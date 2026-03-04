@@ -1,12 +1,12 @@
-# Daily Paper Reader — 每日 arXiv / OpenReview 论文推荐与 AI 阅读平台
-
-> Fork 一次，就能获得一个每天自动更新的个性化论文推荐与阅读站点。
+# Daily Paper Reader 
+## 每日 arXiv / OpenReview 论文推荐与 AI 阅读平台
 
 * 一个开源的 **arXiv / OpenReview 论文推荐、阅读与 AI 问答平台**。  
 * Fork 一次，即可获得一个 **每天自动更新** 的个性化论文推荐站点。  
 * Open-source daily **arXiv / OpenReview** paper recommendation, reading, and Q&A platform powered by **GitHub Actions** and **GitHub Pages**.
 
-[在线演示](https://ziwenhahaha.github.io/daily-paper-reader) · [5 分钟快速启动](#5-分钟快速启动)
+[在线演示](https://ziwenhahaha.github.io/daily-paper-reader) \
+[5 分钟快速启动](#5-分钟快速启动)
 
 ## 你能快速得到什么
 
@@ -21,7 +21,7 @@
 ## 适合谁使用
 
 - 想持续追踪某个研究方向新论文的学生、研究者和工程师
-- 想搭建个人论文推荐站点、实验室论文主页或阅读面板的开发者
+- 想搭建私人论文推荐站点、实验室论文主页或阅读面板的开发者
 - 想把“发现论文 → 阅读论文 → 提问总结”放进同一工作流的人
 
 ## 5 分钟快速启动
@@ -65,7 +65,8 @@ Fork 该仓库到自己账号下，建议仓库名字保持原样。
 | 版本 | 日期 | 更新内容 |
 | --- | --- | --- |
 | v1.0.0 | 2026-02-19 | 基础功能实现完成 |
-| Unreleased | - | 请在每次发布时补充 |
+| v1.1.0 | 2026-02-28 | 优化订阅面板逻辑，不再需要手动记关键词 |
+| v1.2.0 | 2026-03-04 | 优化使用体验 |
 
 ## Star 曲线（项目热度）
 

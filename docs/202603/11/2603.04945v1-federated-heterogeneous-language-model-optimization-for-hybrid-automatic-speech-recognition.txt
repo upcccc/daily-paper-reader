@@ -1,0 +1,395 @@
+Title: Federated Heterogeneous Language Model Optimization for Hybrid Automatic Speech Recognition
+
+URL Source: https://arxiv.org/pdf/2603.04945v1
+
+Published Time: Fri, 06 Mar 2026 01:42:18 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+# FEDERATED HETEROGENEOUS LANGUAGE MODEL OPTIMIZATION FOR HYBRID AUTOMATIC SPEECH RECOGNITION 
+
+# Mengze Hong 1∗ Yi Gu 2,3∗ Di Jiang 1† Hanlin Gu 4
+
+# Chen Jason Zhang 1 Lu Wang 5 Zhiyang Su 41Hong Kong Polytechnic University 2Ant Group 3Shanghai Jiao Tong University 
+
+> 4
+
+# Hong Kong University of Science and Technology 5Shenzhen University 
+
+ABSTRACT 
+
+Training automatic speech recognition (ASR) models increasingly relies on decentralized federated learning to ensure data privacy and accessibility, producing multiple local models that require effective merging. In hybrid ASR systems, while acoustic models can be merged using established methods, the language model (LM) for rescoring the N-best speech recognition list faces challenges due to the heterogeneity of non-neural n-gram models and neural network models. This paper proposes a heterogeneous LM optimization task and introduces a match-and-merge paradigm with two algorithms: the Genetic Match-and-Merge Algorithm (GMMA), using genetic operations to evolve and pair LMs, and the Reinforced Match-and-Merge Algorithm (RMMA), leveraging reinforcement learning for efficient convergence. Experiments on seven OpenSLR datasets show RMMA achieves the lowest average Character Error Rate and better generalization than baselines, converging up to seven times faster than GMMA, highlighting the paradigm’s potential for scalable, privacy-preserving ASR systems. 
+
+Index Terms — Federated learning, speech recognition, lan-guage models, genetic algorithms, reinforcement learning 
+
+1. INTRODUCTION 
+
+Automatic speech recognition (ASR) is a core technology that enables accessible and scalable speech-driven applications [1, 2]. Training high-performance ASR systems requires large volumes of carefully curated speech data, which are increasingly managed through decentralized federated learning due to growing concerns about data privacy [3]. In this paradigm, data curators train local models on private datasets and share only model parameters to con-struct a stronger global model, enabling collaborative optimization without direct data exposure [4]. Despite its effectiveness, federated ASR training requires tailored optimization of the model aggre-gation process to achieve performance comparable to centralized training without incurring excessively high computational cost [5]. In practice, hybrid ASR systems are widely used due to their modular design and support for real-time streaming [6, 7], integrat-ing acoustic models (AMs) and language models (LMs) to achieve robust performance. AMs extract features from raw speech signals and model the relationship between acoustic feature vectors and pho-netic units, converting audio into phone sequences [8]. LMs estimate word sequence probabilities and rescore the N-best hypothesis list to incorporate long-range semantic information. A typical LM pipeline employs an n-gram model to generate an N-best list or lattice, fol-lowed by a neural network (NN) model that rescores candidate sen- 
+
+> ∗Equal Contribution. †Corresponding Author.
+
+Fig. 1 . The optimization of heterogeneous language model (LM) pairs in ASR involves (1) local training of source model pairs by curators using private data, and (2) merging multiple models to form a superior target model pair. The values of m and k may differ due to differences in data distribution across curators. tences to produce the final recognition output [9, 10]. Existing re-search has primarily focused on acoustic model optimization, with methods such as GMA and SOMA enabling effective aggregation [11, 12]. In contrast, language model optimization remains underex-plored and faces two significant technical barriers: 1. Heterogeneity : The n-gram model differs fundamentally in structure from neural network models, making existing opti-mization methods designed for isomorphic models infeasible. 2. Alignment : Effective LM merging requires mutual matching over the N-best list, as independent optimization of individual LMs does not guarantee optimal combined performance. To overcome these challenges, this paper introduces a novel hetero-geneous language model optimization task for federated hybrid ASR systems. We present a unified match-and-merge paradigm , using genetic algorithms to handle n-gram and neural network LMs as dis-tinct populations. Based on this paradigm, we develop two inno-vative algorithms and demonstrate their superior performance and convergence efficiency compared to existing methods. 
+
+2. RELATED WORK 
+
+Hybrid ASR systems, which combine acoustic models and language models, have evolved rapidly from traditional GMM-HMM archi-tectures [13] to deep learning-based frameworks [14]. This hybrid design offers several advantages over end-to-end systems: superior explainability for error analysis, modularity that allows AMs and LMs to be independently tuned or adapted to specific domains and datasets, and natural support for decentralized, heterogeneous data, enabling personalized model adaptation [15]. These features have made hybrid ASR systems widely adopted in industrial applications through toolkits such as Kaldi ASR, which facilitate lightweight and efficient model training and deployment [16]. 
+
+> arXiv:2603.04945v1 [cs.CL] 5 Mar 2026
+
+𝑛 -gram LM ଵ
+
+𝑛 -gram LM ௠
+
+…
+
+Crossover 
+
+Mutation 
+
+⨁   
+
+> 𝑛 -gram LM ௜𝑛 -gram LM ௝
+
+𝜆 1-𝜆  
+
+> 𝑛 -gram LM ௞
+
+⨂
+
+NN LM ଵ
+
+NN LM ௠
+
+…
+
+Source models Source models 
+
+Crossover 
+
+⨁ 
+
+> NN LM ௜NN LM ௝
+
+Mutation   
+
+> Flip
+> NN LM ௜
+> Top-𝑘
+> 𝑛 -gram LMs
+> …
+> Top-𝑘 NN LMs Top-𝑘 LM Pairs
+
+Fig. 2 . Overview of the Genetic Match-and-Merge Algorithm (GMMA). Heterogeneous language models (n-gram and neural LMs) are treated as separate populations and evolved via type-specific genetic operations. The top-k candidates from each population are then paired, and LM combinations with the highest matching fitness are selected for reproduction and merging. Although heterogeneous language model optimization has re-ceived limited attention, many studies focus on model combination (or ensembling), where each model predicts independently, and out-puts are later aggregated [17, 18]. In contrast, model merging targets training and model-level optimization, integrating parameters from locally trained models into a single strong model of the same size [11]. This approach is better suited to large-scale industrial appli-cations, producing a single, optimized model that reduces inference cost and latency while maintaining robustness across datasets. 
+
+3. PROBLEM FORMULATION 
+
+Consider n private datasets T = {T1, . . . , T n}, each correspond-ing to a distinct application scenario or data distribution, and used to train a paired source model Mi = ( MN,i , M R,i ), where MN,i is the i-th n-gram LM and MR,i is the i-th neural network language model (NN LM). The n-gram LMs share a homogeneous structure with distinct parameters, as do the NN LMs, but n-gram and NN LMs are heterogeneous. Each n-gram LM is represented as an n-dimensional matrix of word sequence frequencies, with column vec-tors AjN,i (1 ≤ j ≤ n). Each NN LM MR,i consists of L layers, with parameters W lR,i (1 ≤ l ≤ L) representing weights and biases. The optimization task is to combine the n paired source models into a target model pair MT = ( MN,T , M R,T ) through weighted param-eter combination of MN,i and MR,i .
+
+4. GENETIC MATCH-AND-MERGE ALGORITHM 
+
+We propose the Genetic Match-and-Merge Algorithm (GMMA) to optimize the merging of heterogeneous n-gram and NN LMs (see Figure 2). GMMA leverages a genetic algorithm inspired by natural selection [19], starting from the source models and evolving over generations through reproduction, mutation, and crossover operators to produce increasingly well-adapted offspring. For clarity, let P
+
+denote the overall population of paired models, while PN and PR
+
+include only the n-gram and NN LMs, respectively. 
+
+Algorithm 1 Genetic Match-and-Merge Algorithm (GMMA) 
+
+Input : Source paired models M1, M 2, . . . , M n
+
+Initialize P = {M1, . . . , M n}, PN = {MN, 1, . . . , M N,n }, PR =
+
+{MR, 1, . . . , M R,n }
+
+1: while not converged do 
+
+2: for each MN,i in PN do 
+
+3: With p1, PN ← PN ∪ Mutation (MN,i )
+
+4: end for 
+
+5: for each MR,i in PR do 
+
+6: With p1, PR ← PR ∪ Mutation (MR,i )
+
+7: end for 
+
+8: Randomly shuffle P
+
+9: for each adjacent pair (MN,i , M N,i +1 ) in PN do 
+
+10: With p2, PN ← PN ∪ Crossover (MN,i , M N,i +1 )
+
+11: end for 
+
+12: for each adjacent pair (MR,i , M R,i +1 ) in PR do 
+
+13: With p2, PR ← PR ∪ Crossover (MR,i , M R,i +1 )
+
+14: end for 
+
+15: Reproduction via pairing PN × PR
+
+16: Set P as the top-K pairs 
+
+17: end while 
+
+The initial population consists of the source models, with ge-netic operators specifically designed for heterogeneous LMs. For NN LMs, mutation randomly flips a bit in the model’s binary file, while crossover selects two adjacent models and exchanges layers at a random point l (1 ≤ l ≤ L) to generate two offspring [20]: 
+
+MR,i ′ = {W 1 
+
+> R,i ′
+
+, . . . , W lR,i ′ , W l+1  
+
+> R,i +1 ′
+
+, . . . , W LR,i +1 ′ },MR,i +1 ′ = {W 1 
+
+> R,i +1 ′
+
+, . . . , W lR,i +1 ′ , W l+1  
+
+> R,i ′
+
+, . . . , W LR,i ′ }.
+
+For n-gram LMs, mutation scales a randomly selected column vector by a coefficient k ∈ (0 , 1) :
+
+MN,i ′ = [0 1, . . . , 0j−1, k · AjN,i , 0j+1 , . . . , 0n] + MN,i .Algorithm 2 Reinforced Match-and-Merge Algorithm (RMMA) 
+
+Input : Source paired models M1, M 2, . . . , M n
+
+Initialize : policy network ωa, discount factor γ, learning rate β
+
+1: Set t ← 1, initialize target model state st = ( sMt , s Rt )
+
+2: repeat 
+
+3: if train then 
+
+4: Sample action at ∼ π(at|st; ωa)
+
+5: else 
+
+6: Select action at = arg max a π(a|st; ωa)
+
+7: end if 
+
+8: Execute at, update merged model: sMt+1 = f (at; MR, M N )
+
+9: Update observation sRt+1 , state st+1 = ( sMt+1 , s Rt+1 )
+
+10: if train then 
+
+11: Compute TD error: δt ← rt + γ · v(st+1 ) − v(st)
+
+12: Update policy: ωa ← ωa + β · ∇ ωa log π(at|st; ωa) · δt
+
+13: end if 
+
+14: t ← t + 1 
+
+15: until t > t max or at−1 = terminate 
+
+16: Return optimized model pair Mt
+
+The crossover operation combines two adjacent models: 
+
+MN,i ′ = λM N,i + (1 − λ)MN,i +1 ,
+
+with λ ∈ (0 , 1) representing a random weight. For reproduction, GMMA considers heterogeneous n-gram and NN LMs as separate populations, with fitness defined by their degree of match, evaluated using the Character Error Rate (CER) on a validation dataset. The top K n -gram LMs are paired with the top K NN LMs, and the 
+
+K pairs with the lowest CERs are selected as parents for the next generation. Increasing K improves population diversity and expands the search space, but also increases computational costs. Algorithm 1 presents GMMA, with hyperparameters p1 and p2 controlling the mutation and crossover probabilities, respectively. 
+
+5. REINFORCED MATCH-AND-MERGE ALGORITHM 
+
+Although the GMMA approach produces high-quality language models, its reliance on random crossover and mutation leads to slow convergence, limiting practical applicability. To achieve comparable performance more efficiently, we propose the Reinforced Match-and-Merge Algorithm (RMMA), which employs a reinforcement learning agent [21] to guide the merging process (Algorithm 2). As illustrated in Figure 3, the source models are treated as the envi-ronment, while the action set A = [ a1, . . . , a t] specifies the merge variables. The state st = ( sMt , s Rt ) consists of the merged model pair sMt = f (at; MR, M N ) and the corresponding evaluation feed-back sRt obtained from a validation set. The merging of NN LMs is formulated by extending the rigorous proposition in [11]: 
+
+W lR,T =
+
+> n
+
+X
+
+> i=1
+
+θliW lR,i + ∆ W lR,T s.t. θli > 0,
+
+> n
+
+X
+
+> i=1
+
+θli = 1 , (1) where ∆W lR,T (1 ≤ l ≤ L) captures the perturbations intro-duced by the mutation operator, while the weighted summation term Pni=1 θliW lR,i corresponds to crossover. For n-gram LMs, we define the merging analogously as: 
+
+MN,T =
+
+> n
+
+X
+
+> i=1
+
+ϕiMN,i +
+
+> n
+
+X
+
+> j=1
+
+∆AjM,T s.t. ϕi > 0,
+
+> n
+
+X
+
+> i=1
+
+ϕi = 1 ,
+
+(2) Value          
+
+> 𝑣(𝑠 ௧)
+> Merged LM Pairs
+> Source
+> 𝑛 -gram LMs
+> 𝜙 ௜
+> ⨁⨁
+> ⨁⨁
+> Constrained  connection
+> 𝑜 ௜
+> ௟
+> 𝑜 ௜
+> ௟ିଵ
+> 𝑜 ௜
+> ௟ାଵ
+> 𝑜 ௜ାଵ
+> ௟ାଵ
+> 𝑜 ௜ାଵ
+> ௟
+> 𝑜 ௜ାଵ
+> ௟ିଵ
+> 𝑠 ௧
+> ெ
+> 𝑓(𝑎 ௧; 𝑀 ோ, 𝑀 ே)
+> 𝑠 ௧
+> ோ
+> 𝑔(𝑟 ௧; 𝑀 ்)
+> 𝑠 ௧
+> (𝑠 ௧
+> ெ, 𝑠 ௧
+> ோ)
+> Layer
+> l + 1
+> Layer
+> l
+> Layer
+> l − 1
+> Policy
+> 𝜋(𝑎 ௧|𝑠 ௧)
+> …
+> Source NN LMs
+> {Δ𝑊 ோ,்
+> ௟, 𝜃 ௜
+> ௟, 𝑊 ோ,௜
+> ௟,
+> Δ𝐴 ெ,்
+> ௜, 𝜙 ௜|𝑖 = 1, … , 𝑚}
+> Environment
+> Agent
+> Target LM Pairs
+> 𝑛 -gram LM ଵ
+> 𝑛 -gram LM ௠
+> …
+> NN LM ଵ
+> NN LM ௠
+> …
+> Source models
+> RMMP
+
+Fig. 3 . Overview of Reinforced Match-and-Merge Algorithm. The merging problem is formulated as a sequential decision-making pro-cess, where a reinforcement learning agent selects actions to maxi-mize rewards and enhance model quality. where ∆AjM,T (1 ≤ j ≤ n) denotes the mutation effects. With these definitions, the optimization objective is formulated as follows: 
+
+min     
+
+> ∆WlR,T , θ li,∆AjM,T , ϕ i
+
+ℓ(MN,T , M R,T ), (3) subject to the constraints in Equations 1 and 2. The reinforcement learning agent is implemented as an actor-critic model [22], using a recurrent neural network to parameterize the policy π(at|st) for action selection. The policy is conditioned on the RNN hidden state ht at time step t:
+
+ht = tanh( Wpst + Ucht−1), (4) where Wp and Uc are trainable parameters. Let ℓ(M ) denote the CER on a validation set. The reward signal rt is computed as: 
+
+rt =
+
+(
+
+η · sign [ℓ(Mt−1) − ℓ(Mt)] , at̸ = terminate ,
+
+sign [ϵ − ℓ(Mt)] , at = terminate , (5) where η is a scale factor and ϵ is a target CER threshold. We train the agent using one-step temporal-difference (TD) learning [23]. With discount factor γ ∈ [0 , 1) , the TD error (used as an advantage estimate) is: 
+
+δt = rt + γ · v(st+1 ) − v(st). (6) The policy gradient is approximated via the actor-critic update: 
+
+∇ωa J(ωa) ≈ ∇ ωa log π(at|st; ωa) · δt, (7) where ωa are the policy parameters and J(ωa) is the expected cumu-lative discounted reward. During inference, the agent selects actions greedily as at = arg max a π(a|st; ωa) and returns the final merged model pair upon termination. 
+
+6. EXPERIMENT 6.1. Experimental Setup 
+
+To ensure reproducibility, we use seven publicly available Mandarin OpenSLR datasets (Table 1), each treated as private data for a cu-rator. Mandarin presents additional challenges due to segmentation and semantic-level ambiguity [24]. Datasets with predefined splits retain their original training, validation, and test sets; for the remain-ing datasets, we randomly split them into 60% training, 20% valida-tion, and 20% test sets. The Character Error Rate (CER) is reported as a fine-grained metric well-suited to Mandarin. Table 1 . Dataset statistics (sample size and duration) and evaluation results, reported as the mean over 5 random seeds. Lower CER indicates better performance; the best results among merged models are shown in bold .                                                                                                                   
+
+> Dataset Name Data Statistics
+> no.wav hours SLR18 THCHS-30 13388 34.0 SLR33 Aishell 141525 179.3 SLR38 Free ST Mandarin 102600 109.5 SLR47 Primewords 50384 98.8 SLR62 aidatatang 237265 200.3 SLR68 Read Speech 658084 768.8 SLR93 AISHELL-3 88035 85.1
+> Total –1291281 1475.8
+> Model SLR33 SLR38 SLR47 SLR62 SLR93 Average SLR18 SLR68
+> Reference 4.60 8.91 17.08 4.20 4.63 7.88 13.47 8.53
+> Source Models
+> SLR33 4.25 13.87 18.99 9.44 6.51 10.61 14.86 14.66 SLR38 14.20 8.51 27.90 9.53 13.40 14.71 23.49 14.71 SLR47 7.78 15.02 15.79 10.51 8.33 11.48 14.21 14.69 SLR62 14.74 15.28 27.12 4.09 12.50 14.74 24.15 10.21 SLR93 5.16 13.46 19.63 8.58 5.26 10.42 15.68 10.84
+> Merged Models
+> Fine-tuning 7.21 11.28 18.99 7.76 7.35 10.51 15.81 11.09 Direct Average 5.14 8.85 18.96 4.54 5.18 8.53 14.98 10.16 GMMA 4.63 11.33 17.57 4.17 4.57 8.46 14.08 8.81 RMMA 4.63 9.26 17.59 4.14 4.55 8.03 13.68 8.77
+
+Fig. 4 . Convergence behavior on training data. The secondary axis (right) corresponds to GMMA due to its larger variance. Five pairs of n-gram and NN LMs are trained on SLR33, SLR38, SLR47, SLR62, and SLR93 to form the source models, with the average CER reported on their respective test sets. The remaining datasets, SLR18 and SLR68, are reserved for testing to evaluate the generalization of the trained models. The ASR system is built using the Kaldi toolkit [25] with its “Chain” model 1. The acoustic model is a Time Delay Neural Network (TDNN) [26], the NN LM is an RNN [27], and the n-gram LM is a tri-gram trained with SRILM [28]. Experiments are conducted on hardware with an Intel Xeon 72-core CPU, an NVIDIA Tesla K80 GPU, and 314GB of memory. All source models share identical training criteria, and all merging methods use the same set of source models. 
+
+6.2. Main Result 
+
+Given the limited prior research on heterogeneous LM optimization, we present the first comprehensive comparison among: (a) Model fine-tuning, (b) Direct average of model parameters, (c) GMMA, (d) RMMA, and (e) Centralized model (trained on all five datasets, serv-ing as a reference). Table 1 reports CER evaluations on the test sets. The proposed RMMA achieves the lowest average CER, comparable to the centrally trained reference model, demonstrating the effective-ness of model merging. Evaluations on the SLR18 and SLR68 test sets further confirm RMMA’s superior generalization, followed by GMMA, both outperforming Direct Average and Fine-tuning. These results highlight the effectiveness of the proposed match-and-merge paradigm for optimizing heterogeneous LMs. 
+
+6.3. Convergence Efficiency 
+
+Figure 4 compares the convergence behaviors of the merging meth-ods. When merging five source models, GMMA requires over 800 iterations and approximately 15 days to converge, whereas RMMA achieves convergence in fewer than 30 iterations within 2 days. 
+
+> 1
+
+https://kaldi-asr.org/doc/chain.html 
+
+Table 2 . Performance evaluation (CER) of target models optimized on different numbers of source models. 
+
+Experiment 2 Models 3 Models 4 Models 5 Models Average 
+
+Direct Avg 13.58 12.64 9.47 8.53 RMMA 9.56 9.23 8.91 8.03 
+
+SLR18 
+
+Direct Avg 21.54 19.57 15.23 14.98 RMMA 15.59 14.63 13.97 13.68 
+
+SLR68 
+
+Direct Avg 15.32 15.16 12.71 10.16 RMMA 14.65 14.27 10.39 8.77 RMMA shows a substantial CER reduction after just one iteration, while GMMA underperforms Direct Average and Fine-tuning during the first 60 iterations. These results highlight the practical advantage of RMMA’s CER-based reward system, which guides search more efficiently than random exploration, achieving high model quality while being more efficient for large-scale model optimization. 
+
+6.4. Performance Scaling with Number of Source Models 
+
+We evaluate target model quality by varying the number of source models, added sequentially for performance comparison. Since the genetic algorithm and fine-tuning cannot process models sequen-tially, RMMA is compared only with the Direct Average baseline. As shown in Table 2, increasing the number of source models gener-ally improves performance, but RMMA achieves comparable quality using fewer models than Direct Average. The reinforcement learning agent in RMMA assigns higher weights to better models, mitigating the influence of lower-quality ones. 
+
+7. CONCLUSION 
+
+In this work, we introduce the optimization of heterogeneous lan-guage models for hybrid automatic speech recognition systems in a federated learning setting. To address the challenge of structural differences across multiple n-gram and neural network LM pairs, we formalize the Match-and-Merge paradigm and propose two novel al-gorithms: GMMA and RMMA. Experimental results show that both algorithms significantly improve LM performance, with RMMA achieving superior efficiency and performance nearly comparable to centralized training. These findings highlight the potential of fed-erated learning combined with effective and efficient optimization strategies to preserve data privacy while maintaining high model quality, encouraging further exploration in this direction. Acknowledgements 
+
+The work was partially supported by the Research Grants Coun-cil (Hong Kong) (RGC) (PolyU25600624), the RCDTT Funding Body PolyU (UGC) (P0058790, 4-BBGV), the NSFC/RGC Joint Research Scheme (N PolyU5179/25), and the PolyU Start-up Fund (P0059983). 
+
+8. REFERENCES 
+
+[1] Takafumi Moriya, Shota Horiguchi, et al., “Alignment-free training for transducer-based multi-talker asr,” in 
+
+ICASSP 2025-2025 IEEE International Conference on Acous-tics, Speech and Signal Processing (ICASSP) . IEEE, 2025, pp. 1–5. [2] Junyu Lu, Di Jiang, Mengze Hong, Victor Junqiu Wei, Qintian Guo, and Zhiyang Su, “Contextualized token discrimination for speech search query correction,” 2025. [3] Qiang Yang, Yang Liu, Tianjian Chen, and Yongxin Tong, “Federated machine learning: Concept and applications,” ACM Transactions on Intelligent Systems and Technology (TIST) ,vol. 10, no. 2, pp. 1–19, 2019. [4] Yan Gao, Titouan Parcollet, et al., “End-to-end speech recogni-tion from federated acoustic models,” in ICASSP . IEEE, 2022, pp. 7227–7231. [5] Conghui Tan, Di Jiang, Huaxiao Mo, et al., “Federated acous-tic model optimization for automatic speech recognition,” in 
+
+DASFAA 2020 . 2020, p. 771–774, Springer-Verlag. [6] Duc Le, Thilo Koehler, Christian Fuegen, and Michael L. Seltzer, “G2g: Tts-driven pronunciation learning for graphemic hybrid asr,” in ICASSP , 2020, pp. 6869–6873. [7] Mohammad Zeineldeen, Jingjing Xu, Christoph L¨ uscher, et al., “Conformer-based hybrid asr system for switchboard dataset,” in ICASSP , 2022, pp. 7437–7441. [8] Linhao Dong, Shuang Xu, and Bo Xu, “Speech-transformer: a no-recurrence sequence-to-sequence model for speech recog-nition,” in ICASSP . IEEE, 2018, pp. 5884–5888. [9] A. Ogawa, M. Delcroix, S. Karita, and T. Nakatani, “Rescoring n-best speech recognition list based on one-on-one hypothesis comparison using encoder-classifier model,” in ICASSP , 2018. [10] Xinyue Liu, Mingda Li, Luoxin Chen, Prashan Wanigasekara, Weitong Ruan, Haidar Khan, Wael Hamza, and Chengwei Su, “Asr n-best fusion nets,” in ICASSP , 2021, pp. 7618–7622. [11] Conghui Tan, Di Jiang, Jinhua Peng, Xueyang Wu, Qian Xu, and Qiang Yang, “A de novo divide-and-merge paradigm for acoustic model optimization in automatic speech recognition,” in IJCAI , 1 2021, pp. 3709–3715. [12] Conghui Tan, Di Jiang, Huaxiao Mo, Jinhua Peng, Yongxin Tong, Weiwei Zhao, Chaotao Chen, Rongzhong Lian, Yuan-feng Song, and Qian Xu, “Federated acoustic model opti-mization for automatic speech recognition,” in International Conference on Database Systems for Advanced Applications .Springer, 2020, pp. 771–774. [13] Pawel Swietojanski, Arnab Ghoshal, and Steve Renals, “Revis-iting hybrid and gmm-hmm system combination techniques,” in 2013 IEEE International Conference on Acoustics, Speech and Signal Processing . IEEE, 2013, pp. 6744–6748. [14] Hamza Kheddar, Mustapha Hemis, and Yassine Himeur, “Au-tomatic speech recognition using advanced deep learning ap-proaches: A survey,” Information fusion , vol. 109, pp. 102422, 2024. [15] Aku Rouhe, Anja Virkkunen, Juho Leinonen, and Mikko Ku-rimo, “Low resource comparison of attention-based and hy-brid asr exploiting wav2vec 2.0,” in Interspeech . International Speech Communication Association (ISCA), 2022, pp. 3543– 3547. [16] Juan M Perero-Codosero, Fernando M Espinoza-Cuadros, and Luis A Hern´ andez-G´ omez, “A comparison of hybrid and end-to-end asr systems for the iberspeech-rtve 2020 speech-to-text transcription challenge,” Applied Sciences , vol. 12, no. 2, pp. 903, 2022. [17] Zhi-Hua Zhou, Ensemble methods: foundations and algo-rithms , CRC press, 2012. [18] Aditya Kamlesh Parikh, Louis ten Bosch, and Henk van den Heuvel, “Ensembles of hybrid and end-to-end speech recogni-tion.,” in Proceedings of the 2024 Joint International Confer-ence on Computational Linguistics, Language Resources and Evaluation (LREC-COLING 2024) , 2024, pp. 6199–6205. [19] Jeffrey R Sampson, “Adaptation in natural and artificial sys-tems (john h. holland),” 1976. [20] Brendan McMahan, Eider Moore, Daniel Ramage, et al., “Communication-efficient learning of deep networks from de-centralized data,” in Artificial Intelligence and Statistics .PMLR, 2017, pp. 1273–1282. [21] Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, and Martin Ried-miller, “Playing atari with deep reinforcement learning,” arXiv preprint arXiv:1312.5602 , 2013. [22] Vijay R Konda and John N Tsitsiklis, “Actor-critic algorithms,” in Advances in neural information processing systems , 2000, pp. 1008–1014. [23] Sutton and S. Richard, “Learning to predict the methods of temporal differences,” Machine Learning , vol. 3, no. 1, 1988. [24] Victor Junqiu Wei, Weicheng Wang, Di Jiang, Yuanfeng Song, and Lu Wang, “ASR-EC benchmark: Evaluating large lan-guage models on Chinese ASR error correction,” in Proceed-ings of the 2025 Conference on Empirical Methods in Natural Language Processing: Industry Track , Suzhou (China), Nov. 2025. [25] Daniel Povey, Arnab Ghoshal, Gilles Boulianne, et al., “The kaldi speech recognition toolkit,” in IEEE 2011 workshop on automatic speech recognition and understanding . Hawaii, 2011, vol. 1, pp. 5–1. [26] Alex Waibel, Toshiyuki Hanazawa, Geoffrey Hinton, Kiyohiro Shikano, and Kevin J Lang, “Phoneme recognition using time-delay neural networks,” IEEE transactions on acoustics, speech, and signal processing , vol. 37, no. 3, pp. 328–339, 1989. [27] Tom´ aˇ s Mikolov, Martin Karafi´ at, Luk´ aˇ s Burget, Jan ˇ Cernock` y, and Sanjeev Khudanpur, “Recurrent neural network based lan-guage model,” in Eleventh annual conference of the interna-tional speech communication association , 2010. [28] Andreas Stolcke, “Srilm-an extensible language modeling toolkit,” in Seventh international conference on spoken lan-guage processing , 2002.

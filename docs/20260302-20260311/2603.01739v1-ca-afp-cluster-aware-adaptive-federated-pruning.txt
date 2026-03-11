@@ -1,0 +1,745 @@
+Title: CA-AFP: Cluster-Aware Adaptive Federated Pruning
+
+URL Source: https://arxiv.org/pdf/2603.01739v1
+
+Published Time: Tue, 03 Mar 2026 03:23:26 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# CA-AFP: Cluster-Aware Adaptive Federated Pruning 
+
+# Om Govind Jha 
+
+om22@iiserb.ac.in IISER Bhopal Bhopal, India 
+
+# Harsh Shukla 
+
+harsh22@iiserb.ac.in IISER Bhopal Bhopal, India 
+
+# Haroon R. Lone 
+
+haroon@iiserb.ac.in IISER Bhopal Bhopal, India 
+
+## Abstract 
+
+Federated Learning (FL) faces major challenges in real-world deploy-ments due to statistical heterogeneity across clients and system heterogeneity arising from resource-constrained devices. While clustering-based approaches mitigate statistical heterogeneity and pruning techniques improve memory and communication efficiency, these strategies are typically studied in isolation. We propose CA-AFP, a unified framework that jointly addresses both challenges by performing cluster-specific model pruning. In CA-AFP, clients are first grouped into clusters, and a separate model for each cluster is adaptively pruned during training. The frame-work introduces two key innovations: (1) a cluster-aware impor-tance scoring mechanism that combines weight magnitude, intra-cluster coherence, and gradient consistency to identify parameters for pruning, and (2) an iterative pruning schedule that progressively removes parameters while enabling model self-healing through weight regrowth. We evaluate CA-AFP on two widely used human activity recog-nition benchmarks, UCI HAR and WISDM, under natural user-based federated partitions. Experimental results demonstrate that CA-AFP achieves a favorable balance between predictive accu-racy, inter-client fairness, and communication efficiency. Com-pared to pruning-based baselines, CA-AFP consistently improves accuracy and lower performance disparity across clients with lim-ited fine-tuning, while requiring substantially less communication than dense clustering-based methods. It also shows robustness to different Non-IID levels of data. Finally, ablation studies analyze the impact of clustering, pruning schedules and scoring mecha-nism offering practical insights into the design of efficient and adaptive FL systems. Our implementation is publicly available at https://anonymous.4open.science/r/CAAFP-C36E/. 
+
+ACM Reference Format: 
+
+Om Govind Jha, Harsh Shukla, and Haroon R. Lone. 2026. CA-AFP: Cluster-Aware Adaptive Federated Pruning. In Proceedings of Conference Long Name (Conference Name). ACM, New York, NY, USA, 12 pages. https://doi.org/10. 1145/XXXXXXX.XXXXXXX 
+
+## 1 Introduction 
+
+Federated Learning (FL) has emerged as a crucial paradigm for collaborative machine learning, allowing models to be trained on decentralized devices while preserving user data privacy [ 24 ]. This paradigm is particularly well suited for applications that involve sensitive data generated on edge devices such as smartphones, smartwatches, and IoT sensors, which are commonly encountered in domains like Human Activity Recognition (HAR) [14, 20, 28]. 
+
+> Conference Name, Location
+> 2026. ACM ISBN 978-1-4503-XXXX-X/18/06 https://doi.org/10.1145/XXXXXXX.XXXXXXX
+
+The deployment of FL in real-world environments exposes two fundamental challenges: statistical heterogeneity [ 18 ] and system heterogeneity [ 29 ]. Statistical heterogeneity arises when data dis-tributions vary significantly between clients, such as differences in users’ typing patterns or individual activity patterns in HAR appli-cations. System heterogeneity arises due to disparities in hardware and network conditions, including differences in computational speed, memory capacity, bandwidth availability, and energy con-straints across devices [3]. Statsitical heterogeneity results in non-IID data which is par-ticularly detrimental to federated optimization thereby slowing convergence and leads to suboptimal global models that fail to generalize well to individual clients [ 19 ]. To mitigate this issue, Personalized Federated Learning (PFL) approaches have been pro-posed, which aim to tailor models to individual clients or groups of clients [ 18 ]. Under this line of research, clustering-based FL has emerged as a prominent strategy that groups clients with similar data distributions, enabling more relevant and effective aggregation. Representative methods such as FedCHAR demonstrate that clus-tering clients based on update similarity can significantly improve personalization, robustness under heterogeneous data settings [ 21 ]. In real-world FL systems, both statistical heterogeneity and sys-tem heterogeneity must be addressed jointly. Recent approaches such as SAFL [ 17 ] and FLCAP [ 25 ] attempt to tackle statistical heterogeneity through client clustering and system heterogeneity through model pruning. However, both frameworks suffer from in-trinsic limitations in how pruning decisions are made. In particular, pruning is performed while model parameters and cluster assign-ments are still evolving, causing sparsification to rely on early-stage and potentially unstable optimization signals. SAFL primarily lever-ages structural cues derived from batch normalization statistics, whereas FLCAP relies mainly on weight magnitude to estimate parameter importance. As a result, these methods fail to capture collective relevance across clients within the same cluster. Con-sequently, parameters that are weak at the individual client level but consistently important at the cluster level may be prematurely removed. Moreover, the lack of a controlled and gradual sparsifi-cation mechanism can lead to instability and degraded accuracy under non-IID data distributions. To address these limitations, we propose CA-AFP (Cluster-Aware Adaptive Federated Pruning), which decouples cluster formation from sparsification and introduces a context-aware pruning strat-egy. CA-AFP first allows client models to stabilize during an initial dense training phase, after which cluster assignments are formed and pruning is initiated. This design ensures that importance es-timates are derived from reliable and converged learning behav-ior. Furthermore, CA-AFP employs an iterative adaptive masking  
+
+> arXiv:2603.01739v1 [cs.LG] 2 Mar 2026 Conference Name, Date, Location Om Govind Jha, Harsh Shukla, and Haroon R. Lone
+
+schedule that dynamically updates sparsity patterns during train-ing, enabling the model to “heal” by reactivating previously pruned weights that later become important. We evaluate CA-AFP on two standard human activity recogni-tion benchmarks, WISDM and UCI-HAR, which represent realistic and controlled federated settings with strong inter-user hetero-geneity. We compare against both dense clustering-based baselines (FedCHAR [ 20 ], ClusterFL [ 27 ]) and pruning-based baselines (Effi-cientFL [ 29 ], FedSNIP [ 30 ]), enabling a fair comparison across meth-ods that address statistical and system heterogeneity in isolation. While dense baselines focus on mitigating statistical heterogeneity using fully parameterized models, pruning baselines primarily tar-get system heterogeneity and communication efficiency through sparsification. Experimental results show that CA-AFP consistently matches or outperforms pruning-based baselines while approaching the accuracy of dense methods at comparable sparsity levels. On both datasets, CA-AFP achieves improved fairness over EfficientFL and FedSNIP while maintaining substantially lower communication costs than dense approaches, even under limited fine-tuning. With additional fine-tuning, CA-AFP further narrows the performance gap with dense baselines. These results demonstrate that CA-AFP effectively preserves parameters that are collectively informative at the cluster level and provides flexible control over the trade-off between accuracy and communication efficiency under device constraints. To support reproducibility, we release the complete implementation of CA-AFP at https://anonymous.4open.science/r/ CAAFP-C36E/README.md. 
+
+## 2 Related Work 
+
+Cluster-Based Federated Learning: Cluster-based federated learning (FL) addresses statistical heterogeneity. For example Fed-CHAR [ 20 ] performs hierarchical clustering based on cosine simi-larity of model update directions, enabling intra-cluster aggregation that improves robustness by isolating malicious clients while en-hancing fairness across participants [ 21 ]. Similarly, ClusterFL [ 26 ]formulates FL as a clustered multi-task optimization problem and jointly learns cluster assignments and model parameters via ADMM, allowing collaborative learning within clusters and discarding slow or weakly correlated clients to reduce communication rounds and improve accuracy [27]. Recent clustered FL (CFL) frameworks further refine client group-ing by explicitly modeling gradient variance and partial partici-pation. Early CFL approaches assume low intra-cluster gradient variance to achieve faster convergence and improved generaliza-tion under non-IID data. Building on this assumption, StoCFL [ 31 ]introduces a stochastic clustering mechanism that leverages co-sine similarity of gradient-based data distribution representations and supports partial client participation. Through a bi-level op-timization strategy, StoCFL enables knowledge sharing between cluster-specific models and a global model, improving data effi-ciency while maintaining cluster specialization [ 31 ]. Complemen-tarily, FedClust [ 12 ]adopts a one-shot, weight-driven hierarchical clustering strategy that exploits correlations between partial model weights—particularly classifier layers—and underlying client data distributions, achieving stable cluster formation with significantly reduced communication overhead and dynamic support for newly joining clients. Despite their effectiveness in mitigating statistical heterogeneity and improving convergence under non-IID data, these clustered FL approaches uniformly rely on fully dense model exchanges. They primarily focus on statistical, optimization, and security-related challenges, while overlooking memory footprint and communica-tion efficiency. The absence of sparsification, pruning, or compres-sion mechanisms limits their applicability in resource-constrained federated environments, such as edge devices with strict bandwidth and memory constraints. 
+
+Pruning-based Federated Learning: Pruning-based federated learning reduces the communication, computation, and memory overhead of federated optimization by allowing clients to train and transmit sub-models derived from a global model [ 2, 9]. A representative approach is Federated Dropout [ 6 ], where clients randomly drop neurons or filters during local training and only com-municate the remaining parameters, thereby lowering resource re-quirements while maintaining convergence properties of the global model [ 5]. To further optimize the initial phase of training, FedSNIP [30 ]employs single-shot network pruning based on connection sen-sitivity to establish sparse structures before communication begins. Furthermore, EfficientFL [ 16 ] reduces the burden on edge devices by identifying a “winning subnetwork” at the start of training, en-suring that only the most impactful parameters are updated and transmitted throughout the federated loop. Such approaches demon-strate that partial model participation can be effective in federated settings, particularly for resource-constrained edge devices. 
+
+Adaptive Federated Pruning: Adaptive federated pruning ex-tends pruning-based federated learning by dynamically adjusting model sparsity throughout the training process in response to sys-tem constraints, optimization progress, and device heterogeneity [8 ]. Unlike static pruning strategies that rely on training dense mod-els followed by one-shot sparsification, adaptive methods integrate pruning directly into the federated optimization loop, enabling de-vices to progressively learn sparse models without incurring the cost of dense training [ 10 ]. Recent frameworks such as FLCAP [ 13 ]further refine this by utilizing clustered adaptive pruning to handle scalable systems, while SAFL [ 17 ] employs structure-aware pruning to align sub-models with specific client clusters. FedResCuE [ 33 ] addresses system heterogeneity and unstable network connections by enabling clients to train self-distilled neural networks that can be structurally pruned to arbitrary sizes with-out requiring fine-tuning. Through progressive learning, predictive knowledge is captured in nested sub-models, allowing clients with different resource budgets to participate using differently sized pruned models while still contributing meaningful updates to the global aggregation process. This adaptive pruning paradigm allows federated learning systems to gracefully accommodate heteroge-neous devices and partial model transmissions. 
+
+Cluster-Aware Pruning in Federated Learning: Cluster-aware federated learning aims to mitigate statistical heterogeneity by grouping clients with similar data distributions and restricting model aggregation within each cluster [ 23 ]. Representative works CA-AFP: Cluster-Aware Adaptive Federated Pruning Conference Name, Date, Location 
+
+Figure 1: The overall workflow of CA-AFP. 
+
+such as ClusterFL formulate federated learning as a clustered multi-task optimization problem, where the server jointly learns clus-ter assignments and cluster-specific models using distributed opti-mization techniques, enabling collaborative learning among similar clients while reducing communication overhead through cluster-wise straggler dropout and node selection [26]. These clustering-based approaches demonstrate that exploit-ing intrinsic similarity among clients is effective for improving convergence, personalization, and robustness in federated learn-ing. However, existing cluster-aware federated learning methods primarily operate on fully dense models and focus on statistical heterogeneity, fairness, and security aspects [ 32 ]. They do not in-corporate pruning or sparsification mechanisms within or across clusters, resulting in substantial memory and communication over-head when deployed on resource-constrained edge devices [ 20 , 26 ]. Consequently, although clustering reduces harmful interference among heterogeneous clients, the absence of cluster-aware pruning limits the scalability and efficiency of these approaches. This obser-vation highlights a critical research gap in jointly leveraging client clustering and adaptive pruning to achieve both statistical efficiency and system-level resource efficiency in federated learning. 
+
+## 3 Methodology 
+
+The CA-AFP framework operates in four distinct phases. Algo-rithm 1 (Appendix) provides detailed pseudocode, and Figure 2 presents an overview of the workflow. 
+
+## 3.1 Phase 1 : Initial Training and Clustering 
+
+Initial Training : Training proceeds in communication rounds. At each round 𝑡 , the server broadcasts the global model 𝑤 (𝑡 −1) to all the clients. Each client 𝑘 performs 𝐸 local training epochs on its dataset D𝑘 by minimizing the standard cross-entropy loss: 
+
+LCE  
+
+> 𝑘
+
+(𝑤 𝑘 ; D𝑘 ) = − 1
+
+|D 𝑘 |∑︁ (𝑥,𝑦 ) ∈ D 𝑘 
+
+log 𝑝 (𝑦 | 𝑥 ), (1) where LCE  
+
+> 𝑘
+
+(𝑤 𝑘 ; D𝑘 ) denotes the cross-entropy loss on client 
+
+𝑘 , 𝑤 𝑘 represents the model parameters, D𝑘 is the local dataset of client 𝑘 with |D 𝑘 | samples, (𝑥, 𝑦 ) denotes an input–label pair, and 
+
+𝑝 (𝑦 | 𝑥 ) is the predicted probability of label 𝑦 given input 𝑥 .After completing 𝐸 local epochs, client 𝑘 obtains updated param-eters 𝑤 (𝑡 ) 
+
+> 𝑘
+
+, which are sent to the server. The server aggregates the client models as 
+
+𝑤 (𝑡 ) =
+
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+|D 𝑘 ||D| 𝑤 (𝑡 ) 
+
+> 𝑘
+
+, (2) where 𝑤 (𝑡 ) denotes the aggregated global model parameters at communication round 𝑡 , 𝐾 is the total number of participating clients, and |D| = Í𝐾 𝑘 =1 |D 𝑘 | is the total number of training samples across all clients. The initial training phase is performed for 𝑇 0
+
+communication rounds, where 𝑇 0 ≥ 0.
+
+Clustering : After the initial training phase of 𝑇 0 rounds, the final global model 𝑤 (𝑇 0 ) is used as the reference model for client clustering. If 𝑇 0 = 0, 𝑤 (𝑇 0 ) corresponds to a randomly initialized model. Each client 𝑘 initializes its model with 𝑤 (𝑇 0 ) and performs one local training epoch on D𝑘 , producing updated parameters 𝑤 (𝑇 0,1) 
+
+> 𝑘
+
+.The local update used for clustering is defined as 
+
+Δ𝑤 𝑘 = 𝑤 (𝑇 0,1) 
+
+> 𝑘
+
+− 𝑤 (𝑇 0 ) . (3) The pairwise cosine distance between clients 𝑘 and 𝑘 ′ is com-puted as 
+
+𝑑 (𝑘, 𝑘 ′) = 1 − (Δ𝑤 𝑘 )⊤Δ𝑤 𝑘 ′
+
+∥Δ𝑤 𝑘 ∥2 ∥Δ𝑤 𝑘 ′ ∥2
+
+. (4) Here, Δ𝑤 𝑘 and Δ𝑤 𝑘 ′ denote the one-epoch local update vectors of clients 𝑘 and 𝑘 ′, respectively. The operator (·) ⊤ denotes vector transpose, (Δ𝑤 𝑘 )⊤Δ𝑤 𝑘 ′ represents their inner product, and ∥ · ∥ 2
+
+denotes the Euclidean ( 𝐿 2) norm. This distance measures the angular dissimilarity between client updates while being invariant to their magnitudes. Agglomerative hierarchical clustering with average linkage is then applied to the resulting distance matrix to assign each client to a cluster. The clustering process only determines client assignments and does not modify the global model weights. 
+
+## 3.2 Phase 2: Cluster-Level Stabilization 
+
+After client clustering, CA-AFP initializes one cluster model for each cluster using the Phase 1 global model 𝑤 (𝑇 0 ) . Each cluster model is then refined through a few rounds of “dense federated training” [ 21 ] within its corresponding client group, without any pruning applied at this stage. Specifically, for each cluster 𝑐 , let C𝑐 denote the set of clients assigned to cluster 𝑐 . After each round 𝑡 , the server broadcasts the current cluster model 𝑤 (𝑡 ) 
+
+> 𝑐
+
+to all clients 𝑘 ∈ C 𝑐 . Within each cluster, each client maintains two models: a personal reference model 𝑤 𝑝,𝑘 
+
+and a cluster model 𝑤 𝑐 .Each client performs local training on its dataset D𝑘 by mini-mizing the regularized objective 
+
+L𝑐 𝑘 (𝑤 𝑐 ; D𝑘 ) = LCE  
+
+> 𝑘
+
+(𝑤 𝑐 ; D𝑘 ) + 𝜆 
+
+2 ∥𝑤 𝑐 − 𝑤 𝑝,𝑘 ∥2, (5) where L𝑐 𝑘 (𝑤 𝑐 ; D𝑘 ) denotes the total training loss of client 𝑘 in cluster 𝑐 , and LCE  
+
+> 𝑘
+
+(𝑤 𝑐 ; D𝑘 ) denotes the standard cross-entropy loss evaluated on client 𝑘 ’s local dataset. The parameter 𝑤 𝑐 represents Conference Name, Date, Location Om Govind Jha, Harsh Shukla, and Haroon R. Lone 
+
+the cluster model parameters, and 𝑤 𝑝,𝑘 denotes the personal refer-ence model of client 𝑘 , initialized from the Phase 1 global model 
+
+𝑤 (𝑇 0 ) and kept fixed during Phase 2 and Phase 3. Although all reference models share the same initial weights, maintaining separate copies facilitates personalization which can be done later. The regularization term prevents the cluster model from drifting excessively from the global representation while allowing adaptation to cluster-level data. The hyperparameter 𝜆 controls the strength of this regularization. After local training, clients return their updated cluster models 
+
+𝑤 (𝑡 ) 
+
+> 𝑐,𝑘
+
+to the server. The cluster model is then updated using a data-size–weighted aggregation: 
+
+𝑤 (𝑡 +1) 
+
+> 𝑐
+
+=∑︁  
+
+> 𝑘 ∈ C 𝑐
+
+|D 𝑘 ||D 𝑐 | 𝑤 (𝑡 ) 
+
+> 𝑐,𝑘
+
+, (6) where |D 𝑐 | = Í𝑘 ∈ C 𝑐 |D 𝑘 | denotes the total number of samples within cluster 𝑐 . The cluster-level stabilization phase is performed for 𝑇 1 communication rounds, where 𝑇 1 ≥ 0. When 𝑇 1 = 0, the cluster models are not further refined and are directly forwarded to the subsequent pruning phase. 
+
+## 3.3 Phase 3: Cluster Training with Pruning 
+
+Phase 3 continues optimizing the same regularized cluster objective defined in Eq. (5) in Phase 2, while introducing pruning into the cluster models. The cluster model 𝑤 𝑐 is subjected to a binary pruning mask 𝑀 𝑐 
+
+[22 ]. This step ensures that pruned weights remain zeroed out in the global cluster state: 
+
+𝑤 (𝑡 +1) 
+
+> 𝑐
+
+= ∑︁  
+
+> 𝑘 ∈ C 𝑐
+
+|D 𝑘 ||D 𝑐 | 𝑤 (𝑡 )
+
+> 𝑐,𝑘
+
+!
+
+⊙ 𝑀 (𝑡 ) 
+
+> 𝑐
+
+(7) To determine which parameters should be retained or pruned un-der the binary mask while preserving cluster-level knowledge, we introduce a cluster-aware importance scoring. 
+
+Importance Scoring: Let 𝑤 𝑐,𝑗 denote the 𝑗 -th scalar weight parameter of the cluster model 𝑤 𝑐 , and let 𝑊 𝑐 denote the set of all scalar weight parameters of 𝑤 𝑐 . CA-AFP integrates cluster-level signals to guide pruning through importance score: Score 𝑤 𝑐,𝑗 = 𝛼 · Mag 𝑤 𝑐,𝑗 + 𝛽 · Coh 𝑤 𝑐,𝑗 + 𝛾 · Con 𝑤 𝑐,𝑗 , (8) where 𝛼 , 𝛽 , and 𝛾 are weighting coefficients satisfying 𝛼 + 𝛽 +𝛾 = 1.
+
+Magnitude Score. The normalized absolute magnitude of a weight: Mag 𝑤 𝑐,𝑗 = |𝑤 𝑐,𝑗 |
+
+max 𝑢 ∈𝑊 𝑐 |𝑢 | (9) 
+
+Coherence Score. Measures cross-client stability of a weight within a cluster: Coh 𝑤 𝑐,𝑗 = 11 + Var 𝑘 ∈ C 𝑐 (𝑤 (𝑘 ) 
+
+> 𝑐,𝑗
+
+) (10) where 𝑤 (𝑘 ) 
+
+> 𝑐,𝑗
+
+denotes the value of weight 𝑤 𝑐,𝑗 in the locally trained cluster model of client 𝑘 . Lower variance indicates higher structural agreement across clients. 
+
+Consistency Score. Measures gradient direction agreement among cluster clients: Con 𝑤 𝑐,𝑗 = 1
+
+|C 𝑐 |∑︁ 𝑘 ∈ C 𝑐 
+
+sign 
+
+ 𝜕 L𝑘 
+
+𝜕𝑤 𝑐,𝑗 
+
+
+
+(11) where L𝑘 denotes the local objective of client 𝑘 .Here, C𝑐 represents the set of clients belonging to cluster 𝑐 . The importance score favors parameters that are simultaneously large in magnitude, stable across clients, and consistently supported by gradient directions, thereby preserving both structural importance and learning dynamics during pruning. CA-AFP dynamically changes the binary pruning mask as the rounds progress so that it can leverage the stablised weight updates in those rounds and improve its decision of pruning and retaining the models weights. For this, it follows the Prune and Heal Mecha-nism that we decribe below. 
+
+Prune-and-Heal Mechanism. It is performed periodically using a pruning schedule during cluster training, following an iterative 
+
+prune–heal loop. At each pruning step, CA-AFP executes the fol-lowing procedure: (1) Importance Re-evaluation: Importance scores are recom-puted using magnitude, coherence, and consistency signals to reflect the current training dynamics. (2) Scheduled Pruning: Let 𝑆 (𝑡 ) denote the current sparsity level, defined as the fraction of pruned (zero-valued) weights in the cluster model at iteration 𝑡 . Based on the current sparsity 𝑆 (𝑡 ) and the target sparsity 𝑆 target , a fraction of the lowest-ranked weights is removed. The pruning amount is automatically adjusted according to the remaining pruning steps and a user-defined prune rate, ensuring a smooth pro-gression toward the target sparsity. (3) Gradient-Guided Regrowth: To preserve the model’s abil-ity to adapt during training, a subset of pruned connections with the highest gradient magnitudes is reactivated, enabling structural exploration and preventing irreversible informa-tion loss. (4) Healing Phase: The masked sparse model is then trained for few rounds as per the schedule defined, allowing the remaining parameters to adapt and compensate before the next pruning step. 
+
+## 3.4 Phase 4: Client Fine-Tuning 
+
+After the pruning process is completed, each client performs a local fine-tuning stage to recover potential accuracy loss introduced by pruning. During this stage, the final pruning mask 𝑀 𝑐 is fixed and no further structural updates are allowed. Let ˜𝑤 𝑘 denote the locally fine-tuned sparse model of client 𝑘 ,initialized from its final cluster model after Phase 3. Each client optimizes ˜𝑤 𝑘 under the sparsity constraint: 
+
+min 
+
+> ˜𝑤 𝑘
+
+LCE  
+
+> 𝑘
+
+( ˜𝑤 𝑘 ; D𝑘 ) s.t. ˜𝑤 𝑘 ⊙ 𝑀 𝑐 = ˜𝑤 𝑘 . (12) This constraint enforces that only the parameters corresponding to non-zero entries in the pruning mask 𝑀 𝑐 are updated, while pruned parameters remain fixed at zero. Fine-tuning is performed CA-AFP: Cluster-Aware Adaptive Federated Pruning Conference Name, Date, Location 
+
+Table 1: Heterogeneity analysis of WISDM and UCI-HAR. Heterogeneity Type Metric WISDM UCI HAR Quantity Skew Coef. of Variation ( 𝐶𝑉 = 𝜎 𝜇 × 100% ) 30.4% 10.2% Sample Count ( 𝜇 ± 𝜎 ) 297 ± 90 343 ± 35         
+
+> Label Skew Clients with Missing Classes 17 / 36 0 / 30 Missing Rate 47.2% 0.0%
+> Feature Skew Mean Inter-Client CV 6.5% 0.6%
+
+for a small number of local epochs without any further communica-tion or aggregation, allowing each client to adapt the sparse model to its local data distribution while preserving the final sparsity level. 
+
+## 4 Experimental Setup 4.1 Dataset and Data Distribution 
+
+We evaluate CA-AFP on two widely used human activity recogni-tion (HAR) benchmarks, WISDM and UCI-HAR . These datasets are selected because they are standard benchmarks in federated and personalized HAR research [ 1], exhibit strong inter-user het-erogeneity, and differ in sensing conditions and data collection environments, enabling a robust assessment of CA-AFP. 
+
+WISDM Dataset: The WISDM (Wireless Sensor Data Mining) activity recognition dataset [ 15 ] consists of 1,098,207 raw smart-phone accelerometer recordings collected from 36 users performing six activities: Walking, Jogging, Upstairs, Downstairs, Sitting, and Standing. Raw sensor streams are segmented using sliding windows of 200 timesteps with 50% overlap, producing 10,591 samples of shape (200 , 3). Each user is treated as an independent federated client, resulting in a natural user-based data partition that pre-serves real-world heterogeneity arising from differences in motion patterns, activity frequency, and device handling. This natural partition that we summarise in Table 1 inherently induces non-IID data distributions across clients, including feature skew (due to individual motion dynamics), label skew (uneven activity participation across users), and quantity skew (varying numbers of samples per user), without introducing artificial data manipulation. WISDM therefore serves as a realistic, noisy, and unconstrained federated learning benchmark. 
+
+UCI-HAR Dataset: The UCI-HAR dataset [ 7] contains inertial sen-sor data from 30 subjects performing six activities under controlled laboratory conditions, collected using waist-mounted smartphones. The dataset comprises a total of 10,299 labeled samples, where each sample is represented as a multivariate time series of shape (128 , 9).Similar to WISDM, we adopt a natural federated setting where each subject corresponds to one client. Compared to WISDM, UCI-HAR exhibits lower sensor noise and more consistent activity execution (Table 1). Together, WISDM and UCI-HAR span diverse deployment con-ditions, including real-world versus laboratory environments, dif-ferent window lengths and sensor dimensionalities, and varying degrees of inter-client heterogeneity. This combination enables a balanced evaluation of CA-AFP under both realistic and controlled federated learning settings. 
+
+## 4.2 Baseline Methods 
+
+We compare CA-AFP against four representative baselines that address federated heterogeneity through either client clustering or model pruning. FedCHAR and ClusterFL focus on clustering to mitigate statistical heterogeneity and improve client-level perfor-mance, while EfficientFL and FedSNIP employ pruning to enhance communication efficiency and device compatibility. In addition to reducing communication overhead, pruning introduces regulariza-tion that helps mitigate overfitting and client drift [ 11 ]. We refer to methods without pruning as dense baselines (FedCHAR, ClusterFL) and those with pruning as pruned baselines (EfficientFL, FedSNIP). 
+
+FedCHAR [ 21 ] is a clustering-based personalized FL method without pruning and serves as an accuracy-oriented upper bound. 
+
+ClusterFL [27 ] jointly optimizes client models and cluster assign-ments via alternating optimization to mitigate statistical hetero-geneity. EfficientFL [29 ] compresses client updates through spar-sification and quantization to reduce communication cost while preserving convergence. FedSNIP [4] applies one-shot SNIP-based pruning at clients to transmit only critical parameters. Recent methods such as SAFL and FLCAP also combine cluster-ing and pruning but operate under different architectural and algo-rithmic assumptions. SAFL relies on Batch Normalization–based network slimming, which is incompatible with our BN-free ar-chitecture. FLCAP derives clustering signals from pruning-mask dynamics rather than model update similarity. To ensure fair and controlled comparisons, we therefore restrict our evaluation to baselines that are directly compatible with our model and training. 
+
+## 4.3 Experimental settings 
+
+We describe our experimental configurations for reproducibility. Additional details are provided in Appendix (Tables 5–10). 
+
+Implementation and Hardware. All experiments were conducted on a Linux workstation equipped with an Intel Core i9-14900K processor. CA-AFP and all baselines were implemented in Tensor-Flow 2.14 and initialized using a fixed random seed for both weight initialization and client data partitioning. Unless otherwise stated, we use Adam with a learning rate of 10 −3. The target sparsity is fixed at 70%, and all methods are trained for 50 global rounds. Re-ported results in Table 2 are averaged over five random seeds. 
+
+Phase Sensitivity Analysis. To isolate the effects of different train-ing phases, we conduct sensitivity analyses on the WISDM dataset. We vary the durations of the initial training phase ( 𝑃 1) and post-clustering phase ( 𝑃 2) from 0 to 20 rounds, and the starting sparsity (𝑆 start ) from 0.0 to 0.9 (Table 7). The pruning phase is fixed at 𝑃 3 = 40 
+
+rounds, and fine-tuning is set to 𝑃 4 = 3 epochs. Results are averaged over three random seeds. 
+
+Importance Score Ablation. We analyze the importance scoring function on the UCI-HAR by evaluating seven combinations of magnitude ( 𝛼 ), coherence ( 𝛽 ), and consistency ( 𝛾 ) weights. The pruning schedule is varied from 30% to 70% over 15 rounds to examine the contribution of each component. The configurations are reported in Table 8. These experiments are conducted using a single random seed. Conference Name, Date, Location Om Govind Jha, Harsh Shukla, and Haroon R. Lone 
+
+Table 2: Performance comparison on the WISDM and UCI-HAR datasets with 3 and 25 fine-tuning (FT) epochs. WISDM UCI-HAR Method Sparsity FT Epochs Avg Acc ( 𝜇 ) Fairness ( 𝜎 ) Comm Avg Acc ( 𝜇 ) Fairness ( 𝜎 ) Comm 
+
+(↑) (↓) (MB) (↑) (↓) (MB) 
+
+Dense Baseline 
+
+FedCHAR [21] 0% 3 96.64% 8.39% 483 96.87% 6.70% 347 0% 25 97.16% 8.32% 483 97.48% 6.19% 347 ClusterFL [27] 0% 3 96.18% 7.02% 474 95.80% 6.87% 340 0% 25 96.33% 6.50% 474 95.80% 6.87% 340 
+
+Pruned Baselines 
+
+EfficientFL [29] ≈ 70% 3 92.30% 10.29% 142 95.02% 9.46% 102 
+
+≈ 70% 25 95.68% 9.28% 142 97.49% 5.85% 102 FedSnip [4] ≈ 70% 3 94.29% 10.16% 142 95.56% 9.34% 102 
+
+≈ 70% 25 95.24% 8.96% 142 95.82% 9.34% 102 
+
+Ours 
+
+CA-AFP (0,0,50) ≈ 70% 3 95.56% 8.97% 176 95.99% 6.91% 122 
+
+≈ 70% 25 95.62% 8.84% 176 97.13% 6.55% 122 
+
+CA-AFP (15,15,20) ≈ 70% 3 95.28% 9.50% 375 95.91% 6.49% 266 
+
+≈ 70% 25 96.73% 8.35% 375 97.40% 6.40% 266 
+
+Non-IID Robustness Evaluation. We evaluate all methods on WISDM under three levels of statistical heterogeneity (Table 10). Each client is restricted to at most 𝑘 activity classes: Extreme (𝑘 = 1), Moderate 
+
+(𝑘 = 2), and Mild (𝑘 = 3). Allowed classes are randomly sampled from each client’s ground-truth labels, and data from other classes are discarded. All experiments run for 50 global rounds with tar-get sparsity 𝑆 = 0.7, and results are reported as mean ± standard deviation over five seeds. 
+
+Fine-Tuning Setup. Fine-tuning configurations are summarized in Table 9. 
+
+Model Architecture. All methods use the same lightweight 1D CNN for human activity recognition. The network consists of two convolutional blocks, each containing a 1D convolution layer with 64 filters and kernel size 5, followed by ReLU activation, max pool-ing, and dropout (rate 0.3). The resulting features are flattened and passed to a fully connected layer with 32 units and ReLU activation, followed by dropout (rate 0.2) and a Softmax output layer. 
+
+## 4.4 Accuracy metrics 
+
+To compare with the existing baselines, and to analyse ablations, we use three metrics, namely Accuracy, Fairness (Standard Deviation) and Communication Cost (in MB). The average Accuracy is the mean test accuracy ( 𝜇 ) across all clients. We use the term ‘fairness’ to refer to the standard deviation ( 𝜎 ) of the mean accuracy across all clients. A lower value of fairness means the test accuracy differs less between different clients which indicates that the models had balanced performance across all the clients whereas a higher value for fairness means that the test accuracy varied more between different clients which indicates that the model is not reliable across all clients as its performance varies more. The communication cost measures the total volume of data transmitted between the server and clients throughout the entire training process, expressed in 
+
+Table 3: Best “importance score” configurations. Scenario Dataset 𝛼 𝛽 𝛾 Avg Acc (%) Fairness (%)                                  
+
+> Standard UCI HAR 0.25 0.25 0.50 91.19 9.81 WISDM 0.25 0.25 0.50 91.57 10.51 Drift UCI HAR 0.25 0.25 0.50 66.54 32.70 WISDM 0.00 0.00 1.00 57.63 33.12 Noisy Clients UCI HAR 0.50 0.25 0.25 74.42 19.03 WISDM 0.25 0.25 0.50 74.36 20.72
+
+Megabytes (MB). It accounts for both client-to-server and server-to-client transfers, reflecting efficiency gains from sparsity. The total cost 𝐶 𝑡𝑜𝑡𝑎𝑙 over 𝑅 rounds is estimated as: 
+
+𝐶 𝑡𝑜𝑡𝑎𝑙 =
+
+> 𝑅
+
+∑︁  
+
+> 𝑟 =1
+
+∑︁ 𝑘 ∈ S 𝑟 
+
+2 × | 𝑊 | × ( 1 − 𝑆 (𝑟 ) 
+
+> 𝑘
+
+) × 41024 2 (13) where S𝑟 is the set of selected clients in round 𝑟 , |𝑊 | is the total number of parameters in the dense model (we consider it 32-bit floats, i.e., 4 bytes), and 𝑆 (𝑟 ) 
+
+> 𝑘
+
+is the sparsity of client 𝑘 ’s model in round 𝑟 .
+
+## 5 Results 
+
+Table 2 gives the performance comparison of different baseline methods and CA-AFP across both datasets. From this table, we observe that there is tradeoff between the accuracy and the com-munication cost. Dense methods such as FedCHAR and ClusterFL achieve strong accuracy but incur the highest communication over-head due to full-model communication. In contrast, pruning-based approaches significantly reduce communication cost by transmit-ting sparse updates. The performance is generally more equitable across the clients as the accuracy increases but in some cases it does not show this relation. CA-AFP achieves a better balance between CA-AFP: Cluster-Aware Adaptive Federated Pruning Conference Name, Date, Location 
+
+Figure 2: Effect of “Start Sparsity” and “Rounds” on accuracy in WISDM. 
+
+accuracy, efficiency, and fairness. It consistently performs better or at par with the pruning baselines and with the (15, 15, 20) rounds configuration, it also performs competitively with the dense base-lines while incurring lesser communication cost. The CAAFP with (0, 0, 50) rounds configuration has slightly higher communication cost as compared to the other pruning baselines with because it also regrows weights at a defined rate while pruning. However, the extra cost remains constant given a dataset and model size. Together, these results convey that CA-AFP simultaneously aims for objectives: high accuracy, low communication cost, and im-proved inter-client fairness. It also gives the flexibility utilise the communication budget by adjusting the rounds distribution among different phases to acheive a given target sparisty level for deploy-ment of the models. 
+
+## 5.1 Ablation and Sensitivity Results 
+
+5.1.1 Weights of Importance Score. We conduct an ablation study to analyze the effect of the importance score weights (𝛼, 𝛽, 𝛾 ) under four heterogeneous data scenarios: standard Non-IID, noisy clients, and drift. 
+
+Scenario 1: Standard (Natural Heterogeneity). This scenario serves as the baseline, utilizing the natural partitioning of the UCI HAR dataset. Data is distributed such that each federated learning client corresponds strictly to a single human subject from the origi-nal study, preserving the inherent user-specific variations without synthetic modification. 
+
+Scenario 2: Noisy Clients (Partial Label Corruption). This sce-nario simulates unreliable data annotation. A random subset of 40% 
+
+of the clients is selected to act as noisy participants. For these clients, 
+
+30% of their labels are replaced with random integers drawn from a uniform discrete distribution 𝑈 (0, 5), while the feature vectors 𝑋 
+
+remain unchanged. 
+
+Scenario 3: Drift (Sensor Malfunction). This scenario simulates sensor failure or broken devices. In this setting, 40% of the clients are selected to contribute pure noise. For these participants, 100% of the labels are replaced with random values, effectively destroying the mapping between features and labels ( 𝑋 → 𝑌 𝑟𝑎𝑛𝑑𝑜𝑚 ). This stress-tests the importance scoring mechanism’s ability to identify and suppress updates from malfunctioning nodes. The best-performing configuration for each scenario is summa-rized in Table 3. Overall, these results demonstrate that no single 
+
+Figure 3: Impact of Local Fine-Tuning on accuracy in WISDM. 
+
+component of importance score dominates across all environments. Instead, the mixed formulation enables CA-AFP to flexibly adapt pruning behavior to different types of data and its modifications. This validates our design choice of using a weighted hybrid impor-tance score rather than relying on any single pruning criterion. The complete ablation results for all weight combinations and scenarios are reported in Table 4 in Appendix. The combinations having highest accuracy to fairness ratio which we term as ’score’ in Table 4 is selected as higher accuracy and lower value of fairness is better. 
+
+5.1.2 Effect of Rounds and Start Sparsity. In this study, we exper-iment to isolate and understand the effect of number of rounds for initial training (of phase 1), number of rounds after clustering but before pruning (phase 2) and the starting sparsity level of the pruning and heal (phase 3) with respect to the communication cost and average accuracy across the clients. From the results (see Fig-ure 2), it is observed that increase in accuracy always comes with an increase in the communication cost. Lowering the starting spar-sity as well as increasing the number of initial training rounds in phase 1 or rounds in phase 2 is effective in increasing the accuracy but with increase in the communication cost. We also observe that after increasing the starting sparsity beyond a certain value (in this case, 0.5), the accuracy drops steeply while the communication cost decreases almost at a constant rate. So it is useful to find this number for start sparsity to get better results with limited cost. Conference Name, Date, Location Om Govind Jha, Harsh Shukla, and Haroon R. Lone 
+
+Figure 4: Performance across three Non-IID levels. 
+
+5.1.3 Effect of Local Fine-Tuning. In this experiment, we analyze the impact of local fine-tuning epochs (Phase 4) on final “Accuracy”. Since fine-tuning is performed locally on the sparse models, it incurs zero additional communication overhead. Increasing the number of local fine-tuning epochs from 0 to 25 improves the accuracy of CA-AFP from approximately 88% to 96%, as shown in Figure 3, while maintaining a constant communi-cation cost of approximately 176 MB. This demonstrates that the parameters retained by CA-AFP remain highly adaptable, enabling clients to recover performance through local fine-tuning without additional communication overhead. The Global-FT baseline in Figure 3, which corresponds to CA-AFP with a single cluster, consistently achieves lower accuracy than clustered CA-AFP in the early fine-tuning stages. This indicates that clustering facilitates earlier learning of personalized represen-tations. Moreover, using 10–25 local fine-tuning epochs effectively mitigates any performance gap introduced by cluster-based data partitioning, resulting in stable and robust convergence. Consistent trends are also observed in Table 2, where fine-tuning uniformly improves CA-AFP performance across experimental settings. 
+
+5.1.4 Robustness across Non-IID levels. We evaluate the robustness of CA-AFP and baseline methods under three levels of statistical heterogeneity: Mild (3 classes per client), Moderate (2 classes per client), and Extreme (1 class per client). As shown in Figure 4, under moderate and extreme non-IID set-tings, pruning-based baselines exhibit substantially lower accuracy than clustered dense methods and CA-AFP. In particular, under the extreme 1-class-per-client setting, pruning baselines (FedSNIP and EfficientFL) degrade to approximately 50% accuracy, largely due to severe gradient conflicts across heterogeneous clients. Since no fine-tuning is performed in this experiment, these prun-ing methods are unable to adapt to client-specific distributions, as they rely on a single global model without clustering. In contrast, CA-AFP mitigates this issue by isolating conflicting objectives into separate clusters, maintaining an accuracy of approximately 80 Similar trends are observed under the moderate (2-class) non-IID setting, where pruning baselines continue to underperform relative to clustering-based approaches and CA-AFP. Furthermore, the CA-AFP variant without clustering ( Global-FT ) performs poorly under extreme heterogeneity but recovers accuracy under moderate heterogeneity, highlighting the critical role of clustering in handling severe client-level data diversity. 
+
+## 6 Limitations and Future Work 
+
+Clustering Strategies. In this work, we adopt a fixed cluster-ing strategy to balance effectiveness and computational efficiency. Although prior studies have explored alternative clustering mech-anisms [ 12 , 21 ], a systematic analysis of how different clustering metrics, schedules, and integration points interact with adaptive pruning remains an interesting direction for future work. 
+
+Hyperparameter Sensitivity. CA-AFP relies on a small num-ber of hyperparameters, including the importance score weights and the global sparsity target ( 𝑆 target = 70% ). Our ablation studies demonstrate stable performance across a wide range of settings. Nevertheless, developing adaptive mechanisms that relate these parameters to underlying data distributions could further reduce tuning effort and improve usability in large-scale deployments. 
+
+## 7 Conclusion 
+
+In this work, we presented CA-AFP, a unified framework that integrates clustering-based personalization with adaptive model pruning for federated learning under heterogeneous conditions. Through two key innovations—a cluster-aware importance scoring mechanism that combines weight magnitude, intra-cluster coher-ence, and gradient consistency, and an iterative self-healing pruning schedule—CA-AFP achieves a favorable balance between predictive accuracy, inter-client fairness, and communication efficiency. Extensive experimental results demonstrate that CA-AFP re-mains robust under extreme non-IID settings and enables flexible adaptation to varying communication budgets through control-lable pruning and fine-tuning schedules. By prioritizing parameters based on cluster-level consensus rather than isolated client statistics, CA-AFP makes federated learning more practical for deployment on resource-constrained edge devices. Overall, our work highlights the potential of jointly optimizing personalization and resource efficiency for scalable and reliable federated systems. CA-AFP: Cluster-Aware Adaptive Federated Pruning Conference Name, Date, Location 
+
+## References 
+
+[1] Aouedi, O., Sacco, A., Khan, L. U., Nguyen, D. C., and Guizani, M. Federated learning for human activity recognition: Overview, advances, and challenges. 
+
+IEEE Open Journal of the Communications Society 5 (2024), 5687–5712. [2] Bai, G., Li, Y., Li, Z., Zhao, L., and Kim, K. Fedspallm: Federated pruning of large language models. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) (Albuquerque, New Mexico, 2025), Association for Computational Linguistics, pp. 8361–8373. [3] Bonawitz, K., Eichner, H., Grieskamp, W., Huba, D., Ingerman, A., Ivanov, V., Kiddon, C., Konečný, J., Mazzocchi, S., McMahan, H. B., Overveldt, T. V., Petrou, D., Ramage, D., and Roselander, J. Towards federated learning at scale: System design. Proceedings of the 2nd SysML Conference (MLSys) 1 (2019), 374–388. [4] Bustincio, R. W. C., de Souza, A. M., da Costa, J. B. D., Gonzalez, L. F. G., and Bittencourt, L. F. Reducing communication overhead through one-shot model pruning in federated learning. Annals of Telecommunications 80 (2025). [5] Caldas, S., Wu, P., Li, T., Konečný, J., McMahan, H. B., and Talwalkar, A. 
+
+Feddropout: Federated learning with structured dropout. In Proceedings of the IEEE International Conference on Distributed Computing Systems (ICDCS) (2019), pp. 1–10. [6] Cheng, G., Charles, Z., Garrett, Z., and Rush, K. Does federated dropout actually work? In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops (2022), pp. 3386–3394. [7] Garcia-Gonzalez, D., Rivero, D., Fernandez-Blanco, E., and Luaces, M. R. Apublic domain dataset for real-life human activity recognition using smartphone sensors. Sensors 20 , 8 (2020), 2200. [8] Huang, H., Yang, H., Chen, Y., Ye, J., and Wu, D. Adaptive model pruning in decentralized federated learning. IEEE Transactions on Network Science and Engineering PP , 99 (2025), 1–17. Early Access. [9] Huang, H., Yang, H., Chen, Y., Ye, J., and Wu, D. Fedrts: Federated robust pruning via combinatorial thompson sampling. arXiv preprint arXiv:2501.19122 
+
+(2025). Accepted by NeurIPS 2025. [10] Huang, H., Zhuang, W., Chen, C., and Lyu, L. Fedmef: Towards memory-efficient federated dynamic pruning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (2024), IEEE, pp. 27538–27547. [11] Huang, L., Yin, Y., Fu, Z., Zhang, S., Deng, H., and Liu, D. Fedmask: Joint computation and communication-efficient federated learning via heterogeneous masking. In Proceedings of the 20th ACM Conference on Embedded Networked Sensor Systems (SenSys ’22) (2022), ACM, pp. 1–14. [12] Islam, M. A., Rahman, M. M., and Saha, A. Fedclust: Efficient client clustering in federated learning via weight-based similarity. IEEE Transactions on Artificial Intelligence (2024). [13] Kapoor, A., and Kumar, D. Flcap: Federated learning with clustered adaptive pruning for heterogeneous and scalable systems. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops (2023), pp. 3386–3395. [14] Kim, T., Park, J., and Lee, S. Wireless sensor networks for internet of things applications: A comprehensive survey. Sensors 21 , 6 (2021), 1–28. [15] Kwapisz, J. R., Weiss, G. M., and Moore, S. A. Activity recognition using cell phone accelerometers. ACM SigKDD Explorations Newsletter 12 , 2 (2011), 74–82. [16] Li, A., Sun, J., Wang, B., Duan, L., Li, S., Chen, Y., and Li, H. Lotteryfl: Per-sonalized and communication-efficient federated learning with lottery ticket hypothesis. IEEE Transactions on Parallel and Distributed Systems 33 , 4 (2022), 975–988. Core reference for EfficientFL architectures based on the Lottery Ticket Hypothesis. [17] Li, N., Wang, X., Du, X., Wang, C., Cai, P., and Wang, T. Safl: Structure-aware personalized federated learning via client-specific clustering and scsi-guided model pruning. In Proceedings of the IEEE 31st International Conference on Parallel and Distributed Systems (ICPADS) (2025), IEEE. [18] Li, T., Hu, S., Beirami, A., and Smith, V. Ditto: Fair and robust federated learning through personalization. Proceedings of the 38th International Conference on Machine Learning (ICML) 139 (2021), 6357–6368. [19] Li, T., Sahu, A. K., Zaheer, M., Sanjabi, M., Talwalkar, A., and Smith, V. 
+
+Federated optimization in heterogeneous networks. Proceedings of Machine learning and systems 2 (2020), 429–450. [20] Li, X., Zhang, Y., Wang, J., and Chen, K. Fedchar: Characterizing communication heterogeneity in federated learning. IEEE Transactions on Mobile Computing 
+
+(2023). [21] Li, Y., Wang, X., and An, L. Hierarchical clustering-based personalized federated learning for robust and fair human activity recognition. ACM Transactions on Intelligent Systems and Technology (2023). [22] Lin, R., et al. Improving Neural Network Efficiency with Federated Learning. In Interspeech (2022). [23] Lu, Y., Yin, H., et al. Clustered federated learning with adaptive pruning for 6g edge-intelligent transportation. IEEE Transactions on Intelligent Transportation Systems 26 , 10 (2025), 17790–17799. Published February 21, 2025. [24] McMahan, B., Moore, E., Ramage, D., Hampson, S., and y Arcas, B. A. 
+
+Communication-efficient learning of deep networks from decentralized data. In Proceedings of the 20th International Conference on Artificial Intelligence and Statistics (2017), PMLR, pp. 1273–1282. [25] Miralles, F., Fernandez-Marqes, J., and Lane, N. D. Flcap: Federated learning with clustered aggregation and personalized pruning. Proceedings of the IEEE International Conference on Distributed Computing Systems (ICDCS) (2023), 456– 467. [26] Ouyang, W., Liu, Y., and Han, Z. Clusterfl: A similarity-aware federated learning system for human activity recognition. In Proceedings of the ACM Conference on Embedded Networked Sensor Systems (SenSys) (2021), pp. 1–14. [27] Ouyang, X., Xie, Z., Zhou, J., Xing, G., and Huang, J. Clusterfl: A clustering-based federated learning system for human activity recognition. ACM Transac-tions on Sensor Networks 19 , 1 (2023), 17:1–17:32. [28] Pandolfo, S. Analysis of the volatility of high-frequency data. the realized volatility and the HAR model. Master’s thesis, Università Ca’ Foscari Venezia, 2020. Supervisor: Prof. Stefano Federico Tonellato. [29] Wu, T., Song, C., and Zeng, P. Efficient federated learning on resource-constrained edge devices based on model pruning. Complex & Intelligent Systems 9 (2023), 6999–7013. [30] Xu, J., Li, T., Sahu, A. K., Talwalkar, A., and Smith, V. Fedsnip: Communication-efficient federated learning via sparse neural network training. In Proceedings of the 38th International Conference on Machine Learning (ICML) (2021), pp. 11435– 11444. [31] Zeng, Y., Liu, Z., Wang, J., and Chen, K. Stocfl: Stochastic clustered federated learning for non-iid data. IEEE Transactions on Neural Networks and Learning Systems (2025). [32] Zhang, Y., Chen, H., Lin, Z., Chen, Z., and Zhao, J. Fedac: An adaptive clus-tered federated learning framework for heterogeneous data. arXiv preprint arXiv:2403.16460 (2024). [33] Zhu, L., Liu, X., and Wang, J. Fedrescue: Federated learning with rescue mecha-nism under statistical heterogeneity. In Proceedings of the AAAI Conference on Artificial Intelligence (2022), vol. 36, pp. 4087–4095. Conference Name, Date, Location Om Govind Jha, Harsh Shukla, and Haroon R. Lone 
+
+## 8 Appendix 8.1 Algorithm 
+
+In this section we have explained the CA-AFP framework through the psuedo code as mentioned in the Algorithm 1 
+
+## 8.2 Complete Ablation Results for Score coefficients 
+
+Table 4 reports the complete ablation results of the importance score under all evaluated weight configurations and dataset scenarios. 
+
+## 8.3 Experimental Setup 
+
+In this section, we present the configurations used in our experi-ments, detailed in Table 5 - 10. 
+
+Table 5: Hyperparameter Configuration for UCI HAR Exper-iments Method Parameter Value Common Settings Rounds phase wise ( 𝑃 1, 𝑃 2, 𝑃 3) 0, 0, 50 Local Epochs ( 𝐸 ) 3Batch Size ( 𝐵 ) 32 Optimizer Adam ( 𝑙𝑟 = 1𝑒 −3)Fine-Tuning Rounds ( 𝑃 4) 3
+
+CA-AFP (Ours) Target Sparsity Adaptive (Start 70%) Scoring Weights ( 𝛼, 𝛽, 𝛾 ) 0.5, 0.25, 0.25 Mask Update Rate (Churn) 5% Number of Clusters ( 𝐾 ) 3
+
+FedSNIP Target Sparsity 70% 
+
+EfficientFL Target Sparsity 70% 
+
+FedCHAR Clusters ( 𝐾 ) 3Warmup Rounds 10 
+
+ClusterFL Clusters ( 𝐾 ) 3Regularization ( 𝜌 ) 5𝑒 −3
+
+Bi-level Params ( 𝛼, 𝛽 ) 1𝑒 −3, 5𝑒 −4
+
+Algorithm 1 CA-AFP: Cluster-Aware Adaptive Federated Pruning 
+
+Require: Clients K, clusters 𝐶 , warm-up rounds 𝑇 1 ≥ 0, stabilization rounds 𝑇 2 ≥ 0,pruning rounds 𝑇 3, pruning frequency 𝑓 , target sparsity 𝑆 target , prune rate 𝜌 
+
+Ensure: Personalized models {𝑣 𝑘 }
+
+1: Initialize global model 𝑤 (0)
+
+2: Phase 1: Warm-up Training 
+
+3: if 𝑇 1 > 0 then 
+
+4: for 𝑡 = 1 to 𝑇 1 do 
+
+5: Server broadcasts 𝑤 (𝑡 )
+
+6: for all clients 𝑘 do 
+
+7: Client trains locally and returns 𝑤 (𝑡 )
+
+> 𝑘
+
+8: end for 
+
+9: 𝑤 (𝑡 +1) ← Í𝑘   
+
+> |D 𝑘 ||D|
+
+𝑤 (𝑡 )
+
+> 𝑘
+
+10: end for 
+
+11: end if 
+
+12: Client Clustering (Always Executed) 
+
+13: Let 𝑤 ref ← 𝑤 (𝑇 1 ) ⊲ 𝑤 (0) if 𝑇 1 = 0
+
+14: for all clients 𝑘 do 
+
+15: Client trains one local epoch from 𝑤 ref 
+
+16: Compute update Δ𝑤 𝑘 
+
+17: end for 
+
+18: Server clusters {Δ𝑤 𝑘 } into 𝐶 clusters 19: for all clusters 𝑐 do 
+
+20: 𝑤 (0) 
+
+> 𝑐
+
+← 𝑤 ref 
+
+21: 𝑀 (0) 
+
+> 𝑐
+
+← 1
+
+22: end for 
+
+23: Phase 2: Dense Cluster Stabilization 
+
+24: if 𝑇 2 > 0 then 
+
+25: for 𝑡 = 1 to 𝑇 2 do 
+
+26: for all clusters 𝑐 do 
+
+27: Server broadcasts 𝑤 (𝑡 )
+
+> 𝑐
+
+28: for all clients 𝑘 ∈ C 𝑐 do 
+
+29: Client minimizes L𝑐 𝑘 (𝑤 𝑐 ) and returns 𝑤 (𝑡 )
+
+> 𝑐,𝑘
+
+30: end for 
+
+31: 𝑤 (𝑡 +1) 
+
+> 𝑐
+
+← Í𝑘 ∈C 𝑐    
+
+> |D 𝑘 ||D 𝑐 |
+
+𝑤 (𝑡 )
+
+> 𝑐,𝑘
+
+32: end for 
+
+33: end for 
+
+34: end if 
+
+35: Phase 3: Prune–Heal Training 
+
+36: for 𝑡 = 1 to 𝑇 3 do 
+
+37: for all clusters 𝑐 do 
+
+38: if 𝑡 mod 𝑓 = 0 then 
+
+39: Clients compute gradients using 𝑤 (𝑡 ) 
+
+> 𝑐
+
+⊙ 𝑀 (𝑡 )
+
+> 𝑐
+
+40: Compute importance scores Score 𝑤 = 𝛼 Mag 𝑤 + 𝛽 Coh 𝑤 + 𝛾 Con 𝑤 
+
+41: Compute sparsity 𝑆 (𝑡 )
+
+42: 𝑅 ← ⌊ ( 𝑇 3 − 𝑡 )/ 𝑓 ⌋
+
+43: Δ𝑆 ← ( 𝑆 target − 𝑆 (𝑡 ) )/ 𝑅 
+
+44: 𝑁 churn ← 𝜌 · 𝑁 active 
+
+45: 𝑁 deficit ← Δ𝑆 · 𝑁 total 
+
+46: 𝑁 prune ← 𝑁 churn + 𝑁 deficit 
+
+47: 𝑁 grow ← 𝑁 churn 
+
+48: Prune 𝑁 prune lowest-score active weights 49: Regrow 𝑁 grow highest-gradient inactive weights 50: Update mask 𝑀 (𝑡 )
+
+> 𝑐
+
+51: end if 
+
+52: Server broadcasts (𝑤 (𝑡 ) 
+
+> 𝑐
+
+, 𝑀 (𝑡 ) 
+
+> 𝑐
+
+)
+
+53: for all clients 𝑘 ∈ C 𝑐 do 
+
+54: Minimize L𝑐 𝑘 (𝑤 𝑐 ) under mask 𝑀 (𝑡 )
+
+> 𝑐
+
+55: Return 𝑤 (𝑡 )
+
+> 𝑐,𝑘
+
+56: end for 
+
+57: 𝑤 (𝑡 +1) 
+
+> 𝑐
+
+←
+
+Í𝑘 ∈C 𝑐    
+
+> |D 𝑘 ||D 𝑐 |
+
+𝑤 (𝑡 )
+
+> 𝑐,𝑘
+
+
+
+⊙ 𝑀 (𝑡 )
+
+> 𝑐
+
+58: end for 
+
+59: end for 
+
+60: Phase 4: Personalized Fine-Tuning (Optional) 
+
+61: for all clusters 𝑐 do 
+
+62: 𝑤 ∗ 
+
+> 𝑐
+
+← 𝑤 (𝑇 3 ) 
+
+> 𝑐
+
+⊙ 𝑀 (𝑇 3 )
+
+> 𝑐
+
+63: for all clients 𝑘 ∈ C 𝑐 do 
+
+64: 𝑣 𝑘 ← 𝑤 ∗
+
+> 𝑐
+
+65: Client minimizes L𝐶𝐸 𝑘 (𝑣 𝑘 ; D𝑘 )
+
+subject to 𝑣 𝑘 ⊙ 𝑀 (𝑇 3 ) 
+
+> 𝑐
+
+= 𝑣 𝑘 
+
+66: end for 
+
+67: end for 
+
+68: return {𝑣 𝑘 }CA-AFP: Cluster-Aware Adaptive Federated Pruning Conference Name, Date, Location 
+
+Table 4: Combined ablation study of importance score weights (𝛼, 𝛽, 𝛾 ) on UCI HAR and WISDM datasets. Note: "Extreme Non-IID" is excluded as it was not evaluated on WISDM. Weights UCI HAR WISDM Scenario 𝛼 𝛽 𝛾 Acc Fairness Score Acc Fairness Score 
+
+Drift 1.00 0.00 0.00 0.6860 0.3526 1.9453 0.6129 0.3820 1.6047 Drift 0.00 1.00 0.00 0.6339 0.3148 2.0135 0.5915 0.3456 1.7116 Drift 0.00 0.00 1.00 0.6475 0.3264 1.9840 0.5763 0.3312 1.7399 Drift 0.50 0.25 0.25 0.6939 0.3452 2.0102 0.5774 0.3396 1.7001 Drift 0.25 0.50 0.25 0.6853 0.3546 1.9323 0.5974 0.3671 1.6273 Drift 0.25 0.25 0.50 0.6654 0.3270 2.0350 0.6169 0.3671 1.6807 Drift 0.33 0.33 0.34 0.6967 0.3506 1.9870 0.5797 0.3420 1.6950 Standard 1.00 0.00 0.00 0.8964 0.1550 5.7816 0.9143 0.1037 8.8198 Standard 0.00 1.00 0.00 0.8548 0.1416 6.0361 0.9040 0.1019 8.8708 Standard 0.00 0.00 1.00 0.8139 0.1549 5.2535 0.8906 0.1211 7.3559 Standard 0.50 0.25 0.25 0.8796 0.1691 5.2014 0.9031 0.1095 8.2486 Standard 0.25 0.50 0.25 0.8971 0.1396 6.4262 0.8939 0.1152 7.7587 Standard 0.25 0.25 0.50 0.9119 0.0981 9.2963 0.9157 0.1051 8.7110 Standard 0.33 0.33 0.34 0.8769 0.1571 5.5809 0.9103 0.1145 7.9534 Noisy Clients 1.00 0.00 0.00 0.7565 0.2111 3.5833 0.7456 0.2204 3.3832 Noisy Clients 0.00 1.00 0.00 0.6890 0.2006 3.4351 0.7449 0.2341 3.1822 Noisy Clients 0.00 0.00 1.00 0.6449 0.1800 3.5821 0.7322 0.2082 3.5170 Noisy Clients 0.50 0.25 0.25 0.7442 0.1903 3.9101 0.7490 0.2333 3.2100 Noisy Clients 0.25 0.50 0.25 0.7458 0.1949 3.8267 0.7335 0.2164 3.3894 Noisy Clients 0.25 0.25 0.50 0.6860 0.1963 3.4957 0.7436 0.2072 3.5893 Noisy Clients 0.33 0.33 0.34 0.7130 0.1843 3.8680 0.7560 0.2189 3.4542 
+
+Table 6: Configuration for WISDM Experiments Method Parameter Value Common Settings Rounds phase wise ( 𝑃 1, 𝑃 2, 𝑃 3) 0, 0, 50 Local Epochs ( 𝐸 ) 3Batch Size ( 𝐵 ) 32 Optimizer Adam ( 𝑙𝑟 = 1𝑒 −3)Fine-Tuning Rounds ( 𝑃 4) 25 CA-AFP (Ours) Target Sparsity Adaptive (Start 70%) Scoring Weights ( 𝛼, 𝛽, 𝛾 ) 0.25, 0.25, 0.50 Mask Update Rate (Churn) 5% Number of Clusters ( 𝐾 ) 3
+
+FedSNIP Target Sparsity 70% 
+
+EfficientFL Target Sparsity 70% 
+
+FedCHAR Clusters ( 𝐾 ) 3Warmup Rounds 10 
+
+ClusterFL Clusters ( 𝐾 ) 3Regularization ( 𝜌 ) 5𝑒 −3
+
+Bi-level Params ( 𝛼, 𝛽 ) 1𝑒 −3, 5𝑒 −4
+
+Table 7: Phase Configuration for CA-AFP Ablation Studies (WISDM) Ablation Study 𝑃 1 𝑃 2 𝑃 3 𝑃 4 Start (Warmup) (Adapt) (Prune) (Fine-Tune) Sparsity Study A: Start Sparsity 0 0 40 3 Varied (Varying 𝑆 𝑠𝑡𝑎𝑟𝑡 ) (0.0 − 0.9)                    
+
+> Study B: Post-Cluster 0Varied 40 30.5
+> (Varying 𝑃 2){0,5, . . . , 20 }(50%)
+> Study C: Initial Warmup Varied 040 30.5
+> (Varying 𝑃 1){0,5, . . . , 20 }(50%)
+
+Conference Name, Date, Location Om Govind Jha, Harsh Shukla, and Haroon R. Lone 
+
+Table 8: Configuration for Importance Score Ablation Study Component Parameter Value / Description Scoring Weights Grid Search (1.0, 0.0, 0.0) – Pure Magnitude 
+
+(𝛼, 𝛽, 𝛾 ) (7 Combinations) (0.0, 1.0, 0.0) – Pure Coherence 
+
+(0.0, 0.0, 1.0) – Pure Consistency 
+
+(0.50 , 0.25 , 0.25 ) – Magnitude Dominant 
+
+(0.25 , 0.50 , 0.25 ) – Coherence Dominant 
+
+(0.25 , 0.25 , 0.50 ) – Consistency Dominant 
+
+(0.33 , 0.33 , 0.34 ) – Balanced 
+
+Data Scenarios Standard Natural User Split of UCI HAR and WISDM 
+
+Drift 40% clients with 100% Random labels (Sensor Malfunction) 
+
+Noisy Clients 40% clients with 30% random labels 
+
+Sparsity Schedule Start Sparsity ( 𝑆 𝑠𝑡𝑎𝑟𝑡 ) 30% (0.3) Target Sparsity ( 𝑆 𝑡𝑎𝑟𝑔𝑒𝑡 ) 70% (0.7) Evolution Strategy Dynamic Pruning ( 0.3 → 0.7)
+
+Training Config Total Rounds ( 𝑃 3) 15 Rounds 
+
+Local Epochs ( 𝐸 ) 1 Epoch 
+
+Fine-Tuning ( 𝑃 4) 0 Epochs 
+
+Pruning Frequency Every 5 Rounds 
+
+Table 9: Configuration for Fine-Tuning Ablation Component Parameter Value Dataset Scenario WISDM (Standard) Partitioning Natural User Split 
+
+Phase 1, 2 and 3 Rounds ( 𝑃 1, 𝑃 2, 𝑃 3) (0, 0, 50) Sparsity Target 70% Clients per Round 10 
+
+Phase 4: Personalization Rounds ( 𝑃 4) {1, 5, 10, 15, 20, 25} Optimizer Adam ( 𝑙𝑟 = 1𝑒 −3)
+
+Methods Compared CA-AFP 𝐾 = 3, 𝑆 = 70% 
+
+Global-FT (variant of CA-AFP) 𝐾 = 1 (No Clustering), 𝑆 = 70% 
+
+FedSNIP 𝐾 = 1, 𝑆 = 70% 
+
+EfficientFL 𝐾 = 1, 𝑆 = 70% 
+
+FedCHAR 𝐾 = 3, 𝑆 = 0% 
+
+ClusterFL 𝐾 = 3, 𝑆 = 0% 
+
+Table 10: Configuration for Non-IID Experiment 
+
+Parameter Configuration Dataset WISDM (Activity Recognition) 
+
+Total Clients 36 (Heterogeneous) 
+
+Global Rounds 50 
+
+Target Sparsity 70% ( 0.7)
+
+Runs per Scenario 5 Independent Seeds 
+
+Non-IID Scenarios 
+
+Extreme Non-IID Clients restricted to 1 class only 
+
+Moderate Non-IID Clients restricted to 2 classes only 
+
+Mild Non-IID Clients restricted to 3 classes only

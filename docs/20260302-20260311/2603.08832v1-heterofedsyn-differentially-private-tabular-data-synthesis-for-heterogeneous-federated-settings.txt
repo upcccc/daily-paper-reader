@@ -1,0 +1,1402 @@
+Title: HeteroFedSyn: Differentially Private Tabular Data Synthesis for Heterogeneous Federated Settings
+
+URL Source: https://arxiv.org/pdf/2603.08832v1
+
+Published Time: Wed, 11 Mar 2026 00:05:45 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# HeteroFedSyn: Differentially Private Tabular Data Synthesis for Heterogeneous Federated Settings 
+
+## Xiaochen Li 
+
+UNC Greensboro USA x_li12@uncg.edu 
+
+## Fengyu Gao 
+
+University of Virginia USA wan6jj@virginia.edu 
+
+## Xizixiang Wei 
+
+University of Virginia USA xw8cw@virginia.edu 
+
+## Tianhao Wang 
+
+University of Virginia USA tianhao@virginia.edu 
+
+## Cong Shen 
+
+University of Virginia USA cong@virginia.edu 
+
+## Jing Yang 
+
+University of Virginia USA yangjing@virginia.edu 
+
+## Abstract 
+
+Traditional Differential Privacy (DP) mechanisms are typically tai-lored to specific analysis tasks, which limits the reusability of pro-tected data. DP tabular data synthesis overcomes this by generating synthetic datasets that can be shared for arbitrary downstream tasks. However, existing synthesis methods predominantly assume centralized or local settings and overlook the more practical hor-izontal federated scenario. Naïvely synthesizing data locally or perturbing individual records either produces biased mixtures or introduces excessive noise, especially under heterogeneous data distributions across participants. We propose HeteroFedSyn, the first DP tabular data synthesis framework designed specifically for the horizontal federated setting. Built upon the PrivSyn paradigm of 2-way marginal–based synthe-sis, HeteroFedSyn introduces three key innovations for distributed marginal selection: (i) an 𝑙 2-based dependency metric with random projection for noise-efficient correlation measurement, (ii) an unbi-ased estimator to correct multiplicative noise, and (iii) an adaptive selection strategy that dynamically updates dependency scores to avoid redundancy. Extensive experiments on range queries, Wasser-stein fidelity, and machine learning tasks show that, despite the increased noise inherent to federated execution, HeteroFedSyn achieves utility comparable to centralized synthesis. Our code is open-sourced via the link 1. 2
+
+ACM Reference Format: 
+
+Xiaochen Li, Fengyu Gao, Xizixiang Wei, Tianhao Wang, Cong Shen, and Jing Yang. 2018. HeteroFedSyn: Differentially Private Tabular Data Synthesis for Heterogeneous Federated Settings. In Proceedings of Make sure to en-ter the correct conference title from your rights confirmation emai (Confer-ence acronym ’XX). ACM, New York, NY, USA, 15 pages. https://doi.org/ XXXXXXX.XXXXXXX  
+
+> 1https://github.com/XiaochenLi-w/Federated-Tabular-Data-Synthesis-Framework
+> 2This work has been accepted by SIGMOD 2026. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> Conference acronym ’XX, June 03–05, 2018, Woodstock, NY
+> ©2018 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-XXXX-X/18/06 https://doi.org/XXXXXXX.XXXXXXX
+
+## 1 Introduction 
+
+Protecting data privacy while leveraging sensitive datasets for data mining tasks has long been a fundamental research challenge. To solve this challenge, Differential Privacy (DP) is proposed [ 22 ], which provides strong privacy guarantees and has been widely adopted across diverse applications, such as Census [ 7], Health-care [ 57 ], and GPS [ 8]. Traditional DP achieves privacy by injecting noise into (i) the dataset itself, (ii) the outputs of data analysis, or (iii) intermediate parameters. These approaches have been ex-tensively studied [ 17 , 23 , 24 , 26 , 27 , 37 , 38 ], covering tasks from range queries [ 33 , 34 ] to generative model training [ 29 , 35 ]. Al-though these techniques are considered mature from a research perspective, several concerns persist in real-world deployment. A key limitation is that DP protection via noise addition is typi-cally tied to a specific task. First, the scale of DP noise depends on data sensitivity, which is usually task-dependent. While domain-level sensitivity is also possible, it often introduces excessive noise. Second, noise mechanisms often require customization for each analysis pipeline, especially when injecting noise into intermediate results. This reduces usability and increases analysis cost. To enable task-agnostic use of DP-protected data, researchers have proposed DP tabular data synthesis methods. These meth-ods generate synthetic datasets from sensitive data and allow re-lease for arbitrary downstream tasks. They typically operate in two steps: (1) extracting noisy statistics from the original data, and (2) sampling synthetic records that match them. Existing meth-ods fall into graphical-model–based [ 10 , 43 , 54 , 55 ] and ML-based approaches [ 30 , 45 , 49 – 52 ], with recent surveys providing compre-hensive summaries [ 13 , 28 , 53 ]. Although not always optimal for a specific task, these methods eliminate repetitive access to raw data, avoid task-specific DP mechanisms, and maintain compati-bility with existing analysis tools. As a result, DP data synthesis substantially reduces the cost of data sharing. However, most DP tabular data synthesis methods assume a centralized data setting, where all records are stored on a single server. A separate line of work explores a local DP setting [ 39 ], where each user injects noise into their own record before sharing it. While both settings are useful, they overlook a more realistic and common scenario: multiple organizations holding disjoint subsets of data with the same attributes and wishing to collaborate. Exam-ples include hospitals jointly analyzing regional disease trends and schools aggregating student statistics for resource planning. These 
+
+> arXiv:2603.08832v1 [cs.CR] 9 Mar 2026
+
+cases fall under the horizontal federated setting, where data are distributed across parties but share the same attributes. Two intuitive solutions fall short in this setting. (1) Each party could independently run a DP synthesis algorithm and share local synthetic data. However, real-world data distributions are often heterogeneous across institutions, e.g., hospitals with different spe-cialties or banks with distinct client bases, and the merged data would form a biased and inconsistent mixture. (2) Parties could add LDP noise to individual records and then share them, but this renders further DP synthesis unnecessary and introduces variance that scales quadratically with the dataset size, severely degrading utility. Therefore, instead of sharing raw data or locally perturbed records, it is necessary to collaboratively exchange dataset statistics to synthesize a global DP dataset. We follow the widely adopted PrivSyn paradigm [ 55 ], synthesiz-ing data using 2-way marginals. However, even sharing local 2-way marginals can still lead to high noise under a limited privacy budget. Specifically, for a dataset with 𝑑 attributes, the variance of noise in each marginal is 𝑂 (𝑑 4/( 4𝜖 2)) . Therefore, only a subset of informa-tive marginals should be selected to guide data synthesis. While PrivSyn provides a centralized greedy selection method, it cannot be directly applied when data are distributed and inaccessible. To address this gap, we propose HeteroFedSyn, a framework for DP tabular data synthesis in the horizontal federated setting, with three key innovations: (a) Attribute Dependency Metric and Marginal Compression. We define an 𝑙 2 distance metric InDif2 𝑎,𝑏 to measure dependencies between any two attributes 𝑎 and 𝑏 . To reduce noise and communication overhead, we apply random projection to com-press the 2-way marginals while preserving dependency signals InDif2 𝑎,𝑏 . Specifically, for two attributes with domains of size 𝑑 𝑎 
+
+and 𝑑 𝑏 , the length of their 2-way marginal is 𝑑 𝑎 × 𝑑 𝑏 . It can be com-pressed to length 𝑘 using random projection, while 𝑘 << 𝑑 𝑎 , 𝑑 𝑏 . (b) 
+
+Unbiased Estimation over Noisy marginals. Computing InDif2 𝑎,𝑏 in-volves multiplicative operations over noisy marginals, which makes debiasing particularly challenging. We provide a rigorous mathe-matical procedure for obtaining an unbiased estimate of InDif2 𝑎,𝑏 
+
+from the compressed noisy marginals. (c) Adaptive Marginal Selec-tion. We observe that selecting important 2-way marginals solely based on attribute dependency can be suboptimal, as it ignores the overlap between selected and unselected marginals. For example, once the marginals for attribute pairs (a, b) and (a, c) are selected, the correlation between b and c is already implicitly constrained. Therefore, selecting the (b, c) marginal next may be redundant, even if (b, c) has a high InDif2 𝑏,𝑐 . In this case, the privacy budget could be better spent on covering additional attributes. Therefore, we introduce an adaptive marginal selection mechanism that up-dates InDif2 𝑎,𝑏 adaptively during the selection process to avoid redundancy and maximize coverage under a fixed privacy budget. Finally, we conduct extensive experiments on a variety of down-stream tasks, including range queries, Wasserstein-based fidelity, and three machine learning models (Random Forest, MLP, and XGBoost). The results show that although the distributed setting introduces significantly more noise than the centralized one, the accuracy of downstream tasks remains comparable, with errors staying within the same order of magnitude rather than degrading proportionally to the noise. Our contributions are summarized as follows: 
+
+Table 1: Important Notations                                    
+
+> Variable Description
+> 𝑐 Number of participants
+> 𝑐 𝑖 The 𝑖 th participants
+> 𝐷 𝑖 Local dataset held by 𝑐 𝑖
+> ˆ𝐷 Global synthetic dataset
+> 𝑛 𝑖 Number of samples held by each participant
+> 𝑛 Number of total samples 𝑛 =Í𝑐 𝑖 =1𝑛 𝑖
+> 𝑑 Number of dimensions of each sample
+> 𝑘 Projection dimension of 2-way marginal
+> 𝑀 𝑎 /ˆ𝑀 𝑎 1-way marginal/noisy marginal of the 𝑎 th attribute
+> 𝑀 𝑎,𝑏 /ˆ𝑀 𝑎,𝑏
+> 2-way marginal/noisy marginal of the 𝑎 th and 𝑏 th attributes
+> 𝑠 𝑎 , 𝑠 𝑏 Length of 1-way marginal of the 𝑎 th /𝑏 th attribute InDif2 𝑎,𝑏
+> Metric indicating the correlation between the 𝑎 th and 𝑏 th attributes
+
+• We propose HeteroFedSyn, the first differentially private tabular data synthesis framework for federated settings with heterogeneous data. 
+
+• Within HeteroFedSyn, we first introduce an 𝑙 2-based de-pendency metric and develop the synthesis algorithm Fed-PrivSyn. We then propose AdaFedPrivSyn, which incorpo-rates an adaptive mechanism to reduce redundancy and im-prove efficiency in marginal selection. 
+
+• We conduct extensive experiments across diverse down-stream tasks, validating the effectiveness and practicality of our approach. 
+
+## 2 Preliminaries 2.1 Problem Statement 
+
+In this paper, we study privacy-preserving data synthesis in the horizontal federated setting. Assume there are 𝑐 participants, each holding a local dataset 𝐷 𝑖 with 𝑛 𝑖 samples. These datasets share the same attributes but contain records from different users and exhibit distributional bias, making any single 𝐷 𝑖 statistically uninforma-tive. Moreover, each participant 𝑐 𝑖 seeks to protect the privacy of individuals in 𝐷 𝑖 .An untrusted server aims to generate a synthetic dataset ˆ𝐷 for downstream tasks (e.g., machine learning or range queries) by lever-aging the global statistical characteristics of all local datasets. The entire data-sharing process must ensure privacy protection. All key notations are summarized in Table 1. Except for local datasets and marginals, parameters such as the number of participants, the size of each 𝐷 𝑖 , and the domain size of each attribute are assumed to be commonly known to all parties and the server. 
+
+## 2.2 Privacy Definitions 
+
+We utilize Differential Privacy techniques [ 21 ] to provide privacy protection for sensitive data, which prevents any sample from being inferred from the statistical results by limiting its influence on the final statistical outcomes. 
+
+Differential Privacy. First, we present the definition of standard differential privacy as follows. 
+
+Definition 1. ((𝜖 , 𝛿 )-Differential Privacy ). An algorithm M
+
+satisfies ( 𝜖, 𝛿 )-DP,where 𝜖, 𝛿 ≥ 0, if and only if for any neighboring datasets 𝐷 and 𝐷 ′ that differ in one element, and any possible outputs 
+
+> 2
+
+R ⊆ 𝑅𝑎𝑛𝑔𝑒 (M) , we have 
+
+Pr [M ( 𝐷 ) ∈ R] ≤ 𝑒 𝜖 Pr [M ( 𝐷 ′) ∈ R] + 𝛿. 
+
+Regarding neighboring datasets 𝐷 and 𝐷 ′, we consider 𝐷 to have one more sample than 𝐷 ′ or one less sample than 𝐷 ′ in this paper. Here, 𝜖 is called the privacy budget . The smaller 𝜖 means that the outputs of M on 𝐷 and 𝐷 ′ are more similar, and thus the provided privacy guarantee is stronger. 𝛿 is generally interpreted as M not satisfying 𝜖 -DP with probability 𝛿 .
+
+Zero-Concentrated DP. Complex algorithms usually require mul-tiple privacy compositions. In this paper, we achieve a more con-cise and tighter privacy composition by converting the privacy guarantee to Zero-Concentrated Differential Privacy (zCDP). The definition of zCDP is as follows. 
+
+Definition 2. (Zero-Concentrated Differential Privacy (zCDP)). A randomized mechanism M satisfies 𝜌 -zCDP with parameter 𝜌 > 0
+
+if, for all neighboring datasets 𝐷 and 𝐷 ′ differing in a single element, and for all 𝛼 > 1, we have: 
+
+𝐷 𝛼 (M ( 𝐷 )∥M ( 𝐷 ′)) ≤ 𝜌𝛼, 
+
+where 𝐷 𝛼 (M ( 𝐷 )∥M ( 𝐷 ′)) is the 𝛼 -Rényi divergence between the distributions of M ( 𝐷 ) and M ( 𝐷 ′).
+
+Gaussian Mechanism. The Gaussian mechanism is commonly used to achieve (𝜖, 𝛿 )-DP. We use it as a building block mechanism in our design. 
+
+Definition 3. (Gaussian Mechanism). Given a function 𝑓 : D → 
+
+R𝑑 , the Gaussian Mechanism adds Gaussian noise to ensure differen-tial privacy. Specifically, the Gaussian Mechanism is defined as: 
+
+M ( 𝐷 ) = 𝑓 (𝐷 ) + N ( 0, 𝜎 2𝐼 ),
+
+where N ( 0, 𝜎 2𝐼 ) represents a multivariate Gaussian distribution with mean zero and covariance matrix 𝜎 2𝐼 . The noise scale 𝜎 is cho-sen based on the sensitivity of 𝑓 and the desired privacy parameters. The ℓ2-sensitivity of 𝑓 is given by: 
+
+Δ𝑓 = max  
+
+> 𝐷,𝐷 ′
+
+∥𝑓 (𝐷 ) − 𝑓 (𝐷 ′)∥ 2,
+
+where 𝐷 and 𝐷 ′ are neighboring datasets differing in a single ele-ment. To satisfy (𝜖, 𝛿 )-DP, 𝜎 is typically set to: 
+
+𝜎 = Δ𝑓 √︁ 2 ln (1.25 /𝛿 )
+
+𝜖 .
+
+To achieve zCDP with the parameter 𝜌 [11], 𝜎 is set to: 
+
+𝜎 = Δ𝑓 
+
+√2𝜌 .
+
+Privacy Composition. We use zCDP for privacy composition. zCDP has a clean composition property, which is additive under composition. The formal definition is as follows. 
+
+Definition 4. (Composition of zCDP [ 11 ]) For a sequence of mech-anisms M𝑖 satisfying 𝜌 𝑖 -zCDP for 𝑖 = 1, 2, . . . , 𝑘 , their composition 
+
+M = (M 1, M2, . . . , M𝑘 ) satisfies Í𝑘 𝑖 =1 𝜌 𝑖 -zCDP. 
+
+Under the standard (𝜖, 𝛿 )-DP framework, we can use the follow-ing conversion to interpret zCDP guarantees. 
+
+Definition 5. (zCDP to (𝜖, 𝛿 )-DP) If a mechanism M satisfies 
+
+𝜌 -zCDP, then it also satisfies (𝜖, 𝛿 )-DP for any 𝛿 > 0 and: 
+
+𝜖 ≤ 𝜌 + 2√︁ 𝜌 log (1/𝛿 ).
+
+Post-Processing Property. The noisy results processed by the DP mechanism are robust, and their privacy guarantee remains intact after further analytical exploration. 
+
+Definition 6. If a mechanism M : D → R satisfies (𝜖, 𝛿 )-DP, then for any function 𝑔 : R → R ′, the mechanism 𝑔 ◦ M remains 
+
+(𝜖, 𝛿 )-DP. 
+
+## 2.3 PrivSyn 
+
+PrivSyn is a classical method proposed by Zhang et al. [ 55 ] for generating differentially private tabular datasets under the cen-tralized setting. It generates tabular data with similar statistical characteristics by capturing low-dimensional information, i.e., 2-way marginals, from the table and adding noise. The key challenge in this process is that the number of attributes 𝑑 in the dataset is typically large. Releasing all 2-way marginals, which amount to 𝑑 (𝑑 − 1)/ 2, would be prohibitively large, resulting in statistical characteristics being overwhelmed by noise. Therefore, allocating a portion of the privacy budget to select the most relevant attributes’ marginals is essential. We summarize the key algorithmic process of PrivSyn into the following three steps: 
+
+• Dependency Measurement. To identify the more “valuable” 
+
+2-way marginals, PrivSyn introduces a metric called InDif to evaluate the dependency between any two attributes. For any two attributes 𝑎 and 𝑏 , InDif calculates the ℓ1 distance between the 2-way marginal 𝑀 𝑎,𝑏 and 2-way marginal generated assuming independence 𝑀 𝑎 × 𝑀 𝑏 , i.e., InDif 𝑎,𝑏 = |𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 |.
+
+According to the composition theory (Definition 4), all 𝑚 = 𝑑 (𝑑 −
+
+1)/ 2 InDif scores are published with Gaussian noise, i.e., 𝜎 2 =
+
+Δ𝐼𝑛𝐷𝑖 𝑓 𝑚 /( 2𝜌 ′), where Δ𝐼𝑛𝐷𝑖 𝑓 = 4.
+
+• Marginal Selection. Essentially, the process of marginal selec-tion makes trade-off between noise error and dependency error. If a 2-way marginal (𝑎, 𝑏 ) is selected, it incurs a noise error 𝜓 𝑎,𝑏 ;if not selected, it introduces a dependency error 𝜙 𝑎,𝑏 . PrivSyn utilizes InDif 𝑎,𝑏 as the dependency error and solves this optimiza-tion problem by proposing a greedy method: 
+
+min ∑︁  
+
+> 𝑧 ∈𝑍
+
+[𝜓 𝑧 𝑥 𝑧 + 𝜙 𝑧 (1 − 𝑥 𝑧 )] , 𝑥 𝑧 ∈ { 0, 1}, (1) where 𝑍 represents the set of all 2-way marginals. Then, the selected 2-way marginals are released for the subsequent data synthesis after adding noise. 
+
+• Data Synthesis. PrivSyn constructs a flow graph and iteratively fits the noisy marginals by duplicating and replacing values in a randomly initialized dataset. This method is called GUM. To accelerate convergence, GUM only fits noisy 2-way marginals and generates independent attribute of samples in one step based on noisy 1-way marginals after convergence. 
+
+## 3 HeteroFedSyn 
+
+In this section, we first construct a general horizontal federated tabular data synthesis framework. HeteroFedSyn follows this frame-work and incorporates the algorithms for each of its components.                                            
+
+> 3ID Age Gender Address State
+> Marriage Status Income
+> 1Teenage Male VA Single Low
+> 2Adult Female NY Married High
+> 3Elderly Female MD Divorced Medium
+> ID Age Gender Address State
+> Marriage Status Income
+> 4Teenage Male VA Single Low
+> 5Teenage Female DC Single Low
+> 6Elderly Male VA Divorced Medium
+> 7Adult Male CA Married High
+> Party 1
+> Party c
+
+…
+
+User Side                              
+
+> ID Age Gender Address State
+> Marriage Status Income
+> 1Teenage Male VA Single Medium
+> 2Teenage Female CT Single High
+> 3Elderly Male VA Divorced Medium
+> ………………
+> ………………
+
+Server Side  
+
+> Untrusted Collector Synthesizer
+> Privacy Protection
+> Synthetic Data
+> Noisy Information
+> Statistical calculation
+> Budget Allocation
+> Noise Addition
+> Queries
+
+Figure 1: Overview of the horizontal federated data synthesis framework. On the user side, multiple participants hold different data sources with the same attributes. They extract information, add noise, and share it with the server, synthesizing a publishable dataset with similar statistical characteristics to the entire private data. 
+
+## 3.1 Overview 
+
+The overview of the horizontal federated data synthesis framework is shown in Figure 1, which contains user side and server side. 
+
+• User Side. The user side consists of 𝑐 clients, where private tabular data containing different samples with the same attributes are stored locally on each client (assuming the datasets have already been aligned using PSI technology [ 16 , 32 ]). The user side never sends raw data to the server, instead, it extracts the statistical information by the Statistical Calculation module, adds noise by the Noise Addition module, and then transmits the noisy messages to the server. All privacy budget consumption is strictly controlled by the budget allocation module, which follows the privacy composition theory (Definition 4). 
+
+• Server Side. The Collector on the server side gathers the noisy information sent by the clients and forwards it to the synthesizer 
+
+for fitting. This process may involve multiple rounds of interac-tion with the user side. Additionally, we assume that the collector honestly follows the algorithms but is curious and may attempt to infer user privacy. The synthetic dataset can be released for any downstream tasks, with the privacy guarantee ensured by the post-processing property (Definition 6). 
+
+## 3.2 Workflow of HeteroFedSyn 
+
+We design HeteroFedSyn within the structure of the horizontal federated data synthesis framework. The entire execution process consists of the following four main steps. 
+
+• Marginal Sharing. Different from the centralized setting, where all analysis and computation are performed on the raw dataset before release, the server-side analysis can only be based on the noisy information shared by the user side in the federated set-ting. At the beginning of the HeteroFedSyn, each participant on the user side needs to compute all 1-way marginals and 2-way marginals of their local dataset, which represent the probabil-ity distribution of individual attributes and the joint probabil-ity distribution of any two attributes. After adding noise, these marginals are sent to the server for aggregation to obtain an unbi-ased overall data distribution, which is crucial for the subsequent steps. Specifically, HeteroFedSyn utilizes a random projection matrix to compress all 2-way marginals into a 𝑘 -dimensional vector, avoiding the excessive communication overhead caused by transmitting the 2-way marginals. 
+
+• Dependency Measurement. Next, HeteroFedSyn faces the chal-lenge of measuring the dependency between attributes based on the noisy 1-way and 2-way marginals. HeteroFedSyn adopts PrivSyn’s dependency evaluation metric, but modifies it from the ℓ1 norm to the ℓ2 norm. By leveraging the property of ran-dom projection matrix and performing debiasing operations, the server can obtain dependency scores for any pair of attributes. 
+
+• Marginal Selection. After obtaining the dependency scores for all 2-way marginals, HeteroFedSyn selects the most “valuable” 
+
+2-way marginals, which are then required from the user side after adding noise. This process filters out a large number of inde-pendent or weakly correlated 2-way marginals, thereby prevent-ing unnecessary privacy budget consumption. HeteroFedSyn in-cludes two synthesis algorithms: FedPrivSyn and AdaFedPrivSyn, each employing a distinct marginal selection strategy. Unlike PrivSyn’s static selection method, AdaFedPrivSyn adopts an adap-tive approach for marginal selection. It continuously updates the initially computed dependency scores based on the currently se-lected marginals, which can further prevent wasting the privacy budget on redundant 2-way marginals. 
+
+• Data Synthesis. Data synthesis is integrated throughout the entire workflow of HeteroFedSyn, rather than being performed only at the final stage after marginal selection, as in PrivSyn. With each 2-way marginal selected, HeteroFedSyn performs data synthesis and adjusts the dependency scores of the relevant 2-way marginals based on the synthesized dataset. The workflow of HeteroFedSyn is summarized in Figure 2. Each participant first computes all 1-way and 2-way marginals on its local data and sends their compressed and noisy versions to the server, which uses only a small portion of the overall privacy bud-get (Step 1). The server aggregates these statistics to obtain global marginals and computes dependency scores for all attribute pairs (Step 2). Based on these scores, the server greedily selects the most informative 2-way marginals that best capture attribute dependen-cies in the dataset (Step 3), and requests them from the clients (Step 4). The clients then use the remaining majority of the privacy budget to perturb the selected 2-way marginals and send them to the server for data synthesis (Step 5). In the adaptive setting, the synthesized data is further used to update the dependency scores, 
+
+> 4
+
+Marginal Sharing 
+
+Dependency Measurement 
+
+Marginal Selection  Data Synthesis 
+
+User Side  Server Side 
+
+1 2 3
+
+6
+
+5
+
+4
+
+> Noisy Selected Marginals
+> Update Sores of Related 2-way Marginals
+> Noisy 1-way&2-way Marginals
+> Dependency Scores of 2-way Marginals
+> Key of Selected Marginals
+> Request Selected Marginals
+> Synthetic Dataset
+> Private Datasets
+
+Figure 2: Workflow of HeteroFedSyn. The user side shares noisy 1-way and 2-way marginals with the server for dependency measurement. Based on dependency scores, the server selects 2-way marginals for data synthesis. During the adaptive marginal selection process, HeteroFedSyn continuously updates dependency scores to guide subsequent marginal selection. 
+
+which are fed back to guide subsequent marginal selection, enabling a dynamic selection process (Step 6). In the following section, we provide a detailed description of the four main building blocks in HeteroFedSyn, and explain how the privacy budget is carefully managed throughout the entire process. 
+
+## 4 Building Blocks 4.1 Marginal Sharing 
+
+As the first building block in the workflow of HeteroFedSyn, mar-ginal sharing enables the server to obtain an initial understanding of global attribute distributions while preserving local data privacy. In HeteroFedSyn, marginal sharing on the user side occurs in two stages. In the first stage, participants share all 1-way and 2-way marginals of their local datasets with the server for attribute de-pendency analysis. In the second stage, after the server gains an understanding of the global dataset characteristics, it requests addi-tional marginal information from the participants. The first stage of marginal sharing consumes a small part of the privacy budget, reserving most of the privacy budget for the second stage to provide more accurate information for valuable marginal information. For second-stage sharing, the user side only need to add Gaussian noise to the marginals requested by the server. This section focuses on designing the initial stage of data sharing, which is essential but may suffer from excessive noise and communication overhead. The marginal sharing algorithm executed by each participant is shown in Algorithm 1. All participants locally compute all 1-way and 2-way marginals and add Gaussian noise. Each 2-way marginal is multiplied by a random projection matrix ( 𝑑 (𝑑 − 1)/ 2 in total) before adding noise, which is shared by all participants. Next, we provide the technical details involved in the algorithm. 
+
+Integrating biased local dataset. Since participants’ data come from different sources, their distributions may vary significantly. Conducting attribute dependency analysis on a biased local dataset would be meaningless. As shown in Table 2, suppose two local datasets contain the same two attributes, Gender and Age, and their one-way marginals are both [Male, 0.5, Female, 0.5], [Teenager, 0.5, Adult, 0.5]. Since Dataset #1 primarily consists of adult males and teenage females, while Dataset #2 mainly contains teenage males and adult females, the InDif scores calculated from these two datasets bias significantly from that of the merged global dataset. 
+
+Algorithm 1 Marginal Sharing (Executed by Each Participant) 
+
+Input: {𝑃 𝑎,𝑏 ∈ R(𝑠 𝑎 ·𝑠 𝑏 ) × 𝑘 : 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 }, where each i.i.d entry of 𝑃 𝑎,𝑏 drawn from 𝑁 (0, 1 
+
+> 𝑘
+
+) and 𝑘 is projection dimension, local dataset 𝐷 𝑖 . 
+
+> 1:
+
+Compute all 1-way marginals {𝑀 𝑐 𝑖  
+
+> 𝑎
+
+: 𝑎 ∈ { 1, ..., 𝑑 } } . 
+
+> 2:
+
+Compute all 2-way marginals {𝑀 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+: 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 }. 
+
+> 3:
+
+Send {𝑛 𝑖 · ( 𝑀 𝑐 𝑖  
+
+> 𝑎
+
++𝐺 𝑎 ) : 𝑎 ∈ { 1, ..., 𝑑 } } to the Server, where 𝐺 𝑎 ∈ R1×𝑠 𝑎 
+
+is sampled from 𝑁 𝑠 𝑎 (0, 𝜎 21 ). 
+
+> 4:
+
+Send {𝑧 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+= 𝑛 𝑖 · ( 𝑀 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+𝑃 𝑎,𝑏 + 𝐺 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+) : 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 } } to the server, where 𝐺 𝑎,𝑏 ∈ R1×𝑘 is sampled from 𝑁 𝑘 (0, 𝜎 22 ).
+
+Table 2: Examples of significant differences between local and global marginal distributions.               
+
+> Independent 2-way marg. Actual 2-way marg. InDif Gender and Age Distribution at Dataset #1
+> Male, Teenager 0.25 Male, Teenager 0.10 0.6 Male, Adult 0.25 Male, Adult 0.40 Female, Teenager 0.25 Female, Teenager 0.40 Female, Adult 0.25 Female, Adult 0.10
+> Gender and Age Distribution at Dataset #2
+> Male, Teenager 0.25 Male, Teenager 0.40 0.6 Male, Adult 0.25 Male, Adult 0.10 Female, Teenager 0.25 Female, Teenager 0.10 Female, Adult 0.25 Female, Adult 0.40
+> Gender and Age Global Distribution
+> Male, Teenager 0.25 Male, Teenager 0.25 0Male, Adult 0.25 Male, Adult 0.25 Female, Teenager 0.25 Female, Teenager 0.25 Female, Adult 0.25 Female, Adult 0.25
+
+This example further confirms the necessity of aggregating all bi-ased local 2-way marginals before conducting attribute dependency analysis, as aggregating only 1-way marginals is insufficient. Therefore, in HeteroFedSyn, all participants need to compute 
+
+1-way and 2-way marginals of their local datasets in the initial stage, multiply them by the size of their local dataset, and then send them to the server for aggregation. The server sums these values and divides them by the total number of data points across all local datasets to obtain all marginals of the unbiased global dataset. 
+
+Compressing with Random Projection. Sharing all marginals may result in excessive communication overhead, especially since 
+
+2-way marginals may have very high dimensionality. Specifically, for a dataset with 𝑑 attributes, the number of 2-way marginals is 
+
+𝑑 (𝑑 − 1)/ 2. For a 2-way marginal 𝑀 𝑎,𝑏 , where the domain size of 
+
+> 5
+
+attribute 𝑎 and 𝑏 are 𝑠 𝑎 and 𝑠 𝑏 , the length of 𝑀 𝑎,𝑏 is 𝑠 𝑎 · 𝑠 𝑏 . The length of 𝑀 𝑎,𝑏 is always on the order of the squared value of 1-way marginals. To alleviate communication overhead, HeteroFedSyn employs random mapping techniques to reduce the dimensionality of all 2-way marginals. By compressing each 2-way marginal from length 𝑠 𝑎 · 𝑠 𝑏 to 𝑘 dimensions, it not only reduces communication load, but also lowers the amount of noise added to each marginal. According to Johnson-Lindenstrauss Lemma [ 40 ], given a data matrix 𝑋 ∈ R𝑛 ×𝑑 , one can construct a random projection matrix 
+
+𝑃 ∈ R𝑑 ×𝑘 to obtain 
+
+𝑋 = 𝑋 𝑃 ∈ R𝑛 ×𝑘 , 𝑘 ≪ 𝑑. (2) where the entries of the random matrix 𝑃 are i.i.d. and typically follow the Gaussian distribution or a Gaussian-like distribution, such as uniform. It has been proven that, as long as 𝑘 is not too small ( 𝑘 = Ω(log 𝑛 /𝜆 2 
+
+> 𝐽 𝐿
+
+), where 𝜆 𝐽 𝐿 is a small multiplicative value), two matrices multiplied by the same mapping matrix can preserve pairwise distances with high probability. It is widely used as a dimensionality reduction tool in tasks involving distance estima-tion [31, 36, 48]. In the analysis of attribute dependency, 1-way marginals are needed for further computational operations, while 2-way marginals are only used for distance comparisons. Therefore, HeteroFedSyn applies the random projection technique to compress all 2-way marginals on the user side. Since the length of each 2-way marginal may vary, we sample a random projection matrix for each 2-way marginal. Specifically, for a pair of attributes ( 𝑎 , 𝑏 ), we sample a ma-trix 𝑃 𝑎,𝑏 ∈ R(𝑠 𝑎 ·𝑠 𝑏 ) × 𝑘 , where each entry is independently sampled from a Gaussian distribution 𝑁 (0, 1 
+
+> 𝑘
+
+). Each participant 𝑐 𝑖 on the user side maps the 2-way marginal 𝑀 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+using the same random projection matrix 𝑃 𝑎,𝑏 following Equation 2. To aggregate 2-way marginals of the same attribute pairs across participants, all parties must use the same projection matrices. In HeteroFedSyn, the server should generate and synchronize the 𝑑 (𝑑 − 1)/ 2 matrices to all participants before the data synthesis algorithm starts running. 
+
+Adding Gaussian Noise to Marginals. All 1-way marginals and the dimension-reduced 2-way marginals need to be perturbed with Gaussian noise to satisfy DP guarantee. Given the allocated privacy budget 𝜌 1, for the 1-way marginal, we have Theorem 1 to ensure the privacy guarantee. 
+
+Theorem 1. (Privacy Guarantee for 1-Way Marginals). Let ∥𝑀 𝑐 𝑖  
+
+> 𝑎
+
+−
+
+𝑀 𝑐 ′ 
+
+> 𝑖
+> 𝑎
+
+∥2 ≤ Δ1, ∀𝑎 ∈ { 1, ..., 𝑑 }, 𝑖 ∈ { 1, ..., 𝑐 }. Then for any 𝜌 1 > 0, ˆ𝑀 𝑎 is 
+
+𝜌 1-zCDP if 𝜎 1 ≥ Δ1√︃ 𝑑  
+
+> 2𝜌 1
+
+.
+
+Next, we provide the upper bound on the sensitivity Δ1 of the 
+
+1-way marginal in Theorem 2. 
+
+Theorem 2. (Bounding Δ1). Let Δ1 be the ℓ2-sensitivity for adding noise to the 1-way marginals. We have Δ1 ≤ 1.
+
+Proof. Denote the count of items on attribute 𝑎 as 𝑎 1, ..., 𝑎 𝑠 𝑎 .Assume that we add one sample to the dataset of participant 𝑐 𝑖 ,the value of attribute 𝑎 belongs to the 𝑗 th item 𝑎 𝑗 . Additionally, the number of sample held by each participant 𝑛 𝑖 should larger than 1.Then we have 
+
+Δ1 = max ∥𝑀 𝑐 𝑖  
+
+> 𝑎
+
+− 𝑀 𝑐 ′ 
+
+> 𝑖
+> 𝑎
+
+∥2
+
+= max 
+
+vut 𝑠 𝑎 ∑︁ 
+
+> 𝑖 =𝑞,𝑞 ≠𝑗
+
+( 𝑎 𝑞 
+
+𝑛 𝑖 
+
+− 𝑎 𝑞 
+
+𝑛 𝑖 + 1 )2 + ( 𝑎 𝑗 
+
+𝑛 𝑖 
+
+− 𝑎 𝑗 + 1
+
+𝑛 𝑖 + 1 )2
+
+= max 
+
+vut 𝑠 𝑎 ∑︁ 
+
+> 𝑖 =𝑞,𝑞 ≠𝑗
+
+𝑎 2
+
+> 𝑞
+
+𝑛 2 
+
+> 𝑖
+
+(𝑛 𝑖 + 1)2 + (𝑎 𝑗 − 𝑛 𝑖 )2
+
+𝑛 2 
+
+> 𝑖
+
+(𝑛 𝑖 + 1)2
+
+= max 1
+
+𝑛 𝑖 (𝑛 𝑖 + 1)
+
+vut 𝑠 𝑎 ∑︁ 
+
+> 𝑖 =𝑞
+
+𝑎 2 
+
+> 𝑞
+
++ 𝑛 𝑖 (𝑛 𝑖 − 2𝑎 𝑗 )≤√2
+
+𝑛 𝑖 
+
+≤ 1
+
+□
+
+Given the allocated privacy budget 𝜌 2, we present the privacy guarantee of 2-way marginal in Theorem 3. 
+
+Theorem 3. (Privacy Guarantee for 2-Way Marginals) Let ∥𝑀 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+𝑃 𝑎,𝑏 −
+
+𝑀 𝑐 ′ 
+
+> 𝑖
+> 𝑎,𝑏
+
+𝑃 𝑎,𝑏 ∥2 ≤ Δ2, ∀𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎, 𝑖 ∈ { 1, ..., 𝑐 }. Then for any 
+
+𝜌 2 > 0, 𝑧 𝑎,𝑏 is 𝜌 2-zCDP if 𝜎 2 ≥ Δ2√︃ 𝑑 (𝑑 −1) 
+
+> 4𝜌 2
+
+.
+
+We provide an upper bound on the sensitivity Δ2 in Theorem 4. 
+
+Theorem 4. (Bounding Δ2). Let Δ2 be the ℓ2 sensitivity for adding noise to the 2-way marginals. We have 
+
+Δ2 ≤ max  
+
+> 1≤𝑖 ≤𝑠 𝑎 𝑠 𝑏
+
+vut 𝑘 ∑︁ 
+
+> 𝑗 =1
+
+𝑃 𝑎,𝑏 [𝑖, 𝑗 ]2
+
+Proof. Denote the count of items on attribute 𝑎 , 𝑏 as 𝑎 1, ..., 𝑎 𝑠 𝑎 
+
+and 𝑏 1, ..., 𝑏 𝑠 𝑏 , respectively. Then the domain size of 2-way marginal on attribute 𝑎 and 𝑏 is 𝑠 𝑎 𝑠 𝑏 , denote the count of items as 𝑐 1, ..., 𝑐 𝑠 𝑎 𝑠 𝑏 .Assume we add one sample to the 𝑖 th user’s datasets, the value of attribute 𝑎 and 𝑏 belong to 𝑖 th  
+
+> 0
+
+and 𝑗 th  
+
+> 0
+
+items, respectively. We have 
+
+Δ2 = max ∥𝑀 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+𝑃 𝑎,𝑏 − 𝑀 𝑐 ′ 
+
+> 𝑖
+> 𝑎,𝑏
+
+𝑃 𝑎,𝑏 ∥2
+
+≤ max ∥𝑀 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+− 𝑀 𝑐 ′ 
+
+> 𝑖
+> 𝑎,𝑏
+
+∥2 · max  
+
+> 1≤𝑖 ≤𝑠 𝑎 𝑠 𝑏
+
+vut 𝑘 ∑︁ 
+
+> 𝑗 =1
+
+𝑃 [𝑖, 𝑗 ]2 (based on [31]) 
+
+=
+
+vt∑︁   
+
+> (𝑖,𝑗 )≠(𝑖 0,𝑗 0)
+
+( 𝑐 𝑖,𝑗 
+
+𝑛 𝑖 
+
+− 𝑐 𝑖,𝑗 
+
+𝑛 𝑖 + 1 )2 + ( 𝑐 𝑖 0,𝑗 0
+
+𝑛 𝑖 
+
+− 𝑐 𝑖 0,𝑗 0 + 1
+
+𝑛 𝑖 + 1 )2
+
+· max  
+
+> 1≤𝑖 ≤𝑠 𝑎 𝑠 𝑏
+
+vut 𝑘 ∑︁ 
+
+> 𝑗 =1
+
+𝑃 [𝑖, 𝑗 ]2 ≤ max  
+
+> 1≤𝑖 ≤𝑠 𝑎 𝑠 𝑏
+
+vut 𝑘 ∑︁ 
+
+> 𝑗 =1
+
+𝑃 [𝑖, 𝑗 ]2.
+
+□
+
+## 4.2 Dependency Measurement 
+
+Following the initial marginal sharing stage, the server performs dependency measurement on the received noisy 1-way and 2-way marginals to identify 2-way marginals with strong attribute corre-lations. Such strongly correlated marginals play a more critical role in capturing the underlying statistical structure of the dataset than weakly correlated ones. By allocating a small portion of the privacy 
+
+> 6
+
+Algorithm 2 Dependency Measurement 
+
+Input: {𝑃 𝑎,𝑏 ∈ R(𝑠 𝑎 ·𝑠 𝑏 ) × 𝑘 : 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 }, where each i.i.d entry of 𝑃 𝑎,𝑏 drawn from 𝑁 (0, 1 
+
+> 𝑘
+
+) and 𝑘 is projection dimension.  
+
+> 1:
+
+Compute { ˆ𝑀 𝑎 = 1
+
+> 𝑛
+
+Í𝑐 𝑖 =1 𝑛 𝑖 · ( 𝑀 𝑐 𝑖  
+
+> 𝑎
+
++ 𝐺 𝑎 ) : 𝑎 ∈ { 1, ..., 𝑑 } } . 
+
+> 2:
+
+Compute {𝑧 𝑎,𝑏 = 1
+
+> 𝑛
+
+Í𝑐 𝑖 =1 𝑧 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+: 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 }. 
+
+> 3:
+
+Compute {𝑧 𝑎 ∗𝑏 = ( ˆ𝑀 𝑎 × ˆ𝑀 𝑏 )𝑃 𝑎,𝑏 : 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 }. 
+
+> 4:
+
+Compute {InDif2 2 
+
+> 𝑎,𝑏
+
+= 𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏 22 −
+
+h
+
+𝑘𝛼𝜎 22 + 𝛼𝜎 21
+
+ 𝑠 𝑏 ∥ ˆ𝑀 𝑎 ∥22 +
+
+𝑠 𝑎 ∥ ˆ𝑀 𝑏 ∥22
+
+ − 𝑠 𝑎 𝑠 𝑏 𝛼 2𝜎 41
+
+i
+
+: 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 }, 𝛼 =  
+
+> Í𝑖 𝑛 2
+> 𝑖
+> 𝑛 2
+
+.
+
+Output: {InDif2 𝑎,𝑏 : 𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 > 𝑎 }
+
+budget to this dependency analysis, HeteroFedSyn can preserve the majority of the privacy budget for accurately acquiring the most informative marginals, rather than expending it on a large number of unnecessary marginals. HeteroFedSyn still follows InDif, the dependency measure pro-posed in PrivSyn [ 55 ], but with modifications. We compute the ℓ2
+
+distance between the actual 2-way marginals and the joint distribu-tion of marginals without considering dependencies. InDif2 𝑎,𝑏 = ∥𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 ∥2 (3) Unlike the centralized setting, where InDif2 𝑎,𝑏 can be computed directly from the raw data and noise added afterward, in the fed-erated scenario, the server can only access the noisy version of the 1-way marginals and the noisy version of the 2-way marginals, which have been compressed through random projection. Here, the computation of the ℓ2-norm distance between marginals is essen-tially intended to align with the property that compressed noisy marginals preserve the ℓ2-norm distance. Directly applying the formula ˆ𝑀 𝑎,𝑏 − ˆ𝑀 𝑎 × ˆ𝑀 𝑏 on these noisy marginals does not yield a correct InDif2 𝑎,𝑏 , because the noise interacts in a complex way. Therefore, the biggest challenge in HeteroFedSyn is to extract an unbiased estimate of InDif2 𝑎,𝑏 from these “distorted” marginals. In particular, simply expanding ˆ𝑀 𝑎,𝑏 − ˆ𝑀 𝑎 × ˆ𝑀 𝑏 would generate terms involving the original 𝑀 𝑎 and 𝑀 𝑏 , which the server cannot access; Theorem 5 shows how to cleverly use only the noisy marginals to cancel out these extra terms and obtain a valid unbiased estimate. The detailed process for dependency measurement on the server side is shown in Algorithm 2. The server first needs to aggregate the noisy 1-way marginals and the compressed noisy 2-way marginals received from the participants. The aggregation is based on a propor-tional weighting according to the amount of data each participant holds. To align the compressed noisy 2-way marginals, the joint distribution 𝑀 𝑎 × 𝑀 𝑏 computed from noisy 1-way marginal must also be mapped using the same projection matrix 𝑃 𝑎,𝑏 . After ag-gregation of the noisy marginal information, the server constructs an unbiased estimator of InDif2 𝑎,𝑏 based on it. Next, we present how Theorem 5 derives an unbiased estimate of InDif2 𝑎,𝑏 for any attribute pair (𝑎, 𝑏 ) using the noisy marginals 𝑧 𝑎,𝑏 and 𝑧 𝑎 ∗𝑏 .
+
+Theorem 5. (Unbiased estimation of InDif2 𝑎,𝑏 ). 𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏  
+
+> 22
+
+−
+
+h
+
+𝑘𝛼𝜎 22 + 𝛼𝜎 21
+
+ 𝑠 𝑏 ∥ ˆ𝑀 𝑎 ∥22 + 𝑠 𝑎 ∥ ˆ𝑀 𝑏 ∥22
+
+ − 𝑠 𝑎 𝑠 𝑏 𝛼 2𝜎 41
+
+i
+
+is an unbiased esti-mator of the square of InDif2 𝑎,𝑏 , where 𝛼 =  
+
+> Í𝑖 𝑛 2
+> 𝑖
+> 𝑛 2
+
+.
+
+Proof. We first recall the setup and notations. Each client 𝑐 𝑖 has a dataset of size 𝑛 𝑖 with 𝑛 = Í𝑖 𝑛 𝑖 . Each client sends the following to the server: 1-way marginals 𝑛 𝑖 
+
+ 𝑀 𝑐 𝑖  
+
+> 𝑎
+
++ 𝐺 𝑐 𝑖 
+
+> 𝑎
+
+ with 𝐺 𝑐 𝑖  
+
+> 𝑎
+
+∼ N ( 0, 𝜎 21 𝐼 𝑠 𝑎 );2-way marginals 𝑧 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+= 𝑛 𝑖 
+
+ 𝑀 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+𝑃 𝑎,𝑏 + 𝐺 𝑐 𝑖 
+
+> 𝑎,𝑏
+
+ with 𝐺 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+∼ N ( 0, 𝜎 22 𝐼 𝑘 ).Define 𝑀 𝑎 = 1
+
+> 𝑛
+
+Í𝑖 𝑛 𝑖 𝑀 𝑐 𝑖  
+
+> 𝑎
+
+, 𝐺 𝑎 = 1
+
+> 𝑛
+
+Í𝑖 𝑛 𝑖 𝐺 𝑐 𝑖  
+
+> 𝑎
+
+, 𝐺 𝑎,𝑏 = 1
+
+> 𝑛
+
+Í𝑖 𝑛 𝑖 𝐺 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+,and 𝛼 =  
+
+> Í𝑖 𝑛 2
+> 𝑖
+> 𝑛 2
+
+. Then we have 
+
+𝐺 𝑎 ∼ N ( 0, 𝛼𝜎 21 𝐼 𝑠 𝑎 ),𝐺 𝑎,𝑏 ∼ N ( 0, 𝛼𝜎 22 𝐼 𝑘 ).
+
+Server aggregates 
+
+ˆ𝑀 𝑎 = 1
+
+𝑛 ∑︁ 𝑖 
+
+𝑛 𝑖 (𝑀 𝑐 𝑖  
+
+> 𝑎
+
++ 𝐺 𝑐 𝑖  
+
+> 𝑎
+
+) = 𝑀 𝑎 + 𝐺 𝑎 ,𝑧 𝑎,𝑏 = 1
+
+𝑛 ∑︁ 𝑖 
+
+𝑧 𝑐 𝑖  
+
+> 𝑎,𝑏
+
+= 𝑀 𝑎,𝑏 𝑃 𝑎,𝑏 + 𝐺 𝑎,𝑏 .
+
+We then analyze 𝐸 ∥𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏 ∥22
+
+, where 
+
+𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏 = (𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 )𝑃 𝑎,𝑏 
+
++
+
+
+
+𝐺 𝑎,𝑏 − ( 𝑀 𝑎 × 𝐺 𝑏 )𝑃 𝑎,𝑏 − ( 𝐺 𝑎 × 𝑀 𝑏 )𝑃 𝑎,𝑏 − ( 𝐺 𝑎 × 𝐺 𝑏 )𝑃 𝑎,𝑏 
+
+
+
+.
+
+Since 𝐺 𝑎 , 𝐺 𝑏 , and 𝐺 𝑎,𝑏 are independent, mean-zero Gaussians and independent of 𝑃 𝑎,𝑏 , we have 
+
+E∥𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏 ∥22
+
+ = 𝐸 ∥( 𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 )𝑃 𝑎,𝑏 ∥22
+
+
+
++ 𝐸 ∥𝐺 𝑎,𝑏 ∥22
+
+ + 𝐸 ∥( 𝑀 𝑎 × 𝐺 𝑏 )𝑃 𝑎,𝑏 ∥22
+
+ + 𝐸 ∥( 𝐺 𝑎 × 𝑀 𝑏 )𝑃 𝑎,𝑏 ∥22
+
+
+
++ 𝐸 ∥( 𝐺 𝑎 × 𝐺 𝑏 )𝑃 𝑎,𝑏 ∥22
+
+ .
+
+We then evaluate each variance term. We use two useful properties: 
+
+E∥𝑥𝑃 ∥22 = ∥𝑥 ∥22 (Johnson-Lindenstrauss Lemma [ 40 ]), and ∥𝑢 ×
+
+𝑣 ∥22 = ∥𝑢 ∥22 · ∥ 𝑣 ∥22. Then we have 
+
+E∥( 𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 )𝑃 𝑎,𝑏 ∥22 = ∥𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 ∥22,
+
+E∥𝐺 𝑎,𝑏 ∥22 = 𝑘𝛼𝜎 22 ,
+
+E∥( 𝑀 𝑎 ×𝐺 𝑏 )𝑃 𝑎,𝑏 ∥22 = E∥𝑀 𝑎 ×𝐺 𝑏 ∥22 = ∥𝑀 𝑎 ∥22·E∥𝐺 𝑏 ∥22 = ∥𝑀 𝑎 ∥22·𝑠 𝑏 𝛼𝜎 21 .
+
+Similarly, 
+
+E∥( 𝐺 𝑎 × 𝑀 𝑏 )𝑃 𝑎,𝑏 ∥22 = ∥𝑀 𝑏 ∥22 · 𝑠 𝑎 𝛼𝜎 21 ,
+
+E∥( 𝐺 𝑎 × 𝐺 𝑏 )𝑃 𝑎,𝑏 ∥22 = E∥𝐺 𝑎 ∥22 E∥𝐺 𝑏 ∥22 = 𝑠 𝑎 𝑠 𝑏 𝛼 2𝜎 41 .
+
+Therefore, 
+
+𝐸 ∥𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏 ∥22
+
+ = ∥𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 ∥22
+
++ 𝑘𝛼 𝜎 22 + 𝛼𝜎 21
+
+ 𝑠 𝑏 ∥𝑀 𝑎 ∥22 + 𝑠 𝑎 ∥𝑀 𝑏 ∥22
+
+ + 𝑠 𝑎 𝑠 𝑏 𝛼 2𝜎 41 .
+
+Since ˆ𝑀 𝑎 = 𝑀 𝑎 + 𝐺 𝑎 , we have E∥ ˆ𝑀 𝑎 ∥22 = ∥𝑀 𝑎 ∥22 + 𝑠 𝑎 𝛼𝜎 21 . Similarly, 
+
+E∥ ˆ𝑀 𝑏 ∥22 = ∥𝑀 𝑏 ∥22 + 𝑠 𝑏 𝛼𝜎 21 . Therefore, we have 
+
+𝐸 ∥𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏 ∥22
+
+ = ∥𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 ∥22
+
++ 𝑘𝛼 𝜎 22 + 𝛼𝜎 21
+
+
+
+𝑠 𝑏 E∥ ˆ𝑀 𝑎 ∥22 + 𝑠 𝑎 E∥ ˆ𝑀 𝑏 ∥22
+
+
+
+− 𝑠 𝑎 𝑠 𝑏 𝛼 2𝜎 41 .
+
+The Unbiased estimator is InDif2 2 
+
+> 𝑎,𝑏
+
+= 𝑧 𝑎,𝑏 − 𝑧 𝑎 ∗𝑏  
+
+> 22
+
+−
+
+h
+
+𝑘𝛼𝜎 22 +
+
+𝛼𝜎 21
+
+ 𝑠 𝑏 ∥ ˆ𝑀 𝑎 ∥22 + 𝑠 𝑎 ∥ ˆ𝑀 𝑏 ∥22
+
+ − 𝑠 𝑎 𝑠 𝑏 𝛼 2𝜎 41
+
+i
+
+where 𝛼 =  
+
+> Í𝑖 𝑛 2
+> 𝑖
+> 𝑛 2
+
+, and we have E InDif2 2
+
+> 𝑎,𝑏
+
+ = ∥𝑀 𝑎,𝑏 − 𝑀 𝑎 × 𝑀 𝑏 ∥22 = InDif2 2 
+
+> 𝑎,𝑏
+
+. □
+
+> 7
+
+Algorithm 3 Adaptive Marginal Selection                                                                                        
+
+> Input: Number of attributes 𝑑 ,set of 2-way marginals 𝑍 =
+> {𝑧 1, ..., 𝑧 𝑑 (𝑑 −1)/ 2}, set of InDif2 scores {𝜙 0
+> 𝑧 }𝑧 ∈𝑍 , set of noise errors
+> {𝜓 𝑧 }𝑧 ∈𝑍 .
+> 1: Selected marginals 𝑋 ← ∅ ,𝐸 0←Í𝑧 ∈𝑍 𝜙 𝑧 ,𝑡 ←0
+> 2: while True do
+> 3: for each 2-way marginal 𝑧 ∈𝑍 do
+> 4: 𝐸 𝑡 𝑧 =Í𝑗 ∈𝑋 ∪{ 𝑧 }𝜓 𝑧 +Í𝑗 ∈𝑍 \{ 𝑧 }𝜙 𝑧
+> 5: end for
+> 6: 𝑧 ∗←arg min 𝑧 ∈𝑍 𝐸 𝑡 𝑧
+> 7: 𝐸 𝑡 ←𝐸 𝑧 ∗
+> 8: if 𝐸 𝑡 ≥𝐸 𝑡 −1then
+> 9: Break
+> 10: end if
+> 11: 𝑋 ←𝑋 ∪ { 𝑧 ∗}
+> 12: {𝜙 𝑡 𝑧 }𝑧 ∈𝑍 ←Update the set of InDif2 scores
+> 13: 𝑡 ←𝑡 +1.
+> 14: end while Output: 𝑋
+
+Algorithm 4 Update InDif2 Scores                                                                             
+
+> Input: Selected marginals 𝑋 , set of InDif2 scores {𝜙 𝑧 }𝑧 ∈𝑍 .
+> 1: Generate synthetic data ˆ𝐷 𝑡 using 𝑋
+> 2: Compute 2-way marginals {˜𝑀 𝑡 𝑎,𝑏 :𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 >𝑎 }from ˆ𝐷 𝑡
+> 3: {𝜙 𝑡 𝑧 }𝑧 ∈𝑍 ← { InDif2 𝑡 𝑧 ← ∥ 𝑧 𝑎,𝑏 −˜𝑀 𝑡 𝑎,𝑏 𝑃 𝑎,𝑏 ∥2:𝑎, 𝑏 ∈ { 1, ..., 𝑑 }, 𝑏 >
+> 𝑎 } } ▽Update InDif2 from the current synthetic data.
+> 4: 𝐴𝑡𝑡 ← ∪ (𝑎,𝑏 ) ∈ 𝑋 {𝑎, 𝑏 } ▽ Extracts all distinct attributes contained in 𝑋
+> 5: for each 2-way marginal 𝑧 ∈𝑍 do
+> 6: if 𝑧 ∩𝐴𝑡𝑡 =∅Or 𝜙 𝑡 𝑧 >𝜙 𝑡 −1
+> 𝑧 then
+> 7: 𝜙 𝑡 𝑧 ←𝜙 𝑡 −1
+> 𝑧 ▽Only update InDif2 of 𝑧 related to 𝑋
+> 8: end if
+> 9: end for Output: {𝜙 𝑡 𝑧 }𝑧 ∈𝑍
+
+## 4.3 Marginal Selection & Data Synthesis 
+
+Building upon the dependency scores InDif2 computed for all at-tribute pairs, the server proceeds to marginal selection and data synthesis. In this stage, a subset of 2-way marginals is selected to guide the construction of the synthetic dataset. The selection can be directly performed using the greedy algorithm proposed in PrivSyn, as shown in Equation 1, which selects all marginals in a single round based on their dependency scores. We refer to this strategy as non-adaptive marginal selection. Consider the following example: In an attribute set, there exist three highly correlated attributes A, B, and C. The InDif2 values for attribute pairs (A, B), (B, C), and (A, C) are higher than those of other attribute pairs, making them highly likely to be selected. However, when (A, B) and (B, C) are already selected, the marginal information of (A, C) is implicitly contained in the combination of 𝑀 𝑎,𝑏 and 𝑀 𝑏,𝑐 .In this case, the InDif2 𝑎,𝑐 decreases after adjusting attributes on 𝑀 𝑎,𝑏 
+
+and 𝑀 𝑏,𝑐 . There may be other attribute pairs whose InDif2 is higher than updated InDif2 𝑎,𝑐 . Allocating the privacy budget to release other 2-way marginals would be more beneficial for preserving the correlations in the data synthesis process. The advantage of adaptive over static marginal selection is theoretically justified by Chen et al. [ 13 ], which shows that 𝑘 already selected marginals can provide additional information for evaluating any 2-way marginal beyond independent measurements. 
+
+Theorem 6. [13 ] For any pair of attributes (𝐴 𝑖 , 𝐴 𝑗 ), the KL diver-gence of conditional estimation is no larger than that of independent estimation: 
+
+KL 
+
+
+
+𝑃 𝑖 𝑗 ∥ ˆ𝑃 𝑖 𝑗 
+
+
+
+≤ KL  𝑃 𝑖 𝑗 ∥ 𝑃 𝑖 𝑃 𝑗 
+
+ , (4) 
+
+where 
+
+ˆ𝑃 𝑖 𝑗 =∑︁ 
+
+> A
+
+𝑃 (A) 𝑃 (𝐴 𝑖 | A) 𝑃 (𝐴 𝑗 | A).
+
+Note that in HeteroFedSyn, both Pr [𝐴 𝑖 | 𝐴 1, . . . , 𝐴 𝑘 ] and Pr [𝐴 𝑗 |
+
+𝐴 1, . . . , 𝐴 𝑘 ] are estimated from noisy marginals. As a result, al-though Theorem 6 still holds, its advantage may be attenuated by the noise. Based on this, we also propose an adaptive marginal se-lection algorithm, with the detailed process shown in Algorithm 3. Following the greedy strategy from PrivSyn, we denote the set of all 𝑑 (𝑑 − 1)/ 2 number of 2 way marginals as 𝑍 . For each 2-way marginal 𝑧 in the set, we represent its InDif2 as 𝜙 𝑧 and the noise error introduced by its release as 𝜓 𝑧 . In the initial step, none of the 2-way marginals have been selected, and all errors come from InDif2 , denoted as Í𝑧 ∈𝑍 𝜙 𝑧 . In each iteration, we traverse all 2-way marginals and select the one that can most reduce the current total error 𝐸 𝑡 . Intuitively, the selection process involves continuously evaluating whether the noise error introduced by releasing each 
+
+2-way marginal is smaller than the error caused by ignoring its dependency relationship. The key point in our adaptive marginal selection is that we update InDif2 of the related 2-way marginals accordingly after adding a 2-way marginal in each iteration. We show how to update InDif2 scores in Algorithm 4. In the 𝑡 -th iteration, the server requests the newly selected 2-way marginal from the user side (only one new 2-way marginal is added per round), and then it executes the data synthesis algorithm based on the currently selected 2-way marginals to obtain ˆ𝐷 𝑡 . From this synthetic dataset, we can obtain all the current 2-way marginals. The accuracy of these 2-way marginals can reflect the quality of the selected marginals. We use InDif2 score computed from the current 
+
+2-way marginal as the updated InDif2 . This step is reflected in Line 3 of the Algorithm 4. If a 2-way marginal shares an attribute with the newly added marginal, it is likely to be affected in the previous examples. In this case, we update its InDif2 score. Moreover, to avoid inaccurate marginal selection and generation from harming the accuracy of InDif2 , we update it only when the updated InDif2 is smaller than the original InDif2 . This step is reflected in Line 5-9 of the Algorithm 4. Note that, before conducting data synthesis, it is necessary to han-dle the attributes uncovered by the selected 2-way marginals. We refer to these attributes as isolated attributes. For these attributes, we directly release their 1-way marginals to provide information for data generation. In this paper, we treat the data synthesis process as a black box. We can directly invoke PrivSyn’s GUM algorithm [ 55 ], which iteratively replicates and replaces data points to ensure that a randomly generated dataset aligns with all the released marginals. We can also employ other data synthesis algorithms, such as Genetic Algorithm [ 47 ], Relaxed Projection [ 9 ], Generative Network [ 41 ], and PGM [ 44 ]. The choice of synthesis algorithm does not interfere with the performance of the design in this paper. 
+
+> 8
+
+Algorithm 5 Privacy Budget Allocation                                                      
+
+> Input: Local Dataset {𝐷 𝑖 }𝑖 ∈𝑐 , total privacy budget 𝜌 , ratio 𝑞 with 𝑞 <1/3.
+> Output: Synthetic dataset ˆ𝐷
+> 1: Share all 1-way marginals of {𝐷 𝑖 }𝑖 ∈𝑐 with 𝜌 1=𝑞 ·𝜌 .
+> 2: Share all 2-way marginals of {𝐷 𝑖 }𝑖 ∈𝑐 with 𝜌 2=𝑞 ·𝜌 .
+> 3: Dependency scores measurement with no privacy loss.
+> 4: Adaptive Marginal Selection with no privacy loss.
+> 5: Update InDif2 scores with no privacy loss.
+> 6: Share selected 2-way marginals of {𝐷 𝑖 }𝑖 ∈𝑐 with 𝜌 3=(1−2𝑞 )𝜌 .
+> 7: Handle isolated marginals with no privacy loss.
+> 8: Construct ˆ𝐷 using data synthesis algorithm with no privacy loss.
+
+## 4.4 Privacy Budget Allocation 
+
+Privacy budget allocation serves as a fundamental building block that underpins the entire execution of HeteroFedSyn. As multiple rounds of communication take place between the participants and the server, the privacy budget must be carefully allocated across different stages to ensure a strict end-to-end privacy guarantee. We present the detailed privacy budget allocation in Algorithm 5. In this paper, the privacy boundary is at the participants’ side. Thus, all privacy budget consumption occurs during the data-sharing process on the user side. All computations on the server do not in-troduce additional privacy loss due to the post-processing property of DP (Definition 6). In the initial stage, when sharing all 1-way and 
+
+2-way marginals for dependency measurement, users allocate 𝑞 of the total privacy budget, respectively. After selecting the important 
+
+2-way marginals on the server side, users allocate the remaining 
+
+1 − 2𝑞 of the privacy budget to share these selected marginals. To ensure that the majority of the privacy budget is reserved for the se-lected 2-way marginals, we require 𝑞 < 1/3, so that 1−2𝑞 dominates the total budget allocation. The privacy budget allocation strategy is empirical. Specifically, we can follow the allocation strategy in PrivSyn and set 𝑞 = 10% . Considering the high noise sensitivity in a distributed setting, 𝑞 can also be moderately increased to ensure the accuracy of the selected marginals. We will investigate the impact of privacy budget allocation in the experiment section. For attributes uncovered by selected 2-way marginals, we di-rectly use 1-way marginals shared in the initial stage. Besides, each selected 2-way marginal in Algorithm 3 must be immediately shared with the server to update the synthetic dataset. However, since the total number of selected marginals is unknown in advance, the privacy budget cannot be pre-allocated for each sharing step. To address this, we assume that no more than one-third of all possible 2-way marginals will be selected. This ratio serves as a hyperpa-rameter. Based on this assumption, each time a 2-way marginal is shared, it consumes 𝑑 (𝑑 − 1)𝑞𝜌 /6 of the total privacy budget. 
+
+## 5 Complexity Analysis 
+
+In this section, we analyze the computation and communication complexity of HeteroFedSyn. 
+
+Computation Complexity. Under HeteroFedSyn, the client-side computation is lightweight. Each client computes all 1-way and 
+
+2-way marginals over its local dataset with complexities 𝑂 (𝑛 𝑖 𝑑 )
+
+and 𝑂 (𝑛 𝑖 𝑑 2), where 𝑛 𝑖 denotes the local dataset size. Adding noise to a 1-way marginal costs 𝑂 (𝑠 𝑎 ), while perturbing a 2-way marginal 
+
+𝑀 𝑎,𝑏 costs 𝑂 (𝑠 𝑎 𝑠 𝑏 ). Since 2-way marginals are perturbed twice (ini-tial sharing and after server-side selection), the total noise cost is 
+
+𝑂 (2𝑠 𝑎 𝑠 𝑏 ). Assuming a uniform average domain size 𝑠 , the overall client-side complexity is 𝑂  𝑑 (𝑛 𝑖 + 𝑠 ) + 𝑑 2 (𝑛 𝑖 + 2𝑠 2).On the server side, aggregating all received marginals incurs a cost of 𝑂 (𝑛𝑑 + 𝑛𝑑 2), where 𝑛 is the total number of records from all clients. Computing InDif2 scores for all attribute pairs requires 
+
+𝑂 (𝑑 4) time. The subsequent greedy marginal selection takes 𝑂 (𝑑 2)
+
+in the worst case. Finally, the GUM-based data synthesis algorithm has complexity 𝑂 (𝑇𝑑 2𝑛 syn ) [13 ], where 𝑇 is the number of iterations and 𝑛 syn is the synthetic dataset size. Thus, the overall server-side complexity is 𝑂 (𝑑 4 +𝑑 2 (𝑛 +𝑇𝑛 syn ) + 𝑛𝑑 ), dominated by 𝑂 (𝑑 4) when 
+
+𝑑 >√︁ 𝑛 + 𝑇𝑛 syn . For AdaFedPrivSyn with dynamic marginal selec-tion, the worst-case additional cost is 𝑂 (𝑑 6 + 𝑑 4𝑇𝑛 syn ). In practice, by fixing the number of data synthesis reruns to a constant, the over-all complexity remains dominated by 𝑂 (𝑑 4). In our experiments, we update InDif2 scores for every 10 newly selected marginals, which substantially reduces the computational cost. 
+
+Communication Complexity. Each client participates in only two communication rounds: initialization and post-selection. Al-though adaptive marginal selection may involve multiple trans-missions, the total communication cost remains the same as in the non-adaptive setting. In the worst case, when all 2-way marginals are selected, the client-to-server communication complexity is 
+
+𝑂 (2𝑑 2𝑘 2 + 𝑑𝑘 ), where 𝑘 ≪ 𝑠 2 is the compressed marginal length. In practice, the number of selected marginals is typically much smaller than 𝑑 2, depending on inter-attribute correlations. On the server side, it only needs to notify clients of selected 
+
+2-way marginals by transmitting attribute index pairs. Thus, the server-to-client communication cost is 𝑂 (𝑑 2) in the worst case. 
+
+## 6 Evaluation 
+
+In this section, we evaluate the performance of the HeteroFedSyn framework, which comprises two algorithms: FedPrivSyn and AdaFed-PrivSyn. Our evaluation focuses on three aspects: (1) the similarity between the synthetic datasets generated by HeteroFedSyn and the original datasets, as well as their utility for various downstream tasks; (2) a comparison between HeteroFedSyn and existing ap-proaches. Since no prior work exists under the same setting, we primarily compare against PrivSyn [ 55 ] from the centralized setting, along with two naïve distributed baselines; and (3) the impact of varying the number of users, data distribution strategies, and key parameters on the performance of HeteroFedSyn. 
+
+## 6.1 Setup 
+
+Datasets. We evaluate our method using five real-world datasets. All datasets are multi-dimensional, containing both numerical and categorical attributes. We summarize all datasets in Table 3. 
+
+Table 3: Datasets used for evaluation.                         
+
+> Name #Records #Attr #Num #Cat
+> Adult [3] 32,562 15 69Abalone [2] 4,177 981Obesity [4] 2,112 17 89Insurance [5] 1,339 734Shoppers [1] 12,331 18 10 8
+
+Prior to the experiments, all datasets are preprocessed to enable efficient computation of marginals for each attribute. Specifically, 
+
+> 9
+
+we directly encode all categorical attributes without altering their domain sizes. For numerical attributes, we divide their ranges into 
+
+100 bins and mapped all data accordingly. 
+
+Downstream Tasks and Metrics. Du et al. [ 19 ] propose a com-prehensive and systematic evaluation framework for data synthesis algorithms. Our evaluation follows their framework and specifically includes the following aspects. 
+
+• Utility in Range Query Tasks. For each evaluation, we generate 
+
+1, 000 random queries. For discrete attributes, query key sets are sampled at random, while for continuous attributes, query ranges are defined by randomly generated lower and upper bounds. Each query returns the proportion of records within the specified range relative to the entire dataset. The query error is measured as the average difference between the results obtained on the synthetic dataset and those on the original dataset for all queries. Formally, let A denote the synthesis algorithm being evaluated, 𝐷 𝑠𝑦𝑛 the synthetic dataset generated by A, 𝐷 𝑜𝑟𝑔 the original dataset, and 
+
+𝑅 the query set. The query error is then indicated as 
+
+𝐸𝑟𝑟 𝑟𝑞 = 1
+
+𝑅 ∑︁ 𝑟 ∈𝑅 
+
+𝑞 𝑟 (𝐷 𝑠𝑦𝑛 ) − 𝑞 𝑟 (𝐷 𝑜𝑟𝑔 ) . (5) 
+
+• Wasserstein-based Fidelity. The Wasserstein distance quantifies the minimum cost required to transform one distribution into another. In our evaluation, we compute the Wasserstein distance between the 2-way marginals of the synthetic dataset and those of the original dataset. Formally, let 𝑃 denote the 2-way marginal distribution derived from the synthetic dataset 𝐷 𝑠𝑦𝑛 , and 𝑄 the corresponding distribution from the original dataset 𝐷 𝑜𝑟𝑔 . The fidelity of a synthesis algorithm 𝐴 is then defined as follows: 
+
+𝐹𝑖𝑑𝑒𝑙𝑖𝑡𝑦 (𝐴 ) := E𝑃 ∼𝐷 𝑠𝑦𝑛 ,𝑄 ∼𝐷 𝑜𝑟𝑔 [𝑊 (𝑃, 𝑄 )] . (6) For the details of Wasserstein distance 𝑊 (𝑃, 𝑄 ), we refer the reader to [19]. 
+
+• Accuracy in Machine Learning Tasks. We apply the synthetic datasets to train three machine learning models: Random Forest, Multilayer Perceptron (MLP), and XGBoost [ 15 ]. For dataset with categorical labels, we train classification models; for datasets with numerical labels, we train regression models. The entire synthetic dataset is used for model training, while 20% of original dataset is reserved for validating model accuracy. Finally, we report the average performance of the synthetic dataset across three models, using F1 score as the evaluation metric for classification tasks and Root Mean Square Error (RMSE) for regression tasks. All synthetic datasets are generated with the same size as the corresponding original datasets. Given the high computational cost of the entire process, we repeat the data synthesis and evaluation process five times to reduce randomness. 
+
+Experimental Setting. The development and evaluation of our ex-periments are conducted on top of an open-source framework [ 18 ]. All the algorithms are implemented in Python 3.10 and all the exper-iments are conducted on a server running Ubuntu 22.04.1, equipped with E5-2620 v4 2.10GHz processors and 128GB of memory. 
+
+## 6.2 Analysis of Experimental Results 
+
+Performance of Synthesis Algorithms. In this part, we aim to demonstrate the utility of the synthetic datasets generated by the proposed synthesis algorithms from different perspectives, across various tasks and datasets. 
+
+(1) Distributions comparison of the synthetic and original datasets. 
+
+Figure 3 illustrates the comparison of distributional similarity be-tween the original sensitive dataset and the datasets generated by the centralized PrivSyn, as well as our proposed methods, Fed-PrivSyn and AdaFedPrivSyn. For ease of visualization, we use the relatively small Insurance dataset. All attributes are projected into a two-dimensional PCA space, with blue points representing the orig-inal dataset and orange points representing the synthetic datasets. We set the overall privacy budget to 𝜖 = 5. For FedPrivSyn and AdaFedPrivSyn, 60% of the total privacy budget is allocated to share the 1-way and 2-way marginals, while the remaining 40% of the budget is used to release the selected 2-way marginals. From a visual perspective, we can observe that, similar to PrivSyn, although the synthetic data points do not exactly overlap with the original points, their overall distribution is roughly similar to that of the original dataset. The DP noise inevitably increases the variance of the synthetic datasets, and the distributed noise addition further introduces noise that is participant number times larger than in the centralized setting. Nevertheless, Figure 3 shows that the datasets generated by FedPrivSyn and AdaFedPrivSyn are overall comparable to those produced by PrivSyn. The Label attribute in the Insurance dataset is numerical, and we are interested in whether the synthetic datasets preserve the distributed characteristics of this attribute. This is important for downstream tasks such as training regression models. Figure 4 compares the Label distributions of datasets generated by PrivSyn, FedPrivSyn, and AdaFedPrivSyn with the original dataset. Although the variance of the distribution increases, the synthetic datasets still remain the main characteristics of the original distribution. Notably, AdaFedPrivSyn preserves the peak information of the distribution more prominently. 
+
+(2) Performance comparison of HeteroFedSyn with baseline meth-ods. Table 4 compares synthesis algorithms across downstream tasks, datasets, and privacy levels ( 𝜖 = 0.2, 1, and 5). We com-pare HeteroFedSyn with three baselines. PrivSyn [ 55 ] represents a classic method under the centralized setting. FedPrivSyn-allMarg adds noise to all 2-way marginals without marginal selection and directly uses them for data synthesis. FedPrivSyn-RandMarg ran-domly selects a random number of 2-way marginals, perturbs them, and uses the resulting marginals for synthesis. We also evaluate FedPrivSyn-w/o RP, which removes random projection for mar-ginal compression. We do not treat it as a baseline, since random projection is mainly introduced to reduce communication over-head rather than to improve synthesis accuracy, and is therefore considered part of our method. For fair comparison, FedPrivSyn and AdaFedPrivSyn follow the same privacy budget allocation as PrivSyn, with 20% for marginal selection and 80% for perturbing 2-way marginals. We set the number of participants to 𝑐 = 5 and the random projection dimension to 𝑘 = 10 .For range queries, we report the error of 2-way marginals, where lower values indicate better performance. Fidelity is measured using the Wasserstein distance between the real and synthetic datasets. We further evaluate utility on three downstream machine learn-ing tasks: Random Forest, MLP, and XGBoost, by training models on synthetic data and validating them on a held-out subset of the                   
+
+> 10 10000 010000 20000 30000 40000 50000
+> pca1
+> 30
+> 20
+> 10
+> 0
+> 10
+> 20
+> 30
+> pca2
+> PrivSyn
+> Real Dataset
+> Synthetic Dataset
+> 10000 010000 20000 30000 40000 50000
+> pca1
+> 30
+> 20
+> 10
+> 0
+> 10
+> 20
+> 30
+> pca2
+> FedPrivSyn
+> Real Dataset
+> Synthetic Dataset
+> 10000 010000 20000 30000 40000 50000
+> pca1
+> 40
+> 30
+> 20
+> 10
+> 0
+> 10
+> 20
+> 30
+> pca2
+> AdaFedPrivSyn
+> Real Dataset
+> Synthetic Dataset
+
+Figure 3: Comparison of the original dataset and synthetic datasets generated by PrivSyn, FedPrivSyn, and AdaFedPrivSyn in a two-dimensional PCA space. The results are evaluated on Insurance dataset, where 𝜖 = 5, number of participants is 𝑐 = 2, and 
+
+40% privacy budget is allocated for releasing selected 2-way marginals. 20000 0 20000 40000 60000 80000                 
+
+> label
+> 0
+> 1
+> 2
+> 3
+> 4
+> Density
+> 1e 5PrivSyn
+> Real Dataset
+> Synthetic Dataset
+> 20000 020000 40000 60000 80000
+> label
+> 0
+> 1
+> 2
+> 3
+> 4
+> Density
+> 1e 5FedPrivSyn
+> Real Dataset
+> Synthetic Dataset
+> 20000 020000 40000 60000 80000
+> label
+> 0
+> 1
+> 2
+> 3
+> 4
+> Density
+> 1e 5AdaFedPrivSyn
+> Real Dataset
+> Synthetic Dataset
+
+Figure 4: Comparison of the single-attribute distribution between the synthetic datasets generated by PrivSyn, FedPrivSyn, and AdaFedPrivSyn and the original dataset. The results are evaluated on the Label attribute of the Insurance Dataset, where 𝜖 = 5,number of participants is 𝑐 = 2, and 40% privacy budget is allocated for releasing selected 2-way marginals. Table 4: Overall performance of the synthetic datasets generated by different methods across three different downstream tasks on multiple datasets. We evaluate under three levels of privacy protection strength. The arrows next to 𝜖 indicators denote whether a higher or lower result is better. For the distributed methods, the number of participants is 𝑐 = 5, the projected dimension 𝑘 = 10 , and 80% privacy budget is allocated for releasing selected 2-way marginals. 
+
+Dataset Adult Abalone Obesity Insurance Shoppers Query Error 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓
+
+PrivSyn 0.011 0.004 0.003 0.058 0.057 0.046 0.085 0.052 0.027 0.059 0.044 0.026 0.039 0.019 0.007 
+
+FedPrivSyn-allMarg 0.035 0.031 0.016 0.061 0.058 0.056 0.099 0.093 0.076 0.057 0.053 0.046 0.054 0.051 0.037 
+
+FedPrivSyn-RandMarg 0.043 0.035 0.022 0.057 0.060 0.059 0.095 0.096 0.073 0.061 0.060 0.048 0.054 0.050 0.037 
+
+FedPrivSyn-w/o RP 0.035 0.018 0.007 0.060 0.059 0.056 0.105 0.077 0.051 0.056 0.053 0.031 0.052 0.041 0.018 
+
+FedPrivSyn 0.018 0.018 0.005 0.058 0.056 0.054 0.093 0.083 0.049 0.083 0.055 0.038 0.051 0.039 0.016 
+
+AdaFedPrivSyn 0.017 0.009 0.006 0.057 0.058 0.044 0.091 0.076 0.030 0.094 0.062 0.028 0.048 0.020 0.007 Fidelity Error 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓
+
+PrivSyn 0.293 0.086 0.036 0.451 0.430 0.360 0.337 0.263 0.148 0.475 0.361 0.194 0.622 0.317 0.116 
+
+FedPrivSyn-allMarg 0.589 0.476 0.230 0.462 0.462 0.449 0.352 0.352 0.330 0.359 0.327 0.275 0.802 0.757 0.575 
+
+FedPrivSyn-RandMarg 0.587 0.463 0.326 0.461 0.460 0.457 0.340 0.342 0.305 0.345 0.352 0.316 0.795 0.758 0.584 
+
+FedPrivSyn-w/o RP 0.542 0.280 0.112 0.453 0.451 0.431 0.523 0.290 0.222 0.279 0.312 0.240 0.775 0.635 0.318 
+
+FedPrivSyn 0.230 0.281 0.061 0.454 0.454 0.425 0.345 0.299 0.220 0.667 0.385 0.267 0.757 0.602 0.300 
+
+AdaFedPrivSyn 0.158 0.097 0.034 0.411 0.458 0.342 0.542 0.391 0.137 0.587 0.525 0.158 0.39 4 0.295 0.104 ML Efficiency 𝜀 = 0.2 ↑ 𝜀 = 1 ↑ 𝜀 = 5 ↑ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↑ 𝜀 = 1 ↑ 𝜀 = 5 ↑ 𝜀 = 0.2 ↓ 𝜀 = 1 ↓ 𝜀 = 5 ↓ 𝜀 = 0.2 ↑ 𝜀 = 1 ↑ 𝜀 = 5 ↑
+
+PrivSyn 0.652 0.743 0.752 3.157 3.065 3.313 0.103 0.135 0.188 149 .746 143 .610 131 .762 0.775 0.726 0.724 
+
+FedPrivSyn-allMarg 0.687 0.687 0.763 3.326 3.326 3.355 0.107 0.110 0.131 132 .409 130 .797 130 .222 0.524 0.773 0.769 
+
+FedPrivSyn-RandMarg 0.620 0.651 0.685 3.225 2.667 3.375 0.108 0.152 0.136 144 .673 144 .531 142 .742 0.655 0.778 0.766 
+
+FedPrivSyn-w/o RP 0.666 0.668 0.681 3.287 3.097 3.418 0.029 0.117 0.145 142 .630 137 .846 131 .009 0.743 0.772 0.741 
+
+FedPrivSyn 0.648 0.736 0.752 3.052 2.714 3.192 0.118 0.131 0.134 150 .798 136 .469 130 .937 0.749 0.775 0.712 
+
+AdaFedPrivSyn 0.609 0.718 0.728 3.247 3.211 3.006 0.029 0.113 0.128 151 .314 144 .364 137 .539 0.706 0.707 0.782 
+
+original data. For the Abalone and Insurance datasets, we use re-gression models and report prediction error (lower is better); for the remaining datasets, we use classification models evaluated by F1 score (higher is better). Overall, despite injecting substantially more noise due to distributed privacy constraints, the distributed meth-ods achieve errors within the same order of magnitude as PrivSyn across all datasets and metrics. Among all methods, AdaFedPrivSyn consistently achieves the best performance on both range query and fidelity on Adult and Shoppers containing a large number of attributes. In contrast, on datasets with fewer attributes and smaller attribute domains, such as Insurance, our methods do not exhibit a clear advantage. This is expected, since when the number of 2-way marginals is limited and their domain sizes are small, redundancy among marginals is low. In such cases, allocating part of the pri-vacy budget to marginal selection and dimensionality reduction provides limited benefit. We also observe that all methods exhibit similar trends on range query and fidelity metrics, while the ad-vantages of distributed methods on downstream ML tasks are less 
+
+11 5 10 15 20 25                       
+
+> 0.000
+> 0.025
+> 0.050
+> 0.075
+> Query Error
+> FedPrivSyn
+> 510 15 20 25
+> 0.01
+> 0.02
+> 0.03
+> Query Error
+> AdaFedPrivSyn
+> 510 15 20 25
+> 0.1
+> 0.2
+> 0.3
+> Fidelity Error
+> 510 15 20 25
+> 0.05
+> 0.10
+> Fidelity Error
+> 510 15 20 25
+> Number of Parties c
+> 0.74
+> 0.75
+> 0.76
+> 0.77
+> ML Efficiency
+> 510 15 20 25
+> Number of Parties c
+> 0.70
+> 0.72
+> ML Efficiency
+> 1-way 2-way 3-way
+
+Figure 5: Impact of number of participants 𝑐 on FedPrivSyn and AdaFedPrivSyn across three downstream tasks on Adult dataset, where 𝜖 = 5, and 40% privacy budget is allocated for releasing selected 2-way marginals. Query Fidelity ML     
+
+> Different evaluations
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Accuracy
+> FedPrivSyn
+> Query Fidelity ML
+> Different evaluations
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Accuracy
+> AdaFedPrivSyn
+> Biased Distributed Random Distributed Uniform Distributed
+
+Figure 6: Impact of data distribution on FedPrivSyn and AdaFedPrivSyn across three downstream tasks on Adult dataset, where 𝜖 = 5, 𝑐 = 5, and 40% privacy budget is al-located for releasing selected 2-way marginals. 
+
+consistent. This is likely because ML performance depends not only on marginal accuracy but also on higher-order correlations and task-specific inductive biases, which may not be fully captured by improved 2-way marginals alone. As a result, gains in query accuracy and fidelity do not always translate directly into uniform improvements in downstream learning performance. 
+
+Impact of Key Parameters on the Synthesis Algorithms. When applying algorithms in real-world scenarios, it is inevitable to con-figure some key parameters. In this part, we investigate how these parameters affect the performance of the proposed algorithms. 
+
+(1) Impact of the number of participants 𝑐 . On the Adult dataset, we vary the number of participants 𝑐 from 5 to 25 , assuming that data samples are uniformly distributed across all participants. By evaluat-ing the range query error, fidelity error, and ML efficiency of the gen-erated datasets, we demonstrate the impact of increasing the num-ber of distributed participants on FedPrivSyn and AdaFedPrivSyn. The results are shown in Figure 5. As the number of distributed participants increases, the dataset is spread across more client-sides, which means that the aggregated dataset inevitably contains more noise. Consequently, the performance of the synthetic datasets on the three tasks decreases as 𝑐 increases. However, we observe that for range query error on 2-way and 3-way marginals, as well as for the fidelity error, the increase in errors of the synthetic datasets slows down as 𝑐 grows. The error growth rates of AdaFedPrivSyn consistently lower than those of FedPrivSyn. 
+
+Table 5: Impact of the assumption on the number of selected marginals (1/4, 1/3, and 1/2 of all 2-way marginals) on AdaFed-PrivSyn, where 𝑐 = 5 and 40% privacy budget is allocated for releasing selected 2-way marginals.  
+
+> Dataset
+
+𝜖 Assumption Query Error Fidelity Error # Selected Marginals Adult 5 1/4 0.006 0.044 11/26 1/3 0.006 0.034 35/35 1/2 0.006 0.059 52/52 1 1/4 0.011 0.090 11/26 1/3 0.017 0.158 35/35 1/2 0.015 0.204 51/52 Obesity 5 1/4 0.023 0.084 10/34 1/3 0.030 0.084 11/45 1/2 0.028 0.132 20/68 1 1/4 0.085 0.330 10/34 1/3 0.067 0.333 10/45 1/2 0.093 0.410 10/68 
+
+(2) Impact of data distribution among participants. In our evalua-tion, we assume that the dataset is evenly partitioned among par-ticipants. For example, a dataset of size 1,000 distributed across five users assigns 200 samples to each. In practice, data may be unevenly distributed, with some participants holding substantially more sam-ples or exhibiting significant distributional bias. Figure 6 compares FedPrivSyn and AdaFedPrivSyn under three settings: (i) uniform data distribution across participants, (ii) random data allocation with unequal sample sizes, and (iii) distributions with pronounced bias, where participants hold data from different subpopulations (one participant may contain only high-income/low-income indi-viduals). Since the evaluation metrics operate on different scales, we normalize them for joint visualization. The F1 score (ML Effi-ciency) is left unchanged, while query error and fidelity error are transformed using 𝑒 −𝑉 /𝛼 , with 𝛼 = 0.05 for range queries and 𝛼 = 1
+
+for fidelity. After normalization, larger values consistently indicate better performance. As shown in Figure 6, AdaFedPrivSyn and Fed-PrivSyn exhibit comparable performance across all three settings. This robustness arises because the noisy statistics are shared and proportionally aggregated, which effectively mitigates the impact of distributional bias. These results confirm the effectiveness of HeteroFedSyn in handling heterogeneous data distributions. 
+
+(3) Impact of privacy budget allocation. In PrivSyn, the privacy budget allocation is fixed: 20% of the budget is used to select in-formative 2-way marginals, and the remaining 80% is allocated to releasing the selected marginals. For the comparison reported in Table 4, we configure FedPrivSyn and AdaFedPrivSyn using the same budget allocation to ensure fairness. However, this allocation is not necessarily optimal. In Figure 7, we investigate whether dif-ferent privacy budget allocations have a significant impact on the quality of the synthesized data. We observe that when the privacy budget is relatively large (e.g., 𝜖 ≥ 1), different allocation strategies yield comparable performance. In contrast, under a tighter privacy budget (e.g., 𝜖 = 0.2), allocating a larger portion of the budget (e.g., 
+
+80% ) to releasing 2-way marginals leads to noticeably better per-formance for both methods. When the privacy budget is sufficient, allocating more budget to marginal selection can help identify more informative 2-way marginals and further improve synthesis quality. 
+
+(4) Impact of random projection dimension. In FedPrivSyn and AdaFedPrivSyn, we map marginals to a lower-dimensional space            
+
+> 12 0.2 15
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> 0.025
+> 0.030
+> 0.035
+> 0.040
+> Query Error
+> 0.2 15
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Fidelity Error
+> 0.2 15
+> 0.625
+> 0.650
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> 0.775
+> ML Efficiency
+> FedPrivSyn (80%) FedPrivSyn (60%) FedPrivSyn (40%) AdaFedPrivSyn (80%) AdaFedPrivSyn (60%) AdaFedPrivSyn (40%)
+
+Figure 7: Impact of privacy budget allocation on FedPrivSyn and AdaFedPrivSyn across three downstream tasks on Adult dataset, with 40% , 60% , or 80% of the privacy budget assigned to selected 2-way marginals and 𝑐 = 5.5 10 15 20 25 30            
+
+> k
+> 0.0050
+> 0.0055
+> 0.0060
+> 0.0065
+> 0.0070
+> 0.0075
+> 0.0080
+> Query Error
+> 510 15 20 25 30
+> k
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Fidelity Error
+> 510 15 20 25 30
+> k
+> 0.70
+> 0.71
+> 0.72
+> 0.73
+> 0.74
+> 0.75
+> ML Efficiency
+> FedPrivSyn AdaFedPrivSyn
+
+Figure 8: Impact of random projection dimension 𝑘 on FedPrivSyn and AdaFedPrivSyn across three downstream tasks on Adult dataset, where 𝜖 = 5, 𝑐 = 5, and 40% privacy budget is allocated for releasing selected 2-way marginals. 
+
+to reduce communication overhead. While adding noise in the reduced space decreases the amount of injected noise, dimension-ality reduction also introduces compression error. As shown in Figure 8, varying the projection dimension 𝑘 from 5 to 30 leads to non-monotonic performance changes across all three metrics for both algorithms. Although an overall trend can be observed, the results exhibit noticeable fluctuations. Notably, 𝑘 = 10 achieves consistently better performance across all metrics, suggesting a favorable balance between compression error and noise error. In practice, the optimal choice of 𝑘 strongly depends on the underlying data distribution. For some datasets, such as Insurance, compression can noticeably degrade the performance of HeteroFedSyn (Table 4); however, the reduction in communication overhead is substantial. 
+
+(5) Impact of the assumption in AdaFedPrivSyn. As described in Subsection 4.4, AdaFedPrivSyn repeatedly performs marginal se-lection and updates InDif2, which requires participants to share selected 2-way marginals in advance. Since the total number of selected marginals is unknown, we assume that at most a fixed fraction of all 2-way marginals will be chosen and allocate the pri-vacy budget accordingly. Table 5 evaluates this assumption using three bounds ( 1/4, 1/3, and 1/2) on two datasets under two privacy budgets. We observe that a larger bound generally leads to more selected marginals, as the reduced per-marginal budget degrades InDif2 accuracy, though this does not necessarily harm overall util-ity because the optimal number depends on how many informative marginals are truly needed. Finding this optimum is difficult in the federated setting: static FedPrivSyn ignores marginal depen-dencies, while AdaFedPrivSyn’s dynamic selection is sensitive to the assumed bound. In practice, we set the bound to 1/3, which achieves consistently good performance (Table 4). 
+
+## 7 Related Work 
+
+Tabular data synthesis has a long research trajectory, primarily fo-cused on the centralized setting. Existing privacy-preserving works primarily follow two technical approaches. A research line uses probabilistic graphical models (PGMs), which represent correlations among random variables through graph structures. Some approaches are based on Bayesian networks, such as PrivBayes [ 54 ] and BSG [ 10 ], which approximate the joint dis-tribution by privately selecting conditional distributions from at-tribute–parent pairs. However, repeated use of the exponential mechanism in this selection incurs significant computational over-head and accuracy loss under a limited privacy budget. Other meth-ods, including PGM [ 44 ], PrivMRF [ 12 ], and JTree [ 14 ], rely on Junction Tree–based Markov networks. PrivMRF and JTree con-struct an undirected graph by adding attribute pairs with noisy mutual information above a threshold, while PGM formulates an optimization problem to infer a distribution matching observed marginals. Another direction selects low-dimensional marginals with strong correlations using noise-addition mechanisms, as in MST [ 42 ] and PrivSyn [ 55 ]. Their synthesis strategies differ: MST uses PGM to generate data, whereas PrivSyn employs GUM to iter-atively modify a randomly initialized dataset via duplication and replacement. Finally, AIM [ 43 ] adopts a workload-aware approach, iteratively refining marginals by selecting and updating poorly answered queries using the exponential mechanism. Another line of work leverages deep generative models. Early studies focused on Generative Adversarial Networks (GANs) [ 30 ,49 , 52 ], which generate data under differential privacy using DP-SGD [ 6 ] by injecting noise into gradients during training. However, GANs were originally designed for continuous data, such as images, and struggle to handle datasets containing mixed numerical, cate-gorical, and ordinal variables. They also have difficulty capturing the full distribution, as the generator produces limited variation. More recent work explores diffusion models [ 45 , 51 ] and Large Language Models (LLMs) [ 50 ] under differential privacy. These approaches, however, typically require large training datasets. Few studies address data synthesis in federated settings. Most existing methods rely on GANs [ 20 , 25 , 56 ]. The only statistical 
+
+> 13
+
+approach applies PrivBayes to discrete data [ 46 ]. However, con-structing the Bayesian network requires numerous communication rounds between the server and participants, and its performance is sensitive to the network initialization. As shown in [ 55 ], PrivSyn outperforms PrivBayes. Moreover, since the implementation of [ 46 ]is unavailable, we do not include it in our comparison. 
+
+## 8 Conclusion 
+
+In this work, we proposed HeteroFedSyn, a differentially private data synthesis framework for the federated setting. Within this framework, we tackled the key challenge of marginal selection without direct access to distributed data, and further introduced an adaptive optimization strategy to enhance selection efficiency. While this fills an important gap in DP synthesis, it also highlights that handling high-dimensional statistics in a distributed manner causes noise to accumulate across every step under a limited privacy budget. As a result, even well-designed optimizations may be easily overshadowed. Looking ahead, we believe further improvements can be achieved not only through algorithmic refinements but also by leveraging public knowledge to reduce privacy cost. We hope HeteroFedSyn serves as a foundation for more practical and scalable privacy-preserving data sharing in federated scenarios. 
+
+## 9 Acknowledgments 
+
+We thank the anonymous reviewers for their valuable comments and suggestions. Cong Shen is supported by NSF grants AST-2132700, ECCS-2332060, CNS-2313110, and ECCS-2143559. Jing Yang and Fengyu Gao are supported by NSF grants ECCS-2531023 and CNS-2531789. 
+
+## References 
+
+[1] 2021. Online Shoppers Purchasing Intention Dataset. https://www.kaggle.com/ datasets/imakash3011/online-shoppers-purchasing-intention-dataset. [2] 2023. Abalone Original Dataset(UCI). https://www.kaggle.com/datasets/ naveen1729/abalone-original-datasetuci. [3] 2023. Adult Dataset. https://www.kaggle.com/datasets/mlbysoham/adult-dataset. [4] 2023. Obesity data set. https://www.kaggle.com/datasets/lesumitkumarroy/ obesity-data-set. [5] 2025. Insurance-dataset. https://www.kaggle.com/datasets/zainulabaiden/ insurance-dataset. [6] Martin Abadi, Andy Chu, Ian Goodfellow, H Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. 2016. Deep learning with differential privacy. In 
+
+Proceedings of the 2016 ACM SIGSAC conference on computer and communications security . 308–318. [7] John M Abowd. 2018. The US Census Bureau adopts differential privacy. In Pro-ceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining . 2867–2867. [8] Miguel E. Andrés, Nicolás Emilio Bordenabe, Konstantinos Chatzikokolakis, and Catuscia Palamidessi. 2013. Geo-indistinguishability: differential privacy for location-based systems. In 2013 ACM SIGSAC Conference on Computer and Communications Security, CCS’13, Berlin, Germany, November 4-8, 2013 , Ahmad-Reza Sadeghi, Virgil D. Gligor, and Moti Yung (Eds.). ACM, 901–914. [9] Sergül Aydöre, William Brown, Michael Kearns, Krishnaram Kenthapadi, Luca Melis, Aaron Roth, and Amaresh Ankit Siva. 2021. Differentially Private Query Release Through Adaptive Projection. In Proceedings of the 38th International Conference on Machine Learning, ICML 2021, 18-24 July 2021, Virtual Event (Pro-ceedings of Machine Learning Research, Vol. 139) , Marina Meila and Tong Zhang (Eds.). PMLR, 457–467. [10] Vincent Bindschaedler, Reza Shokri, and Carl A. Gunter. 2017. Plausible Deni-ability for Privacy-Preserving Data Synthesis. Proc. VLDB Endow. 10, 5 (2017), 481–492. [11] Mark Bun and Thomas Steinke. 2016. Concentrated Differential Privacy: Sim-plifications, Extensions, and Lower Bounds. In Theory of Cryptography - 14th International Conference, TCC 2016-B, Beijing, China, October 31 - November 3, 2016, Proceedings, Part I (Lecture Notes in Computer Science, Vol. 9985) , Martin Hirt and Adam D. Smith (Eds.). 635–658. [12] Kuntai Cai, Xiaoyu Lei, Jianxin Wei, and Xiaokui Xiao. 2021. Data synthesis via differentially private markov random fields. Proceedings of the VLDB Endowment 
+
+14, 11 (2021), 2190–2202. [13] Kai Chen, Xiaochen Li, Chen Gong, Ryan McKenna, and Tianhao Wang. 2025. Benchmarking Differentially Private Tabular Data Synthesis:[Experiments & Analysis]. Proceedings of the ACM on Management of Data 3, 6 (2025), 1–25. [14] Rui Chen, Qian Xiao, Yu Zhang, and Jianliang Xu. 2015. Differentially Private High-Dimensional Data Publication via Sampling-Based Inference. In Proceedings of the 21th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, Sydney, NSW, Australia, August 10-13, 2015 , Longbing Cao, Chengqi Zhang, Thorsten Joachims, Geoffrey I. Webb, Dragos D. Margineantu, and Graham Williams (Eds.). ACM, 129–138. [15] Tianqi Chen and Carlos Guestrin. 2016. XGBoost: A Scalable Tree Boosting System. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, San Francisco, CA, USA, August 13-17, 2016 , Balaji Krishnapuram, Mohak Shah, Alexander J. Smola, Charu C. Aggarwal, Dou Shen, and Rajeev Rastogi (Eds.). ACM, 785–794. [16] Emiliano De Cristofaro, Paolo Gasti, and Gene Tsudik. 2012. Fast and Private Computation of Cardinality of Set Intersection and Union. In Cryptology and Network Security, 11th International Conference, CANS 2012, Darmstadt, Germany, December 12-14, 2012. Proceedings , Josef Pieprzyk, Ahmad-Reza Sadeghi, and Mark Manulis (Eds.), Vol. 7712. Springer, 218–231. [17] Wei Dong, Qiyao Luo, and Ke Yi. 2023. Continual observation under user-level differential privacy. In 2023 IEEE Symposium on Security and Privacy (SP) . IEEE, 2190–2207. [18] Yuntao Du. 2024. SynMeter. https://github.com/zealscott/SynMeter. [19] Yuntao Du and Ninghui Li. 2024. Systematic assessment of tabular data synthesis algorithms. arXiv preprint arXiv:2402.06806 (2024). [20] Shaoming Duan, Chuanyi Liu, Peiyi Han, Xiaopeng Jin, Xinyi Zhang, Tianyu He, Hezhong Pan, and Xiayu Xiang. 2022. Ht-fed-gan: Federated generative model for decentralized tabular data synthesis. Entropy 25, 1 (2022), 88. [21] Cynthia Dwork. 2006. Differential Privacy. In Automata, Languages and Pro-gramming, 33rd International Colloquium, ICALP 2006, Venice, Italy, July 10-14, 2006, Proceedings, Part II (Lecture Notes in Computer Science, Vol. 4052) , Michele Bugliesi, Bart Preneel, Vladimiro Sassone, and Ingo Wegener (Eds.). Springer, 1–12. [22] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam D. Smith. 2006. Cali-brating Noise to Sensitivity in Private Data Analysis. In Theory of Cryptography, Third Theory of Cryptography Conference, TCC 2006, New York, NY, USA, March 4-7, 2006, Proceedings (Lecture Notes in Computer Science, Vol. 3876) , Shai Halevi and Tal Rabin (Eds.). Springer, 265–284. [23] Cynthia Dwork, Moni Naor, Toniann Pitassi, and Guy N Rothblum. 2010. Dif-ferential privacy under continual observation. In Proceedings of the forty-second ACM symposium on Theory of computing . 715–724. [24] Úlfar Erlingsson, Vasyl Pihur, and Aleksandra Korolova. 2014. Rappor: Random-ized aggregatable privacy-preserving ordinal response. In Proceedings of the 2014 ACM SIGSAC conference on computer and communications security . 1054–1067. [25] Mei Ling Fang, Devendra Singh Dhami, and Kristian Kersting. 2022. Dp-ctgan: Differentially private medical data generation using ctgans. In International conference on artificial intelligence in medicine . Springer, 178–188. [26] Shuya Feng, Meisam Mohammady, Han Wang, Xiaochen Li, Zhan Qin, and Yuan Hong. 2024. Dpi: Ensuring strict differential privacy for infinite data streaming. In 2024 IEEE Symposium on Security and Privacy (SP) . IEEE, 1009–1027. [27] Fengyu Gao, Ruida Zhou, Tianhao Wang, Cong Shen, and Jing Yang. 2025. Data-adaptive Differentially Private Prompt Synthesis for In-Context Learning. In 
+
+The Thirteenth International Conference on Learning Representations . https: //openreview.net/forum?id=sVNfWhtaJC [28] Yuzheng Hu, Fan Wu, Qinbin Li, Yunhui Long, Gonzalo Munilla Garrido, Chang Ge, Bolin Ding, David Forsyth, Bo Li, and Dawn Song. 2024. Sok: Privacy-preserving data synthesis. In 2024 IEEE Symposium on Security and Privacy (SP) .IEEE, 4696–4713. [29] Dihong Jiang, Sun Sun, and Yaoliang Yu. 2023. Functional renyi differential privacy for generative modeling. Advances in Neural Information Processing Systems 36 (2023), 14797–14817. [30] James Jordon, Jinsung Yoon, and Mihaela Van Der Schaar. 2018. PATE-GAN: Generating synthetic data with differential privacy guarantees. In International conference on learning representations .[31] Krishnaram Kenthapadi, Aleksandra Korolova, Ilya Mironov, and Nina Mishra. 2013. Privacy via the Johnson-Lindenstrauss Transform. J. Priv. Confidentiality 
+
+5, 1 (2013). [32] Vladimir Kolesnikov, Mike Rosulek, Ni Trieu, and Xiao Wang. 2019. Scalable Private Set Union from Symmetric-Key Techniques. In Advances in Cryptology -ASIACRYPT 2019 - 25th International Conference on the Theory and Application of Cryptology and Information Security, Kobe, Japan, December 8-12, 2019, Proceedings, Part II (Lecture Notes in Computer Science, Vol. 11922) , Steven D. Galbraith and 
+
+> 14
+
+Shiho Moriai (Eds.). Springer, 636–666. [33] Tejas Kulkarni. 2019. Answering range queries under local differential privacy. In Proceedings of the 2019 International Conference on Management of Data . 1832– 1834. [34] Chao Li, Michael Hay, Gerome Miklau, and Yue Wang. 2014. A data-and workload-aware algorithm for range queries under differential privacy. arXiv preprint arXiv:1410.0265 (2014). [35] Kecen Li, Chen Gong, Xiaochen Li, Yuzhong Zhao, Xinwen Hou, and Tianhao Wang. 2025. From easy to hard: Building a shortcut for differentially private image synthesis. In 2025 IEEE Symposium on Security and Privacy (SP) . IEEE, 3988–4006. [36] Ping Li and Xiaoyun Li. 2023. Differential Privacy with Random Projections and Sign Random Projections. CoRR abs/2306.01751 (2023). [37] Xiaochen Li, Tianyu Li, Yitian Cheng, Chen Gong, Kui Ren, Zhan Qin, and Tianhao Wang. 2025. Spas: Continuous release of data streams under w-event differential privacy. Proceedings of the ACM on Management of Data 3, 1 (2025), 1–27. [38] Xiaochen Li, Zhan Qin, Kui Ren, Chen Gong, Shuya Feng, Yuan Hong, and Tianhao Wang. 2025. Delay-allowed Differentially Private Data Stream Release. In 32nd Annual Network and Distributed System Security Symposium, NDSS . The Internet Society. [39] Xiaoguang Li, Haonan Yan, Qingwen Li, Hui Li, and Fenghua Li. 2024. Dis-tributed Data Synthesis under Local Differential Privacy. In 2024 IEEE Smart World Congress (SWC) . IEEE, 2300–2307. [40] W Johnson J Lindenstrauss and J Johnson. 1984. Extensions of lipschitz maps into a hilbert space. Contemp. Math 26, 189-206 (1984), 2. [41] Terrance Liu, Giuseppe Vietri, and Steven Wu. 2021. Iterative Methods for Private Synthetic Data: Unifying Framework and New Methods. In Advances in Neural Information Processing Systems 34: Annual Conference on Neural Information Processing Systems 2021, NeurIPS 2021, December 6-14, 2021, virtual , Marc’Aurelio Ranzato, Alina Beygelzimer, Yann N. Dauphin, Percy Liang, and Jennifer Wortman Vaughan (Eds.). 690–702. [42] Ryan McKenna, Gerome Miklau, and Daniel Sheldon. 2021. Winning the NIST Contest: A scalable and general approach to differentially private synthetic data. 
+
+J. Priv. Confidentiality 11, 3 (2021). [43] Ryan McKenna, Brett Mullins, Daniel Sheldon, and Gerome Miklau. 2022. AIM: an adaptive and iterative mechanism for differentially private synthetic data. 
+
+Proceedings of the VLDB Endowment 15, 11 (2022). [44] Ryan McKenna, Daniel Sheldon, and Gerome Miklau. 2019. Graphical-model based estimation and inference for differential privacy. In Proceedings of the 36th International Conference on Machine Learning, ICML 2019, 9-15 June 2019, Long Beach, California, USA (Proceedings of Machine Learning Research, Vol. 97) ,Kamalika Chaudhuri and Ruslan Salakhutdinov (Eds.). PMLR, 4435–4444. [45] Timur Sattarov, Marco Schreyer, and Damian Borth. 2024. Differentially Private Federated Learning of Diffusion Models for Synthetic Tabular Data Generation. 
+
+arXiv preprint arXiv:2412.16083 (2024). [46] Sen Su, Peng Tang, Xiang Cheng, Rui Chen, and Zequn Wu. 2016. Differen-tially private multi-party high-dimensional data publishing. In 2016 IEEE 32nd International Conference on Data Engineering (ICDE) . IEEE, 205–216. [47] Felipe Petroski Such, Vashisht Madhavan, Edoardo Conti, Joel Lehman, Kenneth O. Stanley, and Jeff Clune. 2017. Deep Neuroevolution: Genetic Algorithms Are a Competitive Alternative for Training Deep Neural Networks for Reinforcement Learning. CoRR abs/1712.06567 (2017). [48] Tyler M. Tomita, James Browne, Cencheng Shen, Jaewon Chung, Jesse Patsolic, Benjamin Falk, Carey E. Priebe, Jason Yim, Randal C. Burns, Mauro Maggioni, and Joshua T. Vogelstein. 2020. Sparse Projection Oblique Randomer Forests. J. Mach. Learn. Res. 21 (2020), 104:1–104:39. [49] Reihaneh Torkzadehmahani, Peter Kairouz, and Benedict Paten. 2019. Dp-cgan: Differentially private synthetic data and label generation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops . 0–0. [50] Toan V Tran and Li Xiong. 2024. Differentially private tabular data synthesis using large language models. arXiv preprint arXiv:2406.01457 (2024). [51] Gianluca Truda. 2023. Generating tabular datasets under differential privacy. 
+
+arXiv preprint arXiv:2308.14784 (2023). [52] Liyang Xie, Kaixiang Lin, Shu Wang, Fei Wang, and Jiayu Zhou. 2018. Differ-entially private generative adversarial network. arXiv preprint arXiv:1802.06739 
+
+(2018). [53] Mengmeng Yang, Chi-Hung Chi, Kwok-Yan Lam, Jie Feng, Taolin Guo, and Wei Ni. 2024. Tabular data synthesis with differential privacy: A survey. arXiv preprint arXiv:2411.03351 (2024). [54] Jun Zhang, Graham Cormode, Cecilia M. Procopiuc, Divesh Srivastava, and Xiaokui Xiao. 2014. PrivBayes: private data release via bayesian networks. In 
+
+International Conference on Management of Data, SIGMOD 2014, Snowbird, UT, USA, June 22-27, 2014 , Curtis E. Dyreson, Feifei Li, and M. Tamer Özsu (Eds.). ACM, 1423–1434. [55] Zhikun Zhang, Tianhao Wang, Ninghui Li, Jean Honorio, Michael Backes, Shibo He, Jiming Chen, and Yang Zhang. 2021. PrivSyn: Differentially Private Data Synthesis. In 30th USENIX Security Symposium, USENIX Security 2021, August 11-13, 2021 , Michael D. Bailey and Rachel Greenstadt (Eds.). USENIX Association, 929–946. [56] Zilong Zhao, Robert Birke, Aditya Kunar, and Lydia Y Chen. 2021. Fed-tgan: Federated learning framework for synthesizing tabular data. arXiv preprint arXiv:2108.07927 (2021). [57] Alexander Ziller, Dmitrii Usynin, Rickmer Braren, Marcus Makowski, Daniel Rueckert, and Georgios Kaissis. 2021. Medical imaging deep learning with differential privacy. Scientific Reports 11, 1 (2021), 13524.

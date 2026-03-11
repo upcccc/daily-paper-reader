@@ -1,0 +1,753 @@
+Title: LDP-Slicing: Local Differential Privacy for Images via Randomized Bit-Plane Slicing
+
+URL Source: https://arxiv.org/pdf/2603.03711v1
+
+Published Time: Thu, 05 Mar 2026 01:34:03 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# LDP-Slicing: Local Differential Privacy for Images via Randomized Bit-Plane Slicing 
+
+## Yuanming Cao Chengqi Li Wenbo He McMaster University Hamilton, Ontario, Canada 
+
+## Abstract 
+
+Local Differential Privacy (LDP) is the gold standard trust model for privacy-preserving machine learning by guaran-teeing privacy at the data source. However, its applica-tion to image data has long been considered impractical due to the high dimensionality of pixel space. Canonical LDP mechanisms are designed for low-dimensional data, resulting in severe utility degradation when applied to high-dimensional pixel spaces. This paper demonstrates that this utility loss is not inherent to LDP, but from its applica-tion to an inappropriate data representation. We introduce LDP-Slicing, a lightweight, training-free framework that re-solves this domain mismatch. Our key insight is to decom-pose pixel values into a sequence of binary bit-planes. This transformation allows us to apply the LDP mechanism di-rectly to the bit-level representation. To further strengthen privacy and preserve utility, we integrate a perceptual ob-fuscation module that mitigates human-perceivable leak-age and an optimization-based privacy budget allocation strategy. This pipeline satisfies rigorous pixel-level ε-LDP while producing images that retain high utility for down-stream tasks. Extensive experiments on face recognition and image classification demonstrate that LDP-Slicing out-performs existing DP/LDP baselines under comparable pri-vacy budgets, with negligible computational overhead. 
+
+## 1. Introduction 
+
+The architecture of modern vision systems is built on a fun-damental, high-stakes trade: to unlock the power of services like biometric authentication or AI-assisted medical diag-nostics, users must surrender their privacy-sensitive, iden-tifiable image to a central server. Even with the best se-curity practices, this centralization is vulnerable to internal breaches and unauthorized misuse. Recurring violations of data privacy regulations, such as the collection of facial tem-plates without user consent [38], confirm this systemic mis-use. The urgent question for the field is how to preserve image privacy and enable powerful vision models in a zero-trust world. Early approaches to image privacy relied mainly on simple visual obfuscation, such as blurring and pixelation [13, 20]. Although visually effective against human ob-servers, these methods offer no formal privacy guarantees and have been shown to be reversible by modern deep learning attacks [37]. Meanwhile, cryptographic techniques [14, 19] provide mathematically strong security guarantees against unauthorized access, but cannot prevent inference attacks and their computational demands make them im-practical for training large-scale vision models. Differential Privacy (DP) [11, 12] has emerged as the gold standard algorithm to provide rigorous, quantifiable privacy guarantees. In centralized DP, data is first collected by a central curator who injects noise into query results or trained models [1]. This setting benefits from higher utility but is built on a unrealistic assumption of a trusted curator. If the curator is breached, the privacy of all raw data is ir-reversibly lost, violating the core principle of a zero-trust world. To eliminate the reliance on a trusted curator, we turn to Local Differential Privacy (LDP) [24], which enforces privacy at the data source. However, LDP confronts an in-surmountable barrier with high-dimensional data. A sin-gle 8-bit pixel can assume 256 distinct values. Applying the LDP mechanism like randomized response in this high-cardinality space injects overwhelming noise that destroys nearly all task-relevant information and leads to the well-known “curse of dimensionality” [10]. As a result, works for provable vision privacy have generally followed two alternative paths: either operating within the centralized DP model [15, 56], or applying LDP to a lower-dimensional representation, such as latent em-beddings [29], feature descriptors [39], or eigenvectors [7]. We argue this utility loss is not a limitation of LDP, but a solvable problem of domain mismatch. Our central premise is that an image can be transformed into an LDP-friendly representation without collapsing its dimensional-ity. This reframes the catastrophic utility loss as a conse-   
+
+> arXiv:2603.03711v1 [cs.CV] 4 Mar 2026 Figure 1. The LDP-Slicing framework. Our method consists of two primary stages: (1) Perceptual obfuscation: the input image is transformed into the frequency domain via DWT, where the low-frequency (LL) band is pruned to remove human-perceptible information. (2) Bit-plane randomization: The obfuscated image is decomposed into binary bit-planes. A utility-aware randomized response mechanism is applied to each bit and enforces a strict ε-Local Differential Privacy guarantee before the final image is reconstructed.
+
+quence of applying LDP to an improper data representation. To achieve this, we introduce LDP-Slicing, a training-free framework that makes LDP practical for standard images. The framework first applies a wavelet-based perceptual ob-fuscation to defend against human inspection, then maps each obfuscated image to an LDP-friendly binary bit-plane space and applies a utility-aware randomized response at the bit level. The resulting privatized images satisfy rigor-ous per-pixel ε-LDP and plug directly into standard recog-nition/classification models. Extensive experiments show that LDP-Slicing delivers strong privacy–utility trade-offs with negligible overhead. Our main contributions are as follows: • We introduce LDP-Slicing, a practical framework that, for the first time, enables rigorous pixel-level ε-LDP for standard images, without relying on handcrafted features or learned representations. The privatized image is fully compatible with the standard vision pipelines without re-quiring architectural changes. • We propose an optimization-driven budget allocation strategy that distributes privacy noise according to the structural and perceptual importance of each bit-plane and channel. • We provide a formal proof that LDP-Slicing satisfies rig-orous, pixel-level ε-Local Differential Privacy, and em-pirically validate its resilience against an identity distin-guishing attack. • We demonstrate state-of-the-art privacy-utility tradeoffs on four face recognition and two image classification benchmarks. Our method is lightweight and efficient, making it well-suited for on-device deployment. 
+
+## 2. Related work 
+
+2.1. Image obfuscation 
+
+The most direct approach to image privacy is to obscure visually sensitive content. Traditional methods like blur-ring, pixelation, and noise injection [20, 27], while simple to implement, offer no formal guarantees and have been re-peatedly shown to be vulnerable to reconstruction by mod-ern machine learning attacks [52]. A more sophisticated variant, learnable instance encoding, exemplified by In-staHide [22], mixes sensitive images with a large public dataset and randomly flips the sign of pixels to conceal vi-sual information. However, like other purely obfuscation-based methods, it offers no formal privacy guarantee and indeed was decisively broken by Carlini et al. [6], who demonstrated near-perfect reconstruction attacks, and sub-sequently by fusion-denoising attacks [31]. The consistent failure of these methods reveals a core principle: visual ob-scurity is a fragile defense against increasingly powerful learning-based attacks. A separate line of work attempts to achieve privacy preservation in the frequency domain. These methods trans-form images using the Discrete Cosine Transform (DCT) [8] and then perturb or discard specific frequency coeffi-cients [32, 46]. While removing low-frequency components can degrade visual information and preserve utility for some tasks [44], this frequency removal method is also reversible [28]. In stark contrast to these heuristic approaches, LDP-Slicing provides a formal, mathematically provable guaran-tee of privacy that is resilient by design. 2.2. Differential Privacy for images 
+
+To achieve provable privacy guarantees, most research has adopted DP with a centralized trust model. In this setting, a trusted curator collects the dataset of sensitive images and applies a DP mechanism, by injecting calibrated noise into the gradients during model training (e.g., DP-SGD [1]). This has been successfully used to train private generative models like DP-GANs [49] or, more recently, DP-Diffusion models [45], which can synthesize private images. While LDP removes the need for a trusted curator, it faces the well-known challenge with high-dimensional images, often referred to as the curse of dimensionality. Consequently, prior work avoids applying LDP to raw pixels, instead ap-plying LDP to lower dimensional intermediate representa-tions, such as feature vectors [7, 39]. This leaves a critical gap in the literature, which our work directly addresses: a method that provides the source-level privacy guarantees di-rectly on high-dimensional pixel data without collapsing it into a low-dimensional representation. 
+
+## 3. Preliminaries 
+
+3.1. Threat model 
+
+We consider a powerful adversary who controls the server and has full knowledge of our privacy mechanism, but can-not access raw user data. The adversary’s goal is to per-form either a reconstruction attack (recovering a perceptu-ally similar image I∗ from a privatized image ˜I) or an iden-tity distinguishing attack (determining if a privatized im-age ˜I and a public image Ipub belong to the same person). We adopt the formal definitions for the reconstruction at-tack from Carlini et al. [6] and provide the full details in Appendix. 
+
+Definition 1 (Identity distinguishing attack) . Let M : X → 
+
+eX be a randomized local privacy mechanism over face im-ages. Let I be the set of identities, and for every i ∈ I 
+
+let Dpriv  
+
+> i
+
+and Dpub  
+
+> i
+
+be the private and public image dis-tributions of that identity. The identity distinguishing ex-periment samples an identity i, draws x ∼ Dpriv  
+
+> i
+
+, re-leases ˜x = M(x), and then, with probability 1/2, draws 
+
+y ∼ Dpub  
+
+> i
+
+(the match case) and otherwise draws j̸ = i and 
+
+y ∼ Dpub  
+
+> j
+
+(the non-match case). The bit b = 1[i = j] is the ground truth. An adversary A outputs b′ = A(˜ x, y ), and its advantage is 
+
+Adv link  
+
+> M
+
+(A) = Pr[ b′ = b] − 12 .
+
+The probability is over the sampling of identities/images, the randomness of M, and the randomness of A.
+
+3.2. Local Differential Privacy 
+
+Our work is grounded in the formal guarantees of Local Dif-ferential Privacy: 
+
+Definition 2 (ε-Local Differential Privacy [24]) . A random-ized mechanism M : X → Y is ε-LDP if for all x, x ′ ∈ X 
+
+and all measurable subset S ⊆ Y ,
+
+Pr[ M(x) ∈ S] ≤ eε Pr[ M(x′) ∈ S] .
+
+Unlike centralized DP, which ensures privacy by guar-anteeing indistinguishability between neighboring datasets, LDP does not require defining neighboring dataset and pro-vides a stronger privacy guarantee by ensuring that for any two local inputs, the mechanism’s output distributions are nearly identical. The privacy budget ε controls the privacy-utility trade-off ( e.g ., smaller values imply stronger privacy and greater utility loss). A canonical mechanism for achiev-ing LDP in binary data is the randomized response. 
+
+Definition 3 (Randomized response [48]) . Let v take values in the binary domain v ∈ { 0, 1}, the (Binary) Randomized Response MRR mechanism that takes v as input and out-puts a perturbed v′ ∈ { 0, 1} can be defined as: 
+
+Pr[ MRR (v) = v′] = 
+
+(p if v = v′,
+
+1 − p if v̸ = v′.
+
+The input v can be viewed as the true input, and the prob-ability of a truthful response is denoted as p. Such a mech-anism has two nice properties: 
+
+Theorem 1 (Sequential composition [12]) . Let M1, M2
+
+be randomized algorithms that are ε1- and ε2-LDP, respec-tively. Then their release M1,2(x) = ( M1(x), M2(x)) is 
+
+(ε1 + ε2)-LDP. 
+
+Theorem 2 (Closedness to postprocessing[11]) . Let M :
+
+N|X | → R be a randomized algorithm that is ε-local dif-ferentially private. Let f : R → R′ be an arbitrary ran-domized mapping. Then f ◦ M : N|X | → R′ is ε-local differentially private. 
+
+## 4. Methodology 
+
+Our goal is to design a local privacy mechanism M that transforms an image I into a privatized version ˜I such that ˜I satisfies per-pixel ε-LDP and remains useful for downstream vision tasks. At its core, the LDP mecha-nism provides privacy by injecting calibrated noise into the data source and makes it statistically indistinguishable from original input. The challenge is that the effectiveness of this noise injection is proportional to the size of the input space. Consider a k-ary LDP mechanism ( e.g ., general random-ized response [48]), the mechanism must obfuscate the true value among all k−1 alternatives. The probability of report-ing the true value is p = eε 
+
+> eε+k−1
+
+. For an image with 8-bit pixels, the cardinality is extremely large ( k = 256 ). Even for a moderate privacy budget, the probability of reporting the true pixel value becomes vanishingly small, forcing the output to be almost pure noise. We argue that this utility loss is not an unavoidable cost of LDP and can be solved with correct data representation. Our core insight is this: A pixel with 256 discrete states is a binary encoding of eight bits, and the significance of each bit corresponds to the semantic structure of the pixel. This is the foundation of LDP-Slicing (Fig. 1), where we can allo-cate privacy budget based on the significance of the bit. Our framework is composed of three principled modules: first, a perceptual obfuscation stage to defeat human inspection. Second, our core bit-plane randomization mechanism pro-vides a formal LDP guarantee against algorithmic attacks. Finally, a utility-aware optimization to allocate the privacy budget for maximum downstream utility. 
+
+4.1. Perceptual obfuscation via wavelet pruning 
+
+To provide a holistic defense, we begin by addressing the threat of direct human inspection. While our core LDP mechanism protects against algorithmic inference, at weaker privacy settings ( e.g ., larger ε), the noisy image may still retain residual structure perceptible to a human observer. To address this, we introduce a perceptual obfus-cation as a pre-processing step. This stage is motivated by a well-studied asymmetry in perception: human vision pri-marily uses low-frequency image cues ( e.g ., broad shapes and smooth regions) to recognize content [4], whereas mod-ern convolutional neural networks (CNNs) often exploit fine, high-frequency details [2]. We exploit this by us-ing a 1-level Haar Discrete Wavelet Transform (DWT) to decompose each image channel into a low-frequency ap-proximation sub-band (LL) and three high-frequency de-tail sub-bands (LH, HL, HH). We then perform LL-Pruning by setting all coefficients in the low-frequency LL band to zero before reconstructing the image via the inverse DWT (IDWT). The effect of this process is visualized in Fig. 3 and Fig. 4. Unlike the block-based Discrete Cosine Trans-form (DCT) and other frequency transformations, the DWT decomposes the image at multiple resolutions, and avoids introducing the artifacts common to DCT when frequency coefficients are aggressively pruned. This leads to better preservation of useful high-frequency details, as we empir-ically validate it in our ablation study Tab. 3. 
+
+4.2. Pixel-level LDP via bit-plane randomization 
+
+With the image perceptually obfuscated, we now introduce our core mechanism to provide a formal ε-LDP guarantee. We achieve this by first changing the data representation through Bit-Plane Slicing (BPS). For an image with d-bit pixel (typically d = 8 ), each pixel x ∈ [0 , 2d − 1] is decomposed into a sequence of      
+
+> Figure 2. Bit-plane slicing reveals the non-uniform distribu-tion of structural information. An 8-bit image (left) is decom-posed into its planes ( right ), from LSB (top-left) to MSB (bottom-right). This visualization shows that coarse structural information is concentrated in the high-order MSB planes, while low-order LSB planes consist primarily of noise-like texture. This motivates our non-uniform, utility-aware budget optimization strategy.
+> Figure 3. Visual justification for channel-aware allocation and perceptual obfuscation. This figure shows an original image (a) and its YCbCr components before and after LL-pruning. It vali-dates two key decisions: (1) Channel Importance: The luma (Y) channel (b) contains the most structural information compared to the chroma channels (c,d). (2) Post-Pruning Signal: After LL-pruning (e), the resulting image (e) is perceptually obfuscated for human viewers. The Y-channel’s MSB (f) still retains significant high-frequency detail for machine learning, unlike the less infor-mative chroma MSBs (g,h).
+
+binary bits {x1, ..., x d}, where: 
+
+xℓ =
+
+j x
+
+2d−ℓ
+
+k
+
+mod 2 , ℓ ∈ { 1, . . . , d }. (1) This process decomposes the image into a total of 24 bit planes across Y, Cb, and Cr channels (Fig. 2). In this bi-nary domain, we can now apply the randomized response mechanism independently to flip each bit xℓ ∈ { 0, 1}. This produces a privatized bit ˜xℓ according to: 
+
+Pr MRR (xℓ) = ˜ xℓ
+
+ =
+
+( eεℓ  
+
+> eεℓ+1
+
+. if ˜xℓ = xℓ,  
+
+> 1
+> eεℓ+1
+
+. otherwise . (2) where εℓ is the privacy budget allocated to that specific bit-plane. The question then arises: how should the total pri-vacy budget εtotal be distributed among the individual bit-plane budgets {εℓ}?4.3. Utility-aware privacy budget optimization 
+
+A naive application of randomized response would allocate the total privacy budget εtotal uniformly across all 24 bit-planes ( e.g ., εℓ = εtotal /24 ). However, we argue this is suboptimal. As Fig. 2 and Fig. 3 clearly show, not all bits are created equal. The Most Significant Bits (MSBs) of the Luma (Y) channel contain the vast majority of the image’s structural information. Wasting privacy budget on noisy, low-impact Least Significant Bits (LSBs) and less important chroma channels degrades utility for no meaningful privacy gain. To formalize this intuition, we therefore frame budget allocation as a constrained optimization problem. Let εc,b 
+
+be the privacy budget allocated to bit-plane b ∈ { 1, ..., 8}
+
+of color channel c ∈ { Y,Cb,Cr }. Our objective is to find the set of budgets {εc,b } that minimizes weighted distortion (total utility loss), subject to a fixed total budget: 
+
+min 
+
+> {εc,b }
+
+X
+
+> c,b
+
+Wc,b 
+
+εc,b 
+
+s.t. X
+
+> c,b
+
+εc,b = εtotal , εc,b ≥ 0.
+
+(3) The effectiveness of this optimization hinges on defining principled importance weights, Wc,b . We derive these from two well-established properties of digital images and human perception: • Color channel sensitivity ( wc): As modern CNNs are robust to reduced chroma information [16] and inspired by chroma subsampling ( e.g ., JPEG compression [43]). We assign a higher weight to the Y color channel. Specif-ically, we set wY = 4 , wCb = wCr = 1 .• Bit-plane significance ( wb): Each bit contributes 2b−1 to the pixel value. Thus, wb = 2 b−1 reflects its impact on image fidelity. The total weight is the product, Wc,b = wc · wb. With the distortion of randomized response being inversely related to the budget, we solve this optimization using Lagrange multipliers (details in the Appendix): 
+
+εc,b = εtotal ·
+
+pWc,b 
+
+P
+
+> i∈{ Y,Cb ,Cr }
+
+P8
+
+> j=1
+
+pWi,j 
+
+. (4) This allocation technique ensures that the most critical in-formation receives the most privacy budget ( e.g ., the least noise). After perturbation, each pixel is reconstructed via: 
+
+˜x =
+
+> 8
+
+X
+
+> ℓ=1
+
+28−ℓ · ˜xℓ, (5) The resulting image provides a formal ε-LDP guarantee while remaining fully compatible with standard vision mod-els such as recognition and classification. 
+
+4.4. Privacy analysis 
+
+We now prove that LDP-Slicing provides a rigorous per-pixel LDP guarantee (see the full proof in the Appendix). 
+
+Theorem 3 (LDP-Slicing satisfies pixel-level εtotal –LDP) .
+
+Let εtotal = P 
+
+> c,b
+
+εc,b be the per-pixel privacy budget. LDP-Slicing guarantees εtotal -LDP for each pixel. Proof sketch. The proof relies on two basic properties of LDP: 1. Per-pixel composition: Our mechanism applies ran-domized response independently to each of the 24 bits that constitute a color pixel. By the composition The-orem 1, the full pipeline is 
+
+P 
+
+> c,b
+
+εc,b 
+
+
+
+-LDP, which equals εtotal -LDP. 2. Immunity to post-processing: The final reconstruction step is a data-independent function applied to the pri-vatized bits. By the post-processing Theorem 2, such transformations cannot weaken privacy. In particular, the wavelet pruning is a public, deterministic pre-processing step and does not consume the privacy bud-get ε. Therefore, the entire LDP-Slicing pipeline guarantees that each output pixel is εtotal -LDP with respect to the orig-inal pixel value. 
+
+The meaning of privacy guarantee A formal proof is nec-essary, but what does this guarantee mean for the adversary defined in Sec. 5.2 ? The ε-LDP guarantee provides a hard upper bound on the adversary’s ability to distinguish be-tween any two privatized images. This is captured by the Total Variation (TV) distance, which measures the maxi-mum possible statistical difference between two distribu-tions. A small TV distance means the outputs are statis-tically similar. For LDP-Slicing, this distance is tightly bounded: 
+
+Corollary 4 (Total Variation bound under ε-LDP) . Let M
+
+be an ε-LDP mechanism (Definition 2). For any two inputs 
+
+x, x ′ ∈ X , and P = L(M(x)) and Q = L(M(x′)) . Then 
+
+TV( P, Q ) = sup 
+
+> S⊆X
+
+|P (S) − Q(S)|≤ eε − 1
+
+eε + 1 = tanh  ε/ 2. (6) 
+
+Consequently, in the identity distinguishing attack in Defi-nition 1, the adversary’s advantage is upper bounded by: 
+
+Adv dist  
+
+> M
+
+≤ 12 tanh  ε/ 2. (7) 
+
+The full proof is in the Appendix. 
+
+Another crucial implication of our work is how pixel-level LDP provides effective image-level protection. Al-though composing the privacy bounds across all pixels im-plies a loose worst-case theoretical guarantee for the full Table 1. Benchmarks on face recognition accuracy (%). LDP-Slicing is compared with a non-private baseline, heuristic meth-ods, and methods with formal privacy guarantees. Bold indicates the best result among DP/LDP methods.                                                                  
+
+> Method DP/LDP Guarantee AgeDB-30 LFW CPLFW CALFW
+> ArcFace [9] None 97.88 99.77 92.77 96.05 InstaHide [22] None 79.58 96.53 81.03 86.24 Cloak [35] None 92.60 98.91 83.43 92.18 PPFR-FD [46] None 97.23 99.69 90.19 95.60 DuetFace [32] None 97.93 99.82 92.77 96.10 PartialFace [33] None 97.79 99.80 92.03 96.07 ProFace [50] None 92.81 98.27 88.17 93.20 AdvFace [47] None 92.57 98.45 83.73 93.62 MinusFace [34] None 97.57 99.78 91.90 95.90 PEEP [7] Feature-level 87.47 98.41 79.58 90.06 DCTDP [23] Block-level 94.37 99.48 90.60 93.47
+> LDP-Slicing (Ours) Pixel-level 96.68 99.75 91.08 96.02
+
+image, semantic identity inherently relies on spatial corre-lation ( e.g ., contours and textures). By applying indepen-dent binary randomized response to every pixel’s bit-planes, LDP-Slicing guarantees strict ε-LDP indistinguishability for every individual bit. This independent perturbation severely disrupts structural dependencies and erodes global semantic information, as evidenced by the low attack ad-vantages in Sec. 5.2. 
+
+## 5. Experiments 
+
+We evaluate LDP-Slicing on two challenging domains: Privacy-Preserving Face Recognition (PPFR) and Privacy-Preserving image classification. 
+
+Datasets. For face recognition, we train on the MS1M-ArcFace (MS1MV2) dataset [17] and evaluate on four stan-dard benchmarks testing performance across pose, age, and quality variations: LFW [21], CPLFW [54], and CALFW [55], and AgeDB-30[36]. For image classification, we use the CIFAR-10 and CIFAR-100 [26] datasets for both train-ing and testing. For reconstruction attack, we train inversion models on public BUPT dataset [53]. 
+
+Implementation details. For PPFR, we use a pretrained ResNet-50 backbone [18] with ArcFace loss [9], trained for 24 epochs with SGD [40]. For small privacy budgets ( e.g ., 
+
+ε = 2 .4), we use gradient clipping (max norm = 1) to mit-igate gradient vanishing. Unless specified, we set default testing privacy budget εtotal = 20 . For classification, we train a ResNet-56 from scratch. Full hyperparameter details are provided in the Appendix. 
+
+5.1. Privatized image in downstream tasks 
+
+Methods for comparison. For face recognition, we bench-mark LDP-Slicing against three categories of methods: (1) The non-private ArcFace baseline [9], (2) Heuristic meth-ods that obfuscate data but offer no formal privacy guar-antees (InstaHide [22], Cloak [35], PPFR-FD [46], Duet-Face [32], and MinusFace [34]), (3) Methods with formal 
+
+Figure 4. Visual comparison between LL pruning (Bottom) versus without pruning (Top). (a) εtotal = 1 . (b) εtotal = 2 .4.
+
+(c) εtotal = 5 .2. (d) εtotal = 12 . (e) εtotal = 20 . (f) εtotal = 32 . (g) 
+
+εtotal = 58 .
+
+Figure 5. Resilience to a white-box reconstruction attack. The adversary has full knowledge of our pipeline and trains a special-ized two-stage inversion model. From top to bottom εtotal = 5 .2,
+
+εtotal = 20 , εtotal = 58 (a) The original images. (b) original images after LL removed. (c) LDP-Slicing privatized images. (d) 
+
+LL recovered images. (e) Final recovered images. 
+
+DP guarantees including the feature-level PEEP [7] (with 
+
+ε = 5 per PCA components) and block-level DCTDP [23] (with εmean = 0 .5). For image classification, we compare LDP-Slicing against a non-private ResNet-56 as baseline and centralized DP method DP-SGD [1]. We set δ to 1e−10 
+
+to force it close to pure-DP. 
+
+Privacy-preserving face recognition. LDP-Slicing in Tab. 1 consistently outperforms all DP/LDP-based meth-ods on all face recognition benchmarks and close to many heuristic SOTAs. On LFW and CALFW, our performance is nearly identical to the non-private baseline. DCTDP reports privacy at the block-level, which is not directly compara-ble to our per-pixel notion. For a fair comparison, we pro-vide a theoretical upper-bound conversion of their budget in Appendix, which suggests our privacy guarantee is 5 times stricter than DCTDP. Privacy-preserving image classifica-tion. For image classification benchmarks, LDP-Slicing de-cisively outperforms DP-SGD at all privacy budgets ε ≤ 12 
+
+on CIFAR-10 and all budgets on CIFAR-100. 
+
+5.2. Robustness against privacy attack 
+
+White-box reconstruction attack. We evaluate our method against a worst-case adversary who has full knowl-edge of our algorithm and trains a custom two-stage inver-Figure 6. Resilience to black-box reconstruction attack. (a) The original images. Recovered LDP-Slicing image from (b) εtotal =5.2, (c) εtotal = 20 , and (d) εtotal = 58 . (e) Recovered DCTDP 
+
+image ( εmean = 0 .5). 
+
+sion model (denoiser + LL recovery network) to reverse our protection. First, a denoiser attempts to invert the LDP mechanism. It uses an autoencoder architecture [3] with eight parallel attention modules [42], one for each bit-plane, to predict the original bits from the noisy input. Subse-quently, a LL Recovery Network attempts to predict the pruned low-frequency LL information. We use a full-scale U-Net [41] to predict the LL band. As shown in Fig. 5, under medium to low privacy budget, the adversary fails to reconstruct a recognizable face. 
+
+Black-box reconstruction attack. In the more realistic black-box setting, we assume an adversary who has no knowledge of our algorithm but can query it to create a original/privatized image pairs. The adversary then trains a powerful U-Net to reconstruct original images. As shown in Fig. 6, the attack model reconstructs nearly identifiable faces from images protected by the competing DCTDP method. In contrast, even under a significantly relaxed pri-vacy budget of εtotal = 58 , our LDP-Slicing images re-main highly distorted. To simulate a truly SOTA adver-sary, we further evaluate against the powerful generative prior of a StyleGAN-based attack, Map 2V [51]. As shown in Fig. 8, while this SOTA attack successfully recovering some attributes from competing methods, it fails to break LDP-Slicing. 
+
+Identity distinguishing attack. Beyond visual reconstruc-tion, we simulate an identity-distinguishing attack. Here, the adversary has a public unprotected photo of a person IB ,and wants to link a privatized image ˜IA to that same person. This models a real-world attempt to track and link a user’s activity across different anonymized services. We train Wide-ResNet-28 as a classifier to determine if ˜IA and IB
+
+are the same person (on BUPT dataset). LDP-Slicing con-sistently maintains a lower attack advantage than DCTDP across all datasets, as illustrated in Tab. 2. 
+
+Table 2. Identity distinguishing attack advantage (%). The table shows the adversary’s advantage rate in Definition 1. A lower advantage indicates a stronger protection.                               
+
+> Method CIFAR10 CIFAR100 AgeDB-30 LFW CALFW CPLFW
+> PartialFace [33] 3.55 4.34 0.43 16.28 9.0 6.18 DuetFace [32] 5.07 7.14 6.97 19.75 12.98 8.89 DCTDP [23] 4.97 5.98 5.65 12.58 10.92 10.36
+> LDP-Slicing (Ours) 0.25 0.1 0.42 4.5 3.87 1.62
+
+Table 3. Ablation study of key components of LDP-Slicing .Results show face recognition accuracy (%) on four benchmarks, with a fixed privacy budget of εtotal = 20 . Each ablative variant modifies a single component of our full method (D): (A) without LL pruning, (B) with uniform privacy budget, and (C) DCT-based DC pruning with full utility-aware optimization.                      
+
+> Configuration AgeDB-30 LFW CPLFW CALFW
+> ArcFace (baseline) 97.88 99.77 92.77 96.05 (A) w/o LL Pruning 96.90 99.77 91.67 96.05 (B) LL Pruning + Uniform Budget 89.82 99.35 86.73 94.13 (C) DC Pruning + Utility-aware optimization 95.58 99.53 89.53 95.77 (D) LL Pruning + Utility-aware optimization (LDP-Slicing) 96.68 99.75 91.08 96.02
+
+5.3. Ablation study 
+
+Effect of LL pruning. Comparing our full method (D) with a variant without LL pruning (A) shows the utility trade-off made for perceptual privacy. While LL pruning yields a minor accuracy gain, we show in Fig. 4 that removing it leaves images visually identifiable to human observers at large εtotal . We also show in the Appendix that under mod-erate settings, LDP-Slicing remains robust even without LL pruning. Furthermore, comparing our DWT-based pruning (D) to a DCT-based low-frequency removal alternative (C) confirms that DWT preserves better utility. 
+
+Effect of utility-aware budget optimization. We compare our full, optimized budget allocation (C) against a naive uniform allocation (B). The uniform approach results in a catastrophic performance degradation across all bench-marks (e.g., a 6.86% absolute drop on AgeDB-30). This proves our hypothesis of utility-aware optimizing the pri-vacy budget based on the significance of each bit plane and color channel. 
+
+Impact of the total privacy budget εtotal . Finally, we analyze the privacy-utility trade-off across a range of bud-gets. As shown in Fig. 4 and Tab. 4, our method exhibits a predictable trade-off: as the privacy guarantee becomes stronger (lower ε), utility declines. 
+
+5.4. Complexity and compatibility 
+
+Time complexity. On a consumer-grade Apple M4 chip, we test LDP-Slicing over one hundred 112 × 112 images and the average processing time is 5.5 ms (throughput of 232 images/s), comparing existing SOTA MinusFace [34], which takes 68 ms. The complexity scales linearly with the number of pixels N , with the overall time complex-ity Θ( N ). This low computational overhead makes LDP-(a) Privacy-utility trade-off on CIFAR-10. (b) Privacy-utility trade-off on CIFAR-100. 
+
+Figure 7. Privacy-utility trade-off on privacy-preserving image classification. LDP-Slicing is compared against the strong centralized DP-SGD model [1]. On both CIFAR-10 (a) and CIFAR-100 (b) , our local model demonstrates a clear and growing advantage as the budget moves into a more practical range, comparing with the centralized trusted-curator model. 
+
+Figure 8. Visual comparison on Map 2V [51] reconstruction at-tack on PPFR SOTAs. Red squares highlight reconstructions that leak facial features. (a) Target images. (b) Reconstruction from DCTDP [23]. (c) Reconstruction from DuetFace [32]. (d) Re-construction from PartialFace [33]. (e) Reconstruction from LDP-Slicing (ours). Table 4. Privacy-utility trade-off on face recognition accuracy (%) . As the privacy budget εtotal decreases, utility across all bench-marks declines smoothly, aligning with theoretical expectations. PSNR values also correlate with the applied privacy budget.                                            
+
+> Privacy Budget AgeDB-30 LFW CPLFW CALFW PSNR avg
+> εtotal = 1 50.95 52.88 51.45 52.31 6.90 dB
+> εtotal = 2 .454.12 53.62 51.85 53.83 6.91 dB
+> εtotal = 5 .268.89 89.31 71.30 79.15 6.94 dB
+> εtotal = 12 93.70 99.30 88.70 95.33 7.30 dB
+> εtotal = 20 96.68 99.75 91.08 96.02 7.62 dB
+> εtotal = 32 96.46 99.77 91.93 96.04 8.51 dB
+> εtotal = 58 97.45 99.77 92.07 96.05 9.94 dB
+
+Slicing a practical solution for edge devices. 
+
+Storage and transmission overhead. As shown in Tab. 5, LDP-Slicing incurs zero storage or transmission overhead, outputting a standard image. This is a vast improvement over prior works like DCTDP [23] and DuetFace [32], which require representations that are ×63 and ×54 larger. 
+
+Compatibility and Downstream Invariance. Because 
+
+Table 5. Storage and transmission overhead analysis. Over-head is reported as a multiple of the size of a standard image (our method, ×1). Lower is better. LDP-Slicing introduces zero over-head.                
+
+> Method Ours [34] [47] [33] [46] [32] [23]
+> Storage ↓×1×1×5.3×9×36 ×54 ×63
+
+LDP-Slicing outputs a standard image, it is inherently in-variant to downstream tasks and can directly replace un-protected images without architectural modifications. We validate this task-agnostic robustness by evaluating our MS1MV2-trained model zero-shot on cross-dataset bench-marks (VGGFace2 [5], CelebA [30]), and on a completely different domain with higher-resolution medical data (Chest X-Ray [25]). Across these diverse settings, LDP-Slicing consistently preserves high utility. Furthermore, by the post-processing property of LDP, any model trained on these images inherits the rigorous privacy guarantee. Full downstream quantitative results are detailed in the Ap-pendix. 
+
+## 6. Conclusion 
+
+This paper addressed the challenge of enabling source-level privacy for images without sacrificing utility. Our frame-work, LDP-Slicing, transforms pixels into a bit-plane repre-sentation where LDP is natively effective. Combined with perceptual obfuscation and utility-aware budget optimiza-tion, it guarantees rigorous, source-level privacy while pre-serving downstream task accuracy. By making LDP prac-tical for standard vision pipelines, this work unlocks zero-trust deployment in sensitive domains like medical imaging, paving the way for future extensions into video streams. LDP-Slicing: Local Differential Privacy for Images via Randomized Bit-Plane Slicing 
+
+# Supplementary Material 
+
+This supplementary material provides additional details about the proposed LDP-Slicing method. Specifically, we provide: • Formal definitions of the reconstruction threat model (Sec. 3.1). • Derivation of the utility-aware budget optimization. • Complete proofs for the pixel-level Local Differential Pri-vacy (LDP) guarantee and Total Variation bound. • Training configurations and hyperparameters for all benchmarks. • Additional Experiments. • Ethical discussion. 
+
+## A. Formal attack definition 
+
+We formalize the adversarial attack models discussed in our threat model in Sec. 3.1. 
+
+Definition 4 (Reconstruction attack [6]) . Let S =
+
+{(x1, y 1), . . . , (xn, y n)} be the sensitive dataset, and let 
+
+˜S = ( ˜X, ˜Y ) ← M (S) be the privatized dataset revealed to an adversary A. Given ˜S, A outputs a candidate record 
+
+x∗ ∈ X . We say that A succeeds in a reconstruction attack if 
+
+∃ i ∈ [n] such that d(x∗, x i) ≤ r, 
+
+where d : X × X → R≥0 is a context-dependent metric and 
+
+r > 0.
+
+In the context of face images, a successful reconstruction means that x∗ preserves identifiable features of the original person ( e.g ., eyes and nose). An ideal privacy mechanism should make it computationally infeasible for any adversary to produce such an x∗ from ˜x with high confidence. 
+
+## B. Derivation of utility-aware budget optimiza-tion 
+
+In Sec. 4.3 of the main paper, we formulate the following constrained optimization problem: minimize 
+
+> {εc,b }
+
+X
+
+> c,b
+
+Wc,b 
+
+εc,b 
+
+subject to X
+
+> c,b
+
+εc,b = εtotal , εc,b > 0,
+
+where Wc,b > 0 represents the importance weight for bit-plane b of channel c, and εc,b is the allocated privacy budget. We solve this using the method of Lagrange multipliers: 
+
+L({εc,b }, λ ) = X
+
+> c,b
+
+Wc,b 
+
+εc,b 
+
++ λ
+
+X
+
+> c,b
+
+εc,b − εtotal 
+
+ ,
+
+where λ ∈ R is the Lagrange multiplier. Taking partial derivatives with respect to each decision variable εc,b and setting them to zero yields: 
+
+∂L
+
+∂ε c,b 
+
+= − Wc,b 
+
+ε2
+
+> c,b
+
++ λ = 0 .
+
+Solving for εc,b , we obtain: 
+
+εc,b =
+
+pWc,b 
+
+√λ . (8) Since Wc,b > 0 and εc,b > 0, this implies λ > 0. Substi-tuting (8) into the budget constraint P 
+
+> c,b
+
+εc,b = εtotal , we obtain: X
+
+> c,b
+
+εc,b = X
+
+> c,b
+
+pWc,b 
+
+√λ = εtotal ,
+
+Solving for 1/√λ:
+
+1
+
+√λ = εtotal 
+
+P
+
+> c′,b ′
+
+pWc′,b ′
+
+. (9) Finally, substituting (9) back into (8) gives the final solution 
+
+εc,b = pWc,b · εtotal 
+
+P
+
+> c′,b ′
+
+pWc′,b ′
+
+,
+
+or equivalently, 
+
+εc,b = εtotal ·
+
+pWc,b 
+
+P
+
+> i∈{ Y,Cb ,Cr }
+
+P8
+
+> j=1
+
+pWi,j 
+
+. (10) 
+
+## C. Complete proofs 
+
+C.1. Proof of pixel-level LDP guarantee 
+
+In Theorem 3, we claim that LDP-Slicing guarantees that each individual pixel in the output image satisfies εtotal -LDP with respect to the original pixel value. Let X denote the domain of possible pixel values after LL pruning, and let 
+
+M : X → Y Figure 9. Qualitative comparison against other SOTAs. We compare LDP-Slicing (i) against (b) PPFR-FD [46], (c) DuetFace [32], (d) PartialFace [33], (e) ProFace [50], (f) AdvFace [47], (g) MinusFace [34], and DCTDP [23]. DCTDP and LDP-Slicing achieve a higher level of perceptual obfuscation. 
+
+be the per-pixel LDP-Slicing mechanism. By Definition 2, this means that for any two possible pixel values x, ˜x and any measurable subset of possible randomized outputs S:
+
+Pr[ M(x) ∈ S] ≤ eεtotal · Pr[ M(˜ x) ∈ S], (11) where εtotal is the total privacy budget allocated per pixel. In this section, we provide the complete formal proof. 
+
+Setup 
+
+Each pixel after LL pruning has Y, Cb, and Cr channels, each with 8 bits. We index the resulting d = 24 bits as: 
+
+x 7 −→ (x1, . . . , x d) ∈ { 0, 1}d.
+
+Let εℓ denote the privacy budget allocated to the ℓ-th bit, where the total budget is εtotal = Pdℓ=1 εℓ.
+
+Proof. 1. Single bit privacy. 
+
+For any bit xℓ in bit-plane Bℓ, we apply the binary ran-domized response mechanism MRR with budget εℓ. Let p
+
+denote the probability of true response: 
+
+p = eεℓ
+
+eεℓ + 1 
+
+By Definition 3, for any output ˜xℓ ∈ { 0, 1}, we have: 
+
+Pr[ MRR (xℓ) = ˜ xℓ] = 
+
+(p, if xℓ = ˜ xℓ,
+
+1 − p, if xℓ̸ = ˜ xℓ. (12) The worst-case likelihood ratio between two different in-puts is then: 
+
+Pr[ MRR (xℓ) = ˜ xℓ]Pr[ MRR (xℓ)̸ = ˜ xℓ] ≤ p
+
+1 − p =
+
+eεℓ
+
+eεℓ + 1 1
+
+eεℓ + 1 = eεℓ .
+
+Thus, for every ℓ and for all xℓ, ˜xℓ ∈ { 0, 1} and all S ⊆{0, 1}:
+
+Pr[ MRR (xℓ) ∈ S] ≤ eεℓ Pr[ MRR (˜ xℓ) ∈ S] (13) 
+
+2. Basic composition. 
+
+For a fixed pixel x ∈ X , let its d-bit representation after bit-plane slicing be (x1, . . . , x d) ∈ { 0, 1}d. For each bit-plane index ℓ ∈ { 1, . . . , d }, we apply the mechanism MRR 
+
+in parallel with budget εℓ:
+
+M1: d(x) :=  M1(x1), . . . , Md(xd) ∈ { 0, 1}d. (14) Where the mechanisms M1, . . . , Md are run with mutu-ally independent on each bit. For any output pixel ˜x =(˜ x1, . . . , ˜xd) ∈ { 0, 1}d we have: 
+
+Pr[ M1: d(x) = ˜ x] = 
+
+> d
+
+Y
+
+> ℓ=1
+
+Pr[ Mℓ(xℓ) = ˜ xℓ] .
+
+Fix any two pixel values x, ˜x ∈ X we obtain: 
+
+Pr[ M1: d(x) = ˜ x]Pr[ M1: d(x)̸ = ˜ x] =
+
+Qdℓ=1 Pr[ Mℓ(xℓ) = ˜ xℓ]
+
+Qdℓ=1 Pr[ Mℓ(xℓ)̸ = ˜ xℓ]=
+
+> d
+
+Y
+
+> ℓ=1
+
+Pr[ Mℓ(xℓ) = ˜ xℓ]Pr[ Mℓ(xℓ)̸ = ˜ xℓ]
+
+≤
+
+> d
+
+Y
+
+> ℓ=1
+
+eεℓ = ePdℓ=1 εℓ = eεtotal .
+
+Therefore M1: d is εtotal -LDP. 
+
+3. Immunity to post-processing. 
+
+We now prove formally that the reconstruction step pre-serves the εtotal -LDP guarantee. Let 
+
+M1: d : X → { 0, 1}d
+
+denote εtotal -LDP the LDP mechanism from Eq. (14). The reconstruction map f : {0, 1}d → Y is deterministic and given by: 
+
+f (˜ x1, . . . , ˜xd) = 
+
+> d
+
+X
+
+> ℓ=1
+
+2d−ℓ ˜xℓ.The per-pixel LDP-Slicing mechanism is therefore: 
+
+M(x) = f  M1: d(x).
+
+Fix any x, x ′ ∈ X and any measurable subset S ⊆ Y . De-fine 
+
+T = {z ∈ { 0, 1}d : f (z) ∈ S}.
+
+Then 
+
+Pr[ f (M1: d(x)) ∈ S] = Pr[ M1: d(x) ∈ T ] .
+
+Since M1: d is εtotal -LDP, we have: 
+
+Pr[ M1: d(x) ∈ T ] ≤ eεtotal Pr[ M1: d(˜ x) ∈ T ] .
+
+Hence LDP-Slicing is per-pixel εtotal -LDP. 
+
+C.2. Proof of total variation bound under ε-LDP 
+
+Proof. Let P and Q be the output distributions of the LDP-Slicing mechanism M on pixel x and ˜x. By ε-LDP (Defi-nition 2), for all measurable S ⊆ Y ,
+
+P (S) ≤ eεQ(S)
+
+The total variation distance between distribution P and Q
+
+is: 
+
+TV( P, Q ) = sup 
+
+> S⊆Y
+
+|P (S) − Q(S)|.
+
+The LDP inequalities imply that the likelihood ratio be-tween P and Q is bounded: 
+
+e−ε ≤ dP dQ (y) ≤ eε
+
+then 
+
+TV( P, Q ) ≤ eε − 1
+
+eε + 1 = tanh  ε/ 2,
+
+which proves (6). For the identity distinguishing attack in Definition 1, let 
+
+P and Q be the distributions of the observation conditioned on b = 1 and b = 0 , respectively. Any (possibly random-ized) adversary corresponds to some decision region S in which it outputs b′ = 1 . Then 
+
+Pr[ b′ = b] = 12
+
+ 1 + P (S) − Q(S),
+
+so: 
+
+Pr[ b′ = b] − 12 = 12 |P (S) − Q(S)| ≤ 12 TV( P, Q ).
+
+Combining this with the bound on TV( P, Q ) yields: 
+
+Adv dist  
+
+> M
+
+≤ 12 tanh  ε/ 2,  
+
+> Figure 10. Qualitative comparison against other SOTAs. We compare LDP-Slicing (i) against (b) PPFR-FD [46], (c) DuetFace [32], (d) PartialFace [33], (e) ProFace [50], (f) AdvFace [47], (g) MinusFace [34], and DCTDP [23]. DCTDP and LDP-Slicing achieve a higher level of perceptual obfuscation.
+
+## D. Experiments 
+
+D.1. Experimental details 
+
+This subsection provides detailed information about our ex-perimental setup and hyperparameters. We conduct all ex-periments on NVIDIA H100 GPUs using PyTorch. 
+
+Image pre-processing. For face recognition, we resize each facial image to 112×112 pixels to align with other SO-TAs. For image classification, we apply augmentation like random crop and random horizontal flip and optional cutout. 
+
+Privacy-preserving face recognition. We adopt the ResNet-50 architecture with the improved residual [18] backbone. The network is optimized using the ArcFace loss function [9] with a feature scale s = 64 and angular margin 
+
+m = 0 .4. We use SGD [40] with a momentum of 0.9 and a weight decay of 5 × 10 −4. Training proceeds for 24 epochs with an initial learning rate of 0.1, decayed by a factor of 10 at epochs 10, 18, and 22. We also initialize weights from a pre-trained IR-50 model and apply a 5-epoch warm-up pe-riod. 
+
+Privacy-preserving image classification. For image clas-sification on CIFAR-10 and CIFAR-100 dataset, we adopt a ResNet-56 architecture trained for 250 epochs with a batch size of 128. We use SGD with a momentum of 0.9 and a re-duced weight decay of 1 × 10 −4. We set the initial learning rate to 0.1 and decay by a factor of 10 at epochs 80, 160, and 200. For training with low privacy budgets ( e.g ., ε = 1 ), we apply the gradient clipping with a max norm of 0.5. 
+
+D.2. Additional experiments 
+
+We extend LDP-Slicing to the medical domain using the Chest X-Ray dataset [25] at 224 × 224 resolution. We adopt ResNet-50 as backbone and remove color weights during the budget optimization process. As shown in Tab. 6, LDP-Slicing retains high utility even under strict privacy budgets (e.g . εtotal = 5 .2). Furthermore, we perform a zero-shot test of our MS1MV2 trained model directly on the VG-GFace2 [5] and CelebA [30] datasets. LDP-Slicing main-tains a competitive utility under moderate privacy settings (in Tab. 6). 
+
+D.3. Ablation on different color weights 
+
+We evaluate LDP-Slicing under 2 additional different weights (in Tab. 7). The original weight (4:1:1) consistently outperforms other weights. Table 6. Privacy-utility trade-off (%). We perform additional experiment on another 3 benchmarks                                
+
+> Dataset ε=1 ε=2.4 ε=5.2 ε=12 ε=20 ε=32 ε=58
+> Chest X-Ray [25] 76.60 88.94 90.54 91.99 92.15 92.95 93.43
+> VGGFace2 [5] 48.95 50.31 51.71 66.69 67.15 68.99 70.64
+> CelebA [30] 49.88 50.97 50.84 75.90 80.44 82.68 84.89
+
+Table 7. Utility under different color weight (%).                          
+
+> Color W. CIFAR10 CIFAR100 AgeDB LFW CALFW CPLFW
+> 4 : 1 : 1 (Ours) 80.36 53.55 96.68 99.75 96.02 91.08
+> 2 : 1 : 1 78.44 50.63 95.85 99.63 95.68 90.87
+> 1 : 1 : 1 74.92 45.16 94.68 99.47 94.17 89.85
+
+Figure 11. Black-box reconstruction attack (w/o LL pruning) 
+
+D.4. Ablation on LL pruning 
+
+We perform an ablation study (in Fig. 11) by removing the perceptual obfuscation stage. Without LL pruning, LDP-Slicing can still suppress identity-defining high-frequency cues, and the inversion recovers at most blurred, non-identifying content. Although perceptual obfuscation is an auxiliary step, it allows the same ε noise to be spent more on task-relevant signals. 
+
+D.5. Comparison with block-level privacy 
+
+In the main paper, we show that LDP-Slicing outperforms DCTDP [23] in face recognition benchmarks. To provide a fair comparison, we must convert the privacy guarantees at same level, as DCTDP defines privacy at the block-level, not pixel-level. In the standard configuration, DCTDP upsamples the facial image by 8 and applies a Laplace mechanism with 
+
+εmean = 0 .5 to each DCT coefficient within an 8 × 8 block. It also removes the DC coefficient for each color channel. By the central Differential Private (DP) Sequential Compo-sition Theorem [12], the effective privacy budget bound for a single pixel is: 
+
+εpixel ≤ ((8 × 8) block − 1DC ) × 3 × 0.5 = 94 .5.
+
+In contrast, LDP-Slicing operates under a total budget of εtotal = 20 . This derivation suggests that our method is approximately 4.7× stricter than DCTDP. 
+
+D.6. Qualitative comparison against other SOTAs. 
+
+To demonstrate the effectiveness against human observer, we add a visual comparison against other SOTAs in Fig. 11. Heuristic methods like PPFR-FD, DuetFace, and Partial-Face retain sensitive facial features visible to the human observer. In contrast, DP/LDP methods conceal sensitive attributes in noise. 
+
+## E. Ethical considerations. 
+
+Our primary experiment is trained on MS1Mv2 dataset [17]. We acknowledge the ethical concerns about the MS1Mv2 dataset. Our usage is strictly limited to privacy defense re-search and adheres to CVPR’s ethical guidelines. We also recognize that our defense mechanism could theoretically be used by malicious actors to evade lawful systems ( e.g ., hiding illegal content). However, we believe the benefit of allowing end-users local control over data privacy out-weighs these risks. References 
+
+[1] Martin Abadi, Andy Chu, Ian Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep learning with differential privacy. In ACM SIGSAC Confer-ence on Computer and Communications Security , 2016. 1, 3, 6, 8 [2] Antonio A Abello, Roberto Hirata, and Zhangyang Wang. Dissecting the high-frequency bias in convolutional neural networks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 863–871, 2021. 4 [3] Dor Bank, Noam Koenigstein, and Raja Giryes. Autoen-coders, 2021. 7 [4] M. Bar, K. S. Kassam, A. S. Ghuman, J. Boshyan, A. M. Schmid, A. M. Dale, M. S. H¨ am¨ al¨ ainen, K. Marinkovic, D. L. Schacter, B. R. Rosen, and E. Halgren. Top-down fa-cilitation of visual recognition. Proceedings of the National Academy of Sciences , 103(2):449–454, 2006. 4 [5] Qiong Cao, Li Shen, Weidi Xie, Omkar M. Parkhi, and An-drew Zisserman. Vggface2: A dataset for recognising faces across pose and age, 2018. 8, 3, 4 [6] Nicholas Carlini, Samuel Deng, Sanjam Garg, Somesh Jha, Saeed Mahloujifar, Mohammad Mahmoody, Shuang Song, Abhradeep Thakurta, and Florian Tramer. Is private learning possible with instance encoding?, 2021. 2, 3, 1 [7] Mahawaga Arachchige Pathum Chamikara, Peter Bertok, Ibrahim Khalil, Dongxi Liu, and Seyit Camtepe. Privacy pre-serving face recognition utilizing differential privacy. Com-puters & Security , 97:101951, 2020. 1, 3, 6 [8] Wen-Hsiung Chen, C. Smith, and Stanley C. Fralick. Afast computational algorithm for the discrete cosine trans-form. IEEE Transactions on Communications , 25:1004– 1009, 1977. 2 [9] Jiankang Deng, Jia Guo, Jing Yang, Niannan Xue, Irene Kot-sia, and Stefanos Zafeiriou. Arcface: Additive angular mar-gin loss for deep face recognition. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2022. 6, 3 [10] John C. Duchi, Michael I. Jordan, and Martin J. Wainwright. Local privacy, data processing inequalities, and statistical minimax rates, 2014. 1 [11] Cynthia Dwork and Aaron Roth. The Algorithmic Founda-tions of Differential Privacy . Now Publishers Inc., 2014. 1, 3[12] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam D. Smith. Calibrating noise to sensitivity in private data analysis. In Proceedings of the Theory of Cryptography Conference (TCC) , 2006. 1, 3, 4 [13] Andrea Frome, German Cheung, Ahmad Abdulkader, Marco Zennaro, Bo Wu, Alessandro Bissacco, Hartwig Adam, Hartmut Neven, and Luc Vincent. Large-scale privacy pro-tection in Google Street View. In IEEE International Con-ference on Computer Vision , 2009. 1 [14] Ran Gilad-Bachrach, Nathan Dowlin, Kim Laine, Kristin Lauter, Michael Naehrig, and John Wernsing. Cryptonets: Applying neural networks to encrypted data with high throughput and accuracy. In International Conference on Machine Learning , pages 201–210, 2016. 1 [15] Aditya Golatkar, Alessandro Achille, Yu-Xiang Wang, Aaron Roth, Michael Kearns, and Stefano Soatto. Mixed differential privacy in computer vision. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 8376–8386, 2022. 1 [16] Lionel Gueguen, Alex Sergeev, Ben Kadlec, Rosanne Liu, and Jason Yosinski. Faster neural networks straight from jpeg. Advances in neural information processing systems ,31, 2018. 5 [17] Yandong Guo, Lei Zhang, Yuxiao Hu, Xiaodong He, and Jianfeng Gao. Ms-celeb-1m: A dataset and benchmark for large-scale face recognition, 2016. 6, 4 [18] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In IEEE Con-ference on Computer Vision and Pattern Recognition , 2016. 6, 3 [19] Wenbo He, Shusheng Li, Wenbo Wang, Muheng Wei, and Bohua Qiu. CryptoEyes: Privacy preserving classification over encrypted images. In IEEE INFOCOM , pages 1–10, 2021. 1 [20] Steven Hill, Zhimin Zhou, Lawrence Saul, and Hovav Shacham. On the (in)effectiveness of mosaicing and blurring as tools for document redaction. Proceedings on Privacy En-hancing Technologies , 2016, 2016. 1, 2 [21] Gary B. Huang, Marwan Mattar, Tamara Berg, and Eric Learned-Miller. Labeled faces in the wild: A database for studying face recognition in unconstrained environments. In 
+
+Workshop on Faces in Real-Life Images , 2008. 6 [22] Yangsibo Huang, Zhao Song, Kai Li, and Sanjeev Arora. InstaHide: Instance-hiding schemes for private distributed learning, 2021. 2, 6 [23] Jiazhen Ji, Huan Wang, Yuge Huang, Jiaxiang Wu, Xingkun Xu, Shouhong Ding, ShengChuan Zhang, Liujuan Cao, and Rongrong Ji. Privacy-preserving face recognition with learn-able privacy budgets in frequency domain. In European Con-ference on Computer Vision , pages 475–491, 2022. 6, 7, 8, 2, 3, 4 [24] Shiva Prasad Kasiviswanathan, Homin K. Lee, Kobbi Nis-sim, Sofya Raskhodnikova, and Adam Smith. What can we learn privately?, 2010. 1, 3 [25] Daniel S Kermany, Michael Goldbaum, Wenjia Cai, Car-olina CS Valentim, Huiying Liang, Sally L Baxter, Alex McKeown, Ge Yang, Xiaokang Wu, Fangbing Yan, et al. Identifying medical diagnoses and treatable diseases by image-based deep learning. cell , 172(5):1122–1131, 2018. 8, 3, 4 [26] Alex Krizhevsky. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. 6[27] Karen Lander, Vicki Bruce, and Harry Hill. Evaluating the effectiveness of pixelation and blurring on masking the iden-tity of familiar faces. Applied Cognitive Psychology , 2001. 2[28] Shujun Li, Junaid Jameel Ahmad, Dietmar Saupe, and C.-C. Jay Kuo. An improved dc recovery method from ac co-efficients of dct-transformed images. In 2010 IEEE Inter-national Conference on Image Processing , page 2085–2088. IEEE, 2010. 2 [29] Tao Li and Chris Clifton. Differentially private imaging via latent space manipulation. arXiv preprint arXiv:2103.05472 ,2021. 1 [30] Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild. In Proceedings of International Conference on Computer Vision (ICCV) , 2015. 8, 3, 4 [31] Xinjian Luo, Xiaokui Xiao, Yuncheng Wu, Juncheng Liu, and Beng Chin Ooi. A fusion-denoising attack on instahide with data augmentation. Proceedings of the AAAI Confer-ence on Artificial Intelligence , 2022. 2 [32] Yuxi Mi, Yuge Huang, Jiazhen Ji, Hongquan Liu, Xingkun Xu, Shouhong Ding, and Shuigeng Zhou. Duetface: Collab-orative privacy-preserving face recognition via channel split-ting in the frequency domain. In ACM International Confer-ence on Multimedia , pages 6755–6764, 2022. 2, 6, 7, 8, 3 [33] Yuxi Mi, Yuge Huang, Jiazhen Ji, Minyi Zhao, Jiaxiang Wu, Xingkun Xu, Shouhong Ding, and Shuigeng Zhou. Privacy-preserving face recognition using random frequency compo-nents. In IEEE/CVF International Conference on Computer Vision , pages 19673–19684, 2023. 6, 7, 8, 2, 3 [34] Yuxi Mi, Zhizhou Zhong, Yuge Huang, Jiazhen Ji, Jian-qing Xu, Jun Wang, Shaoming Wang, Shouhong Ding, and Shuigeng Zhou. Privacy-preserving face recognition using trainable feature subtraction. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 297–307, 2024. 6, 7, 8, 2, 3 [35] Fatemehsadat Mireshghallah, Mohammadkazem Taram, Ali Jalali, Ahmed Elthakeb, Dean Tullsen, and Hadi Es-maeilzadeh. Not all features are equal: Discovering essential features for preserving prediction privacy. In The Web Con-ference , pages 669–680, 2021. 6 [36] Stylianos Moschoglou, Athanasios Papaioannou, Chris-tos Sagonas, Jiankang Deng, Irene Kotsia, and Stefanos Zafeiriou. Agedb: The first manually collected, in-the-wild age database. In CVPR Workshops , 2017. 6 [37] Carman Neustaedter, Saul Greenberg, and Michael Boyle. Blur filtration fails to preserve privacy for home-based video conferencing. ACM Transactions on Computer-Human In-teraction , 13(1):1–36, 2006. 1 [38] Nimesh Patel, Carlo Licata, Adam Pezen, et al. Complaint – patel v. facebook, inc., case no. 15-cv-03747 (n.d. ill.). Filed in United States District Court for the Northern Dis-trict of Illinois, 2015. Alleges Facebook used facial recogni-tion technology to create and store biometric face templates without consent, in violation of Illinois Biometric Informa-tion Privacy Act. 1 [39] Francesco Pittaluga and Bingbing Zhuang. Ldp-feat: Im-age features with local differential privacy. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion , pages 17580–17590, 2023. 1, 3 [40] Herbert Robbins and Sutton Monro. A stochastic approxi-mation method. The annals of mathematical statistics , pages 400–407, 1951. 6, 3 [41] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmentation. In Medical Image Computing and Computer-Assisted Inter-vention , pages 234–241, 2015. 7 [42] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszko-reit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention is all you need, 2017. 7 [43] G.K. Wallace. The jpeg still picture compression standard. 
+
+IEEE Transactions on Consumer Electronics , 38(1):xviii– xxxiv, 1992. 5 [44] Haohan Wang, Xindi Wu, Zeyi Huang, and Eric P. Xing. High frequency component helps explain the generalization of convolutional neural networks, 2020. 2 [45] Haichen Wang, Shuchao Pang, Zhigang Lu, Yihang Rao, Yongbin Zhou, and Minhui Xue. dp-promise: Differentially private diffusion probabilistic models for image synthesis. In 
+
+USENIX Security Symposium , pages 1063–1080, 2024. 3 [46] Yinggui Wang, Jian Liu, Man Luo, Le Yang, and Li Wang. Privacy-preserving face recognition in the frequency domain. In Proceedings of the AAAI Conference on Artificial Intelli-gence , pages 2558–2566, 2022. 2, 6, 8, 3 [47] Zhibo Wang, He Wang, Shuaifan Jin, Wenwen Zhang, Jiahui Hu, Yan Wang, Peng Sun, Wei Yuan, Kaixin Liu, and Kui Ren. Privacy-preserving adversarial facial features. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 8212–8221, 2023. 6, 8, 2, 3 [48] Stanley L. Warner. Randomized response: A survey tech-nique for eliminating evasive answer bias. Journal of the American Statistical Association , 60, 1965. 3 [49] Liyang Xie, Kaixiang Lin, Shu Wang, Jiayu Zhou, and Fei Wang. Differentially private generative adversarial network, 2018. 3 [50] Lin Yuan, Linguo Liu, Xiao Pu, Zhao Li, Hongbo Li, and Xinbo Gao. Pro-face: A generic framework for privacy-preserving recognizable obfuscation of face images. In Pro-ceedings of the 30th ACM International Conference on Mul-timedia , pages 1661–1669, 2022. 6, 2, 3 [51] Hui Zhang, Xingbo Dong, YenLung Lai, Ying Zhou, Xi-aoyan Zhang, Xingguo Lv, Zhe Jin, and Xuejun Li. Vali-dating privacy-preserving face recognition under a minimum assumption. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 12205– 12214, 2024. 7, 8 [52] Kaihao Zhang, Wenqi Ren, Wenhan Luo, Wei-Sheng Lai, Bjorn Stenger, Ming-Hsuan Yang, and Hongdong Li. Deep image deblurring: A survey, 2022. 2 [53] Yaobin Zhang and Weihong Deng. Class-balanced training for deep face recognition. In CVPR Workshops , pages 824– 825, 2020. 6 [54] T. Zheng and W. Deng. Cross-pose lfw: A database for studying cross-pose face recognition in unconstrained en-vironments. Technical Report 18-01, Beijing University of Posts and Telecommunications, 2018. 6 [55] Tianyue Zheng, Weihong Deng, and Jiani Hu. Cross-age lfw: A database for studying cross-age face recognition in un-constrained environments. arXiv preprint arXiv:1708.08197 ,2017. 6 [56] Yuqing Zhu, Xiang Yu, Manmohan Chandraker, and Yu-Xiang Wang. Private-knn: Practical differential privacy for computer vision. In proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pages 11854–11862, 2020. 1

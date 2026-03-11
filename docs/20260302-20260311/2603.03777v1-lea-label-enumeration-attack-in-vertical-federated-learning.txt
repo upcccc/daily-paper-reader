@@ -1,0 +1,743 @@
+Title: LEA: Label Enumeration Attack in Vertical Federated Learning
+
+URL Source: https://arxiv.org/pdf/2603.03777v1
+
+Published Time: Thu, 05 Mar 2026 01:44:28 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# LEA: Label Enumeration Attack in Vertical Federated Learning 
+
+Wenhao Jiang, Shaojing Fu †, Yuchuan Luo, Lin Liu 
+
+College of Computer Science and Technology, National University of Defense Technology, Changsha, China 
+
+{jwh roy, fushaojing, luoyuchuan09, liulin16 }@nudt.edu.cn 
+
+Abstract —A typical Vertical Federated Learning (VFL) sce-nario involves several participants collaboratively training amachine learning model, where each party has different features for the same samples, with labels held exclusively by one party. Since labels contain sensitive information, VFL must ensure the privacy of labels. However, existing VFL-targeted label inference attacks are either limited to specific scenarios or require auxiliary data, rendering them impractical in real-world applications. We introduce a novel Label Enumeration Attack (LEA) that, for the first time, achieves applicability across multiple VFL scenarios and eschews the need for auxiliary data. Our intuition is that an adversary, employing clustering to enumerate mappings between samples and labels, ascertains the accurate label map-pings by evaluating the similarity between the benign model and the simulated models trained under each mapping. To achieve that, the first challenge is how to measure model similarity, as models trained on the same data can have different weights. Drawing from our findings, we propose an efficient approach for assessing congruence based on the cosine similarity of the first-round loss gradients, which offers superior efficiency and precision compared to the comparison of parameter similarities. However, the computational cost may be prohibitive due to the necessity of training and comparing the vast number of simulated models generated through enumeration. To overcome this challenge, we propose Binary-LEA from the perspective of reducing the number of models and eliminating futile training, which lowers the number of enumerations from O(n!) to O(n3).Experiments across different VFL settings confirm LEA’s effec-tiveness. In the absence of auxiliary datasets, LEA demonstrates a 50% to 90% enhancement in attack accuracy over the existing state-of-the-art label inference attacks in VFL. Moreover, LEA is resilient against common defense mechanisms such as gradient noise and gradient compression. 
+
+Index Terms —Vertical Federated Learning, Security, Label Inference Attack, Clustering 
+
+I. I NTRODUCTION 
+
+Vertical Federated Learning (VFL) is an emerging paradigm in the field of machine learning that addresses the challenges of data privacy and centralization. Unlike traditional Federated Learning (FL), which operates on a single, albeit large, dataset spread across multiple clients [1], VFL specifically deals with scenarios where each clients hold different but complementary feature sets of the same sample space. For instance, WeBank employs VFL to collaborate with invoice agencies to establish financial risk models for their corporate clients [2]. In recent years, the demand for VFL has emerged and grown robustly within the industry. Companies and institutions with limited and fragmented data have been seeking to compensate by 
+
+> †The corresponding author.
+
+partnering with data collaborators to jointly develop artificial intelligence technologies, aiming to maximize the utility of their data [3], [4]. This collaborative approach allows for the training of robust machine learning models without the need to pool data from various sources, thus respecting data privacy and ownership constraints. In VFL, each party contributes to the learning process by providing his unique features, and a central server coordinates the training algorithm without having access to the raw data. In a typical VFL scenario, only one party possesses the label information of the dataset, which is called as the active party .The remaining participants, who do not have access to the labels, are referred to as passive parties .VFL is considered secure because only intermediate val-ues are exchanged between the active party and the passive parties, which is believed to prevent the disclosure of the passive parties’ feature information and the active party’s label information [4]. However, Fu et al [5] proposed label inference attacks against VFL, where the passive party can generate a complete model to infer the labels with access to a small portion of the dataset. They have introduced, for the first time, a label inference attack within VFL, which has catalyzed further research into privacy threats and defenses within the VFL domain. This form of attack is often targeted by defensive solutions [6], [7] and can be considered a cornerstone in the field of VFL privacy and security. However, the effectiveness of this attack is highly dependent on the quality of the dataset acquired by the adversary. This ex-poses the limitation of existing work, which is the requirement for auxiliary data to achieve good attack effectiveness. In this work, we discovered that even without access to a subset of the dataset, our method enables the passive party to carry out a label inference attack, revealing privacy and security threats inherent in VFL. The Label Enumeration Attack (LEA) we propose is similar to brute-force cryptanalysis, enumerating over possible label permutations to train simulated models. By comparing the similarity between these simulated models and a normally trained model, we get the attack model. It is assumed that the passive party’s local data is inherently categorizable, a hypothesis we have confirmed through our experiments. This assumption is plausible in many scenarios, such as when the active party holds the labels and the passive party possesses the data, or when certain features of the passive party are particularly influential. However, without label infor-mation, the passive party cannot ascertain the correspondence 
+
+> arXiv:2603.03777v1 [cs.LG] 4 Mar 2026
+
+between the samples and the true labels. Our work focuses on developing methods to uncover this correspondence. This research contributes to a deeper understanding of the privacy risks in VFL and provides insights into potential countermea-sures to safeguard against such label inference attacks. During the attack process of LEA, we encountered two primary challenges. The first is determining model similar-ity. For neural network models, even when two identically initialized models are trained on the same dataset, the final parameter similarity can be vastly different post-convergence. In the SplitVFL [8] scenario, comparing the similarity of the bottom models presents a greater challenge than comparing the complete models. To address this, we propose assessing model similarity based on the first-round gradient differences under certain conditions. The second is reducing computational cost. For a multi-class classification task with n labels, generating 
+
+n! label permutations corresponds to creating and training 
+
+n! simulated models, which is computationally expensive. To mitigate this, we propose the Binary-Label Enumeration Attack (Binary-LEA), which transforms the multi-class task into multiple binary classification tasks, thereby reducing the computational overhead to O(n3).Additionally, we propose a defense strategy and evaluate two commonly used VFL defense schemes: gradient noise [9] and gradient compression [10]. We found that the proposed defense strategy based on a label mapping table can alleviate the effects of LEA to some extent, while the latter two typical label inference attack defense schemes perform poorly against LEA. This encourages subsequent research to delve deeper into the exploration of defense schemes in VFL. The primary contributions of this paper can be summarized as follows:  
+
+> •
+
+We propose a novel Label Enumeration Attack (LEA) based on clustering algorithms. Compared to previous work, LEA is more suitable for situations without auxil-iary datasets and various VFL scene settings.  
+
+> •
+
+For model similarity assessment, we introduce a method based on the first-round gradient differences in specific conditions. To reduce computational cost, we propose Binary-LEA that converts multi-class tasks into multiple binary tasks, which lowers the number of enumerations from O(n!) to O(n3). 
+
+> •
+
+We evaluate our attack using real-world datasets in both two-party and multi-party settings, achieving significant performance. Additionally, we provide direct and rigorous theoretical evidence to confirm the accuracy of our attack. Furthermore, we assess two classic defensive methods and find them to be ineffective against our attack and propose a defense scheme that can alleviate LEA. II. B ACKGROUND AND RELATED WORK 
+
+A. Vertical Federated Learning 
+
+In recent years, VFL [11] has received significant attention from both the academic community and industry, with hun-dreds of research articles being published annually. There has also been a proliferation of open-source projects, including no-table contributions such as FATE [12], Fedlearner, PaddleFL, PySyft [13], FedTree [14], and FedML [15]. Moreover, real-world industrial applications of VFL have emerged in various sectors, including advertising [16] and finance [2]. Add or             
+
+> concatenate
+> Passive party 1 Passive party 2Passive party 3Passive party n
+> Local
+> model 1
+> ......
+> ......
+> Local
+> model 2
+> Local
+> model 3
+> Local
+> model n
+> Vector 1
+> [口口口口 ]
+> Vector 2
+> [口口口口 ]
+> Vector 3
+> [口口口口 ]
+> Vector n
+> [口口口口 ]
+> Top model
+> or
+> Function
+> Active party 口口口口
+> 口口口口
+> 口口口口
+> ......
+> 口口口口
+> [口口口口 ]
+> or
+> Loss
+> Update
+
+Fig. 1: Flowchart of Vertical Federated Learning. VFL is designed for scenarios where participant datasets share the same sample space but have distinct feature spaces. In such a scenario, the features of the model are distributed among them, but the labels are proprietary to only one. The current mainstream perspective categorizes VFL into AggVFL 
+
+[17] and SplitVFL [8] based on whether the active party’s global model is trainable. When the global model acts as an aggregation function, typically the cross-entropy loss function, the scenario is known as AggVFL. On the other hand, if the global model is a trainable part of the model, the scenario is termed SplitVFL. We provide a flow diagram of the VFL process in Figure 1. 
+
+B. Label Inference Attacks In VFL 
+
+In the real world, labels possessed by the active party, such as patients’ diagnostic results and personal loan default records, are considered sensitive information that should only be accessible to authorized entities. The privacy and security of label information are not only a prerequisite for the proper functioning of VFL but also a target for malicious passive parties. An adversary may exploit the training process in an attempt to infer the valuable labels held by the active party. This adversary could operate under the honest-but-curious se-curity assumption, where they follow the protocol but attempt to glean information, or they could actively manipulate the protocol under a malicious assumption. Up to now, researchers have proposed various label inference attacks across different protocols. When the training protocol employs sample-level gradients, the adversary can obtain sample-level gradients ∂L ∂ ˆy propagated back from the active party where L denotes loss function, 
+
+ˆy means outputs of passive party. They can utilize this in-formation to conduct Direct Label Inference (DLI) [5], [18]. TABLE I: Label Inference Attacks in VFL.                                                                                                                      
+
+> Attack Scheme VFL Setting Model Support Protecting Auxiliary Number Computational Batch-Level Intermediate of classes AggVFL SplitVFL LR NN Gradients Results Requirement Supported complexity 1
+> Direct Label Inference (DLI) [5], [18] ✓××✓××-≥2O(m)
+> Norm Scoring Attack (NS) [18] ×✓×✓××-= 2 O(m)
+> Direction Scoring Attack (DS) [18] ×✓×✓××-= 2 O(m)
+> Residual Reconstruction Attacks (RR) [19] ✓×✓×✓✓-≥2O(d3)
+> Passive Model Completion (PMC) [5] ×✓×✓✓✓Labeled data ≥2O(kT d +md )
+> Active Model Completion (AMC) [5] ×✓×✓✓✓Labeled data ≥2O(mT d )
+> Label-related Relation Inference (LRI) [20] ×✓×✓✓✓-= 2 O(T d +md )
+> Gradient Inversion with a Label Prior [21] ×✓×✓✓✓Label distribution = 2 O(mT d )
+> Label Enumeration Attack (LEA, this work) ✓✓✓✓✓✓-≥2O(n3T d )
+> 1Here, mdenotes the number of samples, ndenotes the number of labels, Tdenotes the number of training rounds, ddenotes the dimension of model parameters, and kdenotes the number of samples in the auxiliary dataset.
+
+For AggVFL, the active party employs non-trainable global model such as softmax, and DLI can achieve an attack with up to 100% accuracy, because the gradient vector for each sample has only one element with the opposite sign to all other elements, thereby revealing the label [18]. For specific scenarios such as binary classification, even in SplitVFL, attackers can infer labels from sample-level gradients through norm scoring (NS) or direction scoring (DS) attacks [18]. When the training protocol uses batch-level gradients, the adversary cannot obtain the sample-level gradients ∂L ∂ ˆys , but it might be able to obtain batch-level gradients ∂L ∂ ˆyb from the active party. Research indicates that in this scenario, it is still possible to accurately infer the true labels l through gradient inversion attacks (GI) [21], [22] and residual reconstruction attacks (RR) [19]. There is another type of attack that infers labels through the model training process. One possible method is that an adversary can obtain a small labeled dataset, supplement a top model to its pre-trained bottom model, and then proceed with training to achieve the goal of predicting labels. This type of attack is known as Passive Model Completion (PMC) [5], where the passive party is semi-honest. An active version of model completion (AMC) is also proposed in [5], which utilizes malicious local optimizers instead of normal local optimizers. The success of Model Completion (MC) largely depends on the adequacy of the auxiliary data possessed by the attacke. Qiu et al. [20], under the assumption that the attacker can access the global model and obtain prediction results, proposed a Label-related Relation Inference (LRI) attack targeting the label-related relationships within the graph owned by the active party. However, these attacks are only applicable to a specific VFL scenario and a particular type of model, with some requiring auxiliary data as well. The LEA we propose is applicable to both SplitVFL and AggVFL and is effective on both models considered in this paper, which are logistic regression and neural network models. Some classic attacks and our proposed LEA are compared as shown in Table I. III. L ABEL ENUMERATION ATTACK 
+
+We propose a Label Enumeration Attack that enables pas-sive parties to obtain private labels in VFL. Our key insight is that the local data of the passive party are inherently classifiable. LEA initiates by generating n clusters through un-supervised clustering and copies n! local models as simulated models. Then it enumerates n! label permutations, assigning labels to each cluster in every simulated model for training. The attack model is identified by comparing the similarity with the normally trained model, which allows the adversary to independently utilize the attack model to complete the VFL process without the involvement of the active party’s top model. We assess the model similarity between models on the cross-entropy loss function for both binary and multi-class tasks. The model with the highest match degree is selected as the attack model, which can independently and accurately recover the private labels of the label owner. The remainder of this section will provide a more detailed description of our proposed attack. Figure 2 illustrates the process of LEA. It is assumed that a passive party acts as an adversary hidden among all participat-ing parties, aiming to steal the sample label information held by the active party. The adversary first prepares for the attack by clustering the local data features, grouping all samples into a set C. Each cluster Ci in C contains several samples, and then enumerating all possible n! permutations of n labels to assign labels to these clusters, thus equivalent to having 
+
+n! complete datasets. Next, the adversary duplicates n! local models as simulated models (in the SplitVFL scenario, a top model is also simulated), and each trains on the n! simulated datasets for one round to obtain n! first-round loss gradients. At the same time, the adversary participates in normal training to obtain the normal first-round loss gradients. The adversary compares the loss values produced by each simulated model with the loss value generated by participating in the normal joint training using cosine similarity. The simulated model with the highest similarity in loss values is selected as the attack model, and is trained to convergence on its correspond-ing simulated dataset to predict the true labels. The following part of this chapter will provide a detailed introduction to the attack process. Attack process   
+
+> ...... Loss 1
+> Attack model Simulation model 1 Simulation model 2 Simulation model n! ...... Attack preparation
+> {X} Local dataset:
+> {C, Y}, Y = [0,1,2, . . . , n]
+> Simulation dataset 1
+> {C, Y}, Y = [1,0,2, . . . , n]
+> Simulation dataset 2 ......
+> {C, Y}, Y = [n, . . . , 2,1,0]
+> Simulation dataset n! Cluster
+> C = {C 1, C 2, . . . , C n}, C iis a subset of X Enumerate all possible permutations of n labels to label C i
+> Simulation dataset 1
+> Loss 2 Simulation dataset 2
+> Loss n! Simulation dataset n!
+> Passive party
+> Loss
+> Active party
+> Be nign train
+> Local model Copy n! local models = Simulation model 2 Compare cosine similarity Train on simulation dataset 2
+
+Fig. 2: The attack process of LEA. 
+
+A. Threat Model 
+
+We posits that each participant possesses a non-overlapping subset of features for the same set of samples, having com-pleted the data alignment process inherent in VFL as in previous work [5]. It is assumed that the features held by each participant are conducive to training a predictive model, implying that their local data are essentially classifiable. This assumption is justified, as participants can contribute to the global model only if they possess valuable features for VFL; otherwise, there is no merit in participating in the aggregation process. In scenarios with non-i.i.d. data, this paper considers the case where participants hold different proportions of sam-ple features. We assume that the adversary has these abilities:  
+
+> •
+
+The adversary is aware of the type of training task and the number of labels. For example, with the CelebA dataset [23], the adversary knows that training tasks involve determining whether a person is wearing glasses or determining the gender, both of which have a label category count of 2. If it is about determining ethnicity, the category count is 3. This is often known in practice because, as the passive party in a VFL system, the ad-versary already needs to be informed about the training-related information.  
+
+> •
+
+The adversary possesses the capability to perform clus-tering. This is the most critical assumption of this chapter, and subsequent experiments demonstrate that the effectiveness of the attack largely depends on the outcome of the clustering. Liu et al. [24] proposed a Deep Autoencoder-based Clustering (DAC) method that achieves an accuracy of 97.8% on the MNIST dataset; Li et al. [25] proposed a Contrastive Clustering (CC) method that achieves an accuracy of 79% on the Cifar-10 dataset. Extant literature abounds with studies corroborating the feasibility of image clustering predicated upon feature-based categorization [26]–[33]. These clustering methods can all serve as components of the attack in this chapter, without being tied to any specific clustering method. It should be noted that, compared to previous label infer-ence attacks, the adversary’s assumption does not require an auxiliary dataset, nor does it require prior knowledge of the label distribution. 
+
+B. Model Similarity 
+
+In the VFL scenario, the three most commonly used models are logistic regression models, neural network models, and decision tree models [8]. Our work focuses on the first two models. The logistic regression model is simple and efficient, used for dealing with binary classification problems, and is widely applied in fields such as financial risk assessment, credit scoring, disease diagnosis, and spam filtering. Its math-ematical expression is: 
+
+σ(z) = 11 + e−z (1) where z is a linear combination of the input features, which can be expressed as z = β0 + β1x1 + β2x2 + . . . + βnxn, and 
+
+βi are the weight parameters and xi are the feature values. This model has a relatively small number of parameters and often converges to the unique minimum point of the loss function. Therefore, to compare the similarity between two logistic regression models, one must compare the similarity between their parameter vectors {βi}. There are many metrics to determine the similarity of vectors, such as Euclidean distance, Manhattan distance, cosine similarity, Pearson cor-relation coefficient, KL divergence, and Chebyshev distance, etc. In the VFL scenario, the passive party can obtain the loss gradients updated by the model at each iteration, and thus knows the direction in which the model converges. For two models with the same initialization, if the direction of each update is similar, their final prediction results will also be similar. Therefore, we chooses cosine similarity, which is convenient for describing changes in direction, as the criterion for determining model similarity. Neural network models have numerous local optima in their loss functions, and models with different initializations, even when trained on the same dataset, are likely to have dissimilar parameters. In SplitVFL, adversary cannot access the active party’s top model, leading him/her to randomly generate a top model. This results in the simulated bottom model and the bottom model from joint training potentially converging to different local optima, manifesting as parameter dissimilarity. To address this, we found that comparing the cosine simi-larity of the first-round loss gradients rather than the param-eters can assist the adversary in identifying the attack model corresponding to the true label sequence, when the sign of parameter initializations in both the active party’s top model and the adversary’s generated top model is the same (positive in this paper). We theoretically and empirically substantiate this approach in subsequent sections. As previously mentioned, SplitVFL is considered more secure than AggVFL, and corre-spondingly, the similarity in first-round loss gradients is more pronounced in AggVFL. We clearly demonstrate this in the experimental section. 
+
+C. LEA for AggVFL 
+
+In AggVFL, each passive party possesses a complete model. After the passive parties generate their output vectors, they transmit these to the active party. The active party then aggregates these vectors by summing them and inputs the combined vector into the loss function to calculate the loss with respect to the true label vector. Before participating in global training, the adversary repli-cates n! simulated models identical to the local model. Sub-sequently, the adversary performs clustering on the local data to obtain n clusters. The adversary generates a set of labels, denoted as A, locally and then creates all possible permutations of this set, resulting in a collection of label sequences enumerated from the set A, which forms a set L of length n! (where n is the number of classes). We can confirm that there must be a sequence in L that corresponds to the real label of each cluster. Ordinarily, the passive party could not train models due to the lack of labels, but now, equipped with 
+
+n! label permutations, the adversary can assign labels to these 
+
+n clusters. Consequently, each simulated model is endowed with labeled training data. The model parameters, feature data, and training hyperparameters for these simulated models are identical, and the only variation is the labels that correspond to the data feature. During the joint training process with the active party, each passive party sends their output results ˆyi = θi(Xi)
+
+to the active party, where θ denotes model parameters and 
+
+X ∈ Rb×fi denotes data features. The active party then sums and organizes these results and gets ˆy = Sigmoid (P ˆyi)
+
+where ˆy consists of m probabilities ( m means number of samples). The cross entropy loss function can be represented as: 
+
+L = − 1
+
+m
+
+> m
+
+X
+
+> i=1
+> n
+
+X
+
+> j=0
+
+(yij log ˆ yij ) (2) where m denotes the number of samples, yij is the probability that sample i belongs to class j, with a value of 0 or 1. The first-round gradient of the output result for the adversary ∇θa
+
+can be expressed as: 
+
+∇θa = ∂L ∂ ˆy∂ ˆy∂ ˆya
+
+∂ ˆya
+
+∂θ a
+
+= − 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+(y − ˆy)Xa
+
+(3) For the adversary, multiple identical simulated models are trained individually. We assume that the sequence correspond-ing to the true labels in the set L is l∗, l∗ assigns the label vector Y ∗ to each cluster, and each corresponding sample label is y∗. If the clustering accuracy is 100%, then y∗ = y,
+
+ˆy′ = Sigmoid (θa(Xa)) = ˆ y. Assuming, as we do, that the dataset Xa is inherently separable and has been perfectly clustered with 100% accuracy, then the corresponding labels 
+
+ˆy′ and y for any two samples within the same cluster would be equal. Therefore, L′ = L and the loss gradient for y∗ would be identical to the loss gradient from the joint training, resulting in the first-round loss gradients that is exactly the same as the one from the joint training: 
+
+∇θ′ 
+
+> a
+
+= ∂L ′
+
+∂ ˆy′
+
+∂ ˆy′
+
+∂θ a
+
+= − 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+(y∗ − ˆy′)Xa
+
+= ∇θa
+
+(4) Although current clustering algorithms do not achieve 100% accuracy, they can reach satisfactory precision levels. There-fore, while there may be some discrepancy in the loss gradi-ents, the loss gradient for y∗ will be the smallest compared to other label sequences. Consequently, the simulated model trained with y∗ will be the most similar to the model produced by the joint training process and can be used to attack for predicting labels. Furthermore, comparing similarities using the first-round loss gradients rather than the final model has two advantages: (1) It significantly reduces computational costs. Identifying the attack model with high probability after the first round of iteration allows for the selection of the most similar or top-ranking models for further training, while discarding the subsequent training of other simulated models, resulting in a reduction of computational costs by more than 100 times when the value of n is greater than 5. (2) Clear differences in similarity. After the first round of iteration, the differences between the simulated models and the federated training model are pronounced, except for the attack model. If training is continued until convergence, the differences in parameters among numerous simulated models may actually decrease, which is not conducive to making judgments. As discussed earlier, the passive party in the VFL process can obtain the loss gradients of the model after each update, knowing the direction of model convergence. Therefore, for two models with the same initialization, if the direction of each update is similar, the final models obtained will also be similar. Consequently, cosine similarity, which is convenient for describing changes in direction, is chosen as the metric for determining model similarity: 
+
+Cosine Similarity (∇θ′
+
+> a
+
+, ∇θa) = ∇θ′ 
+
+> a
+
+· ∇ θa
+
+∥∇ θ′
+
+> a
+
+∥∥∇ θa∥ (5) The closer the result is to 1, the higher the similarity between the two variables, and vice versa, the closer it is to -1, the lower it is. It should be noted that whether the adversary is constructing a complete dataset, simulating label sequences, generating and training simulated models, or determining similarity to identify the attack model and using the attack model to predict sample labels, all these processes are carried out locally without any interference in the global training process. Therefore, for the active party, they cannot detect any attack, let alone detect and exclude it. This meets the high concealment requirements of attacks, allowing adversaries to steal label privacy information without being noticed. 
+
+D. LEA for SplitVFL 
+
+In SplitVFL, both the passive parties and active party possess portions of the global model, and it is only through their collaboration that the complete forward and backward propagation processes can be fulfilled. This approach differs from AggVFL in a significant way: upon receiving the output results from the passive parties, the active party concatenates these results rather than summing them. This concatenated output is then fed into the top model to obtain the predictive values. As a result of this concatenation, the number of parameters in the top model is proportional to the number of passive parties involved. Each passive party contributes a unique part of the overall feature space, and the top model integrates these parts to perform the final prediction. In the context with K passive parties, the active party’s top model can be denoted by a simple expression to illustrate the process: 
+
+θT = ( θ1 
+
+> T
+
+, θ 2 
+
+> T
+
+, ..., θ KT ) (6) where θT denotes top model. When the active party receives output results from the bottom models of the passive parties, he/she concatenates these results and gets Y, then feeds into the top model. The output P of the top model, represents the probability of a sample corresponding to each label. This process is akin to computing the sum: 
+
+P = Sigmoid (θT (Y)) = Sigmoid (θ1 
+
+> T
+
+(ˆ y1) + θ2 
+
+> T
+
+(ˆ y2) + ... + θKT (ˆ yK )) (7) which signifies the aggregation of the features from all passive parties. The subsequent calculation of the loss gradient will differ slightly from that in AggVFL: 
+
+∇θba = ∂L ∂P ∂P ∂ ˆy∂ ˆy∂ ˆya
+
+∂ ˆya
+
+∂θ ba 
+
+= − 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+(y − ˆy)θaT Xa
+
+(8) where θba denotes the the the bottom model. In the scenario described, the adversary, which is a passive party, only has the bottom model θa. Even with an enumerated set of labels L,the adversary cannot complete the training on its own. Conse-quently, the adversary adds an output layer θt to complement the bottom model, thus forming a complete trainable model 
+
+θ = ( θa, θ t). We designate θt as a fully connected layer, with the input dimension matching the characteristic dimension of the output of θa, and the output dimension equal to the number of labels n. In this context, besides generating the same A, L,
+
+C as in AggVFL, the adversary also has to create the top model θt to concatenate with θa. Furthermore, the adversary replicates n! complete simulated models, each with θt added to θa, to carry out the training process. For the adversary, 
+
+ˆya = Sigmoid (θt(θba (Xa))) , the loss gradient corresponding to the model that matches the true label sequence l∗ can be represented as: 
+
+∇θba = ∂L ′
+
+∂P ′
+
+∂P ′
+
+∂ ˆya
+
+∂ ˆya
+
+∂θ ba 
+
+= − 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+(l∗ − ˆya)θtXa
+
+(9) where L′ and P ′ are the loss function and intermediate output corresponding to l∗, respectively. Indeed, while the adversary does not have access to the parameters θaT of the active party’s top model, if the top model’s parameters are initialized to be greater than zero, the adversary can initiate the top layer of the simulated models with positive values as well to carry out the attack. In the case of a Logistic Regression model, the parameters of the top model correspond to the number of passive parties, and for a specific passive party, θaT is a definite value. The attacker employs n! simulated models, each augmented with a top layer θt, and trains them under different label permutations. Even if there are differences in θaT and θt,as long as the signs are the same, the model corresponding to l∗ (the true label sequence) will have a bottom model that is most similar to the joint training bottom model in terms of parameters. In the context of Neural Network models, the parameter count of a single layer of the top model is the product of the number of passive parties and the feature dimension of the intermediate results. For a specific passive party, θaT is a one-dimensional vector. It is easy for the sign characteristics to be lost in subsequent computations, hence we require that the parameters are initialized to be positive. After the model corresponding to l∗ has converged, it remains the most similar to the joint training model in terms of parameters. We provide a detailed process in Algorithm 1. 
+
+E. Binary-LEA 
+
+Given that training n! models can be computationally inten-sive, especially when n is large (for instance, n = 10 results in n! = 3 , 628 , 800 ), we propose a Binary Label Enumeration Attack (Binary-LEA) to reduce the computational overhead. We transform a multi-class classification task into ⌊ n 
+
+> 2
+
+⌋
+
+binary classification tasks, thereby generating ⌊ n 
+
+> 2
+
+⌋ attack mod-els. From the clusters formed by clustering, we select two Algorithm 1 Label Enumeration Attack in VFL. 
+
+Input: Number of labels n, adversary’s local model θa, adver-sary’s first-round loss gradients ∇θa in AggVFL or ∇θba 
+
+in SplitVFL, adversary’s local data Xa ∈ Rb×fa , training epochs e, learning rate η.
+
+Output: Attack model θI .
+
+A ← (0 , 1, 2, ..., n − 1) 
+
+L ← Generate n! permutations of set A.
+
+{C i}ni=1 ← Clustering (Xa)
+
+{Simulate label i}n!−1 
+
+> i=0
+
+← Label the cluster Cx as Lxi .
+
+{θi}n!−1 
+
+> i=0
+
+← Copy n! models that are the same as local model θa //AggVFL 
+
+θt ← Generate a top model. //SplitVFL 
+
+{θi}n!−1 
+
+> i=0
+
+← Copy n! bottom models that are the same as lo-cal model θa and complete the model with θt. //SplitVFL 
+
+for epoch ∈ { 0, 1, ..., e } do for i ∈ index of {θi}n!−1 
+
+> i=0
+
+do 
+
+ˆyi ← F orward (θi, C)
+
+L ← LossF unction (Sigmoid (ˆ yi), Simulate label i)
+
+∇θi ← ∂L ∂ ˆyi  
+
+> ∂ˆyi
+> ∂θ i
+
+//AggVFL 
+
+∇θbi ← ∂L ∂ ˆyi  
+
+> ∂ˆyi
+> ∂θ t
+
+//SplitVFL 
+
+θi ← θi − η × ∇ θi
+
+if epoch = 0 then 
+
+Score i ← Cosine Similarity (∇θi, ∇θa) //Ag-gVFL 
+
+Score i ← Cosine Similarity (∇θba , ∇θbi )
+
+//SplitVFL 
+
+end if end for if epoch = 0 then 
+
+I ← Index of M ax ({Score i}n!−1 
+
+> i=0
+
+)
+
+{θi}n!−1 
+
+> i=0
+
+← { θI }
+
+end if end for return Attack model θI .clusters at a time, which results in N (N − 1) possible label permutations for labels l1 and l2 (where N is the number of remaining labels after accounting for the two selected clusters). Using the previously described method, we derive one attack model from the N (N − 1) simulated models. The output of this model includes three values: the probability of label l1, the probability of label l2, and the probability that the sample does not belong to either l1 or l2. With each generated attack model, the value of N is decremented by 2. We provide a detailed process in Algorithm 2. So the total number of permutations decreased from n! to n(n−1)+( n−2)( n−3)+ ... +2 ×1 which is equivalent to the order of magnitude of O(n3). Further simplification can lead to: 
+
+n(n−1)+( n−2)( n−3)+ ... +2 ×1 = n(n + 2)(2 n − 1) 12 (10) When making predictions, the attacker inputs data into these 
+
+⌊ n 
+
+> 2
+
+⌋ attack models and determines the label value by synthe-sizing their output results. This approach reduces the number of models that need to be trained from O(n!) to O(n3), which significantly decreases the computational burden when n > 3.
+
+Algorithm 2 Binary-Label Enumeration Attack (Binary-LEA). 
+
+Input: Number of labels n, adversary’s local model θa, ad-versary’s first-round loss gradients ∇θa, adversary’s local data Xa ∈ Rb×fa , training epochs e, learning rate η.
+
+Output: Attack models θ1, θ 2, ..., θ ⌊ n 
+
+> 2⌋
+
+.
+
+N ← nA ← (0 , 1, 2, ..., n − 1) 
+
+{C i}ni=1 ← Clustering (Xa)
+
+for l ∈ { 0, 1, ..., ⌊ n 
+
+> 2
+
+⌋} do 
+
+C1, C2 ← Select two clusters of {C i}ni=1 in order. 
+
+L ← Generate N (N − 1) permutations of random two labels l1, l 2 of set A.
+
+{θi}N (N −1) −1 
+
+> i=0
+
+← Copy N (N − 1) models that are the same as local model θa //AggVFL 
+
+θt ← Generate a top model. //SplitVFL 
+
+{θi}n!−1 
+
+> i=0
+
+← Copy N (N − 1) bottom models that are the same as local model θa and complete the model with θt.//SplitVFL 
+
+Simulate label ← Label the cluster Cx with l1, l 2 as 
+
+Lxi .
+
+for epoch ∈ { 0, 1, ..., e } do for i ∈ index of {θi}N (N −1) −1 
+
+> i=0
+
+do 
+
+ˆyi ← F orward (θi, C)
+
+L ← LossF unction (Sigmoid (ˆ yi), Simulate label i)
+
+∇θi ← ∂L ∂ ˆyi  
+
+> ∂ˆyi
+> ∂θ i
+
+//AggVFL 
+
+∇θbi ← ∂L ∂ ˆyi  
+
+> ∂ˆyi
+> ∂θ t
+
+//SplitVFL 
+
+θi ← θi − η × ∇ θi
+
+if epoch = 0 then 
+
+Score i ← Cosine Similarity (∇θi, ∇θa)
+
+//AggVFL 
+
+Score i ← Cosine Similarity (∇θba , ∇θbi )
+
+//SplitVFL 
+
+end if end for if epoch = 0 then 
+
+I ← Index of M ax ({Score i}N (N −1) −1 
+
+> i=0
+
+)
+
+{θi}N (N −1) −1 
+
+> i=0
+
+← { θI }
+
+end if end for 
+
+θl ← Retrain θI to additionally output the probability that neither of these two categories is true. 
+
+N ← N − 2
+
+{C} ← {C} − C 1 − C 2
+
+end for return Attack models θ1, θ 2, ..., θ ⌊ n 
+
+> 2⌋
+
+.IV. E XPERIMENTS 
+
+The experiments were conducted on a Microsoft Windows 11 Pro operating system, version 22635.2483, with a host pro-cessor of 13th Gen Intel(R) Core(TM) i7-13700F, 2100MHz, featuring 16 cores and 24 logical processors. 
+
+A. Experimental Setup Datasets: The Breast Cancer dataset [34] comprises 569 samples with 30 features. The target variable is binary, indi-cating whether the tumor is benign or malignant. The Give-me-some-credit dataset [35] has 150,000 samples with a feature size of 10, used to predict whether individuals meet the loan requirements of financial institutions. To explore the effectiveness of LEA on multiclass classification tasks, we choose to conduct experiments on the MNIST dataset [36]. The MNIST training dataset contains 60,000 samples, each sample being a 28x28 pixel grayscale image of a handwritten digit from 0 to 9. We select 3, 5, and 10 digits for multiclass classification tasks to observe the attack effects. 
+
+Models: On the Breast Cancer and the Give-me-some-credit dataset, we employed both a Logistic Regression model and a MLP model with three hidden layers. For the MNIST dataset, we utilized the residual network ResNet18 model [37]. In the context of SplitVFL, the number of parameters for the top model corresponded to the count of passive parties involved. In the SplitVFL scenario, the bottom model encompassed the parameters of the first two layers of the MLP model, while the third layer, which operates as a standalone entity, served as the top model. The ResNet18 model is divided into a bottom model from the input layer to the third residual block, and the remaining part is the top model. 
+
+VFL settings: To simulate VFL scenarios, we partition the datasets as follows. In Breast Cancer dataset, which has 30 features, we have configured settings for two-party, three-party, and four-party scenarios, with the distribution of feature numbers being 28-2, 19-9-2, and 6-13-9-2 respectively (the attacker possesses the first number of features, and the active party holds the last number of features). For the Give-me-some-credit dataset, we divide the features into 5-5. These divisions corresponds to the real-world scenario where the passive party often possesses more feature information than the active party, while also considering the situation where there are fewer but more important features. For MNIST dataset, we consider a two-party scenario where each image is split into two halves, distributed among the two participating parties, a setup similar to that in work [5]. From the dataset, we have selected samples labeled 0, 1, and 2 for a ternary classification task named MNIST-3, samples labeled 0, 1, 2, 3, and 4 for a quinary classification task named MNIST-5, and samples containing all labels for a decaclassification task named MNIST-10. 
+
+B. Attack Evaluation 
+
+As stated above, we conducted our attack five times under each VFL setting, and the average results are presented in Table II. We measure the No Attack Accuracy (NAA), Cluster Accuracy (CA) and Attack Success Rate (ASR) of LEA over the testing data. We define ASR as the Top-1 accuracy of the attack model on the validation dataset. We expand the first-round loss gradients into a one-dimensional vector and then calculate the cosine similarity. Our attacks achieved good performance on both the Breast Cancer and Give-me-some-credit datasets, with attack accuracies exceeding 0.9. For the multi-class task on MNIST, our attacks also performed well, maintaining an accuracy above 0.8. It can be observed that the cluster accuracy directly influences the attack accuracy, which aligns with our expectations that the performance of the attack model is inextricably linked to the accuracy of the clusters formed by the clustering process. We conducted SHAPLEY value analysis on the Breast Can-cer and Give-me-some-credit datasets, as shown in Figure 4 and Figure 5. The top-ranked features in these two datasets play a significant role in the prediction results, which confirms that in VFL, the passive party can achieve clustering with a small number of useful features. We compared the attack effectiveness of LEA with one of the state-of-the-art label inference attacks, passive model completion (PMC) [5], on five datasets using neural network models in both splitVFL and AggVFL scenarios. However, due to the heavy reliance of PMC’s attack effectiveness on auxiliary datasets not considered in this paper, it exhibited a form of random guessing, and because it is only applicable to SplitVFL, we did not compare it in AggVFL. From Figure 3, it can be seen that the attack accuracy of LEA approaches the test accuracy of models trained normally without attacks in both five datasets and two VFL algorithm scenarios. We conducted a comparative analysis of the cosine sim-ilarity between the model parameters and the first-round loss gradients in the binary classification tasks for both the simulated and the joint training model. As can be observed from Table III, in SplitVFL, comparing the cosine similarity of the parameters can potentially lead to the selection of an incorrect attack model, whereas comparing the similarity of the first-round loss gradients effectively identifies the correct attack model. This aligns with the analysis presented in Section III. For AggVFL, when using the NN model, the similarity in parameters is not distinctly indicative, whereas the first-round loss gradients provide a clear determination of which simulated model corresponds to the attack model. This confirms the feasibility of using the cosine similarity of the first-round loss gradients between models to ascertain model similarity. 
+
+Sensitivity to Cluster Accuracy: The experimental results indicate a strong correlation between ASR and CA. As shown in Figure 6, the experiment simulated scenarios where the adversary has different proportions of features for two binary classification tasks, the Breast Cancer dataset and the Give-me-some-credit dataset. For the Breast Cancer dataset, even when the adversary holds only 10% of the features, that is, 3 feature values, the clustering accuracy can still reach 88.4%, enabling the attack model to achieve a high prediction accuracy of 91.2%. In contrast, for the Give-me-some-credit 2 4 6 8 10 0.0 0.5 1.0                                     
+
+> (a) Breast Cancer_AggVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (b) Give-me-some-credit_AggVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (c) MNIST-3_AggVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (d) MNIST-5_AggVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (e) MNIST-10_AggVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (f) Breast Cancer_SplitVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (g) Give-me-some-credit_SplitVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (h) MNIST-3_SplitVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (i) MNIST-5_SplitVFL
+> Rounds
+> Accuracy
+> 246810 0.0 0.5 1.0
+> (j) MNIST-10_SplitVFL
+> Rounds
+> Accuracy
+
+NAA LEA_ASR PMC_ASR Fig. 3: Comparison of attack effects of LEA and PMC using NN models in SplitVFL and AggVFL scenarios under five dataset settings. TABLE II: The attack performance of LEA. 
+
+Dataset Scene Number Number of Distribution Model Attack Performance of Simulated of Classes Models Features NAA CA ASR 1
+
+Breast Cancer AggVFL 2 2
+
+28 -2 LR 0.970 0.932 0.946 MLP 0.982 0.932 0.938 
+
+19 -9-2 LR 0.963 0.921 0.965 MLP 0.973 0.921 0.947 
+
+6-13-9-2 LR 0.912 0.932 0.947 MLP 0.973 0.932 0.921 SplitVFL 2 2
+
+28 -2 LR 0.947 0.932 0.956 MLP 0.982 0.932 0.929 
+
+19 -9-2 LR 0.945 0.921 0.964 MLP 0.981 0.921 0.956 
+
+6-13-9-2 LR 0.922 0.932 0.947 MLP 0.968 0.932 0.915 Give-me-some-credit AggVFL 2 2 5-5 LR 0.837 0.935 0.839 MLP 0.936 0.935 0.936 SplitVFL 2 2 5-5 LR 0.842 0.935 0.812 MLP 0.933 0.935 0.940 MNIST-3 AggVFL 3 6 18x28 -10x28 ResNet18 0.970 0.930 0.963 SplitVFL 0.960 0.930 0.983 MNIST-5 AggVFL 5 26 18x28 -10x28 ResNet18 0.972 0.912 0.963 (Adopt Binary-LEA) SplitVFL 0.930 0.912 0.889 MNIST-10 AggVFL 10 190 18x28 -10x28 ResNet18 0.952 0.887 0.940 (Adopt Binary-LEA) SplitVFL 0.947 0.887 0.828 
+
+> 1
+
+We take the Top-1 accuracy of the attack model in the validation set as ASR. 
+
+dataset, when the adversary holds 10% of the features, i.e., 1 feature value, the clustering accuracy is 48.7%, resulting in an attack accuracy of only 50.8%. This is because for this dataset, a single feature does not sufficiently classify the samples. When holding more than two feature values, the clustering accuracy stabilizes at 93.2%, and the attack accuracy also increases to around 85.7%. These results demonstrate that the proportion of features the adversary possesses is not the most critical factor. Instead, the quality of the adversary’s data and its ability to support high cluster accuracy are the key determinants of the success of LEA. The higher the cluster accuracy, the more effective the attack, as it can more closely approximate the true label distribution and consequently predict the labels of the samples with greater accuracy. We tested the time cost of Binary-LEA and LEA under various dataset settings in the splitVFL scenario, as shown in table IV. When the number of dataset labels is less than or equal to 3, these two schemes generate the same number of simulated models, so their time overheads are very similar. However, due to the different sizes of the datasets, the attack time costs vary between datasets. When the number of dataset labels exceeds 3, as can be seen from MNIST-5, Binary-LEA significantly reduces the number of simulated models generated, greatly reducing the time cost compared to LEA. For MNIST-10, the number of simulated models generated by 0.20 0.15 0.10 0.05 0.00 0.05 
+
+> SHAP value (impact on model output)
+> mean smoothness
+> compactness error
+> worst symmetry
+> worst smoothness
+> perimeter error
+> worst compactness
+> radius error
+> mean texture
+> worst texture
+> area error
+> mean radius
+> mean perimeter
+> mean area
+> worst concavity
+> mean concavity
+> worst perimeter
+> worst radius
+> mean concave points
+> worst concave points
+> worst area
+> Low
+> High
+> Feature value
+
+Fig. 4: The SHAPLEY Value Analysis Chart for the Breast Cancer Dataset. 0.05 0.00 0.05 0.10 0.15 0.20 
+
+> SHAP value (impact on model output)
+> NumberOfDependents
+> NumberRealEstateLoansOrLines
+> DebtRatio
+> MonthlyIncome
+> NumberOfOpenCreditLinesAndLoans
+> NumberOfTime60-89DaysPastDueNotWorse
+> age
+> NumberOfTime30-59DaysPastDueNotWorse
+> NumberOfTimes90DaysLate
+> RevolvingUtilizationOfUnsecuredLines
+> Low
+> High
+> Feature value
+
+Fig. 5: The SHAPLEY Value Analysis Chart for the Give-me-some-credit Dataset. TABLE III: Comparison of cosine similarity between param-eters and first-round loss gradients on Breast Cancer dataset. 
+
+Scenario Model Cosine Similarity Parameters First-round loss gradients Attack Another 1 Attack Another 
+
+AggVFL LR 0.908 -0.161 0.996 -0.438 NN 0.945 0.840 0.982 -0.967 SplitVFL LR 0.705 0.946 0.972 -0.723 NN 0.746 0.690 0.871 -0.695 
+
+> 1
+
+Another is the model corresponding to the wrong label sequence. 
+
+TABLE IV: The time cost of Binary-LEA and LEA under various dataset settings in splitVFL scenario. 
+
+Dataset Scheme Time cost (s) 
+
+Breast Cancer LEA 0.3960 Breast Cancer Binary-LEA 0.4010 Give-me-some-credit LEA 12.3576 Give-me-some-credit Binary-LEA 13.6124 MNIST-3 LEA 15.1794 MNIST-3 Binary-LEA 16.1245 MNIST-5 LEA 1254.2317 MNIST-5 Binary-LEA 256.4912 MNIST-10 LEA -MNIST-10 Binary-LEA 4924.3223 0.0 0.2 0.4 0.6 0.8 1.0 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Percentage of Adversary's Features Cluster Accuracy      
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+Percentage of Adversary's Features Attack accuracy 
+
+Give-me-some-credit Breast Cancer 
+
+Fig. 6: The impact of different percentage of adversary’s features on cluster accuracy and attack performance in Binary SplitVFL with NN model. LEA is theoretically 19,098 times that of Binary-LEA, so the time overhead is approximately 19,098 times that of Binary-LEA. Since Binary-LEA takes 4,924.3223 seconds, the time required for LEA would be about three years, hence this paper does not test it here. LEA covers a broader range of VFL scenarios and requires less auxiliary data, while still achieving effective label infer-ence attack results. This is because, unlike previous work, the effectiveness of LEA is primarily dependent on the adversary’s ability to cluster local data effectively. V. D EFENSES 
+
+LEA leverages information from the loss gradients provided by the active party. Thus, defensive methods applied to the gradients might mitigate our attack. We consider two methods: (i) Noisy Gradients [9]: Adding Laplace noise to the loss gradients before transmission to protect gradient privacy. ( ii )Gradient Compression [10]: Sending only a proportion of the most significant gradients (those with larger absolute values), which can still yield a highly accurate model. These methods can cause the adversary to select an incorrect attack model by altering the gradient information. Additionally, we propose a defense mechanism based on a label mapping table. As depicted in Figure 7 (a)-(c), adding Laplace noise of varying magnitudes to the loss gradients shows that even with a significant drop in original task accuracy at a noise level of 0.1, LEA still maintains high accuracy. This occurs because the noise does not sufficiently alter the order of magnitude of the first-round loss gradient similarity. Despite the reduced similarity of the true label’s attack model, it remains the most similar. Excessive noise, however, can change the gradient order, leading to incorrect model selection and predictions. In Figure 7 (d)-(f), we compressed gradients by different proportions and found that Breast Cancer and Give-me-some-credit datasets, due to their significant features that can largely determine labels, are not sensitive to changes in the com-pression ratio. MNIST dataset, however, showed a decrease in accuracy with a higher compression ratio. LEA is less sensitive to compression, primarily because the compressed gradient information still implicitly contains important feature information, and the first-round loss gradients of the attack model is more similar compared to the gradients of another model. 0.0001 0.001 0.01 0.1 1                        
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> (a) Breast Cancer
+> Noisy scale Attack accuracy
+> 0.0001 0.001 0.01 0.1 10.0 0.2 0.4 0.6 0.8 1.0
+> (b) Give-me-some-credit
+> Noisy scale Attack accuracy
+> 0.0001 0.001 0.01 0.1 10.0 0.2 0.4 0.6 0.8 1.0
+> (c) MNIST-10
+> Noisy scale Attack accuracy
+> 0.0 0.2 0.4 0.6 0.8 1.0 0.0 0.2 0.4 0.6 0.8 1.0
+> (d) Breast Cancer
+> Compression ratio Attack accuracy
+> 0.0 0.2 0.4 0.6 0.8 1.0 0.0 0.2 0.4 0.6 0.8 1.0
+> (e) Give-me-some-credit
+> Compression ratio Attack accuracy
+> 0.0 0.2 0.4 0.6 0.8 1.0 0.0 0.2 0.4 0.6 0.8 1.0
+> (f) MNIST-10
+> Compression ratio Attack accuracy
+> Origin task LEA Random guess
+
+Fig. 7: Two defenses against LEA and their impacts. (a)-(c): Noisy Gradients, (d)-(f) Gradient Compression. To mitigate the privacy threats posed by LEA, we proposes a defense method based on a label mapping table. Before par-ticipating in VFL, the active party generates a label mapping table that maps each label to a different label. During the training process, the active party can use the pseudo labels obtained after mapping as the sample labels to calculate the loss gradients and send them back to the passive party. In this way, the global model trained predicts samples, and the active party can map the predicted pseudo labels back to their real labels according to the label mapping table, thus completing the prediction process. For the adversary, without the information of the label mapping table, even if they obtain an attack model, they cannot find the correspondence between the real labels and can only achieve an accuracy rate of random guessing. However, this defense method is not effective against LEA in the following two situations: (1) The adversary obtains a small amount of auxiliary dataset. If the adversary has some labeled samples, the labels of the clusters where these samples are located are also likely to be determined, and these can be used in conjunction with the attack model to predict the label values of other samples. (2) The label distribution of the dataset varies greatly. For example, in the Give-me-some-credit dataset, the number of samples with label 1 is only 10% of the samples with label 0. The adversary can directly assign labels to the two clusters obtained by clustering based on the quantity comparison. In contrast, for datasets with a smaller gap in label distribution, such as the MNIST dataset where each type of sample has a similar proportion, it is impossible to directly determine the labels of each cluster, thus defending against LEA. To test the effectiveness of the defense strategy based on the label mapping table, let σ represent the proportion of the total number of labels that the adversary’s auxiliary dataset has. For example, σ = 0 means the adversary has no auxiliary dataset, σ = 0 .5 means that the labels of the samples in the adversary’s auxiliary dataset account for half of the total labels. In a binary classification task, this means the adversary has samples with one type of label. From Figure 8, it can be seen that the defense strategy based on the label mapping table is effective when the adversary has a small proportion of auxiliary dataset labels. In the binary classification task Breast Cancer dataset, when σ < 0.5, the adversary has no samples with labels, equivalent to having no auxiliary dataset, and under defense it is equivalent to random guessing. However, when σ ≥ 0.5, the adversary has a cluster corresponding to one type of label, which means the label of the other cluster is determined, and the correspondence between the cluster and the label is completely obtained, so it cannot be defended. For the binary classification task Give-me-some-credit dataset, the difference in label distribution is too large, close to 10:1, so the adversary can directly determine the corresponding label based on the size of the cluster obtained by clustering, and LEA attacks cannot be defended. For the MNIST dataset, as 
+
+σ increases, the number of labels the adversary has increases from 1 to 10, and the correspondence between the cluster and the label also becomes clearer. Therefore, there is a positive correlation between the attack accuracy and σ, which means that when the adversary has many labeled samples, the defense strategy is difficult to defend against LEA attacks. 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0  
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> (a) Breast Cancer
+> σ
+> Attack accuracy
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> (b) Give-me-some-credit
+> σ
+> Attack accuracy
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> (c) MNIST-10
+> σ
+> Attack accuracy
+> Origin task LEA Random guess
+
+Fig. 8: The defense effectiveness of a label mapping table based defense scheme under different proportions of auxiliary datasets owned by adversaries. We evaluated two mainstream defensive methods, including gradient noise and gradient compression. The experimental results indicate that adding noise to the loss gradient to some extent or compressing the gradients does not alter the relative magnitude of the first-round loss gradient similarity. In addition, we propose a defense method based on a label mapping table that can partially defend against LEA, but may fail in specific situations. Therefore, our label enumeration attack reveals the urgency of mitigating label privacy threats in VFL. VI. C ONCLUSION 
+
+The application of VFL in the industry is increasingly widespread, with privacy and security concerns affecting its implementation. Label information is fundamental and crucial in VFL, and previous work has proposed attack and defense methods for it. We introduce a novel attack method, Label Enumeration Attack (LEA), which infers the label information of the active party using unsupervised clustering from the passive party’s data, covering various VFL scenarios. Our experiments show that LEA performs well on real-world datasets. We also propose an efficient Binary-LEA, reducing the computational overhead from O(n!) to O(n3). We as-sessed two classic defensive methods, found them ineffective against our attack, and proposed a defense method based on a label mapping table. We hope our work will further drive the exploration of attack methods and defenses in VFL. ACKNOWLEDGMENT 
+
+This work was supported by National Natural Science Foundation of China No.62472431. REFERENCES [1] S. Wu, Y. Luo, S. Fu, Y. Chen, and M. Xu, “An efficient replication-based aggregation verification and correctness assurance scheme for federated learning,” IEEE Transactions on Services Computing , vol. 18, no. 2, pp. 633–646, 2025. [2] Y. Cheng, Y. Liu, T. Chen, and Q. Yang, “Federated learning for privacy-preserving ai,” Communications of the ACM , vol. 63, no. 12, pp. 33–36, 2020. [3] L. Li, Y. Fan, M. Tse, and K.-Y. Lin, “A review of applications in federated learning,” Computers & Industrial Engineering , vol. 149, p. 106854, 2020. [4] Q. Li, Z. Wen, Z. Wu, S. Hu, N. Wang, and Y. Li, “A survey on federated learning systems: Vision, hype and reality for data privacy and protection,” IEEE Transactions on Knowledge and Data Engineering ,vol. 35, no. 4, pp. 3347–3366, 2021. [5] C. Fu, X. Zhang, S. Ji, J. Chen, J. Wu, S. Guo, J. Zhou, A. X. Liu, and T. Wang, “Label inference attacks against vertical federated learning,” in 31st USENIX security symposium (USENIX Security 22) , 2022, pp. 1397–1414. [6] S. Li, D. Yao, and J. Liu, “Fedvs: Straggler-resilient and privacy-preserving vertical federated learning for split models,” in International Conference on Machine Learning . PMLR, 2023, pp. 20 296–20 311. [7] W.-j. Lu, Z. Huang, Q. Zhang, Y. Wang, and C. Hong, “Squirrel: A scalable secure {Two-Party } computation framework for training gradient boosting decision tree,” in 32nd USENIX Security Symposium (USENIX Security 23) , 2023, pp. 6435–6451. [8] Y. Liu, Y. Kang, T. Zou, Y. Pu, Y. He, X. Ye, Y. Ouyang, Y.-Q. Zhang, and Q. Yang, “Vertical federated learning: Concepts, advances, and challenges,” IEEE Transactions on Knowledge and Data Engineering ,2024. [9] L. Zhu, Z. Liu, and S. Han, “Deep leakage from gradients,” Advances in neural information processing systems , vol. 32, 2019. [10] P. Kairouz, H. B. McMahan, B. Avent, A. Bellet, M. Bennis, A. N. Bhagoji, K. Bonawitz, Z. Charles, G. Cormode, R. Cummings et al. ,“Advances and open problems in federated learning,” Foundations and trends® in machine learning , vol. 14, no. 1–2, pp. 1–210, 2021. [11] Q. Yang, Y. Liu, T. Chen, and Y. Tong, “Federated machine learning.” 
+
+ACM Transactions on Intelligent Systems & Technology , pp. 1–19, 2019. [12] Y. Liu, T. Fan, T. Chen, Q. Xu, and Q. Yang, “Fate: An industrial grade platform for collaborative learning with data protection,” Journal of Machine Learning Research , vol. 22, no. 226, pp. 1–6, 2021. [13] T. Ryffel, A. Trask, M. Dahl, B. Wagner, J. Mancuso, D. Rueckert, and J. Passerat-Palmbach, “A generic framework for privacy preserving deep learning,” arXiv preprint arXiv:1811.04017 , 2018. [14] Q. Li, Y. Cai, Y. Han, C. M. Yung, T. Fu, and B. He, “Fedtree: A fast, effective, and secure tree-based federated learning system,” arXiv , 2022. [15] C. He, S. Li, J. So, X. Zeng, M. Zhang, H. Wang, X. Wang, P. Vepakomma, A. Singh, H. Qiu et al. , “Fedml: A research li-brary and benchmark for federated machine learning,” arXiv preprint arXiv:2007.13518 , 2020. [16] F. Cai, “Bytedance breaks federal learning: open source fedlearner framework, 209% increase in advertising efficiency,” 2020. [17] T. Zou, Z. Gu, Y. He, H. Takahashi, Y. Liu, G. Ye, and Y.-Q. Zhang, “Vflair: A research library and benchmark for vertical federated learn-ing,” arXiv preprint arXiv:2310.09827 , 2023. [18] O. Li, J. Sun, X. Yang, W. Gao, H. Zhang, and J. Xie, “Label leakage and protection in two-party split learning,” arXiv preprint arXiv:2102.08504 ,2021. [19] J. Tan, L. Zhang, Y. Liu, A. Li, and Y. Wu, “Residue-based label protection mechanisms in vertical logistic regression,” in 2022 8th International Conference on Big Data Computing and Communications (BigCom) . IEEE, 2022, pp. 356–364. [20] P. Qiu, X. Zhang, S. Ji, T. Du, Y. Pu, and J. Zhou, “Your labels are selling you out: Relation leaks in vertical federated learning,” IEEE Transactions on Dependable and Secure Computing , 2022. [21] S. Kariyappa and M. K. Qureshi, “Exploit: Extracting private labels in split learning,” in 2023 IEEE conference on secure and trustworthy machine learning (SaTML) . IEEE, 2023, pp. 165–175. [22] T. Zou, Y. Liu, Y. Kang, W. Liu, Y. He, and Z. Yi, “Defending batch-level label inference and replacement attacks in vertical federated learning,” 
+
+IEEE Transactions on Big Data , pp. 1–12, 2022. [23] Z. Liu, P. Luo, X. Wang, and X. Tang, “Large-scale celebfaces attributes (celeba) dataset,” Retrieved August , vol. 15, no. 2018, p. 11, 2018. [24] S. Lu and R. Li, “Dac–deep autoencoder-based clustering: A general deep learning framework of representation learning,” in Intelligent Systems and Applications: Proceedings of the 2021 Intelligent Systems Conference (IntelliSys) Volume 1 . Springer, 2022, pp. 205–216. [25] Y. Li, P. Hu, Z. Liu, D. Peng, J. T. Zhou, and X. Peng, “Contrastive clus-tering,” in Proceedings of the AAAI conference on artificial intelligence ,vol. 35, no. 10, 2021, pp. 8547–8555. [26] X. Liu, “Simplemkkm: Simple multiple kernel k-means,” IEEE Trans-actions on Pattern Analysis and Machine Intelligence , vol. 45, no. 4, pp. 5174–5186, 2022. [27] L. Wei, S. Liu, R. Zhou, C. Zhu, and J. Liu, “Learning idempotent rep-resentation for subspace clustering,” IEEE Transactions on Knowledge and Data Engineering , 2023. [28] H. Jeon, G. J. Quadri, H. Lee, P. Rosen, D. A. Szafir, and J. Seo, “: A cluster ambiguity measure for estimating perceptual variability in visual clustering,” IEEE Transactions on Visualization and Computer Graphics ,pp. 770–780, 2024. [29] N. Al-Naami, N. Medoc, M. Magnani, and M. Ghoniem, “Improved visual saliency of graph clusters with orderable node-link layouts,” IEEE transactions on visualization and computer graphics , pp. 1–11, 2024. [30] Z. Hao, Z. Lu, G. Li, F. Nie, R. Wang, and X. Li, “Ensemble clustering with attentional representation,” IEEE Transactions on Knowledge and Data Engineering , pp. 581–593, 2024. [31] J. Chakraborty, D. K. Pradhan, and S. Nandi, “A multiple k-means cluster ensemble framework for clustering citation trajectories,” Journal of Informetrics , p. 101507, 2024. [32] X. Yu, Y. Jiang, G. Chao, and D. Chu, “Deep contrastive multi-view subspace clustering with representation and cluster interactive learning,” 
+
+IEEE Transactions on Knowledge and Data Engineering , pp. 1–12, 2024. [33] A. Liang, B. Yao, B. Wang, Y. Liu, Z. Chen, J. Xie, and F. Li, “Sub-trajectory clustering with deep reinforcement learning,” VLDB Journal ,pp. 685–702, 2024. [34] P. P. Kumar and V. M. A. Bai, “Breast cancer detection on mammo-graphic images using hyper parameter tuning & optimization: A con-volutional neural network & transfer learning approach,” International Journal of Engineering Trends and Technology , pp. 76–92, 2022. [35] T. Bradford, ““give me some credit!”: Using alternative data to expand credit access,” Payments System Research Briefing , pp. 1–6, 2023. [36] Y. Wang, F. Li, H. Sun, W. Li, C. Zhong, X. Wu, H. Wang, and P. Wang, 
+
+IOP Conference Series: Earth and Environmental Science , p. 012097, 2020. [37] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016.

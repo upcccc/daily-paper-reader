@@ -1,0 +1,599 @@
+Title: Good-Enough LLM Obfuscation (GELO)
+
+URL Source: https://arxiv.org/pdf/2603.05035v1
+
+Published Time: Fri, 06 Mar 2026 01:50:15 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# Good-Enough LLM Obfuscation (GELO) 
+
+Anatoly Belikov a, Ilya Fedotov b
+
+> aSingularityNET Foundation, Baarerstrasse 141, Zug, 6300, Switzerland
+> bSingularity Compute,
+
+Abstract 
+
+Large Language Models (LLMs) are increasingly served on shared acceler-ators where an adversary with read access to device memory can observe KV caches and hidden states, threatening prompt privacy for open-source models. Cryptographic protections such as MPC and FHE offer strong guar-antees but remain one to two orders of magnitude too slow for interactive inference, while static obfuscation schemes break under multi-run statisti-cal attacks once the model is known. We present GELO (Good-Enough LLM Obfuscation), a lightweight protocol for privacy-preserving inference that limits information leakage from untrusted accelerator observations by hiding hidden states with fresh, per-batch invertible mixing. For each of-floaded projection, the TEE samples a random matrix A, forms U = AH ,offloads U and weights W to the accelerator, and then applies A−1 on return, so that A−1(( AH )W ) = HW and outputs are unchanged. Because mixing is never reused across batches, the attacker faces only a single-batch blind source separation problem. We analyze information leakage and introduce two practical defenses: (i) non-orthogonal mixing to mask Gram matrices, and (ii) orthogonal mixing augmented with a small fraction of high-energy “shield” vectors that pollute higher-order statistics. On Llama-2 7B, GELO preserves float32 outputs exactly, closely matches low-precision baselines, of-floads the dominant matrix multiplications with about 20 –30% latency over-head, and defeats a range of ICA/BSS and anchor-based attacks. 
+
+Keywords: Large Language Models, Trusted Execution Environments, Privacy-preserving inference, GPU offloading, Obfuscation, KV-cache leakage, Blind source separation, Secure machine learning    
+
+> Email addresses: abelikov@singularitynet.io (Anatoly Belikov),
+> ilya@singularitycompute.com (Ilya Fedotov)
+> arXiv:2603.05035v1 [cs.CR] 5 Mar 2026
+
+CRediT authorship contribution statement 
+
+Anatoly Belikov: Conceptualization, Methodology, Software, Formal analy-sis, Investigation, Validation, Writing—original draft. Ilya Fedotov: Super-vision, Funding acquisition, Resources, Writing—review & editing. 
+
+1. Introduction 
+
+Large Language Models (LLMs) are increasingly deployed on shared cloud GPUs. In this setting, an adversary with read access to device memory can exploit vulnerabilities such as KV-cache leakage to reconstruct confidential prompts, infer user data, or partially reverse-engineer model behavior. This creates a tension between the scalability benefits of cloud inference and strict privacy requirements on user inputs. Existing approaches lie on two extremes. Cryptographic methods such as Fully Homomorphic Encryption (FHE) and Multi-Party Computation (MPC) provide strong, provable guarantees, but they typically incur over 
+
+100 × latency overhead and remain impractical for interactive LLM services. At the other end, lightweight obfuscation schemes based on static permu-tations of weights or activations are fast, but fragile: once the underlying model is known, they can be broken by multi-run statistical attacks. Our primary target deployment is a mixed cluster with a small number of confidential GPUs (e.g., H200 with TEE support) [12] and a larger pool of non-confidential accelerators (e.g., L40S). Privacy requirements disallow running plaintext hidden states on the L40S, yet relying solely on H200s for full inference would cap cluster throughput. We therefore seek a protocol that keeps sensitive data inside TEEs while still letting the L40S execute most of the heavy linear algebra. To this end, we introduce the Good Enough LLM Obfuscation (GELO) protocol. GELO is a hybrid design: it executes most transformer operations inside a Trusted Execution Environment (TEE), while offloading only the most expensive matrix multiplications in self-attention, namely the Query (Q), Key (K), and Value (V) projections, to an untrusted accelerator. For each batch, GELO applies a fresh secret invertible linear transform A to hidden states H before offload. The accelerator computes projections on the mixed data U = AH , and the TEE applies A−1 to recover the exact 2result. Because A is never reused, the attacker faces a single-batch Blind Source Separation (BSS) problem. Our experiments show that the added mixing/unmixing cost is modest (around 20 –30% overhead) relative to inse-cure offloading. Our key contributions are: 
+
+• The GELO Protocol: We introduce and formalize the Good Enough LLM Obfuscation (GELO) algorithm, a lightweight protocol for offload-ing LLM projection computations to an untrusted accelerator without revealing the underlying hidden states. 
+
+• Leakage and identifiability analysis: We identify key leakage chan-nels (e.g., Gram-matrix invariants under orthogonal mixing) and pro-vide an identifiability-based security argument: per-batch non-identifiability up to an unknown invertible transform, and no cross-batch information gain under fresh, independent mixing. 
+
+• Attack evaluation and efficiency: We empirically evaluate anchor-based and general BSS/ICA attacks under this threat model, and quan-tify performance overhead, showing that GELO offloads a large fraction of linear-algebra cost (e.g., ≈ 76% in a typical Llama 2 7B configura-tion) with modest overhead on the trusted side. The remainder of this paper is structured as follows. Section 2 (Back-ground and Related Work) reviews related work in cryptographic, obfuscation-based, and TEE-assisted private inference. Section 3 (The GELO Protocol: Method and Implementation) provides a detailed description of our proto-col. Section 4 (Experiments) presents an analysis of performance and se-curity properties. We also analyze what information about hidden states is leaked by accelerator-visible observables under GELO, and characterize the conditions under which an attacker could invert the mixing. Section 5 (Secu-rity Analysis and Identifiability) concludes and outlines directions for future work. 
+
+2. Background and Related Work 
+
+The challenge of securing LLM inference has been approached from sev-eral directions, primarily falling into three categories: cryptographic, obfuscation-based, and TEE-assisted methods. Each offers a different balance of security, performance, and practicality. 32.1. Cryptographic Approaches 
+
+Cryptographic techniques like Multi-Party Computation (MPC) and Fully Homomorphic Encryption (FHE) represent the gold standard for security, allowing computation on data without ever exposing it in plaintext. In an MPC-based system, secret shares of the inputs and model weights are dis-tributed among multiple non-colluding parties, who collaboratively compute the result. FHE, in theory, allows a single untrusted server to perform cal-culations directly on encrypted data. While these methods provide powerful security guarantees, their practical application to large-scale transformers is severely hampered by performance overhead. The non-linear operations ubiquitous in transformers, such as Soft-max and GELU activations, are notoriously expensive to compute in both MPC and FHE frameworks. For instance, Fission’s MPC approach [5] scales poorly for attention mechanisms due to the high communication and com-putation cost of its secure non-linear function protocols, leading to latencies that are orders of magnitude slower than plaintext inference and unsuitable for interactive applications. The fundamental security assumption of MPC is that the nodes are run by separate, independent, and non-colluding enti-ties. This makes the trust assumption difficult to satisfy in many practical deployments. 
+
+2.2. Hybrid and Obfuscation-based Approaches 
+
+To avoid the extreme overhead of cryptography, obfuscation-based meth-ods apply transformations to the model or data to make them unintelligible to an observer. These techniques range from permutation-based protocols to hybrid TEE-based approaches, each with different trust models and security guarantees. A prominent protocol is the Secure Transformer Inference Protocol (STIP) [4]. STIP is a three-party protocol involving a User, a Model Owner, and an un-trusted Executor who performs the live computation. The security hinges on a static secret permutation matrix ( π) generated by the User. The User provides π to the Model Owner, who transforms the private model weights (θ) into obfuscated weights ( θ′ = f (θ, π )) and sends them to the Execu-tor. The User then obfuscates their prompt ( x′ = xπ ) and sends it to the Executor. The insight is that the permutations are designed to cancel out internally (e.g., Q = ( xπ )( π⊤W ) = xW ), ensuring correctness. However, STIP’s architecture has two severe limitations: its rigid three-party trust model is impractical for many cloud scenarios, and more critically, STIP’s 4security collapses for open-source models. If the original weights ( W ) are public, an adversary can solve the equation W ′ = π⊤W to recover the user’s secret permutation π.PermLLM [3] represents a different, hybrid-MPC approach. It also uses a three-party model, but with different roles: a User P1, a Model Provider who also acts as the Hoster P0, and a third party P2 that assists only in an offline preparation phase. The live inference is a two-party cryptographic computa-tion between the User and the Hoster. Its mechanism is not a simple static permutation; instead, it uses additive secret sharing (an MPC technique) for all linear layers and reserves a secure random permutation for non-linear functions (like Softmax). This permutation is dynamic and allows the User to compute the non-linear function on shuffled plaintext data, avoiding the primary MPC bottleneck. While this design is “magnitudes faster” than pure MPC and is secure for open-source models (user privacy is protected by secret sharing, not key obfuscation), it still retains the high network commu-nication overhead and latency inherent to cryptographic protocols for every linear layer. STIP’s rigid model and its critical vulnerability to open-source models make it incompatible with common deployments. PermLLM, while secure, retains the high latency of network-bound cryptographic protocols. Our protocol, GELO, is designed to overcome these specific limitations. Like PermLLM, it is secure for open-source models. However, it achieves dramat-ically higher performance by rejecting high-overhead MPC entirely. Instead, GELO leverages a hybrid TEE–accelerator model. By using a dynamic, per-batch secret linear transformation (an invertible matrix A) generated within the TEE, GELO can safely offload the vast majority of computation (the ex-pensive matrix multiplies) to an untrusted accelerator. This approach, rooted in the computational hardness of Blind Source Separation (BSS), thwarts the statistical attacks that defeat static permutation schemes while avoiding the network latency of MPC, as will be detailed in Section 3. 
+
+2.3. TEE-Based Approaches 
+
+Trusted Execution Environments (TEEs), such as Intel SGX and AMD SEV, offer a compelling middle ground by providing hardware-isolated en-claves where code and data are protected from the host system. This en-ables a practical two-party model (user and cloud provider). However, TEEs typically have limited memory and cannot match the raw performance of high-end GPUs, necessitating hybrid approaches that offload computation. 5KV-Shield [1] is one such method, designed to protect on-device LLM inference from KV cache leakage. It uses a hybrid TEE–GPU approach where a secret random permutation matrix R is generated and stored in the TEE. This matrix R is used to permute the attention’s linear weights ( WP =
+
+W R ). Consequently, the computations on the untrusted GPU produce a permuted KV cache KP , V P , theoretically protecting the original data from being leaked. The TEE applies an inverse permutation to the final result to ensure correctness. However, this design shares the exact same fundamental vulnerability as STIP. Its security hinges on the secrecy of R. In an open-source model set-ting, an attacker knows the original weights W and can observe the permuted 
+
+WP as it’s loaded onto the untrusted GPU for computation. This allows them to solve the equation WP = W R to recover the secret R, completely com-promising the protocol’s privacy guarantees. The vulnerability exploited by such attacks is not merely theoretical; the LeftoverLocals attack [2] demonstrated a practical method for intercepting the KV cache from GPU local memory to reconstruct LLM responses. This has spurred the development of several defenses. KV-Cloak [8], for instance, was proposed as another lightweight defense specifically targeting this KV-cache privacy risk. Both protocols build on a legacy of hybrid TEE–GPU sys-tems, such as ShadowNet [7], which was originally designed for CNNs. This earlier work established the core strategy of partitioning a model, offloading computationally heavy linear layers to an untrusted GPU while processing sensitive non-linear activations inside the TEE. However, as demonstrated by the analysis of TEESlice [6], this partitioning strategy is inherently vulner-able when the attacker has access to public model information, a condition that holds for open-source LLMs. Beyond these specific algorithmic flaws, all TEE–GPU hybrid models face severe practical challenges, including signifi-cant communication overhead from encrypting data transfers over PCIe and potential security gaps in the accelerators themselves, such as unencrypted HBM memory on some confidential GPU models. 
+
+3. The GELO Protocol: Method and Implementation 
+
+We propose a secure inference protocol that protects user privacy by executing most LLM operations within a Trusted Execution Environment (TEE), while strategically offloading the most intensive computations to an untrusted accelerator. The protocol’s security is rooted in a novel application 6of dynamic orthogonal rotations, which obfuscate intermediate data without altering the model’s final output. 
+
+3.1. System Architecture and Threat Model TEE 
+
+untrusted gpu 
+
+untrusted gpu 
+
+untrusted gpu 
+
+untrusted gpu 
+
+U = A H H W = A−1 Y
+
+Y =U W
+
+U (TEE →GPU ) Y (GPU →TEE )
+
+> OUTPUT PROMPT
+
+# obfuscated Q, K, V projections 
+
+fresh A 🔒   
+
+> Figure 1: GELO protocol overview. The diagram illustrates the Q/K/V projections; the same procedure is also applied to the output projection ( O).
+
+Our system architecture consists of two distinct components (Figure 1): 
+
+• Trusted TEE device (confidential GPU). A TEE-enabled acceler-ator (e.g., H100/H200-class confidential GPU) where protocol secrets and sensitive intermediate activations are stored and processed. The TEE is responsible for generating and managing all cryptographic se-crets. 7• Untrusted Accelerator. A high-performance device (e.g., GPU) treated as completely untrusted and used only to execute specific, computationally demanding matrix multiplications offloaded from the TEE. It knows the model architecture and weights (e.g., open-source LLMs) and all protocol details except ephemeral secrets. We adopt an honest-but-curious threat model, standard in cloud settings. The adversary (e.g., a malicious cloud provider) has full, real-time read access to the accelerator’s memory (VRAM) and can observe all data transferred to and from it. The adversary’s primary goal is to compromise user privacy by reconstructing the input prompt from these observations. We assume the TEE provides strong hardware-level confidentiality and integrity guarantees, protecting the secrets and computations within it. Side channels originat-ing inside the TEE (fine-grained cache timing, microarchitectural leakage, physical attacks) and availability attacks are out of scope. We also treat accelerator-side leakage beyond raw memory reads (e.g., timing/cache side channels) as out of scope for this work [12, 13, 2]. 
+
+3.2. Core Algorithm 
+
+The core of the GELO protocol is a sequence of linear-algebraic operations designed to offload linear projections while keeping the sensitive hidden-state matrix H confidential. The protocol is executed for each attention block where offloading is desired. Before the protocol begins, the TEE applies batching-time defenses to harden against known-plaintext and data-amplification attacks: 
+
+• Cross-user mixing. Construct batches by aggregating requests from multiple independent users to reduce per-user signal correlation. 
+
+• Flooding detection and disruption. Maintain token-frequency statis-tics; if they significantly diverge from a baseline (e.g., repeated known tokens), inject random tokens to disrupt the pattern. 
+
+• Sensitive-layer exclusion. Do not apply GELO to the first few layers nor the final layer; compute them entirely inside the TEE. The offloading protocol for a single projection proceeds as follows. Let 
+
+H ∈ Rn×d be the batched hidden states (with n tokens, model dimension d), and let W ∈ Rd×p be the projection matrix. 81. Trusted side (TEE). 1. Define inputs. H ∈ Rn×d, W ∈ Rd×p.2. Generate secret matrix. Sample a fresh, random invertible matrix A ∈ Rn×n for this batch (never reused across batches). 3. Obfuscate data (mixing). Compute 
+
+U = AH . (1) 4. Offload computation. Send U (and W if not already resident) to the accelerator. 
+
+2. Untrusted accelerator. 1. Perform projection (general matrix multiplication; GEMM). Compute 
+
+Y = U W . (2) From the adversary’s perspective, both U and W are visible in VRAM. 2. Return result. Send Y ∈ Rn×p back to the TEE. 
+
+3. Trusted side (TEE). 1. De-obfuscate (un-mixing). Recover the true projection via 
+
+Q = A−1Y . (3) If A is orthogonal, A−1 = A⊤.Correctness follows immediately: 
+
+Q = A−1Y = A−1(U W ) = A−1(AHW ) = ( A−1A)HW = IHW = HW . 
+
+(4) 
+
+3.2.1. Mitigating Gram Matrix Information Leaks 
+
+If A is orthogonal (desirable for performance, as A−1 = A⊤), an adversary observing U = AH can compute: 
+
+U ⊤U = ( AH )⊤(AH ) = H⊤A⊤AH = H⊤H , (5) 
+
+U U ⊤ = ( AH )( AH )⊤ = A(HH ⊤)A⊤ . (6) Thus: 
+
+• Covariance leak. U ⊤U = H⊤H perfectly reveals the d × d covariance of hidden states. 
+
+• Similarity-spectrum leak. U U ⊤ is similar to HH ⊤ and shares its eigenvalues, leaking the spectrum of token-token similarities. While this does not directly reconstruct H, it may be unacceptable. We consider two mitigations. 9Mitigation 1: Use a non-orthogonal A.. Choose A to be a general invertible matrix, so that A⊤A̸ = I and the Gram matrices are masked. 
+
+• Computational cost. The TEE must compute A−1 per batch, an 
+
+O(n3) operation. 
+
+• Numerical stability. Orthogonal A has condition number κ(A) = 1 .A general A can have κ(A) ≫ 1, amplifying accelerator-side numerical errors (e.g., BF16/FP16) in Q = A−1Y . The TEE should generate and verify well-conditioned A (e.g., enforce κ(A) < 100 ). 
+
+Mitigation 2: Random vector padding (shielding).. Retain a fast, stable or-thogonal A ∈ Rn×n but pad the batch with k random “shield” vectors: 
+
+Hdata ∈ R(n−k)×d, S ∈ Rk×d, (7) 
+
+Hfull =
+
+Hdata 
+
+S
+
+
+
+∈ Rn×d, U = AH full . (8) Then the accelerator observes 
+
+U ⊤U = H⊤
+
+> full
+
+Hfull = H⊤
+
+> data
+
+Hdata + S⊤S , (9) i.e., only the sum of the real covariance and the shield covariance. Since S is secret and fresh, the attacker cannot isolate H⊤
+
+> data
+
+Hdata . The same “pollution” masks the token-similarity spectrum. The trade-off is reduced data throughput: inserting k shield vectors dis-places k user tokens for the same O(n2d) cost. Empirically, adding a small number of shield vectors ( k ≈ 5% of n) and scaling them to 4–10 × the aver-age row norm of Hdata thwarts ICA-based attacks with negligible throughput penalty. 
+
+4. Experiments 
+
+4.1. Functional Equality 
+
+To validate the mathematical correctness of the GELO protocol, we con-ducted an end-to-end functional equality test. We compared the output logits of a baseline Llama 2 7B model [10] against an identical model where GELO obfuscation was applied to all Q, K, and V projections, as well as the attention output projection ( O), in the attention layers. Both models were evaluated on a 1000-sample subset of the OpenWebText2 dataset. 10 Table 1: Functional equality between baseline and GELO-obfuscated inference across pre-cisions. 
+
+Precision Top-1 Equality Logit MSE Mean per-token L2
+
+float32 1.000000 9.320817 × 10 −11 0.000902 bfloat16 0.988045 1.813321 × 10 −3 6.179683 float16 0.998450 4.312208 × 10 −5 0.793820 We measured correctness using three metrics: (i) the equality rate of the top-1 predicted token, (ii) the mean squared error (MSE) between the final logit vectors, and (iii) the mean per-token L2 distance between the logit vectors. Results are shown in Table 1. In float32 precision, the protocol achieves perfect equality, with a 100% match in top-1 tokens and near-zero MSE, confirming 
+
+A−1 (AH )W  = HW . (10) In practical low-precision formats (bfloat16 and float16), GELO introduces no meaningful numerical error: the top-1 token equality remains above 98.8%, indicating that the minimal precision loss from the extra mix/un-mix opera-tions does not degrade the model’s generative output in any practical sense. 
+
+4.2. Performance and Latency Analysis Experimental setup. End-to-end serving overhead depends heavily on inference-engine details such as KV-cache management, batching/scheduling policies, kernel fusion, and memory layout (e.g., in vLLM). Integrating GELO into such an engine would require substantial software engineering effort beyond the scope of this study. We therefore report a controlled microbenchmark that isolates GELO-specific costs and their scaling, and leave full engine integration and end-to-end throughput evaluation as future work. Our synthetic microbenchmark uses a same-machine logical split to model the trusted/untrusted components. We obfuscate and transmit random batches between two processes running on different GPUs, rather than running end-to-end LLM inference. This setup allows us to measure the full stack over-heads relevant to GELO-style offload, including A-generation, mixing/unmixing, and communication (IPC) latency. 
+
+Overhead vs. batch size. We measured total latency and overhead of GELO versus an insecure baseline (direct offload without obfuscation) across batch sizes n (Table 2). 11 Table 2: Latency and overhead versus batch size. 
+
+Batch size n Overhead (%) GELO total (ms) Baseline (ms) 64 28.9 4.49 3.48 128 29.2 5.79 4.48 256 19.9 8.93 7.44 512 20.1 16.11 13.41 1024 26.2 30.36 24.06 2048 32.8 60.31 45.41 4096 32.8 218.75 164.74 8192 50.1 537.85 358.41   
+
+> Table 3: Latency breakdown at n= 512 .
+
+Step GELO (ms) % of total Baseline (ms) A-gen (QR) 2.322 13.3% –Mix ( A · H) 0.199 1.1% 0.000 GEMM ( U · W ) 0.441 2.5% 0.443 Un-mix ( A−1 · Y ) 0.272 1.6% 0.000 Copy (socket+I/O) 14.186 81.4% 14.123 Total 17.420 100.0% 14.566 The results reveal a U-shaped overhead curve: 
+
+• For small batches ( n < 128 ), overhead is high ( ∼ 29% ) because GELO-specific costs (A-generation, mixing) are large relative to the very fast main GEMM. 
+
+• At n ∈ { 256 , 512 }, overhead is minimized ( ∼ 20% ). Here, the O(nd 2)
+
+GEMM dominates, making GELO’s costs a smaller fraction of total time. 
+
+• For large batches ( n > 2048 ), overhead rises as the O(n3) cost of gen-erating the n × n orthogonal matrix A becomes the bottleneck. 
+
+Latency breakdown ( n = 512 ). To understand the overhead sources, we pro-filed a single run at n = 512 (Table 3). Total overhead at n = 512 is 19.6%. Two key insights emerge: 
+
+• Modest compute cost. The computational overhead of GELO is A-gen + Mix + Un-mix = 2.793 ms, representing the true cost of security, 12 Table 4: Duplicate analysis over 10,000,165 embeddings. 
+
+Metric Value Percentage Total Embeddings 10,000,165 100% Unique Embeddings 8,359,390 83.6% Duplicate Embeddings 1,640,775 16.4% which is modest. 
+
+• Communication bottleneck. The majority of time ( ∼ 81% ) in both GELO and the baseline is spent on Copy (socket+I/O), indicating the experiment is bottlenecked by inter-process communication rather than GELO’s computations. In summary, for a typical batch size, GELO adds roughly a 20% latency overhead, successfully offloading the main GEMM and demonstrating that the protocol’s algorithmic costs are small relative to fixed communication costs. 
+
+4.3. Deobfuscation Security Analysis: Hidden State Statistics 
+
+The security of GELO rests on the infeasibility of solving the Blind Source Separation (BSS) problem U = AH from a single observation U . However, BSS algorithms (e.g., ICA, Dictionary Learning) can be effective when the sources H exhibit exploitable statistical structure or strong priors. We there-fore analyze hidden-state statistics to identify properties an adversary might leverage. Our dataset comprises 10 million embedding vectors extracted from the 10th transformer layer of a Llama 2 7B model running on the OpenWebText2 dataset. 
+
+4.3.1. Known-Plaintext Vulnerability via Token Repetition 
+
+A classic attack against obfuscation is known-plaintext: an adversary injects or exploits repeated, known inputs and maps them to their obfuscated outputs. We first examined our 10M-embedding dataset for exact duplicates. The results are shown in Table 4. While a 16% duplication rate appears high, frequency analysis shows these duplicates are dominated by special tokens (BOS/EOS). Removing special tokens reduces the collision rate to 0.148%. Table 5 lists most frequent hashes after we remove bos and eos tokens. 13 Table 5: Top 5 most frequent embedding hashes. 
+
+# Hash Count Token IDs Tokens 1 cd167d7d34197d98 427 29871 SPIECE_UNDERLINE 
+
+2 bec72f2782bf3be5 353 450 _The 
+
+3 1dfdd463904c2fcf 218 13 newline 
+
+4 c057b29aa81c90fb 218 13 newline 
+
+5 41cbbddc2cb91529 124 319 _A 
+
+In practical deployments, these highly repetitive tokens are prime can-didates for KV caching and are explicitly mitigated by GELO’s cross-user batch mixing and token-flooding detection (Section 3.2). After filtering these few repetitive cases, the embeddings are overwhelmingly unique and high-entropy, which thwarts simple frequency-analysis and known-plaintext at-tacks. 
+
+4.3.2. Geometric and Dimensionality Priors 
+
+Even if all embeddings are unique, an attacker can exploit geometric structure in the embedding space. We analyzed 3.5 million filtered (unique) embeddings and identified two key structural properties. 
+
+Distribution of norms. We measured the L2 norm of each 4096-dimensional embedding. The data exhibits a strong structural prior: 
+
+• Mean norm: 24 .18 
+
+• Std. dev. of norm: 0.954 (coefficient of variation: 0.039 )The extremely low variance indicates that nearly all embedding vectors lie on a hypersphere of radius ≈ 24 . This is informative non-Gaussian structure: the sources are not uniformly distributed in R4096 but constrained to a narrow shell. 
+
+Effective dimensionality (PCA). We performed Principal Component Anal-ysis (PCA) to estimate intrinsic dimensionality: 
+
+• Full dimension ( d): 4096 
+
+• Participation ratio (PR): 123 .16 
+
+Thus, the hidden states effectively lie on a low-dimensional manifold, roughly 
+
+33 × smaller than the ambient space. 14 Implication for security. An adversary need not solve a full 4096 × 4096 de-mixing problem. As discussed in Section 3.2.1, the covariance leak ( U ⊤U =
+
+H⊤H) reveals the principal subspace. The attacker can project U onto this 
+
+∼ 123 -dimensional subspace and attempt a much smaller, potentially more tractable, 123 × 123 BSS problem. This informs the setup of our deobfusca-tion attack in the next section. 
+
+4.3.3. Anchor-Based Recovery Attacks 
+
+We consider a potential known-plaintext (anchor-based) attack: if an adversary knows (or correctly guesses) k of the n tokens in a batch, can they leverage this information to deobfuscate the remaining n − k unknown tokens? 
+
+Attack simulation. We simulate a best-case scenario for the attacker. 
+
+• Attacker’s knowledge. The attacker knows k “anchor” rows HK ,which are a subset of the true rows of H.The attacker’s goal is to use HK to recover the unknown rows of H. We evaluate three attack variants. 
+
+Attack methodologies. The first step is to estimate the mixing rows AK cor-responding to the known anchors HK via ridge least squares: 
+
+AK = U H ⊤
+
+> K
+
+ HK H⊤ 
+
+> K
+
++ λI −1 , (11) with regularization λ > 0. Given AK , the attacker proceeds with one of the following: 1. Deflation (subtraction). Subtract the anchor contribution and run BSS (e.g., ICA via the FastICA fixed-point solver [17, 14]) on the resid-ual: 
+
+Ures = U − AK HK . (12) 2. Projection. Project onto the subspace orthogonal to the anchor sub-space and run BSS on the residual: 
+
+PA = AK
+
+ A⊤ 
+
+> K
+
+AK
+
+−1A⊤ 
+
+> K
+
+, (13) 
+
+Ures =  I − PA
+
+ U . (14) This strictly removes anchor leakage but also removes significant signal energy. 15 Table 6: Non-anchor recovery quality ( 95th-percentile of cosine similarity) versus number of known anchors k.
+
+Known anchors ( k) Projection Subtraction Constrained ICA 0 0.341 0.341 0.341 2 0.323 0.323 0.328 5 0.317 0.315 0.316 10 0.301 0.310 0.258 20 0.283 0.288 0.237 40 0.245 0.256 0.207 100 0.207 0.231 0.185 200 0.279 0.276 0.277 240 0.408 0.370 0.375 3. Constrained ICA. Use the anchor subspace as a hard constraint. Construct an orthogonal basis B that aligns the first k rows with the anchor subspace, then rotate 
+
+Urot = B⊤U =
+
+Ztop 
+
+Z⊥
+
+
+
+, (15) and run BSS only on Z⊥ to recover the unknown signals. In practice, residual ICA is performed in a reduced row subspace ( r ≈ n − k) to avoid overfitting when anchors are numerous. A detailed description of the attack pipeline is provided in the appendix. 
+
+Results: recovery quality vs. known anchors. We quantify attack success via the 95th-percentile (p95) cosine similarity between the attacker’s recovered vectors and the true, unknown hidden states. A value of 1.0 indicates perfect recovery; values near 0.0 indicate failure. It is visible in Table 6 that as k increases, the recovery quality for the remaining unknown tokens generally decreases markedly up to the point when more than 90% of rows are anchors. This counter-intuitive trend highlights a key strength of GELO: projection-based defences must remove the anchor subspace, but this also removes signal energy and distorts the residual, often making it more Gaussian—conditions under which ICA/BSS is less effective. 
+
+4.3.4. Results: Geometric Recovery 
+
+Beyond per-vector similarity, we measure an attacker’s ability to recover the geometric structure of the unknown data. We quantify this using a 16 matched-subset Gram error, which evaluates how well the pairwise dot prod-ucts (i.e., geometry) of the recovered tokens match those of the true tokens. Metric definition: 
+
+• Matching. For the n − k unknown true rows in H and the attacker’s corresponding estimates ˆH, we find an optimal one-to-one pairing us-ing the Hungarian algorithm [16] with costs based on absolute cosine similarity. 
+
+• Subsets. This yields two matched subsets: Hsub (true rows) and ˆHsub 
+
+(estimated rows). 
+
+• Gram matrices. Compute row-side Gram matrices 
+
+Gtrue = Hsub H⊤
+
+> sub
+
+, Gest = ˆHsub ˆH⊤ 
+
+> sub
+
+. (16) 
+
+• Error metric. The relative Frobenius error is 
+
+GramError = ∥Gest − Gtrue ∥F
+
+∥Gtrue ∥F
+
+. (17) A high error ( ≫ 1.0) indicates failure to reconstruct the structural ge-ometry. Note that the row-side Gram matrix Gtrue is not constrained by the feature-side covariance U ⊤U = H⊤H leaked under orthogonal A (Sec-tion 3.2.1). Moreover, the attacker’s residualization (projection or subtrac-tion) alters U , breaking such identities and leaving no “free” information about Gtrue .Table 7 shows that with k ≈ 10 –20 known anchors, the attacker reduces the relative Gram error from ∼ 1.41 (no anchors) to ∼ 0.78 –0.87, i.e., a 
+
+∼ 40% improvement—substantial, yet still far from accurate reconstruction of non-anchor correlations. Table 8 setup: n = 256 ; strong Gaussian noise via shield rows (5% extra rows) scaled to 10 × the mean row norm; ICA run with whitening/unwhitening and an r-delta to avoid edge cases; metrics aggregated across batches. Gaussian shield rows provide strong defense against anchor-based attacks: only when anchors exceed roughly 70% of rows does the Gram error approach the clean-data result. Subtraction remains unstable in the presence of noise. 17 Table 7: Geometric recovery error (median Gram error; n = 512 ). 
+
+Known anchors ( k) Constrained ICA Subtraction Projection 0 1.414 1.414 1.414 2 0.805 0.852 0.802 5 0.806 0.802 0.807 10 0.840 0.777 0.840 20 0.871 0.811 0.872 40 0.888 0.861 0.889 100 0.896 0.892 0.897 200 0.898 0.899 0.899 240 0.898 0.900 0.900   
+
+> Table 8: Geometric recovery error under strong Gaussian shielding noise (median Gram error; n= 256 ).
+
+Known anchors ( k) Constrained ICA Subtraction Projection 0 64.640 64.640 64.640 2 63.722 64.064 63.129 5 62.044 63.715 60.755 10 58.805 62.994 56.117 20 49.861 62.818 45.229 40 32.339 61.120 26.549 100 7.504 58.394 4.011 200 1.343 51.173 0.868 240 0.914 39.186 0.862 
+
+4.3.5. General Blind Source Separation (BSS) Attacks 
+
+While Section 4.3.3 analyzed targeted, anchor-based attacks, we now evaluate GELO’s resilience against general-purpose Blind Source Separation (BSS) algorithms. The goal is to empirically validate the effectiveness of the mitigations proposed in Section 3.2.1—specifically, Random Vector Padding (Mitigation 2)—and the token-frequency defenses from Section 3.2. Experimental setup follows Section 4.3.3. We apply a suite of BSS al-gorithms (FastICA [17], JADE [15], and joint diagonalization, JD) to U to recover H. Simulations span batch sizes n ∈ [64 , 1024] and padding noise scales ∈ [0 , 10] . Success is measured by cosine similarity between recovered vectors and true hidden states after optimal one-to-one matching. 18 Results: Efficacy of Vector Padding. We report both the median (Figure 3) and the 95th percentile (p95) cosine similarity (Figure 2). The latter reflects the best-quality recoveries within a batch. 
+
+> Figure 2: 95th percentile cosine similarity of recovered tokens versus padding scale. Each batch is augmented with 5% random Gaussian shield rows at varying scales; no exact token repeats are allowed.
+
+The data reveal two key findings: 1. Raw states are vulnerable. With no padding (scale = 0 ) or low-energy padding (scale = 1 ), attacks are partially successful. ICA per-forms best, achieving median cosine similarity in the 0.42 –0.53 range. Tails remain large: at scale = 1 , ICA p95 is high ( ≈ 0.97 –0.99 for 
+
+n ≥ 256 ), even when medians are modest. However, as shown in Sec-tion 4.3.3, recovering a small-to-moderate number of anchors does not translate into recovery of non-anchor rows. 2. Padding mitigation is highly effective. With high-energy shield vectors (scale = 10 ), p95 drops dramatically, remaining below 0.28 and reaching as low as 0.13 for larger, capped batches. Random padding “pollutes” batch statistics, rendering BSS methods ineffective. We also evaluate geometric recovery using the matched-subset Gram er-ror (Section 4.3.3). The results are shown in Figure 4. Low-noise regimes 19 Figure 3: Median cosine similarity of recovered tokens versus padding scale. Each batch is augmented with 5% random Gaussian shield rows at varying scales; no exact token repeats are allowed. Marker shapes denote attack method (ICA, JADE, JD). 
+
+show relatively good row-geometry recovery (error < 1.0). As Gaussian aug-mentation strengthens, Gram error inflates at small n but tends to decline with more samples; nevertheless, with scale = 10 it remains high even at 
+
+n = 1024 across all methods. Note: Left mixing with an orthogonal A preserves the feature-side co-variance U ⊤U = H⊤H, but our Gram metric is row-side and is computed after unmixing/residualization by the attacker, so this identity does not aid geometric recovery. In summary, these experiments validate GELO’s security model. While raw hidden states can be statistically vulnerable (enabling partial recovery of frequent tokens), padding each batch with a small number of high-energy ran-dom vectors is a practical and highly effective countermeasure that thwarts general BSS-based deobfuscation attacks. 
+
+5. Security Analysis and Identifiability 
+
+5.1. Why GELO works: non-identifiability by design Algebraic ambiguity (GL( n) invariance).. For a batch of n token vectors, the accelerator observes the mixed hidden states U = AH , where A ∈ Rn×n is 20 Figure 4: Median Gram error of recovered tokens versus padding scale. Each batch is augmented with 5% random Gaussian shield rows at varying scales; no exact token repeats are allowed. Marker shapes denote attack method (ICA, JADE, JD). 
+
+invertible and H ∈ Rn×d. The observation U constrains only the product 
+
+AH . For any invertible R ∈ GL( n), the pairs (AR −1, RH ) yield the same 
+
+U . Hence H is identifiable only up to an unknown invertible transform. Without side information that ties R to the true token basis, the attacker cannot uniquely recover H from U alone. 
+
+Dynamic mixing prevents accumulation.. If A is freshly and independently sampled for every batch, then statistics from different batches do not align in a common coordinate system. The attacker cannot “average out” the mixing to estimate a stable inverse, in stark contrast to static obfuscation (e.g., fixed permutations), which is vulnerable to multi-run statistical attacks. 
+
+BSS/ICA assumptions are weakened.. ICA exploits non-Gaussianity and in-dependence of sources under a fixed mixing matrix. Modern hidden states are high-dimensional, correlated, and structured; moreover, we refresh A per batch, invalidating the fixed-mixing assumption. As a result, off-the-shelf ICA and dictionary-learning methods lack the stationary signal they need to converge. 21 5.2. Information-theoretic view No cross-batch gain under fresh mixing.. Index batches by t, with Ut = AtHt
+
+and At independent across t and independent of Ht. Then for any fixed batch t, the other obfuscated batches provide no extra information about Ht
+
+beyond Ut:
+
+I(Ht; U1: T ) = I(Ht; Ut).
+
+Intuition: Ui for i̸ = t depend on independent nuisance variables Ai and independent hidden states Hi, so they are conditionally irrelevant for Ht
+
+once Ut is known. 
+
+Second-order statistics do not resolve H.. Across samples within a batch, the observable second-order structure factors as 
+
+ΣU = A ΣH A⊤.
+
+Here ΣH is the covariance of the hidden-state features across tokens in a batch. Without A, whitening reduces the problem only to an unknown or-thogonal (or more generally, invertible) ambiguity; higher-order statistics that ICA would use require a fixed mixing and favorable source assumptions, which we intentionally avoid. 
+
+5.3. How many anchors would suffice? 
+
+Consider an attacker who (unrealistically) knows the full hidden-state matrix H for a batch and can observe the corresponding mixed matrix U =
+
+AH . Then the mixing matrix is algebraically recoverable as 
+
+A = U H +,
+
+and the batch could be fully de-mixed. Note that H ∈ Rn×d is typically non-square, with d ≫ n in LLMs. However, learning H in full is precisely the privacy breach we aim to prevent. With partial in-batch side informa-tion (e.g., a small number of “anchor” token vectors), the problem remains underdetermined because the left-mixing matrix A ∈ Rn×n couples all token rows. Our empirical results in Section 4.3.3 show that such partial anchors do not enable recovery of the remaining tokens under our mitigations. 22 5.4. Batch accumulation: upper limits and empirical evidence Fresh A per batch.. There is no principled benefit from storing many U ’s. Each batch comes with its own unknown transform, so cross-batch alignment is impossible without side information. Accumulation cannot reduce the core ambiguity beyond invariants that survive unknown invertible transforms (e.g., rank). 
+
+Fixed A (not our setting).. If A were fixed and the sources satisfied ICA’s identifiability assumptions (independent, suitably non-Gaussian, at most one Gaussian), then with many samples one could estimate A up to permutation and scaling. GELO’s design specifically avoids this setting by refreshing A
+
+each batch. 
+
+Empirical observation.. Running multiview ICA [9] (implemented via picard-ICA) on many batches did not improve reconstruction compared to a single batch (around 0.2 cosine similarity on 10 batches). This is consistent with the theory above: without a fixed mixing, cross-batch statistics do not con-centrate toward an invertible unmixing. 
+
+5.5. Formal statements we can claim. 
+
+• Per-batch non-identifiability: U = AH reveals H only up to an un-known invertible transform; without side information, H is not uniquely recoverable from a single batch. 
+
+• No cross-batch gain with fresh mixing: under independence of At across batches, other batches do not increase information about Ht beyond Ut.
+
+• Empirical validation: our experiments show that off-the-shelf and con-strained ICA variants fail to recover usable hidden states; storing many batches does not help in practice. 
+
+Not a cryptographic proof.. We do not offer a reduction-based or complexity-theoretic proof of security. Our argument is an identifiability analysis under a stated threat model, supported by negative empirical results. This is appro-priate for obfuscation (as opposed to encryption) and aligned with GELO’s security model based on BSS intractability and dynamic per-batch mixing. 23 5.6. Practical implications 
+
+• To remain secure against accumulation, the mixing must be refreshed per batch (or more frequently). 
+
+• Avoid predictable structure that could act as anchors; any auxiliary side information that ties U back to H across batches weakens security. 
+
+• If an attacker obtains enough in-batch side information to solve for the mixing matrix A (e.g., many exact anchors with correct correspon-dences), then the remaining tokens in that batch can be de-mixed al-gebraically. System design should make such leakage implausible. Taken together, these results explain why GELO resists deobfuscation: the attacker’s problem is under-determined by design, cross-batch aggrega-tion offers no principled advantage under fresh mixing, and practical BSS tools fail to converge to meaningful reconstructions under our assumptions and measurements. 
+
+6. Conclusion and Future Work 
+
+We presented GELO, a “good-enough” privacy layer for LLM inference on untrusted accelerators. GELO keeps sensitive activations inside a TEE while offloading the dominant linear projections in attention (notably the 
+
+Q/K/V GEMMs; and O in our functional-equality test). The TEE applies fresh, per-batch left mixing U = AH before offload and unmixes on return, guaranteeing exact correctness in exact arithmetic and near-identical outputs in low precision. In our prototype on Llama 2 7B, GELO preserves functional behavior (e.g., ≥98.8% top-1 token equality in bfloat16) while adding about 
+
+20 –30% end-to-end latency overhead at typical batch sizes in our synthetic offload microbenchmark, with most time dominated by communication rather than mixing. By never reusing A, GELO prevents cross-batch statistical accumulation and reduces deobfuscation to a single-batch BSS problem. Our analysis identifies key leakage channels (e.g., Gram-matrix invariants under orthogonal A) and shows that non-orthogonal mixing or a small fraction of high-energy shield vectors can effectively mitigate practical ICA/BSS and anchor-based attacks at modest overhead. There are several promising directions for future work: 24 • Integration with LLM engines and KV caching. Integrate GELO into inference engines such as vLLM, especially around KV-cache man-agement with the key goal of maintaining high throughput without compromising users’ data due to cache-sharing leaks [11]. 
+
+• Stronger formalization. Strengthen the identifiability analysis into tighter theorems under explicit assumptions on hidden state priors and attacker observations, and quantify leakage from invariants (e.g., Gram matrices) under practical mitigations. 
+
+• Broader coverage and quantization. Extend selective offload be-yond Q/K/V /O (e.g., MLP projections) and characterize numerical stability under common inference precisions and quantization (BF16/FP16/FP8/INT8). 
+
+• Reducing overhead in large batches. Explore faster constructions for fresh, well-conditioned mixing (e.g., structured orthogonal trans-forms) and system optimizations that reduce the communication bot-tleneck observed in our prototype. 
+
+• Stronger adversaries and side channels. Evaluate adaptive prompt-selection attackers under realistic rate limits and batching policies, and extend the threat model to include accelerator-side side channels (tim-ing, traffic patterns, and cache effects). 
+
+Acknowledgements Funding: This work was supported by SingularityNET Foundation. 
+
+Declaration of Generative AI and AI-assisted technologies in the manuscript preparation process 
+
+During the preparation of this manuscript, the authors used OpenAI GPT-5.1 to assist with drafting and refactoring code for attack baselines and to help improve clarity of the article. All AI-assisted outputs were reviewed, tested where applicable, and edited by the authors, who take full responsibility for the content of the manuscript. 25 Appendix A. Computational Complexity 
+
+For the Llama 2 7B model with hidden dimension d = 4096 , linear projec-tions account for a significant portion of per-token computation, especially for typical prompt sizes. Below is a breakdown of multiply-adds (MAdds) for a non-cached token in a decoder layer. 
+
+Linear projections. 
+
+Q/K/V/O: 4 · 4096 × 4096 ⇒ ≈ 67 M per token. 
+
+Feed-forward network (gate, up, down). 
+
+3 · 4096 × 11008 ⇒ ≈ 135 M per token. 
+
+Core attention. Using multi-head attention with h = 32 heads and dhead =
+
+d/h = 128 :Scores: QK ⊤ ∈ R1×L ⇒ ≈ 4096 · L MAdds per token ,
+
+Weighted sum: Scores ·V ⇒ 32 ·(1 ×L)( L×128) ≈ 4096 ·L MAdds per token .
+
+Thus, the attention core scales as ≈ 8192 · L MAdds per token, where L is the total sequence length (cached context plus the new token). 
+
+Crossover point. Comparing attention ( ∼ 8192 L) to projections+FFN ( ∼
+
+202 M): 
+
+8192 L ≈ 202 × 10 6 ⇒ L ≈ 24 ,658 .
+
+For Llama 3-70B with d = 8192 , the crossover occurs at roughly L ≈ 49 ,000 .Consequently, linear projections are the primary target for offloading in prac-tical prompt lengths. 
+
+Appendix B. Anchor-Based Attack 
+
+This appendix describes the single end-to-end anchor-based attack pipeline used in Section 4.3.3. Starting from a batch of obfuscated hidden states and a small set of known “anchor” tokens, the attacker attempts to reconstruct the remaining hidden states. 26 Preprocessing.. 
+
+1. Batch centering: subtract per-feature means from H before mixing. 2. Optional Gaussian shielding: augment H with random Gaussian rows, 
+
+X = [ H; G ], as a defense. 
+
+Anchor selection and ridge estimation.. Choose k anchor rows HK (oracle-known or detected). The observed obfuscated data is U = AH . Estimate the corresponding mixing rows AK ∈ Rn×k by ridge least squares: 
+
+G = HK H⊤ 
+
+> K
+
+, (B.1) 
+
+AK = ( U H ⊤ 
+
+> K
+
+)  G + λreg I−1. (B.2) Here λreg > 0 stabilizes inversion when anchors are correlated or ill-conditioned. 
+
+Residual construction.. Given AK , form residuals in one of three ways: 1. Subtraction: 
+
+Ures = U − AK HK . (B.3) 2. Projection: 
+
+PA = AK
+
+ A⊤ 
+
+> K
+
+AK + λI −1A⊤ 
+
+> K
+
+, (B.4) 
+
+Ures = ( I − PA) U. (B.5) 3. Constrained ICA (row-space separation): Construct an orthonormal basis B that spans anchors and their orthogonal complement, (B.6) 
+
+Urot = B⊤U =
+
+ QQ⊥
+
+
+
+U, (B.7) where B = [ Q Q⊥ ] is the orthonormal basis constructed in the next paragraph. Then take the last keff rows of Urot (the orthogonal com-plement) to form Ures .27 Constructing the constrained basis.. 
+
+1. Orthonormalize AK to get the anchor-span basis Q:
+
+Q = qr( AK ) (n × k with orthonormal columns ).
+
+2. Compute effective rank keff = rank( AK ).3. Form the orthogonal complement by projecting a random matrix R ∈
+
+Rn×(n−keff ):
+
+Qperp = ( I − QQ ⊤) R, Q⊥ = qr( Qperp ).
+
+Here Q spans the anchor subspace and Q⊥ spans its orthogonal com-plement. 4. Let U = [ Q Q⊥ ] (orthonormal). 
+
+Whitening and dimensionality reduction.. Choose the number of independent row directions r to feed into ICA/FOBI after whitening (trade-off between coverage and stability), typically r = n − k − 1.1. ZCA (symmetric) whitening: compute 
+
+Ures U ⊤
+
+> res
+
+d = VΛ Λ V ⊤ 
+
+> Λ
+
+, W = VΛ Λ−1/2 V ⊤ 
+
+> Λ
+
+, Z = W U res .
+
+2. PCA clipping: let Ur ∈ Rn×r be the matrix whose columns are the 
+
+r largest-variance eigenvectors from VΛ (i.e., its first r columns), and project onto this row subspace: 
+
+Zr = U ⊤ 
+
+> r
+
+Z. 
+
+BSS and back-projection.. Run FOBI and/or ICA (e.g., FastICA [17]) on 
+
+Zr. The solver returns an unmixing matrix Wr ∈ Rr×r (orthogonal in the whitened r-space) and corresponding estimated sources/components Sr ∈
+
+Rr×d such that 
+
+Sr ≈ WrZr,
+
+i.e., each row of Sr is one recovered independent component in the reduced row subspace. Lift back: 
+
+Rfull = Ur Wr U ⊤ 
+
+> r
+
++ ( I − UrU ⊤ 
+
+> r
+
+), (B.8) 
+
+W −1 = √d V Λ Λ1/2 V ⊤ 
+
+> Λ
+
+, (B.9) 
+
+A = W −1R⊤
+
+> full
+
+, (B.10) 
+
+ˆX = A⊤U. (B.11) 28 Matching and metrics (non-anchors only).. 
+
+1. Identify true non-anchors; perform one-to-one matching between recov-ered and true rows using absolute cosine similarity (Hungarian assign-ment). Flip signs on matches to resolve ICA sign ambiguity. 2. Report: 
+
+• p95 cosine on non-anchors: 95th percentile of matched absolute cosines. 
+
+• Gram error (relative Frobenius) on matched non-anchors: 
+
+∥HH ⊤ − ˆH ˆH⊤∥F
+
+∥HH ⊤∥F
+
+.
+
+.
+
+References 
+
+[1] H. Yang, D. Zhang, Y. Zhao, Y. Li, Y. Liu, A first look at efficient and secure on-device LLM inference against KV leakage, in: Proceedings of the 19th Workshop on Mobility in the Evolving Internet Architecture, 2024, pp. 13–18. [2] Sorensen, T. and Khlaaf, H., 2024. LeftoverLocals: Listening to LLM responses through leaked GPU local memory. arXiv preprint arXiv:2401.16603. [3] F. Zheng, C. Chen, Z. Han, X. Zheng, PermLLM: Private inference of large language models within 3 seconds under WAN, arXiv preprint arXiv:2405.18744, 2024. [4] M. Yuan, L. Zhang, X. Y. Li, Secure Transformer Inference Protocol, arXiv preprint arXiv:2312.00025, 2023. [5] M. Ugurbil, D. Mouris, M. B. Santos, J. Cabrero-Holgueras, M. de Vega, S. Sengupta, Fission: Distributed Privacy-Preserving Large Language Model Inference, Cryptology ePrint Archive, 2025. [6] Z. Zhang, L. K. Ng, B. Liu, Y. Cai, D. Li, Y. Guo, X. Chen, TEESlice: Slicing DNN models for secure and efficient deployment, in: Proceed-ings of the 2nd ACM International Workshop on AI and Software Test-ing/Analysis, 2022, pp. 1–8. 29 [7] Z. Sun, R. Sun, C. Liu, A. R. Chowdhury, L. Lu, S. Jha, ShadowNet: A secure and efficient on-device model inference system for convolutional neural networks, in: 2023 IEEE Symposium on Security and Privacy (SP), IEEE, 2023, pp. 1596–1612. [8] Z. Luo, S. Shao, S. Zhang, L. Zhou, Y. Hu, C. Zhao, et al. , Shadow in the cache: Unveiling and mitigating privacy risks of KV-cache in LLM inference, arXiv preprint arXiv:2508.09442, 2025. [9] H. Richard, L. Gresele, A. Hyvarinen, B. Thirion, A. Gramfort, P. Ablin, Modeling Shared responses in Neuroimaging Studies through MultiView ICA, in: Advances in Neural Information Processing Systems (NeurIPS), Vol. 33, 2020, pp. 19149–19162. [10] H. Touvron, L. Martin, K. Stone, P. Albert, A. Almahairi, Y. Babaei, N. Bashlykov, S. Batra, P. Bhargava, S. Bhosale, D. Bikel, Llama 2: Open foundation and fine-tuned chat models, arXiv preprint arXiv:2307.09288, 2023. [11] Wu G, Zhang Z, Zhang Y, Wang W, Niu J, Wu Y, Zhang Y. I know what you asked: Prompt leakage via kv-cache sharing in multi-tenant llm serving. InProceedings of the 2025 Network and Distributed System Security (NDSS) Symposium. San Diego, CA, USA 2025 Jan 1. [12] NVIDIA, NVIDIA Confidential Computing (Hopper-class confidential GPU capabilities and attestation), https://developer.nvidia.com/ confidential-computing , accessed 2025-12-17. [13] M. Naghibijouybari, A. K. Neupane, Z. Qian, N. Abu-Ghazaleh, Ren-dered Insecure: GPU Side Channel Attacks are Practical, in: Proceed-ings of the ACM SIGSAC Conference on Computer and Communica-tions Security (CCS), 2018. [14] A. Hyvärinen, E. Oja, Independent Component Analysis: Algorithms and Applications, Neural Networks 13 (4–5), 2000, pp. 411–430. [15] J.-F. Cardoso, A. Souloumiac, Blind beamforming for non-Gaussian sig-nals, IEE Proceedings F (Radar and Signal Processing) 140 (6), 1993, pp. 362–370. 30 [16] H. W. Kuhn, The Hungarian method for the assignment problem, Naval Research Logistics Quarterly 2 (1–2), 1955, pp. 83–97. [17] A. Hyvärinen, Fast and robust fixed-point algorithms for independent component analysis, IEEE Transactions on Neural Networks 10 (3), 1999, pp. 626–634. 31

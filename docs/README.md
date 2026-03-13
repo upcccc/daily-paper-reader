@@ -6,76 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-12
-- 运行时间：2026-03-12 19:39:58 UTC
+- 最新运行日期：2026-03-13
+- 运行时间：2026-03-13 19:27:39 UTC
 - 运行状态：成功
-- 本次总论文数：18
-- 精读区：7
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日精选 18 篇前沿论文，深度解析差分隐私安全乘法与后量子联邦学习等核心突破。
-重点关注多乘数安全乘法协议的隐私增强，以及应对量子威胁的协作式网络防御新架构。
-建议关注联邦学习在因果发现与风电预测等垂直领域的落地应用，探索跨场景的安全协作方案。
-- 详情：[/202603/12/README](/202603/12/README)
+今日聚焦 17 篇隐私计算前沿，深度解析本地差分隐私的最优性理论与全球医疗联邦学习基建。
+核心结论揭示了频率估计在 LDP 下的严格最优边界，并提出通过 LoRA 缩放因子优化联邦微调稳定性。
+建议优先研读满分理论力作，并关注针对非独立同分布数据的自适应个性化联邦学习方案。
+- 详情：[/202603/13/README](/202603/13/README)
 
 ### 精读区论文标签
-1. [Differentially Private Secure Multiplication: Beyond Two Multiplicands](/202603/12/2603.08944v2-differentially-private-secure-multiplication-beyond-two-multiplicands)  
+1. [Strict Optimality of Frequency Estimation Under Local Differential Privacy](/202603/13/2603.11523v1-strict-optimality-of-frequency-estimation-under-local-differential-privacy)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：分布式计算中的差分隐私安全乘法
-2. [Post-quantum Federated Learning: Secure And Scalable Threat Intelligence For Collaborative Cyber Defense](/202603/12/2603.07726v1-post-quantum-federated-learning-secure-and-scalable-threat-intelligence-for-collaborative-cyber-defense)  
+   evidence：LDP下频率估计的严格最优性
+2. [Building Privacy-and-Security-Focused Federated Learning Infrastructure for Global Multi-Centre Healthcare Research](/202603/13/2603.10063v1-building-privacy-and-security-focused-federated-learning-infrastructure-for-global-multi-centre-healthcare-research)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：结合后量子加密的隐私保护联邦学习
-3. [Fast and Optimal Differentially Private Frequent-Substring Mining](/202603/12/2603.09166v1-fast-and-optimal-differentially-private-frequent-substring-mining)  
+   evidence：针对医疗保健研究的联邦学习基础设施及治理机制
+3. [Federated Active Learning Under Extreme Non-IID and Global Class Imbalance](/202603/13/2603.10341v1-federated-active-learning-under-extreme-non-iid-and-global-class-imbalance)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：子串挖掘的差分隐私算法
-4. [Democratising Clinical AI through Dataset Condensation for Classical Clinical Models](/202603/12/2603.09356v1-democratising-clinical-ai-through-dataset-condensation-for-classical-clinical-models)  
+   evidence：隐私约束下的联邦主动学习
+4. [Incremental Federated Learning for Intrusion Detection in IoT Networks under Evolving Threat Landscape](/202603/13/2603.10776v2-incremental-federated-learning-for-intrusion-detection-in-iot-networks-under-evolving-threat-landscape)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：用于数据集压缩的差分隐私零阶优化框架
-5. [Universal Shuffle Asymptotics, Part II: Non-Gaussian Limits for Shuffle Privacy -- Poisson, Skellam, and Compound-Poisson Regimes](/202603/12/2603.10073v1-universal-shuffle-asymptotics-part-ii-non-gaussian-limits-for-shuffle-privacy----poisson-skellam-and-compound-poisson-regimes)  
+   evidence：以隐私保护方式进行联邦学习
+5. [Structure Selection for Fairness-Constrained Differentially Private Data Synthesis](/202603/13/2603.12112v1-structure-selection-for-fairness-constrained-differentially-private-data-synthesis)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：洗牌隐私和本地随机化器的渐近理论
-6. [Med-DualLoRA: Local Adaptation of Foundation Models for 3D Cardiac MRI](/202603/12/2603.10967v1-med-duallora-local-adaptation-of-foundation-models-for-3d-cardiac-mri)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：针对具有隐私限制的医学影像进行联邦微调
-7. [Separating Oblivious and Adaptive Differential Privacy under Continual Observation](/202603/12/2603.11029v1-separating-oblivious-and-adaptive-differential-privacy-under-continual-observation)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：连续观测下的差分隐私
+   evidence：差分隐私数据合成机制
+6. [SI-ChainFL: Shapley-Incentivized Secure Federated Learning for High-Speed Rail Data Sharing](/202603/13/2603.07992v1-si-chainfl-shapley-incentivized-secure-federated-learning-for-high-speed-rail-data-sharing)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于数据共享的安全联邦学习
 
 ### 速读区论文标签
-1. [Federated Causal Discovery Across Heterogeneous Datasets under Latent Confounding](/202603/12/2603.05149v1-federated-causal-discovery-across-heterogeneous-datasets-under-latent-confounding)  
+1. [Stabilized Fine-Tuning with LoRA in Federated Learning: Mitigating the Side Effect of Client Size and Rank via the Scaling Factor](/202603/13/2603.08058v1-stabilized-fine-tuning-with-lora-in-federated-learning-mitigating-the-side-effect-of-client-size-and-rank-via-the-scaling-factor)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：隐私规制下的联邦因果发现
-2. [A Behaviour-Aware Federated Forecasting Framework for Distributed Stand-Alone Wind Turbines](/202603/12/2603.05263v1-a-behaviour-aware-federated-forecasting-framework-for-distributed-stand-alone-wind-turbines)  
+   evidence：大语言模型的LoRA联邦学习
+2. [FedPrism: Adaptive Personalized Federated Learning under Non-IID Data](/202603/13/2603.08252v2-fedprism-adaptive-personalized-federated-learning-under-non-iid-data)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：保持数据本地性的联邦学习框架
-3. [PromptGate Client Adaptive Vision Language Gating for Open Set Federated Active Learning](/202603/12/2603.07163v1-promptgate-client-adaptive-vision-language-gating-for-open-set-federated-active-learning)  
+   evidence：针对非独立同分布数据的个性化联邦学习框架
+3. [Client-Cooperative Split Learning](/202603/13/2603.08421v1-client-cooperative-split-learning)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：尊重医疗AI中患者隐私的联邦学习
-4. [Compressed Proximal Federated Learning for Non-Convex Composite Optimization on Heterogeneous Data](/202603/12/2603.07654v1-compressed-proximal-federated-learning-for-non-convex-composite-optimization-on-heterogeneous-data)  
+   evidence：隐私约束下的拆分学习
+4. [Split Federated Learning Architectures for High-Accuracy and Low-Delay Model Training](/202603/13/2603.08687v1-split-federated-learning-architectures-for-high-accuracy-and-low-delay-model-training)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：非凸复合优化的联邦学习
-5. [Faster-HEAL: An Efficient and Privacy-Preserving Collaborative Perception Framework for Heterogeneous Autonomous Vehicles](/202603/12/2603.07314v1-faster-heal-an-efficient-and-privacy-preserving-collaborative-perception-framework-for-heterogeneous-autonomous-vehicles)  
+   evidence：用于分布式训练的分离联邦学习架构
+5. [A Distributed Gaussian Process Model for Multi-Robot Mapping](/202603/13/2603.07351v1-a-distributed-gaussian-process-model-for-multi-robot-mapping)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：自动驾驶汽车的隐私保护协作感知
-6. [Heterogeneous Stochastic Momentum ADMM for Distributed Nonconvex Composite Optimization](/202603/12/2603.07682v1-heterogeneous-stochastic-momentum-admm-for-distributed-nonconvex-composite-optimization)  
+   evidence：用于多机器人建图的分布式机器学习
+6. [Covenant-72B: Pre-Training a 72B LLM with Trustless Peers Over-the-Internet](/202603/13/2603.08163v1-covenant-72b-pre-training-a-72b-llm-with-trustless-peers-over-the-internet)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式随机非凸复合优化
-7. [Hide and Find: A Distributed Adversarial Attack on Federated Graph Learning](/202603/12/2603.07743v1-hide-and-find-a-distributed-adversarial-attack-on-federated-graph-learning)  
+   evidence：大规模基础模型的全球分布式预训练
+7. [Revisiting Gradient Staleness: Evaluating Distance Metrics for Asynchronous Federated Learning Aggregation](/202603/13/2603.08211v1-revisiting-gradient-staleness-evaluating-distance-metrics-for-asynchronous-federated-learning-aggregation)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：对联邦图学习的对抗性攻击
-8. [Covenant-72B: Pre-Training a 72B LLM with Trustless Peers Over-the-Internet](/202603/12/2603.08163v2-covenant-72b-pre-training-a-72b-llm-with-trustless-peers-over-the-internet)  
+   evidence：异步联邦学习聚合
+8. [SplitAgent: A Privacy-Preserving Distributed Architecture for Enterprise-Cloud Agent Collaboration](/202603/13/2603.08221v1-splitagent-a-privacy-preserving-distributed-architecture-for-enterprise-cloud-agent-collaboration)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：大规模基础模型的全球分布式训练
-9. [Bayesian Adversarial Privacy](/202603/12/2603.04199v1-bayesian-adversarial-privacy)  
+   evidence：用于智能体协作的隐私保护分布式架构
+9. [ShakyPrepend: A Multi-Group Learner with Improved Sample Complexity](/202603/13/2603.07319v1-shakyprepend-a-multi-group-learner-with-improved-sample-complexity)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：与差分隐私对比的隐私概念
-10. [Good-Enough LLM Obfuscation (GELO)](/202603/12/2603.05035v1-good-enough-llm-obfuscation-gelo)  
+   evidence：利用受差分隐私启发的工具
+10. [Trusting What You Cannot See: Auditable Fine-Tuning and Inference for Proprietary AI](/202603/13/2603.07466v1-trusting-what-you-cannot-see-auditable-fine-tuning-and-inference-for-proprietary-ai)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：使用混淆技术的大语言模型隐私保护推理
-11. [ACLM: ADMM-Based Distributed Model Predictive Control for Collaborative Loco-Manipulation](/202603/12/2603.07095v1-aclm-admm-based-distributed-model-predictive-control-for-collaborative-loco-manipulation)  
+   evidence：云端微调的隐私与完整性保护
+11. [Obliviator Reveals the Cost of Nonlinear Guardedness in Concept Erasure](/202603/13/2603.07529v1-obliviator-reveals-the-cost-of-nonlinear-guardedness-in-concept-erasure)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：基于ADMM的分布式优化框架
+   evidence：隐私保护概念擦除与效用权衡
 
 
 <div class="dpr-home-promo-card">

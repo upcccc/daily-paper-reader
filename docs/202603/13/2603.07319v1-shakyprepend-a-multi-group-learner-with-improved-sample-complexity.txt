@@ -1,0 +1,1994 @@
+Title: ShakyPrepend: A Multi-Group Learner with Improved Sample Complexity
+
+URL Source: https://arxiv.org/pdf/2603.07319v1
+
+Published Time: Tue, 10 Mar 2026 00:56:19 GMT
+
+Number of Pages: 29
+
+Markdown Content:
+# Shaky Prepend : A Multi-Group Learner with Improved Sample Complexity 
+
+Lujing Zhang ∗ Daniel Hsu † Sivaraman Balakrishnan ‡∗Department of Statistics and Data Science Carnegie Mellon University 
+
+lujingz@stat.cmu.edu 
+
+> †
+
+Computer Science Department Data Science Institute Columbia University 
+
+djhsu@cs.columbia.edu 
+
+> ‡
+
+Department of Statistics and Data Science Machine Learning Department Carnegie Mellon University 
+
+siva@stat.cmu.edu 
+
+Abstract 
+
+Multi-group learning is a learning task that focuses on controlling predictors’ conditional losses over specified subgroups. We propose Shaky Prepend , a method that leverages tools inspired by differential privacy to obtain improved theoretical guarantees over exist-ing approaches. Through numerical experiments, we demonstrate that Shaky Prepend 
+
+adapts to both group structure and spatial heterogeneity. We provide practical guidance for deploying multi-group learning algorithms in real-world settings. 
+
+# 1 Introduction 
+
+Modern ML systems are often evaluated and deployed in settings where performance must be reliable not only on average but also on many subpopulations (or groups ) of interest. For example, in clinical prediction and medical imaging, strong aggregate metrics can conceal severe failures on clinically meaningful (and sometimes rare) subtypes or cohorts. This issue is commonly referred to as hidden stratification (Oakden-Rayner et al., 2020). In other high-stakes, human-facing domains, inconsistent performance across subpopula-tions can raise fairness, accountability, and compliance concerns. In consumer lending and credit underwriting, subgroup-level errors can translate into unfair denial or mispricing and may trigger anti-discrimination scrutiny, motivating careful multi-group evaluation and moni-toring (Hall et al., 2021). In recommendation and ranking, popularity bias can systematically under-expose long-tail items and under-serve users with niche preferences, even when average engagement improves (Abdollahpouri et al., 2019). These considerations motivate the multi-group learning framework, which seeks a single predictor that achieves small excess risk simultaneously for every group in a (potentially very large and overlapping) family. As formalized by Rothblum & Yona (2021), given a collection of groups G and a reference hypothesis class H, the goal is to output a predictor f such that, for each g ∈ G , the average loss of f on examples from g is comparable to that of the best group-specific reference predictor arg min h∈H L(h | g).1
+
+> arXiv:2603.07319v1 [cs.LG] 7 Mar 2026
+
+One challenge in multi-group learning is statistical: the number of candidate groups can be enormous (e.g., all intersections of sensitive attributes, cohort definitions, or latent strata), and enforcing uniform guarantees across groups can incur a nontrivial sample-complexity overhead. Tosh & Hsu (2022) give simple and near-optimal algorithms for hidden stratification and multi-group learning, clarifying the structure of solutions and establishing strong guarantees, including a randomized near-optimal procedure and a simpler deterministic alternative with weaker guarantees 1. Follow-up work has studied richer group structure; for example, Deng & Hsu (2024) considered hierarchical group families and designed an interpretable decision-tree learner with near-optimal sample complexity. Complementary research avoids explicit subgroup enumeration by providing guarantees over exponential or infinite subgroup families. Following the work of Kearns et al. (2018), recent advances have generalized these guarantees to adversarial online learning (Garg et al., 2024) and to broad multi-objective frameworks (Balakrishnan et al., 2026; Haghtalab et al., 2023; Lee et al., 2022). Beyond explicitly feature-defined groups, Dai et al. (2024) also studies endogenous or latent subpopulations (e.g., mixture components) and shows that per-subpopulation guarantees can be achievable even when the underlying clusters are hard to recover. We make the following contributions to this line of work: 
+
+1. We propose Shaky Prepend , a multi-group learning algorithm with improved sample complexity and group-size dependence. Shaky Prepend improves upon the multi-group learning rate of the Prepend algorithm of Tosh & Hsu (2022) from O(n−1/3)
+
+to O(n−2/5), and yields better group-size dependence : the excess-loss guarantee for a group scales with its empirical mass Pn(g) rather than being driven by the smallest group. Many existing multi-group learning methods are inherently iterative: in each round, the algorithm selects a group to audit or update using statistics computed on the same fixed sample. This adaptivity can lead to overfitting. Leveraging the core idea of differential privacy (DP) for adaptive data analysis , we inject carefully scaled noise into each round to make the procedure more stable , and obtain improved generalization guarantees. 
+
+2. We connect Shaky Prepend to gradient boosting and propose a fractional variant. We show that Shaky Prepend can be viewed through the lens of gradient boosting :each iteration identifies a “hard” slice of the population (a group with large residual error) and applies a weak corrective update targeted to that slice. Motivated by this view, we introduce a fractional variant that generalizes a class of multi-group learning algorithms and achieves the same sample-complexity bound as the original procedure. 
+
+3. We study practical behavior and provide guidance for using multi-group learn-ing. Through simulations, we examine two complementary notions of adaptivity exhibited by Shaky Prepend : spatial adaptivity , which adjusts to unknown structure in the instance space, and group adaptivity , which automatically trades off high-variance group-specific predic-tors against lower-variance but less tailored alternatives. We also provide practical guidance for hyperparameter tuning and model selection in the multi-group setting. 
+
+1.1 Related Work 
+
+Multi-group learning and hidden stratification. Multi-group learning (Rothblum & Yona, 2021) formalizes the requirement that a single predictor generalize well across many       
+
+> 1We follow the terminology of Haghtalab et al. (2023) who refer to a deterministic predictor as one which maps features to a distribution over labels, and a non-deterministic or randomized predictor as one which produces a distribution over deterministic predictors.
+
+2(possibly overlapping) groups, capturing both fairness and hidden-stratification concerns. Tosh & Hsu (2022) study the structure of solutions and give simple near-optimal algorithms, serving as the closest starting point for our work. Subsequent work considers more structured group families; notably, Deng & Hsu (2024) extend the model to hierarchically structured groups and obtain an interpretable decision tree with near-optimal sample complexity. Our work complements these results by importing DP-for-adaptivity tools to reduce the statistical cost of adaptively selecting and auditing groups. 
+
+Multicalibration and Multiaccuracy. Like multi-group learning, multicalibration and multiaccuracy are multi-objective learning frameworks motivated by fairness considerations, in which a single predictor must simultaneously satisfy many constraints over a (potentially large and intersecting) collection of groups G. Multiaccuracy requires the prediction residual to be small on every group g ∈ G , e.g., E[( f (X) − Y )g(X)] ≤ α (Kim et al., 2019). Multi-calibration, introduced by Hebert-Johnson et al. (2018), is a stricter notion that strengthens calibration to hold within each group in G, further conditioning on the predictor’s score (and thus implicitly on the outcome). Generalized notions of multicalibration have been proposed in various works (Jung et al., 2021; Zhang et al., 2024). These calibration-style guarantees are conceptually distinct from multi-group learning, which targets small conditional loss on every group; they are generally not equivalent. However, Kim et al. (2019) show that for suitable choices of G, multiaccuracy can imply strong multi-group learning guarantees. 
+
+Differential privacy for adaptive data analysis. A major conceptual advance in modern generalization theory is that DP implies strong stability, which in turn yields validity under adaptive query selection. Dwork et al. (2015b) show how to preserve statistical validity in adap-tive data analysis, establishing a foundational link between DP and generalization in interac-tive settings. Related work studies holdout reuse and generalization under adaptivity (Dwork et al., 2015a). These ideas have also influenced practical protocols for repeated evaluation. Our analysis follows this tradition: we use DP-inspired stability to control overfitting arising from adaptively selecting groups based on previous risk estimates, thereby improving sample complexity. 
+
+Adaptive risk estimation and leaderboards (Ladder / Shaky Ladder). Repeated evaluation on a fixed test set can cause adaptive overfitting, a phenomenon studied in the “leaderboard problem.” Blum & Hardt (2015) propose the Ladder algorithm to robustly re-port progress without leaking too much information about the holdout. The Shaky Ladder Algorithm of Hardt (2017) refines the work of Blum & Hardt (2015) by using DP techniques to obtain improved leaderboard guarantee. Our setting differs as our goal is learning under multi-group constraints rather than leaderboard reporting. However, the technical obstruc-tion is similar: adaptively chosen “queries” (groups/benchmarks) can overfit. We explicitly incorporate these insights by designing group-selection and update steps that remain stable under adaptivity. 
+
+Boosting and functional gradient methods. Boosting constructs a strong predictor by iteratively adding weak learners that correct current errors. AdaBoost (Freund & Schapire, 1997) and gradient boosting machines (Friedman, 2001) are canonical examples, with the latter interpreting boosting as greedy functional gradient descent on a loss functional. Shaky Prepend shares this iterative corrective flavor: each iteration identifies a currently worst-performing group and performs an update concentrated on that slice, resembling a boosting step on group-conditional residuals. This viewpoint helps interpret our method and motivates certain practical improvements to the algorithm. 31.2 Paper Outline 
+
+In Section 2, we formalize the multi-group learning setup and notation, review some useful results on concentration bounds for the empirical conditional risk and review the differential privacy tools we use. In Section 3, we introduce Shaky Prepend , an algorithm that achieves an improved theoretical bound for this problem compared to prior deterministic predictors. Finally, Section 4 provides simulation studies that complement our theoretical analysis and offer insights into the practical behavior of these algorithms. 
+
+# 2 Background 
+
+2.1 Setting and Notation 
+
+Let X denote the input space, Y the label space, Z the prediction (output) space, and H ⊂ {h : X → Z} the hypothesis class. We define a group indicator function as g : X → { 0, 1}, and let G be the collection of groups of interest. Given a bounded loss function ℓ : Z × Y → [0 , 1] ,we denote by L(f | g) the expected conditional loss 
+
+L(f | g) := E(x,y )∼D [ ℓ(f (x), y ) | g(x) = 1 ] .
+
+In practice, we do not have direct access to the underlying distribution D; instead, we observe an i.i.d. sample Sn = {(xi, y i) : i = 1 , . . . , n }. Let PSn (g) denote the empirical probability that g(x) = 1 in the sample. We define the empirical conditional loss as 
+
+LSn (f | g) := 1#Sn (g)
+
+> n
+
+X
+
+> i=1
+
+1{g(xi)=1 } ℓ(f (xi), y i),
+
+where #Sn (g) := Pni=1 1{g(xi)=1 } denotes the number of samples belonging to group g.The multi-group learning problem seeks a predictor f that simultaneously guarantees small conditional risk for every group: 
+
+L(f | g) ≤ inf  
+
+> h∈H
+
+L(h | g) + ϵn(g), ∀ g ∈ G ,
+
+where ϵn(g) is a non-increasing function of #Sn (g). Equivalently, the goal is to obtain a collection of sharp oracle inequalities indexed by groups, comparing f to the best-in-class predictor on each g. For simplicity, we use Ln(f |g), Pn(g) and #n(g) as shorthand. 
+
+2.2 Empirical Conditional Risk Convergence Result 
+
+We largely follow the notation of Tosh & Hsu (2022). For a class of {0, 1}-valued functions F
+
+defined over a domain X , its k-th shattering coefficient, is given by 
+
+Πk(F) = max   
+
+> x1,...,x k∈X
+
+|{ (f (x1), ..., f (xk)) : f ∈ F}| .
+
+The thresholded class associated with a real-valued function class F is defined as 
+
+Fthresh = {x → 1[f (x) > τ ] : f ∈ F , τ ∈ R}.
+
+Given a hypothesis class H and a loss function ℓ : Z × Y → [0 , 1] , the loss-composed class is 
+
+ℓ ◦ H = {(x, y ) → ℓ(h(x), y ) : h ∈ H} .
+
+With these definitions in place, the following theorem provides a high-probability uniform convergence bound, bridging empirical conditional risk and the true conditional risk: 4Theorem 1 (Tosh and Hsu, 2022) . Let H be a hypothesis class, let G be a set of groups, and let ℓ : Z × Y → [0 , 1] be a loss function. With probability at least 1 − δ,
+
+|L(h | g) − Ln(h | g)| ≤ 9
+
+s
+
+D
+
+#n(g) , ∀(h, g ) ∈ H × G ,
+
+where D = 2 ln  Π2n
+
+ (ℓ ◦ H )thresh 
+
+Π2n(G) + ln   8
+
+> δ
+
+ .
+
+2.3 Differential Privacy 
+
+Definition 1 (Differential Privacy) . A randomized algorithm M with domain D and range R
+
+is said to satisfy (ε, δ )-differential privacy if for any two adjacent datasets D, D ′ ∈ D differing in at most one element, and for any subset of outputs S ⊆ R , we have 
+
+Pr[ M(D) ∈ S] ≤ eε Pr[ M(D′) ∈ S] + δ. 
+
+Definition 2 (ℓ1-sensitivity) . Let X be a data universe and let S be a family of datasets over 
+
+X . Denote S△S′ as the symmetric difference. For f : S → Rk, its ℓ1-sensitivity is 
+
+∆f := max 
+
+> S,S ′∈S |S△S′|=1
+
+f (S) − f (S′) 1,
+
+Equivalently, |S△S′| = 1 means S and S′ differ by one record, so ∆f is the maximum change in f under a one-record change (Dwork & Roth, 2014; Dwork et al., 2006). Our algorithm is motivated by the Sparse Vector Technique (Dwork et al., 2009) and we use the version in Dwork & Roth (2014). We use a generalized variant for ∆-sensitive queries and a flexible stopping rule (Algorithm 1). Intuitively, each answered query leaks some information about the dataset, so under naive composition the privacy cost grows roughly with the number of queries. With the Sparse Vector Technique (SVT), however, the privacy loss depends primarily on the number of updates (i.e., threshold crossings), rather than the total number of queries. In the classical SVT, the procedure halts after a fixed update budget, and can therefore handle many queries accurately as long as threshold crossings are rare. We extend this idea by allowing more general stopping rules, so the number of updates may be data-dependent, which better matches our setting. Rather than enforcing a hard update cap, we only require the stopping rule to control the number of updates with high probability. We state the privacy guarantee of Algorithm 1 in Theorem 2 and a detailed proof can be found in Appendix B. 
+
+Theorem 2. Given a private database D, an adaptively chosen stream of ∆-sensitive queries 
+
+f1, f 2, . . . , a stopping rule and a threshold λ, let B denote the number of updates. Set σ =
+
+> ∆
+
+√32 ln(1 /δ ) 
+
+> ϵ
+
+. If Pr[ B > k ] ≤ δ′, then Algorithm 1 is (ϵ√k, δ + δ′)-DP. 
+
+Remark 1. When ∆ = 1 and the stopping rule is set as count > c , we have k = c and δ′ = 0 .In this case, Theorem 2 reduces to the classical SVT guarantee of Dwork et al. (2009). 
+
+# 3 Shaky Prepend : Algorithm and Guarantees 
+
+We present the Shaky Prepend algorithm in this section. At a high level, the algorithm repeatedly “fixes” the group on which the current predictor performs worst, by comparing 5Algorithm 1 Generalized Sparse 
+
+Require: A private database D, an adaptively chosen stream of ∆-sensitive queries f1, f 2, . . . ,a threshold λ, differential privacy parameters (ϵ, δ ), and a stopping rule; output alphabet 
+
+{⊤ , ⊥} , where ⊤ denotes “threshold crossed” and ⊥ otherwise. 
+
+σ ← ∆  
+
+> q
+> 32 ln 1
+> δ
+> ϵ
+
+, count ← 0.Sample ξcount ∼ Lap( σ), bλ0 ← λ + ξcount .
+
+for each query i do 
+
+Sample μi ∼ Lap (2 σ)
+
+if fi(D) + μi ≥ bλcount then 
+
+Output ai = ⊤, count = count + 1 .Sample ξcount ∼ Lap( σ), bλcount ← λ + ξcount .
+
+else 
+
+Output ai = ⊥.
+
+end if if the stopping rule is satisfied then 
+
+Halt. 
+
+end if end for 
+
+its loss gap to the best achievable predictor for that group. As shown in Algorithm 2, each update appends a new (gt, h t) pair and yields a predictor represented as a decision list via the recursive operator [gt, h t, . . . , g 0, h 0]( x) := gt(x) ht(x) +  1 − gt(x) [gt−1, h t−1, . . . , g 0, h 0]( x),
+
+with base case [g0, h 0]( x) := g0(x)h0(x). At each iteration, we replace the current predictor by selecting the best ht ∈ H for the chosen group gt. Equivalently, the list is evaluated from front to back: earlier (g, h ) pairs take priority in determining the final prediction. This matches the decision-list form used in Tosh & Hsu (2022). Because such adaptive comparisons can lead to overfitting, we inject carefully scaled noise into the update rule so that the resulting interaction can be cast as an instance of the Sparse Vector Technique (SVT) applied to adaptively chosen threshold queries. At a high level, this noise makes the procedure stable —limiting how much any single data point can influence the sequence of adaptive decisions—which yields sharper generalization and, ultimately, a better rate. 
+
+Remark 2. If we remove the Laplace noise injection, the resulting procedure can be viewed as a variant of the Prepend algorithm of Tosh & Hsu (2022), with a modified stopping rule that explicitly accounts for the group size. We refer to this variant as Group Prepend and give generalization guarantees for it in Appendix B. 
+
+Interactive (analyst–mechanism) view. We can formalize the procedure as a two-party interactive protocol between an adaptive analyst (who selects queries based on the transcript so far) and a randomized mechanism (which returns a single bit yes /no ). 
+
+• Initialization. Given threshold λ, sample ξ0 ∼ Lap( σ), set λ0 = λ + ξ0, and initialize 
+
+count = 0 .
+
+• Analyst’s move (round i). Given the previous responses and the current state of the update rule, the analyst specifies a query qi : X n → R of the form 
+
+qi(Sn) = PSn (gi)
+
+h
+
+LSn (fi | gi) − LSn (hi | gi)
+
+i
+
+,
+
+6Algorithm 2 Shaky Prepend 
+
+Require: Groups G, hypothesis class H, i.i.d. examples (x1, y 1), . . . , (xn, y n) from D, error bound λ, and noise scale σ.Compute h0 ∈ arg min h∈H Ln(h)
+
+Set f0 = [1 , h 0].Sample ξ0 ∼ Lap (σ) and set λ0 = λ + ξ0.
+
+for t = 0 , 1, . . . do 
+
+update ← False 
+
+for (g, h ) ∈ G × H do 
+
+Sample μt,g,h ∼ Lap (2 σ).
+
+if Pn(g) Ln(ft | g) − Ln(h | g) + μt,g,h ≥ λt then 
+
+(gt+1 , h t+1 ) ← (g, h ); ξ′ 
+
+> t
+
+← μt,g,h 
+
+ft+1 ← [gt+1 , h t+1 , g t, h t, . . . , g 0, h 0]
+
+update ← True 
+
+break end if end for if update then 
+
+Sample ξt+1 ∼ Lap (σ) and set λt+1 = λ + ξt+1 
+
+else 
+
+Return ft
+
+end if end for 
+
+where (gi, h i, f i) are chosen according to the following logic: If the last response was yes , set fi = [ gi−1, h i−1, f i−1] and enumerate (gi, h i) ∈ G × H 
+
+from the beginning. If the last response was no , keep fi = fi−1 and continue enumerating (gi, h i) ∈ G × H .If the last response was no and the enumeration of G × H is exhausted, output fi and terminate the protocol. 
+
+• Mechanism’s move (response to qi). Sample μi ∼ Lap(2 σ).If qi(Sn) + μi ≥ λcount , output yes , set count ← count + 1 , sample ξcount ∼ Lap( σ), and update λcount = λ + ξcount .Otherwise output no .Our main result for Algorithm 2 is stated in Theorem 3. 
+
+Theorem 3. Suppose that H and G are finite, and define L∗ 
+
+> g
+
+:= min h∈H L(h | g). With probability at least 1 − β, for all g ∈ G ,
+
+L(f | g) − L∗ 
+
+> g
+
+≲ n− 25 ln nPn(g) ln 
+
+ 24 |G||H| 
+
+β
+
+ 25
+
+ln 
+
+ 2n|G||H| 
+
+β
+
+ 15
+
+.
+
+We now provide a proof sketch for intuition and a complete proof is deferred to Appendix B. 
+
+Proof sketch. Differential-Privacy Property of the Algorithm: Let B denote the total number of updates made by the algorithm. We first show that B is upper-bounded with high probability: 7Lemma 1 (Upper Bound for Update Times) . Denote α = min h Ln(h). Then, 
+
+Pr 
+
+
+
+B ≤ 2αλ
+
+
+
+≥ 1 − e− λ
+
+> 4σ
+
+4αλ .
+
+This bound follows from the boundedness of the loss and the structure of the update criterion. Combining the result with Theorem 2, we prove that Algorithm 2 is differentially private: 
+
+Lemma 2 (Differential Privacy) . Algorithm 2 is 
+
+
+
+ϵ
+
+q 2αλ , δ + e− λ 
+
+> 4σ4αλ
+
+
+
+-DP. 
+
+Bounding the target gap: For any group g, we decompose the excess risk as 
+
+L(f | g)−min  
+
+> h
+
+L(h | g) = 
+
+
+
+Ln(f | g)−min  
+
+> h
+
+Ln(h | g)
+
+
+
++
+
+
+
+L(f | g)−Ln(f | g)
+
+
+
++
+
+
+
+min  
+
+> h
+
+Ln(h | g)−min  
+
+> h
+
+L(h | g)
+
+
+
+.
+
+The last two terms are controlled by a tight generalization bound for any differentially-private mechanism: 
+
+Lemma 3 (Generalization Bound) . Suppose fB is the output of the Algorithm 2 and n ≥
+
+> 1
+> ϵ2 2 αλ
+
+ln 
+
+ 4ϵ   
+
+> q2αλ
+> δ+e−λ
+> 4σ4αλ
+
+
+
+.
+
+Pr 
+
+max  
+
+> g∈G
+
+|Ln(fB | g) − L(fB | g)| > 36 ϵ
+
+q 2αλ
+
+Pn(g)
+
+ < 2|G| (δ + e− λ  
+
+> 4σ4αλ
+
+)
+
+ϵ .
+
+The empirical gap term is controlled by the stopping rule together with tail bounds for the injected Laplace noise. Combining this with Lemma 3, we obtain an error bound conditioned on the number of updates: 
+
+Lemma 4 (Error Bound) . Denote a = max g,h −μB,g,h , L∗ 
+
+> g
+
+= min h∈H L(h | g). When n ≥ 
+
+> λ
+> 2ϵ2α
+
+ln( 4ϵ  
+
+> q2αλ
+> δ
+
+),
+
+Pr 
+
+max  
+
+> g∈G
+
+(L(fB | g) − L∗ 
+
+> g
+
+) > 36 ϵ
+
+q 2αλ + λ + a + ξB + ϵ
+
+q 2
+
+> λ
+
+Pn(g)
+
+ ≤ O |G| (δ + e− λ  
+
+> 4σ4αλ
+
+)
+
+ϵ
+
+!
+
++8 |H| 2|G| 2e− 2ϵ2n 
+
+> 81 λ
+
+.
+
+With an appropriate choice of λ, ϵ and δ, we obtain the final theorem. 
+
+3.1 Fractional Variants of Prepend-Like Algorithms 
+
+When the label space is numerical (e.g., Rk), the update rule of Shaky Prepend can be written as 
+
+ft+1 (x) = ft(x) + gt+1 (x) ht+1 (x) − ft(x),
+
+which naturally suggests a fractional variant obtained by introducing a step-size parameter: 
+
+ft+1 (x) = ft(x) + η g t+1 (x) ht+1 (x) − ft(x),
+
+where η ∈ (0 , 1] is the step size hyperparameter. The previous stopping rule can also be viewed from a complementary perspective: since Ln(h | g) = Ln([ g, h, f t] | g), the algorithm stops precisely when updating along any pair (g, h ) fails to improve the empirical conditional loss 8on the corresponding group g. Thus, the stopping rule can be easily extended in the fractional version by replacing Ln(h | g) with Ln(f ′ | g), where f ′ = ft + η g t+1 
+
+ ht+1 − ft
+
+.When η < 1, each update moves only partially toward the group-specific best response ht+1 .In this regime, it is natural to continue updating whenever the update promises a substantial reduction in the group-conditional loss, rather than updating only when the current predictor is substantially worse than the best response. Overall, the η-update performs a fractional interpolation between the current predictor and the target update. The Fractional Shaky Prepend (the full algorithm is deferred to Appendix B.3) has a similar theoretical guarantee as the original Shaky Prepend , as shown in Theorem 4. Even without improving the theory, step-size tuning can substantially boost practical performance (Section 4), since smaller η
+
+yields a richer family of intermediate predictors. 
+
+Theorem 4. Suppose that H and G are finite, the loss function ℓ is convex with respect to 
+
+f (x), and define L∗ 
+
+> g
+
+:= min h∈H L(h | g). With probability 1 − O (β), Algorithm 4 terminates with predictor f satisfying, for all g ∈ G ,              
+
+> L(f|g)−L∗
+> g≲n−25ln nηP n(g)ln
+> 4|G||H|
+> β
+> 25
+> ln
+> 2n|G||H|
+> β
+> 15
+> .
+
+Remark 3. Beyond Fractional Shaky Prepend , analogous variants of Prepend and 
+
+Group Prepend can be proposed and admit the same guarantees by essentially the same proof. 
+
+3.2 Relation with Gradient Boosting 
+
+Let A(f ) be an objective functional of a predictor f . Gradient boosting aims to solve 
+
+inf f ∈span( S) A(f ), where S is a collection of real-valued functions and 
+
+span( S) = 
+
+
+
+> m
+
+X
+
+> j=1
+
+wj f j : f j ∈ S, w j ∈ R, m ∈ Z+
+
+ .
+
+Starting from an initial predictor f , at each iteration the algorithm approximately solves 
+
+arg min a∈R, g ∈S A(f + ag ), and then updates f ← f + ag .Algorithm 2 and Algorithm 4 can both be interpreted as a fixed-step-size variant of gradient boosting, equipped with an early-stopping rule that acts as a regularizer, and with update directions that depend on the current predictor. Concretely, at iteration t we choose an update direction from the set 
+
+ η 1{g(x)=1 } (hg − ft) : g ∈ G ,
+
+where η is the step size, hg = arg min h∈H Ln(h|g), ft denotes the current predictor. Instead of updating globally at each step, the algorithm updates only locally—restricted to a selected group—along the corresponding direction in this set, yielding strong group-wise guarantees. 
+
+# 4 Experiments 
+
+We present simulation experiments evaluating Shaky Prepend and other multi-group learn-ing algorithms from three angles: (i) practical guidance , focusing on parameter tuning and the choice of tuning criterion; (ii) properties , including group-size and spatial adaptivity; 9and (iii) variants , assessing whether the fractional version improves performance in practice. The code is publicly available at https://github.com/lujingz/shaky_prepend. 
+
+Baselines. We consider the multi-group learning methods of Tosh & Hsu (2022): Prepend ,
+
+Group Prepend , and Sleeping Expert , as reviewed in Section 3. Among them, Sleeping Expert is a randomized, online-learning-based algorithm that attains optimal rates, but it is less space- and time-efficient in practice due to storing intermediate policies and requiring sampling at inference. 
+
+Plot conventions. Unless otherwise stated, points denote the mean over independent runs and error bars show ± one standard error; each run is evaluated on a fixed test set. 
+
+4.1 Criterion Selection: Guidance for Hyperparameter Tuning 
+
+In practice, since it is impossible to calculate the exact value of the hyperparameters, the standard solution is to use a validation set to fine-tune them. However, in the multi-group setting, there are many natural choices of the criterion when fine-tuning. We mainly discuss two criteria here: the global loss L(f ) and the worst group loss max g∈G L(f |g). Our exper-iments suggest the following intuitive guidelines: with enough validation data, tune for the application’s target metric; with limited data, worst-group tuning suffers high variance, so tuning by the global loss is often more reliable. The setup is illustrated in Figure 1. It is 
+
+Figure 1: Criterion-selection setup. Top: Ground truth (orange) and noisy training sam-ples (blue). Bottom: Groups are constructed so that the worst-group loss is not aligned with the total loss. designed so that optimizing the total loss conflicts with optimizing the worst-group loss: one candidate solution attains a smaller total loss, while another achieves a smaller worst-group loss. A more detailed discussion is deferred to Appendix A. Figure 2 shows that when the sample size is large, tuning hyperparameters for worst-group loss improves worst-group performance, while tuning for total loss yields better total-loss performance. Notably, worst-group tuning is less effective for Sleeping Expert : it substantially increases total loss while only slightly reducing worst-group loss. When the sample size is small, Figure 3 shows that worst-loss tuning can be unreliable, especially for Sleeping Expert . In particular, Sleeping Expert tuned by worst loss can 10 Figure 2: Criterion selection (large sample). Total loss (left) and worst-group loss (right) when tuning hyperparameters by total loss vs. worst-group loss (20 runs; 26,000 training points per run). 
+
+Figure 3: Criterion selection (small sample). Total loss (left) and worst-group loss (right) when tuning hyperparameters by total loss vs. worst-group loss (20 runs; 260 training points per run). even attain a larger worst-group loss than when tuned by total loss. This is expected: worst-group loss is a high-variance criterion, so hyperparameter selection based on a noisy estimate can degrade performance. The effect is particularly pronounced for stochastic methods such as Sleeping Expert , whose inherent randomness further reduces stability. 
+
+4.2 Unbalanced-Group Setting: Group-Size Adaptivity of Group Prepend 
+
+and Shaky Prepend 
+
+In many practical settings, the data are group-wise unbalanced, raising the question of whether one should use a potentially biased predictor trained on the larger group or a high-variance predictor trained on the minority group. In this simulation study, we demonstrate that Group Prepend and Shaky Prepend 
+
+can automatically balance these two extremes, achieving consistently better performance than the original Prepend method. As illustrated in Figure 4, we use two coarse groups (groups 2 and 3) and four finer groups 11 Figure 4: Unbalanced-group setup. Top: Ground truth (orange) and noisy training sam-ples (blue). Bottom: Layered group intervals, where only part of the domain is further refined into smaller subgroups, yielding unbalanced granularity. (groups 4–7) to mimic a multi-granularity group structure (e.g., clinical cohorts where some conditions admit meaningful subtype stratification while others do not). 
+
+Figure 5: Unbalanced-group simulation. Total loss (left) and worst-group loss (right) for 
+
+Prepend , Group Prepend , and Shaky Prepend (20 runs; 120 training points per run). Figure 5 illustrates that the Group Prepend achieves the best performance on both the total loss and the worst-case loss, followed by Shaky Prepend , then Sleeping Expert and 
+
+Prepend . This ranking is expected: Group Prepend and Shaky Prepend incorporate group size into their stopping rules, which implicitly balances bias and variance, especially for small groups. 
+
+4.3 Spatial Adaptivity 
+
+Many real-world targets exhibit spatial inhomogeneity , yet the locations and scales of the underlying regions are often unknown in advance. The experiment below demonstrates that, by constructing a rich collection of nested candidate groups, the multi-group learning algorithms tested can adapt to latent spatial features and produce accurate predictions. 12 Figure 6 visualizes the ground-truth signal together with noisy observations, highlighting an underlying piecewise structure. When this spatial structure is not known a priori , we consider the candidate group family to be intervals of varying lengths centered at grid points: 
+
+G = [c − l 
+
+> 2
+
+, c + l 
+
+> 2
+
+] : c ∈ [0 , 1] 0.05 , l ∈ (0 , 1] 0.05 },
+
+where [0 , 1] 0.05 denotes the 0.05 -spaced grid on [0 , 1] , i.e., 
+
+[0 , 1] 0.05 := {0, 0.05 , 0.10 , . . . , 1},
+
+and similarly (0 , 1] 0.05 := {0.05 , 0.10 , . . . , 1}. The goal is to test whether the algorithms can 
+
+automatically recover the latent spatial structure by selecting suitable centers and interval lengths (i.e., groups). We let H be the class of groupwise-constant predictors. 
+
+Figure 6: Spatial adaptivity. Ground truth, observations ( n = 200 ), and Group Prepend 
+
+predictions under additive Normal noise with standard error in {0, 0.1} (rows). Empirically, all methods adapt well to the target’s spatial structure and achieve reason-ably accurate predictions. Due to space constraints, we report only Group Prepend in Figure6 (with additional results deferred to Appendix A); across noise levels, it consistently captures the underlying piecewise spatial pattern, and while higher noise can occasionally lead to suboptimal choices of finer-grained groups, its overall performance remains strong. 
+
+4.4 Fractional Variants of Prepend-Like Algorithms 
+
+Although the fractional variant does not improve the theoretical bound, it can be viewed as exploring a richer function class by allowing fractional updates, which may yield practical gains. Our experiments support this intuition, especially for Shaky Prepend . Specifically, we adopt the spatial-adaptivity setup and evaluate fractional variants of Prepend , Group Prepend , and Shaky Prepend . For each method, we compare the original algorithm to its fractional counterpart (full pseudocode is deferred to Appendix A), and we additionally tune the fractional step size over {0.5, 1}. As shown in Figure 7, the fractional variant consistently attains lower loss across methods, improving both total loss and worst-case group loss. These results suggest that fractional updates provide a simple and effective practical enhancement, even when they leave the worst-case theory unchanged. 
+
+# 5 Conclusion 
+
+We propose Shaky Prepend , a multi-group learning algorithm that leverages differential privacy to obtain improved sample complexity and group-size dependence. Several directions 13 Figure 7: Fractional ablation. Total loss (left) and worst-group loss (right) comparing 
+
+Shaky Prepend and its fractional variant with tuned step size η ∈ { 0.5, 1} (20 runs; 200 training points per run). remain open: 
+
+Extending to multicalibration and multiaccuracy. Multicalibration and multiaccuracy algorithms share a common iterative template: an auditor finds the most-violated subgroup (or constraint) and the predictor is updated accordingly. Several works (e.g., Gopalan et al. (2022); Haghtalab et al. (2023); Hebert-Johnson et al. (2018)) have noted that differential privacy could reduce the sample complexity of such auditing-based procedures, but existing results are often high-level with loose bounds and limited empirical validation. It would be interesting to seek sharper guarantees via analyses similar to ours. 
+
+Infinite (or non-enumerable) hypothesis/group classes. Our DP approach requires explicitly enumerating H and G, which fails when either class is too large. It remains open whether DP techniques can be incorporated into oracle-efficient algorithms (e.g., Deng et al. (2025)) in this regime, while retaining computational efficiency and improving sample com-plexity. 
+
+# References 
+
+Abdollahpouri, H., Burke, R., and Mobasher, B. Managing popularity bias in recommender systems with personalized re-ranking. In Proceedings of the International Florida Artificial Intelligence Research Society Conference , pp. 413–418, 2019. Balakrishnan, S., Haghtalab, N., Hsu, D., Lee, B., and Zhao, E. Panprediction: Optimal predictions for any downstream task and loss. In Proceedings of the 29th International Conference on Artificial Intelligence and Statistics , 2026. to appear. Bassily, R., Nissim, K., Smith, A. D., Steinke, T., Stemmer, U., and Ullman, J. R. Algorithmic stability for adaptive data analysis. SIAM Journal on Computing , 50(3):STOC16–377– STOC16–405, 2021. Blum, A. and Hardt, M. The ladder: A reliable leaderboard for machine learning competi-tions. In Proceedings of the International Conference on Machine Learning , volume 37 of 
+
+Proceedings of Machine Learning Research , pp. 1006–1014, 2015. 14 Dai, Y. D., Haghtalab, N., and Zhao, E. Learning with multi-group guarantees for clusterable subpopulations, 2024. arXiv:2410.14588. Deng, S. and Hsu, D. Multi-group learning for hierarchical groups. In Proceedings of the Inter-national Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pp. 10440–10487, 2024. Deng, S., Hsu, D., and Liu, J. Group-wise oracle-efficient algorithms for online multi-group learning, 2025. arXiv:2406.05287. Dwork, C. and Roth, A. The Algorithmic Foundations of Differential Privacy . Foundations and Trends in Theoretical Computer Science, Now Publishers, 2014. Dwork, C., McSherry, F., Nissim, K., and Smith, A. Calibrating noise to sensitivity in private data analysis. In Theory of Cryptography Conference (TCC 2006) , volume 3876 of Lecture Notes in Computer Science , pp. 265–284, 2006. Dwork, C., Naor, M., Reingold, O., Rothblum, G. N., and Vadhan, S. P. On the complexity of differentially private data release: Efficient algorithms and hardness results. In Proceedings of the 41st Annual ACM Symposium on Theory of Computing (STOC ’09) , pp. 381–390, 2009. Dwork, C., Feldman, V., Hardt, M., Pitassi, T., Reingold, O., and Roth, A. Generalization in adaptive data analysis and holdout reuse. In Advances in Neural Information Processing Systems , volume 28, pp. 2350–2358, 2015a. Dwork, C., Feldman, V., Hardt, M., Pitassi, T., Reingold, O., and Roth, A. Preserving statis-tical validity in adaptive data analysis. In Proceedings of the 47th Annual ACM Symposium on Theory of Computing , pp. 117–126, 2015b. Freund, Y. and Schapire, R. E. A decision-theoretic generalization of on-line learning and an application to boosting. Journal of Computer and System Sciences , 55(1):119–139, 1997. Friedman, J. H. Greedy function approximation: A gradient boosting machine. The Annals of Statistics , 29(5):1189–1232, 2001. Garg, S., Jung, C., Reingold, O., and Roth, A. Oracle efficient online multicalibration and omniprediction. In Proceedings of the 2024 Annual ACM-SIAM Symposium on Discrete Algorithms (SODA) , pp. 2725–2792, 2024. Gopalan, P., Kim, M. P., Singhal, M., and Zhao, S. Low-degree multicalibration, 2022. arXiv:2203.01255. Haghtalab, N., Jordan, M. I., and Zhao, E. A unifying perspective on multi-calibration: Game dynamics for multi-objective learning. In Advances in Neural Information Processing Systems , volume 36, pp. 72464–72506, 2023. Hall, P., Cox, B., Dickerson, S., Kannan, A. R., Kulkarni, R., and Schmidt, N. A united states fair lending perspective on machine learning. Frontiers in Artificial Intelligence , 4, 2021. Hardt, M. Climbing a shaky ladder: Better adaptive risk estimation, 2017. arXiv:1706.02733. 15 Hebert-Johnson, U., Kim, M., Reingold, O., and Rothblum, G. Multicalibration: Calibration for the (Computationally-identifiable) masses. In Proceedings of the 35th International Con-ference on Machine Learning , volume 80 of Proceedings of Machine Learning Research , pp. 1939–1948, 2018. Jung, C., Lee, C., Pai, M. M., Roth, A., and Vohra, R. Moment multicalibration for uncer-tainty estimation. In Proceedings of the 34th Conference on Learning Theory , volume 134 of Proceedings of Machine Learning Research , pp. 2634–2678, 2021. Kearns, M., Neel, S., Roth, A., and Wu, Z. S. Preventing fairness gerrymandering: Audit-ing and learning for subgroup fairness. In Proceedings of the International Conference on Machine Learning , volume 80 of Proceedings of Machine Learning Research , pp. 2569–2577, 2018. Kim, M. P., Ghorbani, A., and Zou, J. Multiaccuracy: Black-box post-processing for fairness in classification. In Proceedings of the 2019 AAAI/ACM Conference on AI, Ethics, and Society , pp. 247–254, 2019. Lee, D., Noarov, G., Pai, M. M., and Roth, A. Online minimax multiobjective optimiza-tion: Multicalibrating and other applications. Advances in Neural Information Processing Systems , 35:29051–29063, 2022. arXiv:2108.03837. Oakden-Rayner, L., Dunnmon, J., Carneiro, G., and Ré, C. Hidden stratification causes clinically meaningful failures in machine learning for medical imaging. In Proceedings of the ACM Conference on Health, Inference, and Learning , pp. 151–159, 2020. Rothblum, G. N. and Yona, G. Multi-group agnostic pac learnability. In Proceedings of the International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pp. 9107–9115, 2021. Tosh, C. J. and Hsu, D. Simple and near-optimal algorithms for hidden stratification and multi-group learning. In Proceedings of the International Conference on Machine Learning ,volume 162 of Proceedings of Machine Learning Research , pp. 21633–21657, 2022. Zhang, L., Roth, A., and Zhang, L. Fair risk control: A generalized framework for calibrat-ing multi-group fairness risks. In Proceedings of the International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pp. 59783–59805, 2024. 16 A Experiment Details 
+
+A.1 Hyperparameters 
+
+In Prepend and Group Prepend , the error tolerance λ is the only hyperparameter. Shaky Prepend introduces an additional hyperparameter σ that controls the magnitude of the injected noise. In the fractional variant, the step size η is also treated as a hyperparameter. For Sleeping Expert , the learning rate is the hyperparameter. 
+
+A.2 Explanation for the Construction of the Criterion Selection Case 
+
+Figure 8: Criterion-selection setup. Left: Ground truth (orange) and noisy training sam-ples (blue). Right: Groups are constructed so that the worst-group loss is not aligned with the total loss. Group 4 is designed to be the likely worst group: it has the smallest sample size and its target values deviate the most from what a constant predictor would capture. Since most observations concentrate around 4.1, the initial predictor is close to 4. For Prepend-like algorithms, the first update will, with high probability, improve the fit on the interval [0 , 2] 
+
+while leaving the prediction on [2 , 3] essentially unchanged. In contrast, updating Group 3 lowers the prediction on [2 , 3] , which can increase the loss on Group 4, even as it improves the fit on [4 , 5] and thereby reduces the total loss. As a result, hyperparameters tuned for total loss tend to encourage more aggressive updates (including updating Group 3), whereas hyperparameters tuned for worst-group loss prefer more conservative behavior and often avoid updating Group 3. This tension produces markedly different outcomes under the total-loss and worst-loss criteria, as illustrated in Figure 2. For Sleeping Expert , the same trade-off persists—the best predictor on Group 3 benefits Group 3 but can hurt performance on its overlap with Group 4—though it manifests in a more complex, randomized way due to the algorithm’s stochastic expert weighting. 17 A.3 Additional Figures for the Spatial Adaptivity Experiment 
+
+Figure 9: Predictions produced by Prepend , Group Prepend , Shaky Prepend , and 
+
+Sleeping Expert (top-left to bottom-right) under additive noise with σ = 0 .1. All methods recover the target’s spatial structure. 
+
+# B Missing Proof 
+
+B.1 Missing Proof in Section 2 
+
+We first introduce the classical result of the Sparse algorithm: 
+
+Theorem 5 (Theorem 3.25 in Dwork and Roth, 2014) . Sparse is (ϵ, δ )-differentially private. Proof of Theorem 2. If we set c = k, σ = ∆√32 ln(1 /δ ) 
+
+> ϵ
+
+, and assume each fi in Algorithm 3 is a 
+
+∆-sensitive query, then the threshold test 
+
+fi(D) + νi ≥ bλcount 
+
+is equivalent, after rescaling by ∆, to 
+
+1∆ fi(D) + ν′ 
+
+> i
+
+≥ bλ′
+
+> count
+
+,
+
+where 1∆ fi(D) has sensitivity 1 and ν′ 
+
+> i
+
+∼ Lap 
+
+
+
+2
+
+√32 ln(1 /δ )
+
+> ϵ
+
+
+
+. Thus, the rescaled procedure is precisely Algorithm 3 applied to 1-sensitive queries with an effective privacy parameter 
+
+ϵ′ = ϵ√k, and therefore the resulting mechanism is (ϵ√k, δ )-DP by Theorem 5. The only difference between Algorithm 1 and the above procedure lies in the stopping rule. Let Y denote the output space, i.e., the set of all possible sequences {ai : i = 1 , 2, . . . }
+
+18 Figure 10: Predictions produced by Prepend , Group Prepend , Shaky Prepend , and 
+
+Sleeping Expert (top-left to bottom-right) under no additive noise. All methods recover the target’s spatial structure. produced before termination. For any y ∈ Y , let l(y) be the number of ⊤ symbols in y, which equals the total number of updates. For an integer c ≥ 1, let y:c denote the prefix of y up to (and including) the c-th ⊤; if l(y) < c , define y:c ≜ y.Let M denote Algorithm 1. Define the truncated mechanism M′ by 
+
+M′(D) ≜ M(D):k,
+
+where D is the input dataset. Equivalently, M′ runs M and truncates its output (i.e., forces termination) once the number of ⊤ symbols reaches k, exactly the procedure we described at first. By the argument above, M′ is (ϵ√k, δ )-DP. Now consider M. For any measurable subset of outputs S ⊆ Y , decompose 
+
+S = S:k ∪ Sk+1: ,
+
+where S:k ≜ {y ∈ S : y = y:k} and Sk+1: ≜ S \ S:k. By assumption, 
+
+Pr[ M(D) ∈ Sk+1: ] ≤ δ′.
+
+Therefore, 
+
+Pr[ M(D) ∈ S] ≤ Pr[ M(D) ∈ S:k] + δ′
+
+= Pr[ M′(D) ∈ S:k] + δ′
+
+≤ eϵ√k Pr[ M′(D′) ∈ S:k] + δ + δ′
+
+≤ eϵ√k Pr[ M(D′) ∈ S:k] + δ + δ′,
+
+for any neighboring datasets D, D ′. By definition, M is (ϵ√k, δ + δ′)-differentially private. This proves the lemma. 19 Algorithm 3 Sparse 
+
+Require: Private database D, an adaptively chosen stream of 1-sensitive queries f1, . . . , a threshold λ, and a cutoff c.
+
+σ ← 2cϵ if δ = 0 else   
+
+> q
+> 32 cln 1
+> δ
+> ϵ
+
+bλ0 ← λ + Lap( σ) count ← 0
+
+for each query i do 
+
+νi = Lap (2 σ)
+
+if fi(D) + νi ≥ bλcount then 
+
+Output ai = ⊤
+
+count = count + 1 
+
+bλcount = λ + Lap (σ)
+
+else 
+
+Output ai = ⊥
+
+end if if count ≥ c then 
+
+Halt. 
+
+end if end for 
+
+B.2 Missing Proof in Section 3 
+
+To derive an upper bound on the number of updates, we need to control the added Laplace noise; this is established in Lemma 5. 
+
+Lemma 5 (Laplace Tail Bound) . Let X1, . . . , X k i.i.d.
+
+∼ Lap( σ), and define a := max i∈[k] |Xi|.
+
+Then for any β ∈ (0 , 1) , Pr 
+
+h
+
+a ≥ σ ln 
+
+ kβ
+
+i 
+
+≤ β. Equivalently, for any ϵ ≥ 0, Pr[ a ≥ ϵ] ≤
+
+k exp  − ϵσ
+
+ .
+
+Proof. For a single Laplace random variable X ∼ Lap( σ), we have for any t ≥ 0,
+
+Pr[ |X| ≥ tσ ] = 2 
+
+Z ∞
+
+> tσ
+
+12σ e−r/σ dr =
+
+Z ∞
+
+> tσ
+
+1
+
+σ e−r/σ dr =
+
+Z ∞
+
+> t
+
+e−u du = e−t.
+
+By the union bound over X1, ..., X k,
+
+Pr 
+
+
+
+max  
+
+> i∈[k]
+
+|Xi| ≥ tσ 
+
+
+
+≤
+
+> k
+
+X
+
+> i=1
+
+Pr[ |Xi| ≥ tσ ] = ke −t.
+
+Setting t = ln( k/β ) yields 
+
+Pr 
+
+
+
+max  
+
+> i∈[k]
+
+|Xi| ≥ σ ln 
+
+ kβ
+
+ 
+
+≤ β, 
+
+which proves the lemma. 
+
+Proof of Lemma 1. Denote a′ = max 0≤t≤ 2αλ
+
+{ξt, ξ ′
+
+> t
+
+} = − min 0≤t≤ 2αλ
+
+{ξt, ξ ′
+
+> t
+
+} (by symmetry of the Laplace distribution). By the update rule, for 1 ≤ t ≤ 2αλ ,
+
+Pn(g)( Ln(ft−1|gt) − Ln(ht|gt)) ≥ λ − ξt − ξ′ 
+
+> t
+
+≥ λ − 2a′.
+
+20 Since ft only differs from ft−1 on gt,
+
+Ln(ft) − Ln(ft−1) = Pn(g)[ Ln(ht|gt) − Ln(ft−1|gt)] ≤ − (λ − 2a′).
+
+In other words, every update decreases Ln(f ) by at least λ − 2a′.If a′ < λ 
+
+> 4
+
+and B > 2αλ ,
+
+Ln(f⌈ 2αλ ⌉) < α − 2αλ (λ − 2a′) < 0, contradicting Ln(·) ≥ 0.
+
+⇒ Pr[ B ≤ 2αλ |α′ < λ 
+
+> 4
+
+] = 1 Pr[ B ≤ 2αλ ] ≥ Pr[ B ≤ 2αλ , a ′ < λ
+
+4 ]= Pr[ a′ ≤ λ
+
+4 ] Pr[ B ≤ 2αλ |a′ < λ
+
+4 ]= Pr[ a′ ≤ λ
+
+4 ] ≥ 1 − e− λ
+
+> 4σ
+
+4αλ .
+
+The last inequality results from Lemma 5. To derive the DP property of Algorithm 2, we also need to analyze the sensitivity of each query: 
+
+Lemma 6. For any g and h, Pn(g)( Ln(f |g) − Ln(h|g)) is 4 
+
+> n
+
+-sensitive. Proof. Denote PSn (g) to be the sample estimate of P (g) on the dataset Sn, LSn (f |g) to be the sample estimate of L(f |g) on the dataset Sn. WLOG, suppose the adjacent dataset of Sn
+
+to be S′ 
+
+> n
+
+= {(x′
+
+> 1
+
+, y ′
+
+> 1
+
+), (x2, y 2), ..., (xn, y n)}.If g(x1) = g(x′
+
+> 1
+
+),
+
+|PSn (g)( LSn (f |g) − LSn (h|g)) − PS′ 
+
+> n
+
+(g)( LS′ 
+
+> n
+
+(f |g) − LS′ 
+
+> n
+
+(h|g)) |
+
+= PSn (g) 1
+
+nP Sn (g) |l(f (x1), y 1) − l(f (x′
+
+> 1
+
+), y ′
+
+> 1
+
+) − l(h(x1), y 1) + l(h(x′
+
+> 1
+
+), y ′
+
+> 1
+
+)| ≤ 2
+
+n ,
+
+If g(x1) > g (x′
+
+> 1
+
+),
+
+|PSn (g)( LSn (f |g) − LSn (h|g)) − PS′ 
+
+> n
+
+(g)( LS′ 
+
+> n
+
+(f |g) − LS′ 
+
+> n
+
+(h|g)) |
+
+= |PSn (g)( LSn (f |g) − LSn (h|g) − LS′ 
+
+> n
+
+(f |g) + LS′ 
+
+> n
+
+(h|g)) |
+
++ |(LS′ 
+
+> n
+
+(f |g) − LS′ 
+
+> n
+
+(h|g))( PSn (g) − PS′ 
+
+> n
+
+(g)) | ≜ A + B. 
+
+LSn (f | g) − LS′ 
+
+> n
+
+(f | g) = | ℓ(x1, y 1) + Pni=2 ℓ(xi, y i)
+
+nP Sn (g) −
+
+Pni=2 ℓ(xi, y i)
+
+nP Sn (g) − 1 | ≤ 1
+
+nP Sn (g) .
+
+Thus, 
+
+A ≤ PSn (g)( 1
+
+nP Sn (g) + 1
+
+nP Sn (g) ) = 2
+
+n ,B ≤ (|LS′ 
+
+> n
+
+(f |g)| + |LS′ 
+
+> n
+
+(h|g)|)|PSn (g) − PS′ 
+
+> n
+
+(g)| ≤ 2 ∗ 1
+
+n = 2
+
+n ,
+
+|PSn (g)( LSn (f |g) − LSn (h|g)) − PS′ 
+
+> n
+
+(g)( LS′ 
+
+> n
+
+(f |g) − LS′ 
+
+> n
+
+(h|g)) | ≤ 4
+
+n .
+
+When g(x1) < g (x′
+
+> 1
+
+), the same conclusion follows as when g(x1) > g (x′
+
+> 1
+
+).
+
+21 We are now ready to prove the DP property of Algorithm 2. 
+
+Proof of Lemma 2. The algorithm can be viewed as a game: 
+
+• For initialization, sample ξ0 ∼ Lap (σ),λ0 = λ + ξ0, count = 0 .
+
+• Every time the adversary query qi : X n → R, q i(Sn) = Pn(gi)[ Ln(fi|gi) − Ln(hi|gi)] 
+
+according to the rule 
+
+– If last response is yes, fi = [ gi, h i, f i−1] and (gi, h i) starts over to enumerate G × H 
+
+– If last response is no, fi = fi−1, (gi, h i) continues to enumerate G × H 
+
+– If last response is no and (gi, h i) has finished enumerating, output fi and end the game. 
+
+• For the mechanism, for each query, sample μi ∼ Lap (2 σ), if qi(Sn) + μi = Ln(fi|gi) −
+
+Ln(hi|gi) + μi ≥ λcount , respond yes, else respond no, count = count + 1 , sample ξcount ∼
+
+Lap (σ), and let λcount = λ + ξcount .The mechanism can be fit into Algorithm 1. By Lemma 6 and according to Theorem 2, the mechanism is (ϵ
+
+q 2αλ , δ + e− λ  
+
+> 4σ4αλ
+
+)-differentially private. 
+
+Proof of Lemma 3. We cite a related theorem in Bassily et al. (2021) here: (Note (ϵ, δ ) −
+
+max − KL − stable is the same as (ϵ, δ )-DP). 
+
+Theorem 6 (Theorem 7.2 in Bassily, Nissim, Smith, Steinke, Stemmer, and Ullman, 2021) .
+
+Let ε ∈ (0 , 1/3) , δ ∈ (0 , ε/ 4) , and suppose n ≥ 1 
+
+> ε2
+
+ln 
+
+ 4εδ
+
+
+
+. Let M : X n → Q ∆ be an (ε, δ )-max-KL–stable mechanism, where Q∆ is the class of ∆-sensitive queries q : X n → R. Let P be a distribution over X , draw x ←R P n, and sample q ←R M(x). Then 
+
+Pr  
+
+> x,M
+
+ q(P ) − q(x) ≥ 18 ε ∆ n < δε .
+
+After processing algorithm 2, the adversary can post-process its final function fB to get a statistical query. Altogether, the process can be seen as a mapping from the dataset to a query, thus fitting into the above cited theorem. We set M1(Sn) = X n → 1
+
+> n
+
+Pni=1 g(xi)fSn (xi),
+
+M2(Sn) = X n → 1
+
+> n
+
+Pni=1 g(xi). Obviously 1
+
+> n
+
+Pni=1 g(xi) and 1
+
+> n
+
+Pni=1 g(xi)fSn (xi) are 1 
+
+> n
+
+-sensitive. Since the post-processing maintains the differential-privacy property and the Algo-rithm 2 is (ϵ
+
+q 2αλ , δ + e− λ  
+
+> 4σ4αλ
+
+)-differentially private according to Lemma 2, the mechanism 
+
+M1 and M2 should also be (ϵ
+
+q 2αλ , δ + e− λ  
+
+> 4σ4αλ
+
+)-DP to 1 
+
+> n
+
+-sensitive queries. By Theorem 6, set 
+
+ϵ′ = ϵ
+
+q 2αλ and δ′ = δ + e− λ  
+
+> 4σ4αλ
+
+, when n ≥ 1
+
+> ϵ2 2 αλ
+
+ln( 4ϵ   
+
+> q2αλ
+> δ+e−λ
+> 4σ4αλ
+
+),
+
+Pr  
+
+> x
+
+[|Pn(g) − P (g)| ≥ 18 ϵ
+
+r 2αλ ] < δ + e− λ 
+
+> 4σ4αλ
+
+ϵ
+
+q 2αλ
+
+≤ δ + e− λ 
+
+> 4σ4αλ
+
+ϵ ,
+
+Pr  
+
+> x
+
+[|Pn(g)Ln(fSn |g) − P (g)L(fSn |g)| ≥ 18 ϵ
+
+r 2αλ ] < δϵ
+
+q 2αλ
+
+≤ δϵ .
+
+22 At the same time, 
+
+|Ln(fSn |g) − L(fSn |g)|≤ 1
+
+Pn(g) [|Pn(g)Ln(fSn |g) − P (g)L(fSn |g)| + |Pn(g) − P (g)|L(fSn |g)] 
+
+≤ 1
+
+Pn(g) [|Pn(g)Ln(fSn |g) − P (g)L(fSn |g)| + |Pn(g) − P (g)|].
+
+Thus, 
+
+Pr[ |Ln(fSn |g) − L(fSn |g)| ≥ 36 ϵ
+
+q 2αλ
+
+Pn(g) ]
+
+≤ Pr[ |Pn(g) − P (g)| ≥ 9ϵ
+
+r 2αλ ] + Pr[ |Pn(g)Ln(fSn |g) − P (g)L(fSn |g)| ≥ 9ϵ
+
+r 2αλ ]
+
+< 2( δ + e− λ  
+
+> 4σ4αλ
+
+)
+
+ϵ .
+
+Construct similar M1 and M2 for every g ∈ G . Taking a union bound over g ∈ G ,
+
+Pr[max  
+
+> g∈G
+
+|(Ln(fSn |g) − (L(fSn |g)| > 36 ϵ
+
+q 2αλ
+
+Pn(g) ] < 2|G| (δ + e− λ  
+
+> 4σ4αλ
+
+)
+
+ϵ .
+
+We first state a simplified finite-class version of Theorem 1, and then prove Lemma 4. 
+
+Corollary 1. If max {|H| , |G|} < ∞, ∀(h, g ) ∈ H × G , with probability at least 1 − δ,
+
+|L(h | g) − Ln(h | g)| ≤ 9
+
+s
+
+2 ln( |G||H| ) + ln(8 /δ )
+
+nP n(g) .
+
+Proof of Lemma 4. We decompose the object into three parts and bound it above by the sum of their absolute values: 
+
+|L(fB |g) − min  
+
+> h∈H
+
+L(h|g)| ≤ | Ln(fB |g) − L(fB |g)| + |Ln(fB |g) − min  
+
+> h∈H
+
+Ln(h|g)| + |Ln(h|g) − L(h|g)|.
+
+Since there is no update during the last iteration, we have for any g ∈ G ,
+
+Pn(g)[ Ln(fB |g) − min  
+
+> h
+
+Ln(h|g)] ≤ λ + max  
+
+> h
+
+−μB,g,h + ξB ≤ λ + a + ξB ,
+
+By corollary 1 and set δ = 8( |H||G| )2e− 2ϵ2n 
+
+> 81 λ
+
+, we have 
+
+Pr[max  
+
+> (h,g )
+
+|Ln(h|g) − L(h|g)| ≥ ϵ
+
+s
+
+2
+
+λP n(g) ] ≤ 8( |H||G| )2e− 2ϵ2n 
+
+> 81 λ
+
+.
+
+Combining with lemma 3, we have that 
+
+Pr[max  
+
+> g∈G
+
+|L(fB |g)−min  
+
+> h∈H
+
+L(h|g)| > 36 ϵ
+
+q 2αλ + λ + a + ξB
+
+Pn(g) +ϵ
+
+s
+
+2
+
+λP n(g) ] ≤ 2|G| (δ + e− λ  
+
+> 4σ4αλ
+
+)
+
+ϵ +8 e− 2ϵ2n 
+
+> 81 λ
+
+|H| 2|G| 2.
+
+23 Also, 1 
+
+> Pn(g)
+
+≥ 1√Pn(g) when Pn(g) ≤ 1, so 
+
+Pr[max  
+
+> g∈G
+
+|L(fB |g)− min  
+
+> h∈H
+
+L(h|g)| > 36 ϵ
+
+q 2αλ + λ + a + ξB + ϵ
+
+q 2
+
+> λ
+
+Pn(g) ] ≤ |G| (δ + e− λ  
+
+> 4σ4αλ
+
+)
+
+ϵ +8 |H| 2|G| 2e− 2ϵ2n 
+
+> 81 λ
+
+.
+
+Now we can prove the main theorem. 
+
+Proof of Theorem 3. Since ℓ(x, y ) ≤ 1 for all x ∈ X , y ∈ Y , we can set α = 1 in Lemma 1. Recall the definition in the lemmas: B is the number of updates before stopping, a is the maximum of the opposite Laplace random variable sampled during the last round, say a =max g,h −μB,g,h . We first assume that n ≥ λ 
+
+> 2ϵ2
+
+ln( 4ϵ  
+
+> q2
+> λ
+> δ
+
+) so that we can apply Lemma 4. 
+
+Pr[ {L(f |g) − min  
+
+> h
+
+L(h|g)} ≥ 1
+
+Pn(g) (37 ϵ
+
+r 2
+
+λ + λ + 2 ln( 4|G||H| 
+
+β )σ)] 
+
+≤ Pr[ {L(f |g) − min  
+
+> h
+
+L(h|g)} ≥ 36 ϵ
+
+q 2 
+
+> λ
+
++ λ + a + ξB + ϵ
+
+q 2
+
+> λ
+
+Pn(g) ] + Pr[ a ≥ ln( 4|G||H| 
+
+β )σ]+ Pr[ ξB ≥ ln( 4|G||H| 
+
+β )σ]
+
+≤ 2|G| (δ + e− λ  
+
+> 4σ4
+> λ
+
+)
+
+ϵ + 8 |H| 2|G| 2e− 2ϵ2n 
+
+> 81 λ
+
++ 2 β. (Lemma 4, Lemma 5) Recall σ = 4 p32 ln(1 /δ )/(nϵ ), set 
+
+δ = β
+
+2n|G||H| , ϵ = n− 35 (ln 4|G||H| 
+
+β
+
+r
+
+ln 1
+
+δ ) 35 = n− 35 (ln 4|G||H| 
+
+β
+
+s
+
+ln 2n|G||H| 
+
+β ) 35 ,λ = 16 √32 ϵ2/3 = 16 √32 n− 25 (ln 4|G||H| 
+
+β
+
+s
+
+ln 2n|G||H| 
+
+β ) 25 (ln n) 25 .
+
+We can first check that n ≥ λ 
+
+> 2ϵ2
+
+ln( 4ϵ  
+
+> q2αλ
+> δ
+
+), because λ 
+
+> 2ϵ2
+
+ln( 4ϵ  
+
+> q2
+> λ
+> δ
+
+) ∼ n 45 . At the same time, 
+
+36 ϵ
+
+r 2
+
+λ ∼ n− 25 (ln 4|G||H| 
+
+β
+
+s
+
+ln 2n|G||H| 
+
+β ) 25 (ln n) 25 ,
+
+ln( 4|G||H| 
+
+β )σ ∼ n 25 (ln 4|G||H| 
+
+β
+
+s
+
+ln 2n|G||H| 
+
+β ) 25 (ln n)− 35 .
+
+Thus, 
+
+λ + 36 ϵ
+
+r 2
+
+λ + ln( 4|G||H| 
+
+β )σ ∼ n− 25 (ln 4|G||H| 
+
+β
+
+s
+
+ln 2n|G||H| 
+
+β ) 25 (ln n) 25 .
+
+By technical lemma 7, ϵ ≥ 1 
+
+> n
+
+, λϵ ≥ 1 
+
+> n
+
+.
+
+24 On the other hand, 2|G| δϵ = nβ ϵ|H| ≤ β, (using ϵ ≥ 1 
+
+> n
+
+)8|H| 2|G| 2e− 2ϵ2n 
+
+> 81 λ
+
+= 8 |H| 2|G| 2e−2nλ 2
+
+≤ 8|H| 2|G| 2e−2n1/5(ln 4|G||H|       
+
+> β
+> q
+> ln 2n|G||H|
+> β)45(ln n)45
+
+≤ 8|H| 2|G| 2e−2(ln( 2|G||H|     
+
+> β)
+> q
+> ln( 2|G||H|
+> β)45
+
+≤ 8|H| 2|G| 2e−2 ln( 2|G||H|   
+
+> β)
+
+= 2 β2 ≤ 2β, λ
+
+4σ = ϵ2/3nϵ 
+
+pln(1 /δ ) = ϵ5/3n
+
+pln(1 /δ ) = ln n ln( 4|G||H| 
+
+β ) ≥ ln n + ln( 4|G||H| 
+
+β )2|G| 
+
+ϵ e− λ
+
+> 4σ
+
+4
+
+λ ≤ 2βnϵλ |H| ≤ β, (using λϵ ≥ 1
+
+n )
+
+Thus, 
+
+2|G| (δ + e− λ  
+
+> 4σ4
+> λ
+
+)
+
+ϵ + 8 |H| 2|G| 2e− 2ϵ2n 
+
+> 81 λ
+
++ 2 β ≤ 6β. 
+
+Put them together and rescale β, for any g ∈ G ,
+
+Pr[ {L(f |g) − min  
+
+> h∈H
+
+L(h|g)} ≳ 1
+
+Pn(g) n− 25 ln( 24 |G||H| 
+
+β ) 25 ln( 1
+
+δ ) 15 ] ≤ β. 
+
+Lemma 7. When 
+
+ϵ = n− 35 (ln 4|G||H| 
+
+β
+
+r
+
+ln 1
+
+δ ) 35 = n− 35 (ln 4|G||H| 
+
+β
+
+s
+
+ln 2n|G||H| 
+
+β ) 35 ,λ = 16 √32 ϵ2/3 = 16 √32 n− 25 (ln 4|G||H| 
+
+β
+
+s
+
+ln 2n|G||H| 
+
+β ) 25 (ln n) 25 ,
+
+we have ϵ ≥ 1 
+
+> n
+
+, λϵ ≥ 1 
+
+> n
+
+.
+
+Proof. Since |G| ≥ 1, |H| ≥ 1, β ≤ 1, n ≥ 2,
+
+ϵ ≥ n− 35 (ln 4 × √ln 2) 35 > n − 35 ≥ 1
+
+n ,ϵλ = 16 √32 n−1(ln 4 × √ln 2)(ln 2) 25 ≥ 1
+
+n .
+
+B.3 Fractional-version of Prepend-like Algorithms 
+
+Proof of Theorem 4. According to the update rules we have: 
+
+Pn(g)( Ln(fB |g) − Ln(fB + η(h − fB )|g)) ≥ λB − μB,g,h .
+
+25 Algorithm 4 Fractional Shaky Prepend 
+
+Require: Groups G, hypothesis class H, i.i.d. examples (x1, y 1), . . . , (xn, y n) from D, error bound λ, step size η, privacy parameters (ϵ, δ ).Compute h0 ∈ arg min h∈H Ln(h)
+
+Set σ ← 4p32 ln(1 /δ )/(nϵ ) and f0 ← [1 , h 0]
+
+Sample ξ0 ∼ Lap (σ) and set λ0 ← λ + ξ0
+
+for t = 0 , 1, . . . do 
+
+update ← False 
+
+for (g, h ) ∈ G × H do 
+
+Sample μt,g,h ∼ Lap (2 σ)
+
+Define f ′(x) ← ft(x) + η g (x) h(x) − ft(x)
+
+if Pn(g) Ln(ft | g) − Ln(f ′ | g) + μt,g,h ≥ λt then 
+
+(gt+1 , h t+1 ) ← (g, h ); ξ′ 
+
+> t
+
+← μt,g,h 
+
+ft+1 (x) ← f ′(x)
+
+update ← True 
+
+break end if end for if update then 
+
+Sample ξt+1 ∼ Lap (σ) and set λt+1 ← λ + ξt+1 
+
+else 
+
+Return ft
+
+end if end for 
+
+By Jensen’s inequality, 
+
+Ln(fB + η(h − fB )|g) ≤ (1 − η)Ln(fB |g) + ηL + n(h|g).
+
+Thus, 
+
+Pn(g)( Ln(fB |g) − Ln(h|g)) ≥ λ − μB,g,h 
+
+η .
+
+The differential-privacy lemma and the generalization lemma still hold. Thus, the error bound lemma becomes: 
+
+Pr[max  
+
+> g∈G
+
+|L(fB |g) − min  
+
+> h∈H
+
+L(h|g)| > 36 ϵ
+
+q 2αλ + λη + a+ξB 
+
+> η
+
++ ϵ
+
+q 2
+
+> λ
+
+Pn(g) ] ≤ 2|G| (δ + e− λ  
+
+> 4σ4
+> λ
+
+)
+
+ϵ + 8 |H| 2|G| 2e− 2ϵ2n 
+
+> 81 λ
+
+.
+
+By picking appropriate λ, ϵ, we have for all g ∈ G , with probability of at least 1 − δ,
+
+L(f | g) − min  
+
+> h
+
+L(h | g) ≲ n− 25 ln nηP n(g) ln 
+
+ 4|G||H| 
+
+β
+
+ 25
+
+ln 
+
+ 1
+
+δ
+
+ 15
+
+.
+
+B.4 Group Prepend 
+
+The theoretical guarantee of the Group Prepend algorithm is stated and proved below. 26 Algorithm 5 Group Prepend 
+
+Require: Groups G, hypothesis class H, i.i.d. examples from D, error bound λ.Compute h0 ∈ arg min h∈H Ln(h). Set f0 = [ h0] ∈ DL 0[G; H]
+
+for t = 0 , 1, . . . do 
+
+Compute 
+
+(gt+1 , h t+1 ) ∈ arg max  
+
+> (g,h )∈G×H
+
+Pn(g)( Ln(ft | g) − Ln(h | g)) 
+
+if Pn(g)( Ln(ft | gt+1 ) − Ln(ht+1 | gt+1 )) ≥ λ then 
+
+Prepend (gt+1 , h t+1 ) to ft to obtain 
+
+ft+1 := [ gt+1 , h t+1 , g t, h t, . . . , g 1, h 1, h 0]
+
+else 
+
+Return ft.
+
+end if end for Theorem 7. Set λ = n− 13 ln( |G||H| ) 13 . With probability of at least 1 − δ, the output predictor 
+
+fB of Algorithm 5 satisfies 
+
+L(fB | g) ≤ min  
+
+> h∈H
+
+L(h | g) + O ln( |G||H| ) 13 n− 13
+
+pPn(g)
+
+!
+
+, ∀g ∈ G .
+
+Proof. For any t = 0 , 1, .., B − 1,Ln(ft+1 ) = Ln(ft) + Pn(gt+1 ) Ln(ft+1 | gt+1 ) − Ln(ft | gt+1 )
+
+= Ln(ft) + Pn(gt+1 ) Ln(ht+1 | gt+1 ) − Ln(ft | gt+1 )
+
+≤ Ln(ft) + λ. 
+
+Therefore, the total number of updates is at most 1/λ .By the update rule, letting fB denote the final predictor, we have 
+
+Pn(g)
+
+
+
+Ln(fB | g) − min  
+
+> h
+
+Ln(h | g)
+
+
+
+≤ λ, ∀g ∈ G .
+
+Since the number of updates is bounded by 1/λ , the number of possible outputs fB is at most 
+
+|H| 1/λ |G| 1/λ . Thus, by Theorem 1, for any g ∈ G ,
+
+|Ln(fB | g) − L(fB | g)| ≤ 9
+
+s
+
+2(1 /λ + 1) ln( |G||H| ) + ln(8 /δ )
+
+nP n(g) .
+
+Consequently, 
+
+L(fB | g) − min  
+
+> h∈H
+
+L(h | g)
+
+≤  L(fB | g) − Ln(fB | g) +  Ln(fB | g) − min  
+
+> h∈H
+
+Ln(h | g) +  min  
+
+> h∈H
+
+Ln(h | g) − min  
+
+> h∈H
+
+L(h | g)
+
+≤ 9
+
+s
+
+2(1 /λ + 1) ln( |G||H| ) + ln(8 /δ )
+
+nP n(g) + λPn(g) + 9 
+
+s
+
+2 ln( |G||H| + ln(8 /δ )) 
+
+nP n(g) .
+
+27 Setting λ = n− 13 ln(8 |G||H| /δ ) 13 , we obtain 
+
+L(fB | g) − min  
+
+> h∈H
+
+L(h | g) ≤ 36 ln(8 |G||H| /δ ) 13 n− 13
+
+pPn(g) + n− 13
+
+Pn(g) = O ln(8 |G||H| /δ ) 13 n− 13
+
+pPn(g)
+
+!
+
+.
+
+28 C Pseudocode for Fractional Variants of Prepend-Like Algo-rithms 
+
+Algorithm 6 Fractional Group Prepend 
+
+Require: Groups G, hypothesis class H, i.i.d. examples from D, error bound λ, step size η.Compute h0 ∈ arg min h∈H Ln(h). Set f0 = [ h0] ∈ DL 0[G; H]
+
+for t = 0 , 1, . . . do 
+
+Define f ′
+
+> g
+
+(x) ← ft(x) + η g (x) h(x) − ft(x)
+
+Compute 
+
+gt+1 ∈ arg max  
+
+> g∈G
+
+Pn(g)( Ln(ft | g) − Ln(f ′ 
+
+> g
+
+| g)) 
+
+if Pn(g) Ln(ft | g) − Ln(f ′ 
+
+> gt+1
+
+| g) ≥ λ then 
+
+ft+1 (x) ← f ′ 
+
+> gt+1
+
+(x)
+
+else 
+
+Return ft.
+
+end if end for Algorithm 7 Fractional Prepend 
+
+Require: Groups G, hypothesis class H, i.i.d. examples from D, error bound λ, step size η.Compute h0 ∈ arg min h∈H Ln(h). Set f0 = [ h0] ∈ DL 0[G; H]
+
+for t = 0 , 1, . . . do 
+
+Define f ′
+
+> g
+
+(x) ← ft(x) + η g (x) h(x) − ft(x)
+
+Compute 
+
+gt+1 ∈ arg max  
+
+> g∈G
+
+Ln(ft | g) − Ln(f ′ 
+
+> g
+
+| g)
+
+if Ln(ft | g) − Ln(f ′ 
+
+> gt+1
+
+| g) ≥ λ then 
+
+ft+1 (x) ← f ′ 
+
+> gt+1
+
+(x)
+
+else 
+
+Return ft.
+
+end if end for 
+
+29

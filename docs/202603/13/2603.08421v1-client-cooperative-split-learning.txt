@@ -1,0 +1,753 @@
+Title: Client-Cooperative Split Learning
+
+URL Source: https://arxiv.org/pdf/2603.08421v1
+
+Published Time: Tue, 10 Mar 2026 02:33:01 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+> 1
+
+# Client-Cooperative Split Learning 
+
+Haiyu Deng ∗, Yanna Jiang ∗, Guangsheng Yu ∗, Qin Wang ∗† ,Xu Wang ∗, Wei Ni ‡, Shiping Chen †, Ren Ping Liu ∗∗University of Technology Sydney | †CSIRO Data61 | ‡Edith Cowan University 
+
+Abstract —Model training is increasingly offered as a service for resource-constrained data owners to build customized mod-els. Split Learning (SL) enables such services by offloading training computation under privacy constraints, and evolves toward serverless and multi-client settings where model segments are distributed across training clients. This cooperative mode assumes partial trust: data owners hide labels and data from trainer clients, while trainer clients produce verifiable training artifacts and ownership proofs. We present C LI COOPER , a multi-client cooperative SL framework tailored for cooperative model training services in heterogeneous and partially trusted environ-ments, where one client contributes data, while others collectively act as SL trainers. C LI COOPER bridges the privacy and trust gaps through two new designs. First, differential privacy-based activation protection and secret label obfuscation safeguard data owners’ privacy without degrading model performance. Second, a dynamic chained watermarking scheme cryptographically links training stages on model segments across trainers, ensuring veri-fiable training integrity, robust model provenance, and copyright protection. Experiments show that C LI COOPER preserves model accuracy while enhancing resilience to privacy and ownership attacks. It reduces the success rate of clustering attacks (which infer label groups from intermediate activation) to 0%, decreases inversion-reconstruction (which recovers training data) similarity from 0.50 to 0.03, and limits model-extraction–based surrogates to about 1% accuracy, comparable to random guessing. 
+
+Index Terms —Split Learning, Privacy, Copyright Protection 
+
+I. I NTRODUCTION 
+
+Under privacy and data-sovereignty constraints, Split Learn-ing (SL) is a promising technique that enables Artificial Intel-ligence (AI) model training services for resource-constrained data owners without exposing raw data: clients compute in-termediate activations, and a server completes training [1]– [4]. This paradigm assumes a well-provisioned server fully trusted for computation and provenance [5]. In practice, de-ployments differ: personal and edge devices offer surplus yet fragmented compute, which is insufficient individually for large models but becomes valuable when aggregated [6]. This motivates a serverless, multi-client collaboration [7], [8]: one client provides data but limited compute; several other clients contribute compute and jointly play the “server” role. This emerging setting becomes both feasible and desirable, better meeting costs by amortizing idle edge/GPU cycles [9] , avoiding centralized rental, and improving availability by enabling elastic, on-demand participation [10]. However, this multi-client collaboration setting is only par-tially trusted [1]. This shift raises coupled challenges that are insufficiently addressed by current SL frameworks: 
+
+> H. Deng and Y. Jiang contributed equally.
+
+• RQ1 (data privacy): How can the data-providing client preserve the privacy of raw inputs and labels while still enabling effective SL? 
+
+• RQ2 (layer ownership): How can trainer clients present cryptographically anchored ownership claims for their con-tributions to access compensation? 
+
+• RQ3 (unauthorized-use defense): How can the collabora-tively trained model resist unauthorized use? 
+
+Building on these RQs, we present C LI COOPER , a multi-client cooperative SL framework tailored to the serverless, partially trusted, multi-client setting. C LI COOPER integrates secret mapping labels with Differential Privacy (DP)-guarded activations and a provenance-preserving watermark chain. For the data-providing client, raw data does not need to be disclosed; instead, each true class is mapped to a set of pseudo-labels, which hides task semantics and label quantity while expanding the effective label space. In parallel, data are augmented to match the expanded label space, and inputs are passed through an embedder whose intermediate activations are perturbed with calibrated DP noise before any upload. Training thus proceeds only on DP-protected activations paired with pseudo-labels, which (i) suppresses raw-input and label inference to address RQ1 , and (ii) binds the model’s practical usefulness to authorization, since only parties holding the secret true-to-pseudo mapping can faithfully interpret predic-tions, thereby constraining unauthorized reuse for RQ3 .For the trainer clients, after coordinating the execution order and model structure, each receives only the upstream activation, keeps its local parameters opaque, and forwards its output activation to the next participant. At agreed check-points, a chained watermark is derived from the received activation digest and then embedded into the client’s segment. The resulting watermarks are cryptographically linked across segments, creating a tamper-evident lineage that ties each segment to the collaborative run and the intended task. This lineage enables auditable ownership assertion, lawful enti-tlement to compensation, and accountability against segment theft or task-mismatch reuse, fulfilling RQ2 while preserving the confidentiality constraints of RQ3 .The key contributions can be summarized as follows: 
+
+• We address privacy risks in partially trusted, client-cooperative SL by concealing label semantics and reducing exposure of raw inputs (via label expansion and calibrated noise on intermediate activation), preventing task leakage and curtailing inversion while keeping the true–pseudo map-ping under the data owner’s control. 
+
+• We ensure training traceability and model ownership in multi-client settings by binding checkpoints with crypto-graphically chained watermarks, enabling verifiable training 
+
+> arXiv:2603.08421v1 [cs.CR] 9 Mar 2026
+
+integrity, robust provenance, and fair compensation, and deterring fabricated training trajectories. 
+
+• We validate at scale across diverse datasets and architec-tures: baseline accuracy is preserved and improves by up to 2%; internal clustering attacks on client-supplied activation drop to 0%; inversion-reconstruction similarity falls from 0.50 to 0.03; and in black-box settings, model-extraction attacks fail, with surrogate models trained on API-labeled data achieving ∼1% accuracy (random guessing). The rest of this paper is organized as follows. §II presents state-of-the-art SL and watermarking technologies. §III intro-duces the system model. §IV describes our framework. §V shows empirical results. §VI summarizes privacy threats and copyright protection. §VII concludes this paper. II. T ECHNICAL WARM -UPS 
+
+1) Split Learning Architectures: SL allows multiple entities to collaboratively train a model while keeping local data private, typically in two ways: 
+
+• In vanilla SL [4], [5], [11], [12], the client encodes local data and sends the resulting intermediate activation to the server, which performs most of the computation and, during gradient descent, requires access to label information [1]. 
+
+• U-shaped SL [13]–[15] is tailored to unmet label-privacy requirements in vanilla SL settings. A client will not share labels with the server. By preprocessing activations after the split on the client side, the client preserves label confiden-tiality while maintaining the integrity. Both assume a server with sufficient compute to train the model independently. In Vanilla SL, clients share labels for gradient computation, which exposes sensitive information. In contrast, U-shaped SL moves gradient computation to the client side, thereby preserving label privacy. However, this design increases communication overhead during the forward and backward passes and adds extra local computation. 
+
+2) Watermarking: Watermarking via modifying model pa-rameters (weights W ) was first proposed (EWDNN) by Uchida et al. [16]. A binary watermark Λ ∈ { 0, 1}B is embedded during training by augmenting the objective: loss (W ) =
+
+lw(W ) + λl Λ(W ), where lw denotes the main task loss, λ
+
+is an adjustable trade-off coefficient, and lΛ is the watermark-embedding regularizer: lΛ(W ) = − PBi=1 (Λ i log( ˆΛi) + (1 −
+
+Λi) log(1 − ˆΛ′
+
+> i
+
+)) , where B denotes the watermark length and ˆΛ is the extracted watermark. During embedding, it assesses the similarity between the ground-truth watermark and the extracted watermark. The extracted watermark is 
+
+ˆΛ′
+
+= Φ( P kW ), where k is the secret key used for watermark embedding, and Φ( z) = 11−exp( −z) is the step function. In general, weight-modified-based watermarking relies on the embedding regularizer. Wang et al. [17] showed that such modifications distort the weight distribution, allowing adversaries to detect the presence of a watermark. RIGA [18] redesigned the loss function to mitigate this vulnerability: 
+
+loss (W ) = lw(W )+ λl Λ(W )+ βl ∆(W ), where β is a tunable coefficient and l∆ measures discrepancy between the clean and watermarked models, constraining their divergence to deter watermark detection via weight-distribution tests. FedIPR [19] applied model watermarking to federated learning, using a watermarking method aligned with EWDNN/RIGA. III. S YSTEM MODEL 
+
+We target a serverless, partially trusted, multi-client coop-erative SL model with heterogeneous participants [20]: one data client owns the private dataset but has limited compute, while several trainer clients contribute surplus yet fragmentary compute . The group jointly trains a split model by agreeing on split points and an execution order. Each trainer handles a local segment sized to its capacity. Parties are honest but curious, and there may be divergent interests, so the design must (i) preserve raw input/label privacy for the data owner, (ii) support auditable ownership and lawful entitlement for trainers, and (iii) constrain unauthorized model reuse. We integrate a privacy-and-authorization layer that couples secret-mapping label expansion with DP protection. The data client never discloses its true labels; instead, each true class is mapped to a set of pseudo-labels, obfuscating task semantics and label quantities. Data augmentation [21] is introduced to align sample counts with the expanded label space. Inputs are then passed through an embedder, and the resulting intermedi-ate activations are perturbed with DP noise before any upload, mitigating feature inversion and label inference attacks [22], [23]. Training proceeds only on these DP-protected activations paired with pseudo-labels. For authorized users who hold the secret true ↔pseudo mapping, model utility remains intact, while for unauthorized parties, outputs degrade to an unusable level. CLI COOPER weaves a chained watermark through the collaboration process. At agreed checkpoints, each trainer derives a watermark token from a digest of the received activation and then embeds it into its segment. Tokens are cryptographically linked across segments to form a tamper-evident lineage that ties each segment to the collaborative run and intended task, supporting auditable ownership assertions, compensation eligibility, and accountability against segment theft or task-mismatch reuse. Each trainer exposes only the upstream activation and keeps its local segment opaque to collaborators. External adversaries interact with the final col-laboratively trained model purely as a black box [24]. Under this visibility constraint, our chained watermarking design can preserve the confidentiality guarantees required in a partially trusted setting and is resilient to common attacks, including removal [25], overwriting [26], and fine-tuning [27]. 
+
+A. Entities 
+
+CLI COOPER involves three primary entities under a server-less, partially trusted, multi-client regime: 
+
+• Data client C owns the private dataset with ground-truth labels, but has only lightweight computing adequate for embedding/perturbation rather than end-to-end training. Its primary requirement is to prevent raw input and label infer-ence and hide task semantics/label quantities from others. 
+
+• Trainer clients T contribute surplus yet fragmentary com-pute without proprietary data, each controlling a private 2model segment sized to its capacity. As rational, honest-but-curious participants, they do not sabotage the task but may prefer minimal effort for “free-lunch” rewards and may be inquisitive about peers’ resources, especially attempting to infer information about C’s data distribution, labels, or sample membership from observed activations. 
+
+• Verifier V is fully trusted and responsible for coordinating and incentive management. It can be instantiated by the data client C, a trainer client T , or a neutral third party, endowed with an omniscient audit view that includes the end-to-end activation relay and all segment parameters. It has the authority to validate chained watermarks and allocate incentives or penalties, thereby enforcing fair compensation and protocol compliance. 
+
+B. Operational Setting and Deployment Context. 
+
+CLI COOPER involves a data client C and a set of trainer clients Ti. Instead of relying on centralized servers, the learning pipeline is formed dynamically by chaining multiple trainer segments, each sized according to local capacity. A logically separate verifier V coordinates task instantiation and incentive settlement without participating in training. This setting naturally captures multi-tenant analytics plat-forms, edge–cloud learning services [28], and compute mar-ketplaces [29] where participants are elastic, independent, and only partially trusted. CLI COOPER treats collaborative model training as a service composed of data provisioning, segmented computation, and verifiable contribution. The absence of a centralized training server shifts security and reliability concerns from protocol correctness to service-level risks, such as inference leak-age [22], free-riding [30], and ownership disputes [31] among rational participants. Accordingly, the system is designed so that no single trainer can infer task semantics or data properties beyond what is necessary for its assigned segment, while still enabling verifiable attribution of computational contributions. These characteristics make C LI COOPER amenable to ex-tensions, e.g., hybrid SL–FL deployments [32], in which multiple SL pipelines are independent local training services and coordinated at a higher level using federated-style ag-gregation. Supporting this extension does not alter the core trust or privacy assumptions of C LI COOPER , and only involves modest protocol adaptations, e.g., elevating the verifier to also assume lightweight aggregation responsibilities and extending the chained watermark derivation across aggregation rounds to preserve the contribution provenance. In this paper, we focus on the core serverless SL setting and leave a full empirical exploration of hybrid SL–FL deployments to future work. 
+
+C. Threat Models. 
+
+We distinguish internal users and external adversaries in-teracting only through exposed APIs. All clients are rational and honest-but-curious [1]: they share the common interest of completing the main task and thus do not sabotage training, yet they may try to minimize their own effort and may be curious about others’ resources. 
+
+• Internal users . Internal users primarily refer to the trainer clients Ti, as the data client C has minimal visibility without access to others’ parameters, and the verifier V
+
+is fully trusted. Each Ti has white-box access to its own segment but sees only upstream activations from peers. Model parameters of other segments and C’s raw data and true labels remain hidden. The dominant risks are curiosity-driven inference and credit/ownership disputes rather than protocol sabotage. Typical inference attempts include:  
+
+> •
+
+Clustering attack. Even without access to C’s raw dataset, T may apply clustering [33]–[35] to interme-diate activation to infer samples of the same class.  
+
+> •
+
+Inversion attack. Assuming T has knowledge of C’s model architecture, it may leverage exposed interme-diate information to reconstruct the training samples or generate visually similar approximations [22], [23]. We consider a marketplace-style collaboration, where trainer clients are rational and honest-but-curious: they share com-mon interest in completing the main task and thus do not sabotage training but may attempt passive inference from observed activations or seek “free-lunch” rewards with minimal effort [36]. Unless otherwise stated, trainer clients are assumed non-colluding; even under collusion, trainers still only observe DP-protected activations and operate in the pseudo-label space, while the data client’s raw inputs, true labels, and the secret true ↔pseudo mapping remain undisclosed. In particular, reusing a pre-trained/open-source segment to bypass training is infeasible because the task semantics are hidden by secret-mapping label expansion and DP perturbation, preventing trainers from identifying a matching pre-trained model in advance. We assume that the verifier V is fully trusted and responsible for settlement: it holds an audit view (end-to-end activation relay and all segment parameters) to verify model utility and chained watermarks and then allocate incentives or penalties. Model runs failing the accuracy requirement are rejected and deemed ineligible for compensation. Notably, 
+
+V needs no access to the data client’s raw inputs, true labels, or the secret label mapping; revealing the mapping to any untrusted third party should be avoided. 
+
+• External adversaries . In contrast, we assume that external adversaries only have black-box [24] access to the released SL model. Their sole capability is interacting with the model through its exposed APIs. We do not consider white-box access, as it would typically imply server compromise or insider leakage beyond our deployment assumptions. Such adversaries may perform model extraction attacks [37]. By querying the API with unlabeled inputs similar to the training data, they can obtain the corresponding labels. The attacker exploits the target SL model as a labeling oracle and subsequently uses the labeled data to train a surrogate model with functionality similar to the original model. IV. D ESIGN OF CLI COOPER 
+
+CLI COOPER has five components (Fig. 1): an SL protocol, secret-mapping label expansion, DP-guarded activations, co-operative training with embedded watermark, and verification. 3Fig. 1. CLI COOPER design: The data client C holds the dataset but has very limited compute and thus collaborates with multiple trainer clients T for split learning. First, to disclose the ground-truth labels Y , C expands Y to pseudo-labels Y ∗ whose quantity and semantics differ from Y . Next, C uses a lightweight encoder to embed features and applies DP to protect activations. T then train the model using DP-protected activations MDP             
+
+> C(WC,D∗)and Y∗for
+> Nepochs until convergence. In the N+1 th epoch, each trainer Tembeds a chained watermark into its assigned subnetwork in a pipelined manner, asserting ownership claim for their contributions to access compensation.
+
+A. SL Protocol 
+
+We target a marketplace-style collaboration where hetero-geneous clients provide training services in exchange for rewards. Clients with higher capacity host larger network partitions, while fragmentary devices host smaller segments. Unlike conventional SL that delegates downstream training to a single powerful server, C LI COOPER distributes the “server side” over multiple trainer clients, scaling the number and size of segments with model complexity and available compute. 
+
+Pre-training negotiation. Before any data flow, the task publisher (usually C or V) conducts a light-weight negotiation phase with participating trainers to (i) agree on split points and a strict execution order T1 → . . . → T n, and (ii) size each segment to match the host’s compute/memory budget and the end-to-end latency target. Each trainer stores and updates only its own segment parameters locally, and does not share them with peers. The agreed plan fixes interface tensor shapes and optimizer/hyper-parameter responsibilities for each segment. 
+
+Training flow. Let D denote the task dataset held exclusively by C, and W = {WC , W T1 , . . . , W Tn } denote the parameters contributed by C and T1, . . . , Tn. The end-to-end system workflow respects the relay structure as follows [22]: 
+
+M(W, D) = MTn
+
+ WTn , MTn−1(. . . MT1 (WT1 , MDP  
+
+> C
+
+(WC , D∗))) .
+
+Here, only activations M(·) are relayed downstream, according to bandwidth/latency-related coordination, while model pa-rameters remain local and opaque to peers. Backpropagation proceeds locally at each trainer over its segment using the received upstream gradients. No true labels or raw inputs are disclosed to trainers, as MDP  
+
+> C
+
+(·) is DP-protected activations and 
+
+D∗ indicates D’variant after an expansion process (§IV-B). To enable market settlement and dispute resolution, trainers agree to embed a chained watermark lineage during training (§IV-C); segments lacking verifiable marks are ineligible. 
+
+Algorithm 1 Label Expansion & Privacy Protection                                                                                                   
+
+> Input: D(original dataset), Y(true label), GY(predefined one-to-many map)), ε(privacy budget of DP noise), {gi}qi=1 (expansion factor for each true label).
+> Output: MDP
+> C(WC,D∗)(DP-protected activations), Y∗(pseudo-labels). 1: for Yi∈Ydo ▷label expansion loop 2: Yi7→ { Y∗
+> i1, . . . , Y ∗
+> igi
+> },▷true labels expand to pseudo-labels 3: {(Di, Y i)}7→{(D∗
+> i1, Y ∗
+> i1). . . (D∗
+> igi
+> , Y ∗
+> igi
+> )}▷data-label pairing. 4: end for
+> 5: YGY
+> −−−→Y∗, Y ∗={Y∗
+> 1, . . . , Y ∗Pqi=1 gi
+> }.▷shuffle randomly. 6: {D, Y }7→{D∗, Y ∗}.▷transform accordingly. 7: ˜A=MC(WC,D∗).▷generate client-side activations. 8: ˜AClip S
+> −−−−→¯A.▷enforce an ℓ1sensitivity bound. 9: ¯AG(ε)
+> −−−−→MDP
+> C(WC,D∗) = ¯A+ Laplace
+> 
+> 0,∆1
+> ε
+> 
+> .▷Laplace-based DP mechanism injection. 10: RETURN {MDP
+> C(WC,D∗),Y∗}
+
+B. Secret-mapping Expansion and DP-based Protection 
+
+CLI COOPER answers RQ1 (data privacy) and RQ3 
+
+(unauthorized-use defense) by coupling secret-mapping label expansion with DP-guarded activations. The data client C
+
+never discloses true labels; instead, it obfuscates task seman-tics and label cardinality while protecting raw inputs against inversion attack (cf. Algorithm 1). 
+
+1) Secret-mapping label expansion: To hide both label se-mantics and quantity while preserving trainability, we employ a secret-mapping expansion controlled by the data client C.Let Y = {Y1, . . . , Y q } be true labels. Data client C samples a secret one-to-many map GY and expands each true class Yi
+
+to gi (gi ≥ 1) pseudo-classes, Yi 7 → { Y ∗ 
+
+> i1
+
+, . . . , Y ∗
+
+> igi
+
+}, yielding 
+
+Y ∗ with Pqi=1 gi categories (Lines 1–3): 
+
+Y GY
+
+−−−→ Y ∗, Y ∗ = {Y ∗ 
+
+> 1
+
+, . . . , Y ∗Pqi=1 gi }, (1) 
+
+where Y ∗ = Sqi=1 {Y ∗ 
+
+> i1
+
+, . . . , Y ∗
+
+> igi
+
+} is the union of all per-class pseudo-labels. The ordering is randomly shuffled and recorded. Data-and-label pairs are remapped accordingly (Line 4): 
+
+{(Di, Y i)} 7 → {(D∗ 
+
+> i1
+
+, Y ∗ 
+
+> i1
+
+). . . (D∗ 
+
+> igi
+
+, Y ∗ 
+
+> igi
+
+)}, (2) 
+
+4where {D∗ 
+
+> i1
+
+, . . . , D∗
+
+> igi
+
+} are obtained by partitioning and noise-aware augmentation of Di [21], [38]; class priors and balance remain stable under expansion. The dataset–label pair becomes       
+
+> {(D, Y )}7→{(D∗, Y ∗)},(3)
+
+where D∗ and Y ∗ are the expanded, anonymized, and per-muted versions of the original dataset and labels, with D∗
+
+transformed accordingly by GY . Define γ =  
+
+> Pqi=1 gi
+> q
+
+> 1.This expansion does not harm utility for authorized users because training is performed consistently on the expanded label space, so the loss is invariant to a fixed mapping [39]. Authorized parties who legally possess GY perform demask-ing at the inference with the inverse mapping G−1 
+
+> Y
+
+:        
+
+> {Y∗
+> 1, . . . , Y ∗Pgi}G−1
+> Y
+> −−−−→ { Y1, . . . , Y q}.(4)
+
+This binds model utility to authorization and obfuscates both semantics and quantities. Without GY or G−1 
+
+> Y
+
+, outputs become operationally degraded for unauthorized users, impeding func-tional repurposing and correct re-labeling of downstream data. 
+
+2) DP-protected activations: To curb activation inversion and sensitive-attribute inference, C perturbs smashed acti-vations with calibrated DP noise before upload. Let ˜A =
+
+MC (WC , D∗) be the client-side activations after the forward pass with the expanded dataset D∗. We enforce a ℓ1 sensitivity bound via per-layer ℓ1-clipping to radius S, yielding ∆1 ≤ 2S
+
+for neighboring inputs. We add zero-mean Laplace 1 noise to 
+
+∆1 and the target privacy budget ε (Lines 5–7): 
+
+˜A Clip S 
+
+> −−−−→
+
+¯A, and ¯A G(ε) 
+
+> −−−−→
+
+MDP  
+
+> C
+
+(WC , D∗) = ¯A+Laplace  0, ∆1
+
+> ε
+
+ ,
+
+where G(ε) denotes a randomized Laplace mechanism [40] with privacy budget ε.
+
+Theorem 1 (DP-protected activations) . Let ¯A(x) =
+
+Clip (1) 
+
+> S
+
+ MC (WC , x ) ∈ Rd be the per-sample activation after per-layer ℓ1-clipping with radius S. The ℓ1-sensitivity satisfies 
+
+∆1 = sup x∼x′ ∥ ¯A(x) − ¯A(x′)∥1 ≤ 2S. Consider the Laplace mechanism Mε(x) = ¯A(x) + Z, Z i.i.d. 
+
+∼ Laplace  0, ∆1
+
+> ε
+
+ ,
+
+yielding pure ε-DP. For any fixed DP activation ya = Mε(xa),any two DP activations yb, y c, and candidate class t,
+
+Pr t gen (ya ∧ yb)
+
+Pr t gen (ya ∧ yc) ≤ e2ε, (5) 
+
+where t generated (ya ∧ yb) denotes the event that both DP activations ya and yb were produced from inputs whose (hidden) true class is t.
+
+Proof. The per-coordinate Laplace noise with scale ∆1/ε 
+
+ensures that for any input x and any observation y, the likelihood ratio is bounded e−ε ≤ Pr[ y | x]Pr[ y | x′] ≤ eε, ∀x ∼
+
+x′, according to the principle of the standard Laplace ε-DP [40]. Fix a candidate class t and write the joint “same-class” event under a product model: Pr[ t gen (ya ∧ yb)] =   
+
+> 1Our framework is mechanism-agnostic, Gaussian ( ε,δ)-DP can be replaced to ℓ1clipping + Gaussian calibration, if one prefers approximate DP.
+
+P 
+
+> x∈t
+
+Pr[ ya|x] Pr[ yb|x] Pr[ x], and similarly for (ya ∧ yc):
+
+Pr[ t gen (ya ∧ yc)] = P 
+
+> x∈t
+
+Pr[ ya|x] Pr[ yc|x] Pr[ x]. Then, 
+
+Pr[ t gen (ya ∧ yb)] Pr[ t gen (ya ∧ yc)] =
+
+P 
+
+> x∈t
+
+Pr[ ya|x] Pr[ yb|x] Pr[ x]
+
+P 
+
+> x∈t
+
+Pr[ ya|x] Pr[ yc|x] Pr[ x]
+
+≤
+
+P 
+
+> x∈t
+
+Pr[ ya|x] ( eε Pr[ ya|x]) Pr[ x]
+
+P 
+
+> x∈t
+
+Pr[ ya|x] ( e−ε Pr[ ya|x]) Pr[ x]= e2ε, (6) where the ε-DP bound on Pr[ yb|x]/ Pr[ ya|x] in the numerator and Pr[ yc|x]/ Pr[ ya|x] in the denominator yields eε and e−ε,respectively. Hence, (5) holds. As demonstrated in Theorem 1, under ℓ1-clipping with Laplace noise, no observer can improve the odds that two DP activations (ya, y b) came from the same candidate class 
+
+t relative to (ya, y c) by more than e2ε. This caps pairwise linkage attacks and underpins the secrecy of class membership. Given C’s limited compute and to avoid cumulative privacy loss from repeated composition, both label-space expansion and DP perturbation are performed once before collaborative training. That is, C expands labels, computes a single forward pass over D∗ to produce ˜A, applies clipping and the Laplace mechanism to obtain MDP  
+
+> C
+
+, and caches these DP-guarded activations for the further training rounds. In the subsequent pipeline, C sends only MDP  
+
+> C
+
+to the first trainer T1 and the pseudo-labels Y ∗ to the last trainer Tn, keeping raw inputs and true labels remain undisclosed. 
+
+C. Training with Chained Watermarking 
+
+Since trainers T are only partially trusted, they must demon-strate that they actually performed training and that they own the layers they optimized—rather than submitting a “free-lunch” or open-source pretrained model to claim rewards. CLI COOPER answers RQ2 (layer ownership) by enforcing pipeline training with chained watermarks embedded into the 
+
+T -side submodels (cf. Algorithm 2). Once a trainer Ti brings its submodel to convergence, it must embed a watermark ΛTi
+
+to attest ownership; crucially, ΛTi is not chosen by Ti but is de-terministically derived from the predecessor’s output activation via a collision-resistant hash. By seeding each watermark with 
+
+ΛTi ←H(·) (H(·) is a hash function to generate a watermark), the scheme prevents precomputation or substitution attacks; a trainer cannot cheat without executing the prescribed protocol. 
+
+1) Pipeline training: Before the cooperative training, the data client C processes the raw dataset with a pre-trained split encoder and safeguards the resulting activations via a DP mechanism, producing DP-protected activations MDP  
+
+> C
+
+. Once C
+
+uploads the activation MDP  
+
+> C
+
+to T1 and the pseudo-labels Y ∗ to 
+
+Tn, it ceases participation in the subsequent pipeline training. The trainers T = {T 1, . . . , Tn} then execute a predefined SL protocol, proceeding sequentially in a pipeline (Lines 1–3). During each training epoch, T1 consistently consumes the 
+
+C-provided activation MDP  
+
+> C
+
+as input and forwards its output to 
+
+T2. Each intermediate trainer Ti for i = 2 , 3..n − 1 takes as input the activation produced by Ti−1, performs its designated computation, and passes the resulting activation to Ti+1 . Upon receiving the activation from Tn−1, Tn combines it with the 5Algorithm 2 Training & Chained Watermarking                                                                                                                                        
+
+> Input: MDP
+> C(WC,D∗)(DP-protected activation), WC(the pretrained model of C), ID Ti(Tinode identity), μi(secret nonce), ηG(threshold for successful watermark embedding), lw(main task loss function), lΛ
+> (watermark embedding regularizers).
+> Output: W={WC, W T1, . . . , W Tn}(SL model with watermark). 1: while (¬converging) do ▷until convergence 2: WC
+> MDP
+> C
+> →WT1
+> MT1
+> →. . . MTn−1
+> →WTn▷pipeline training. 3: end while
+> 4: MDP
+> C,μi,i▷initial activation, and trainer index. 5: for i= 1 ,2. . . n do ▷trainer’s watermark embedding loop 6: ZTi=WMPosition (μi)▷select matrix for weights used for ΛTi
+> 7: ΛTi, k Ti=WMGen (Hi),KeyGen (Hi)where 8: if i= 1 then
+> 9: H1=H(MDP
+> C,1, μ 1, ID T1)
+> 10: else
+> 11: Hi=H(MTi−1, i, μ i, ID Ti)
+> 12: end if ▷calculate trainer’s watermark 13: while η < η Gdo ▷until watermark convergence 14: WTi= arg min W(lw(W) + λl Λ(W)) ▷ΛTiembedding 15: η= 1 −
+> PBb(O(WTi,Z Ti,k Ti)[ j]̸=Λ Ti[j])
+> B,▷update η
+> 16: if η≥ηGthen
+> 17: Save WTi
+> 18: end if
+> 19: end while
+> 20: i+ = 1
+> 21: end for
+> 22: RETURN W={WC, W T1, . . . , W Tn}
+
+pseudo-labels Y ∗ supplied by the client C to compute the loss, perform gradient descent, and backpropagate gradients upstream through Tn−1, Tn−2... T1. The trainers repeat this process for N rounds until the SL model converges. Watermark embedding is performed after the pipeline train-ing converges: after N epochs of standard SL optimization, each trainer embeds its watermark in the ( N + 1 )-th epoch via short regularized watermarking that is monitored until the watermark detection rate reaches the threshold. Therefore, watermarking does not affect the gradient flow or convergence of the main task training in the first N epochs. Model accuracy with watermarking remains close to the baseline across dif-ferent watermark lengths. In addition, embedding/verification overhead is negligible compared to training time. 
+
+2) Watermark generation: Watermark embedding follows pipeline training and proceeds first with the generation of the watermark. Watermark generation begins with the task publisher (which may be either C or the V) assigning each Ti
+
+node a fixed nonce μi, which Ti use as the basis for generating the watermark ΛTi , the embedding key kTi , and the position matrix ZTi that specifies where ΛTi is embedded. Concretely, trainer Ti embeds the watermark only into the parameters of its own assigned layers. We first flatten the trainable tensors in 
+
+Ti’s segment into a 1-D vector and then use ZTi as a selection mask to pick the corresponding weight entries for watermark embedding. ZTi is generated solely from the fixed seed μi,whereas ΛTi and kTi are derived from the predecessor’s output jointly with kTi and the trainer identity ID Ti (Lines 4–12): 
+
+ZTi = WMPosition (μi), i = 1 , 2...n 
+
+ΛTi , k Ti = WMGen (Hi), KeyGen (Hi) with 
+
+Hi = H(MTi−1 , i, μ i, ID Ti ), i = 2 , 3..n, 
+
+while H1 = H(MDP  
+
+> C
+
+, 1, μ 1, ID T1 ), i = 1 ,
+
+(7) where WMPosition (·), WMGen (·), and KeyGen (·) are de-terministic functions, with all randomness derived from the publisher-fixed nonce μi and Ti identity ID Ti . This ensures only the legitimate Ti can generate valid ΛTi and kTi , while the T ’s index i enforces sequential linkage. This chained derivation of the watermark and embedding keys thwarts precomputation: a trainer cannot anticipate ( ΛTi , kTi ) before observing the predecessor’s activation, nor embed a valid watermark into an unauthorized model in advance. 
+
+3) Watermark embedding: Since T possesses no local data, it is unable to embed backdoor-based watermarks [24]. Instead, watermarking approaches that are integrated into the training process by modifying model features (e.g., EWDNN [16], RIGA [18], FedIPR [19]) represent the most suitable schemes for watermark embedding in this setting. After N epoch training, the model converges. In the (N +1) -th epoch, the unique watermark ΛTi is embedded into the weights WTi according to the matrix ZTi , gradually forming the weights of the final epoch, where Λi has been successfully embedded. This embedding process in multiple rounds in the 
+
+(N + 1) th epoch can be written as (Lines 13–14): 
+
+WTi = arg min  
+
+> W
+
+(lw(W ) + λl Λ(W )) , (8) where lw is the main task loss function, lΛ is the watermark embedding regularizer, and λ is a hyper-parameter that bal-ances the main task training and watermark embedding. While embedding the watermark ΛTi , the process is actively monitored in each round of the (N + 1) th epoch. Simultane-ously, the watermark is extracted from WTi and compared to the expected watermark. The watermark detection rate η is calculated using the Hamming distance (Line 15): 
+
+η = 1 −
+
+PBb (O(WTi , Z Ti , k Ti )[ j]̸ = Λ Ti [j]) 
+
+B , (9) where O(·) is the watermark extraction function, and B is the size of ΛTi . Once η reaches or exceeds the predefined threshold ηG (i.e., η ≥ ηG), the embedding process for the current trainer Ti is considered complete. Then Ti freezes and saves its checkpoint (Lines 16–17) and outputs activation MTi
+
+to Ti+1 , who will follow the same watermark generation and embedding process as for the Ti-th trainer. The chained watermark is sequential across trainers by design: each trainer’s watermark/key is deterministically de-rived from the predecessor’s output activation, together with a publisher-fixed nonce and identity, and the trainer index enforces sequential linkage. This iterative process continues until all the trainers finish watermark embedding (Lines 5– 21). It ensures that each watermark is uniquely bound to its predecessor trainer’s output, thereby preventing T from fabri-cating a valid contribution beforehand to access compensation. 6Algorithm 3 Watermark Verification                                                                                                                     
+
+> Input: W={WC, W T1, . . . , W Tn}(SL model with watermark),
+> MDP
+> C(WC,D∗)(DP-protected activation), ID Ti(Tinode identity), μi
+> (secret nonce), Dt(test dataset), ηG(threshold of similarity between the hashed and extracted watermarks).
+> Output: “Fail ” or “ Success ”. 1: Vreceives W={WC, W T1, . . . , W Tn},ID Tifrom Tand C.2: ˆAcc main =Test (W, Dt)▷test the model main task accuracy 3: if ˆAcc main not meeting expectations, then
+> 4: RETURN “Fail ”, break
+> 5: for i= 1 ,2. . . n do ▷verification loop 6: ZTi=WMPosition (μi).▷recover the matrix for ΛTi
+> 7: ΛTi, k Ti=WMGen (Hi),KeyGen (Hi)where 8: if i= 1 then
+> 9: H1=H(MDP
+> C,1, μ 1, ID T1)
+> 10: else
+> 11: Hi=H(MTi−1, i, μ i, ID Ti)
+> 12: end if ▷calculate the watermark from the previous model by H(·)
+> 13: ˆΛTi=O(WTi, Z Ti, k Ti)▷extract the current watermark 14: ηTi= 1 −
+> PBb( ˆΛTi[j]̸=Λ Ti[j])
+> B▷calculate the ΛTisimilarity 15: if ηTi< η Gthen
+> 16: RETURN “Fail ”, break
+> 17: end for
+> 18: RETURN “Success ”
+
+D. Chained Watermark Verification 
+
+Prior to verification, client C uploads the pretrained client-side model WC together with MDP  
+
+> C
+
+to the verifier, while each trainer Ti uploads its checkpoints WTi . The verifier T
+
+assembles the complete SL model W by merging WTi and, using WTi to calculate MTi for subsequent watermark genera-tion. The verification procedure consists of two stages: model performance verification and chained watermark verification. The process begins with the verifier V evaluating the check-point W (Lines 1–4). This step ensures that the SL model achieves an accuracy level above a predefined threshold, which is determined based on empirical values commonly adopted in ML marketplaces [29]. If the accuracy of W falls below this threshold, V rejects T ’s training as invalid. Once the SL model 
+
+W passes the performance evaluation, V proceeds to chained watermark verification (Lines 5–17). Using (7), V employs the activation MTi of the model WTi to regenerate the ground-truth watermark Λi, the embedding key ki, and the position matrix ZTi required for verifying the checkpoint WTi (Lines 6–12). The ground-truth watermark for T1 is computed by feeding MDP  
+
+> C
+
+into (7). This step ensures ΛTi is legitimately derived from MTi of the model WTi . Then, V uses ZTi and 
+
+kTi on the checkpoint model WTi to extract the embedded watermark ˆΛTi (Line 13): ˆΛTi = O(WTTi , Z Ti , k Ti ).Given a predefined watermark detection threshold ηG, the verification for the checkpoint WTi is considered successful if the similarity between the extracted watermark ˆΛi and the ground-truth watermark Λi exceeds ηG. The watermark detection rate of ˆΛi can be formally expressed as (Line 14): 
+
+ηTi = 1 −
+
+PBb (ˆΛTi [j]̸ = Λ Ti [j]) 
+
+B . (10) Hence, V continues the chained watermark validation process 
+
+WTi by WTi , checking the extracted watermark detection rate. Once all WTi have been successfully verified, the SL model 
+
+W is deemed to have correctly completed the training process. 
+
+E. Security Analysis 
+
+We analyze how CLI COOPER addresses the identified threats under our serverless, partially trusted, multi-client setting. Internally, rational honest-but-curious trainers seek to infer information from activations or to claim undue credit; externally, adversaries interact only via black-box APIs and attempt unauthorized misuse, e.g., extraction/distillation. 
+
+1) Threats from internal users (trainers): Each trainer Ti
+
+can inspect its parameters and activations it receives, but never observes C’s raw inputs or true labels, peers’ pa-rameters, or the secret label mapping. The principal risks are curiosity-driven inference on activations, including clus-tering, inversion, membership/attribute/label inference, and credit/ownership disputes, rather than protocol sabotage. 
+
+• Privacy-gated label space & DP activation boundary. 
+
+Trainers operate solely in the pseudo-label space Y ∗, which removes direct semantic interpretability and decouples ob-servable class frequencies from the true task. At the client boundary, Laplace (∆ 1/ε ) noise yields a ε-DP interface for smashed activations, limiting linkage between any pseudo-label pairs and restricting reconstruction power. 
+
+• Segment opacity & cross-segment inference hardness. 
+
+Each trainer retains a private model segment and relays only upstream activations; the internal white-box view is local. Without access to peers’ parameters, end-to-end Jaco-bians, or backward signals beyond the split, standard cross-segment attacks, e.g., reconstructing upstream features or attributing peer capacity/architecture, become ill-posed: the mapping from a single-segment view to others’ weights is non-identifiable, gradient information is locally confined, and multiple vantage points required for triangulation are unavailable by design. This opacity complements the DP boundary, suppressing clustering and inversion reliability. 
+
+• Chained watermark lineage for fair attribution and own-ership. A trainer that reuses a pre-trained/open-source frag-ment across different tasks could claim rewards without gen-uine participation. C LI COOPER prevents such “free-lunch segment replay” by chaining watermarks across trainer Ti,where each mark ΛTi is derived from (MTi−1 , i, μ i, ID Ti ),binding the segment to the predecessor checkpoint, the run chronology, and the intended task. The fully trusted verifier 
+
+V with omniscient audit access reconstructs expected marks and validates detection and utility, establishing segment-level provenance, deterring free-riding, and resolving credit disputes without exposing peers’ parameters. 
+
+2) Threats from external adversaries (black-box only): Out-siders can query the related model via APIs with no access to architecture or weights, so the primary threat is unauthorized reuse through extraction or functional repurposing. In C LI COOPER , outputs reside in a pseudo-label space and are operationally degraded without the secret inverse map 
+
+G−1 
+
+> Y
+
+, as a black-box extractor or distilled surrogate can at best replicate pseudo semantics, which do not translate to the true task without authorization. This breaks reliable relabeling and task remapping. Recovering G−1 
+
+> Y
+
+from queries amounts to solving a combinatorial preimage problem under label expansion, further obfuscated by activation-level DP noise that 7induces stochasticity in outputs and elevates the Bayes risk of any student trained on them. The black-box release also blocks white-box watermark attacks, including removal, overwriting, pruning, and fine-tuning. Moreover, chained watermarks in C LI COOPER are derived from hidden checkpoints and identity-bound nonces, so an extracted surrogate cannot reproduce a valid lineage; any redistribution or task-mismatch reuse lacking a consistent chain is flagged by the trusted verifier V during provenance checks without revealing collaborators’ parameters. V. E XPERIMENTS 
+
+Our experiments focus on fidelity (model performance im-pact), robustness (against clustering, inversion, model extrac-tion), and accountability (ownership verifiability, overhead). 
+
+A. Experimental Settings 
+
+Experiments are executed within a consistent micro-server environment for fair comparisons across all configurations. 
+
+Setup. The experiments are conducted on a high-performance server equipped with an AMD EPYC 9254 CPU operating at 2.9GHz, comprising 24 physical cores and 128MB of L3 cache. The system is configured with 192GB of 4800MHz ECC DDR5 memory in a twelve-channel layout. For storage, it provides dual 1.92TB NVMe SSDs. The training is accelerated using two NVIDIA L40 GPUs, each offering 18,176 CUDA cores, 568 Tensor Cores, and 48GB of dedicated memory. 
+
+Dataset. We consider four benchmark datasets spanning both image and text classification tasks. All datasets (including both features and labels) are retained locally at C.
+
+• MNIST is a benchmark dataset for handwritten digit recog-nition, containing 70,000 grayscale images of digits 0-9, each of size 28 ×28. It is split into 60,000 training and 10,000 testing samples. 
+
+• CIFAR-10 comprises 60,000 RGB images of size 32 ×32 pixels in 10 distinct classes. We adopt 50,000 images for training and 10,000 for testing. 
+
+• CIFAR-100 contains 60,000 32 ×32 images, but spans 100 fine-grained categories. Each image includes both fine and coarse labels, with the same train-test split as CIFAR-10. 
+
+• AG News is a text classification corpus containing news headlines and descriptions from four categories. The dataset provides 120,000 training samples and 7,600 test instances, each labelled with its corresponding topic. 
+
+Model architectures. A variety of widely used neural archi-tectures are selected, including DeepLeNet , AlexNet , ResNet18 ,and WideResNet for image classification tasks, and TextCNN 
+
+and MiniBert for text understanding. For vision models, 
+
+DeepLeNet and AlexNet provide foundational CNN baselines, while ResNet18 introduces skip connections that facilitate deeper optimization. WideResNet enhances accuracy by in-creasing the network’s width. In the NLP domain, TextCNN 
+
+captures local semantics through convolutional operations, and MiniBert delivers efficient contextual encoding through lightweight transformer-based pretraining. In the SL framework, C is responsible for initial data embedding and feature projection, after which the activation is forwarded to T for subsequent training and gradient updates. We apply DeepLeNet and AlexNet to MNIST, AlexNet and 
+
+ResNet18 to CIFAR-10, ResNet18 and WideResNet to CIFAR-100, and use both TextCNN and MiniBert for AG News. All models are optimized using SGD with momentum set to 0.9. Learning rates are chosen based on the dataset charac-teristics: 0.01 for MNIST, 0.1 for CIFAR-10 and CIFAR-100, and 0.005 for AG News. A consistent batch size of 256 is used across all training runs to maintain comparability. 
+
+B. Model Performance 
+
+To safeguard data and label privacy while enabling training traceability and copyright, C LI COOPER integrates label ex-pansion, DP noise perturbation, and chained watermarking. Since these mechanisms inevitably interfere with the SL training, it is necessary to assess their impact on model per-formance. We therefore conducted three sets of experiments: (1) fixing γ=2.0 and ε=5.0, while varying watermark lengths 
+
+B ∈ { 512 , 1024 , 2048 }; (2) fixing ε=5.0 and B=1024, while varying γ ∈ 1.5, 2.0, 2.5; and (3) fixing B=1024 and γ=2.0, while varying ε ∈ 2.0, 5.0, 10.0. The baseline is a stan-dard SL model without any protection, achieving accuracies of 99.42% (DeepLeNet on MNIST), 99.45% (AlexNet on MNIST), 87.97% (AlexNet on CIFAR-10), 92.32% (ResNet18 on CIFAR-10), 71.97% (ResNet18 on CIFAR-100), 71.14% (WideResNet on CIFAR-100), 86.59% (TextCNN on AG News), and 90.68% (MiniBert on AG News). Figs. 2–4 indicate that, in most cases, C LI COOPER has a negligible impact on accuracy, with performance remaining close to the baseline. This can be attributed to the redundancy of deep network parameters and the existence of multiple local optima; watermark embedding or DP-based noise injection guides the model toward different local optima without de-grading accuracy. Label expansion does not reduce Acc main 
+
+because we evaluate in the true-label space: predictions over pseudo-labels are mapped back to the original labels using the secret mapping, so predicting a different pseudo-label within the same true-label group is not counted as an error. Moreover, label expansion is accompanied by data augmentation to avoid data sparsity as the pseudo-label space grows. In some extreme settings, ε = 2 .0, accuracy drops by up to 3% due to excessive noise interference. Interestingly, in certain cases, noise injection even improves generalization: with ε = 10 .0, AlexNet on CIFAR-10 exhibits a 1% accuracy gain, while ResNet18 on CIFAR-100 improves by 1.2%, which suggests that an appropriate noise can act as a regularizer, alleviating overfitting and slightly enhancing performance. 
+
+C. Resistance to Data Clustering Attacks 
+
+We evaluate a clustering-based label matching attacker in the split-learning setting where an internal trainer T1 cannot access the client’s raw inputs or true labels, but can ob-serve DP-protected activations and the corresponding pseudo-labels produced by label expansion. The attacker applies K-means [33], Birch [34], and DBSCAN [35] to the observed activations (all the clustering methods infer the number of clusters automatically) and tries to recover the hidden grouping 8(a) AlexNet MNIST (b) ResNet18 CIFAR10 (c) WideResNet CIFAR100 (d) MiniBert AG News Fig. 2. Comparison of the main accuracy with baseline across different architectures and datasets, where ε=5.0, γ=2.0, B=512/1024/2048.                  
+
+> (a) AlexNet MNIST (b) ResNet18 CIFAR10 (c) WideResNet CIFAR100 (d) MiniBert AG News Fig. 3. Comparison of the main accuracy with baseline across different architectures and datasets, where ε=5.0, B=1024, γ=1.5/2.0/2.5.
+> (a) AlexNet MNIST (b) ResNet18 CIFAR10 (c) WideResNet CIFAR100 (d) MiniBert AG News Fig. 4. Comparison of the main accuracy with baseline across different architectures and datasets, where B=1024, γ=2.0, ε=2.0/5.0/10.0. TABLE I PERFECT CLUSTERING ACCURACY (IN %) UNDER DIFFERENT CLUSTER METHODS AND PROTECTION SETTINGS .
+
+Cluster Methods MNIST DeepLeNet MNIST AlexNet CIFAR10 AlexNet CIFAR10 ResNet18 CIFAR100 ResNet18 CIFAR100 WideResNet AG News TextCNN AG News MiniBert Baseline 100.00 100.00 100.00 100.00 100.00 100.00 100.00 100.00 K-means 
+
+ε=2.0 23.33 16.66 0.00 0.00 0.00 0.00 41.66 83.33 
+
+ε=5.0 40.00 30.00 0.00 0.00 0.00 0.00 50.00 91.66 
+
+ε=10.0 46.66 50.00 0.00 0.00 0.00 0.00 66.66 91.66 
+
+γ=1.5 23.33 20.00 0.00 0.00 0.00 0.00 75.00 91.66 
+
+γ=2.0 20.00 13.33 0.00 0.00 0.00 0.00 50.00 91.66 
+
+γ=2.5 13.33 13.33 0.00 0.00 0.00 0.00 33.33 83.33 Birch 
+
+ε=2.0 13.33 13.33 0.00 0.00 0.00 0.00 16.66 91.66 
+
+ε=5.0 30.00 16.66 0.00 0.00 0.00 0.00 33.33 91.66 
+
+ε=10.0 43.33 60.00 0.00 0.00 0.00 0.00 75.00 91.66 
+
+γ=1.5 56.66 50.00 0.00 0.00 0.00 0.00 66.66 91.66 
+
+γ=2.0 53.33 46.66 0.00 0.00 0.00 0.00 50.00 91.66 
+
+γ=2.5 26.66 26.66 0.00 0.00 0.00 0.00 26.66 83.33 DBSCAN 
+
+ε=2.0 0.00 3.33 0.00 0.00 0.00 0.00 0.00 0.00 
+
+ε=5.0 10.00 10.00 0.00 0.00 0.00 0.00 0.00 8.33 
+
+ε=10.0 13.33 13.33 0.00 0.00 0.00 0.00 0.00 8.33 
+
+γ=1.5 10.00 16.66 0.00 0.00 0.00 0.00 25.00 16.67 
+
+γ=2.0 6.66 13.33 0.00 0.00 0.00 0.00 16.67 0.00 
+
+γ=2.5 6.66 13.33 0.00 0.00 0.00 0.00 0.00 0.00 
+
+structure induced by label expansion. We run the attack three times and report the average Perfect Clustering Accuracy ,defined as the fraction of true-label groups recovered exactly (i.e., each predicted cluster matches a complete true group with no extra or missing samples). Table I shows that without protection (Baseline), clustering accuracy is 100% because activations and true labels are one-to-one, making grouping trivial. Under the protection, on CIFAR10/CIFAR100, clustering fails: clustering accuracy is 0% across settings; i.e., DP perturbation plus label expansion largely destroys cluster separability in harder vision tasks. On MNIST, the attacker achieves moderate success ( ≤50%) because the underlying representations are more separable, making residual structure easier to exploit even after pertur-9TABLE II VISUAL COMPARISON OF INVERSION RECONSTRUCTED SAMPLES UNDER DP NOISE LEVELS (ε) FOR CIFAR-10 AND CIFAR-100.   
+
+> CIFAR-10 CIFAR-100 Target
+> Baseline
+> ε=10.0
+> ε=5.0
+> ε=2.0
+> •Reconstructing from unprotected activation yields relatively high similarity to the input sample—SSIM 0.50 on CIFAR-10 and 0.26 on CIFAR-100. Injecting DP noise at release markedly reduces fidelity: on CIFAR-10, SSIM drops to 0.38, 0.22, and 0.03; on CIFAR-100, it falls to 0.20, 0.15, and 0.07 for ε=10.0, 5.0, 2.0, respectively.
+
+bation. The easiest case is AG News, where clustering accu-racy reaches 50%–90%; text representations can retain strong class separability and thus remain vulnerable to unsupervised grouping in some configurations. As expected, decreasing ε (stronger DP noise) reduces both accuracies by obscuring activation geometry, while increasing 
+
+γ (more pseudo-labels per true class) further lowers accuracy by increasing intra-class dispersion and inter-group mixing, making correct grouping harder for unsupervised clustering. Label expansion plus DP noise renders MCDP non-clusterable to an honest-but-curious T1, addressing RQ1 (data privacy). 
+
+D. Resistance to Data Inversion Attacks 
+
+An honest-but-curious T1, given only the activation up-loaded by C and no access to C’s parameters, may at-tempt to reconstruct C’s training data. Following the UNSplit framework [22], T1 initializes a surrogate network match-ing C’s architecture and poses reconstruction as joint op-timization over inputs and surrogate weights. We evaluate robustness on two representative settings—ResNet18/CIFAR-10 and WideResNet/CIFAR-100—where C performs training-data embedding and applies DP to the activation. We quantify similarity using Structural Similarity Index (SSIM) and summarize visuals in Table II. The first row con-tains target images; the second shows reconstructions from the unprotected baseline, which recover clear shapes and textures, indicating severe leakage. Introducing DP progressively de-grades reconstructions: with ε = 10 .0, outlines and colors blur; at ε = 5 .0, structures largely vanish, and noise dominates; by 
+
+ε = 2 .0, outputs collapse into snowflake-like patterns devoid of semantic content. SSIM scores follow the same monotonic decline. Thus, stronger privacy budgets (smaller ε) render UNSplit ineffective in practice, while label expansion prevents alignment between any residual visual cues and true class semantics, adding defense-in-depth. The label expansion and DP noise on activations thwart inversion attempts, ensuring that C LI COOPER addresses RQ1 (data privacy).                               
+
+> TABLE III ACCURACY (%) FOR RESISTING MODEL EXTRACTION ATTACKS .Datasets/Architectures Acc WAcc D′Acc W′
+> MNIST DeepLeNet 99.53 9.87 10.51 MNIST AlexNet 99.57 9.65 14.44 CIFAR10 AlexNet 88.38 10.34 14.31 CIFAR10 ResNet18 92.23 13.63 13.14 CIFAR100 ResNet18 72.27 1.30 1.44 CIFAR100 WideResNet 72.11 1.08 1.65 AG News TextCNN 91.03 25.66 27.58 AG News MiniBert 90.94 25.54 25.39
+
+E. Resistance to Model Extraction Attacks 
+
+In our setting, the trained SL model is released in a black-box manner: adversaries cannot access the architecture or parameters and can only issue queries to the public API. Given an unlabeled dataset, an attacker may attempt model extraction [41] by querying the API for pseudo-labels and training a surrogate. Our label expansion prevents this: the API returns only pseudo-labels, and without the one-to-many and inverse mappings ( GY ,G−1 
+
+> Y
+
+), the true labels are unrecoverable. To test robustness, we construct unlabeled inputs by adding noise to MNIST, CIFAR10, CIFAR100 training data and by randomly shuffling tokens for AG News. We query the API for pseudo-labels with expansion factor γ = 2 .0 (e.g., 10 true classes → 20 pseudo-labels). Lacking ( GY ,G−1 
+
+> Y
+
+), the attacker can only map each pseudo-label group to a true class at random, then trains a surrogate on the pseudo-labeled set and evaluates it on the true test set. Table III summarizes outcomes: the second to fourth columns show the SL model W accuracy, the pseudo-labeled dataset D′ accuracy, and the attacker’s surrogate model W ′
+
+accuracy, respectively. Across datasets/architectures, attacker performance remains near random guess, ≈10% for MNIST and CIFAR10, 1% for CIFAR100, 25% for AG News, far below the SL model (e.g., 99.5% on MNIST, ≈90% on AG News). Thus, API outputs cannot be exploited to assemble a meaningful training set or a competitive surrogate. To this end, CLI COOPER resolves RQ3 (unauthorized-use defense). 10 TABLE IV TOTAL TRAINING TIME , WATERMARK EMBED /VERIFY TIME (MS ), AND EXTRACTION ACCURACY (%) ACROSS MNIST, CIFAR10/100, AND AG N EWS MODELS . W E VARY ε, γ AND WATERMARK LENGTH B. O VERHEAD REMAINS SMALL EVEN AT B=2048; ACCURACY >99%. L ARGER γ INCREASES TOTAL TRAINING TIME ; “B ASELINE ” HAS NO WATERMARKING .Time/Acc MNIST DeepLeNet MNIST AlexNet CIFAR10 AlexNet CIFAR10 ResNet18 CIFAR100 ResNet18 CIFAR100 WideResNet AG News TextCNN AG News MiniBert Training time (s) 629.98 509.71 473.07 1013.43 1013.63 6267.04 288.93 1488.34 Baseline Watermark Acc (%) 0 0 0 0 0 0 0 0Training time (s) 778.87 623.61 611.44 1200.14 1214.14 7188.71 389.74 1614.01 Embed time (ms) 8.68 8.94 8.83 13.17 13.85 9.56 8.31 8.17 Verify time (ms) 8.65 8.95 8.67 12.99 12.98 9.45 8.29 8.17 ε=2.0 Watermark Acc (%) 99.67 99.81 99.78 99.56 99.67 99.21 99.17 99.78 Training time (s) 784.98 633.46 628.14 1192.48 1215.37 7463.68 393.29 1650.14 Embed time (ms) 8.12 8.72 8.66 13.31 13.69 9.19 8.53 7.97 Verify time (ms) 8.22 8.65 8.44 13.05 13.65 9.11 8.47 7.67 ε=5.0 Watermark Acc (%) 99.56 98.89 99.75 99.35 99.32 99.23 99.27 98.89 Training time (s) 786.43 640.82 639.48 1199.61 1206.17 7687.28 399.01 1576.13 Embed time (ms) 8.61 8.77 8.81 13.41 13.64 9.27 7.51 7.47 Verify time (ms) 8.62 8.57 8.81 13.34 13.56 9.21 7.47 7.35 ε=10.0 Watermark Acc (%) 98.89 99.21 99.37 98.99 99.24 99.24 99.18 99.03 Training time (s) 786.43 640.82 639.48 1199.61 1206.17 7687.28 399.01 1576.13 Embed time (ms) 8.61 8.77 8.81 13.41 13.64 9.27 7.51 7.47 Verify time (ms) 8.62 8.57 8.81 13.34 13.56 9.21 7.47 7.35 γ=1.5 Watermark Acc (%) 99.32 99.87 99.37 99.21 99.18 99.23 99.28 99.38 Training time (s) 918.69 809.33 802.27 1504.91 1517.11 9627.41 511.65 2008.91 Embed time (ms) 8.61 8.52 9.21 13.37 13.62 8.98 7.99 7.32 Verify time (ms) 8.61 8.67 9.23 13.28 13.34 9.01 7.89 7.25 γ=2.0 Watermark Acc (%) 99.45 99.78 99.38 99.25 99.52 99.21 99.28 99.26 Training time (s) 989.13 817.74 819.56 1538.17 1548.11 9691.42 511.15 2080.57 Embed time (ms) 8.53 8.68 9.34 13.99 13.53 9.01 7.42 7.09 Verify time (ms) 8.51 8.63 9.12 12.98 13.22 8.99 7.56 7.21 γ=2.5 Watermark Acc (%) 98.99 99.43 98.87 99.26 99.63 99.23 99.18 99.24 Training time (s) 786.43 640.82 639.48 1199.61 1206.17 7687.28 399.01 1576.13 Embed time (ms) 8.61 8.77 8.81 13.41 13.64 9.27 7.51 7.47 Verify time (ms) 8.62 8.57 8.81 13.34 13.56 9.21 7.47 7.35 B=512 Watermark Acc (%) 99.21 99.48 99.89 99.26 99.02 98.89 99.25 99.34 Training time (s) 803.34 659.94 661.51 1185.81 1206.68 7654.09 416.78 1637.21 Embed time (ms) 12.89 12.88 14.23 22.64 21.53 13.42 12.45 13.13 Verify time (ms) 12.83 12.65 14.32 22.46 21.78 13.21 13.01 13.27 B=1024 Watermark Acc (%) 99.36 99.21 99.21 99.37 99.71 99.24 99.39 99.28 Training time (s) 906.76 680.91 680.39 1225.16 1247.42 8013.85 433.59 1773.24 Embed time (ms) 21.41 25.57 25.98 43.79 40.65 24.48 24.89 24.21 Verify time (ms) 21.22 25.22 24.99 43.78 40.22 24.68 24.62 24.18 B=2048 Watermark Acc (%) 99.68 99.23 99.79 99.29 98.87 99.23 99.09 99.13 TABLE V PER -LINK COMMUNICATION LATENCY (S) BETWEEN ADJACENT PARTIES .Transfer C −→ T 1 T1 −→ T 2 T2 −→ T 3 Ttotal                                 
+
+> MNIST DeepLeNet 0.24 0.12 0.06 0.42 MNIST AlexNet 0.06 0.09 0.01 0.16 CIFAR10 AlexNet 0.08 0.12 0.02 0.22 CIFAR10 ResNet18 0.32 0.16 0.08 0.56 CIFAR100 ResNet18 0.32 0.16 0.08 0.56 CIFAR100 WideResNet 0.80 0.40 0.20 1.40 AG News TextCNN 0.08 0.01 0.01 0.10 AG News MiniBert 0.08 0.06 0.06 0.20
+
+F. Ownership Verifiability and Overhead 
+
+As shown in Table IV, watermark extraction achieves over 99% accuracy across all models and settings, providing reli-able and automated proof of contribution. This detection rate confirms the effectiveness of the chained design, where each trainer’s seed derives from its predecessor’s activation, pro-ducing stable model-dependent signals that cannot be precom-puted or substituted without following the designated training process. Increasing watermark length B predictably raises embedding and verification time (linear encoder/decoder), yet the absolute costs remain small relative to training: even at 
+
+B = 2048 , embed and verify each stay in the single– to low–tens–of–milliseconds range, so the end-to-end impact is marginal and does not affect scheduling or throughput for compensated training. Although total training time increases with the label-expansion factor γ due to larger pseudo-labeled datasets, this effect is independent of watermarking and re-mains within acceptable bounds. Table V reports the per-link communication latency in CLI COOPER with a batch size of 256 and an assumed band-width of 200 MB/s. Since only intermediate activations are relayed along C → T1 → T2 → T3, the latency mainly depends on the interface tensor size and thus increases with model/dataset complexity. For n trainer clients in a relay chain, the per-iteration communication time scales linearly with the number of segment boundaries and the interface size, i.e., 11 Tcomm = O(n( ¯sR + θ)) , where ¯s is the average interface tensor size, R is the link bandwidth, and θ is the per-link propagation/handshake latency. The worst case is CIFAR100 with WideResNet, where the bottleneck link takes 0.80 s, and the total end-to-end latency is 1.40 s. In contrast, AG News with TextCNN yields a bottleneck of 0.06 s and a total of 0.10 s. Even the maximum latency is negligible compared to the training time in Table IV; multi-trainer coordination incurs only modest overhead under typical bandwidth. To this end, CLI COOPER resolves RQ2 (layer ownership). 
+
+G. Discussion on Hyperparameter Choices 
+
+Average expansion factor γ. γ controls the average label expansion ratio: a larger γ means each true label is mapped to more pseudo labels. Empirically, Fig. 3 shows that changing γ
+
+does not degrade the main-task accuracy nor slow down con-vergence. Meanwhile, Table I indicates a clear privacy trend: smaller γ yields higher clustering-attack accuracy, because fewer pseudo labels per true class leave stronger and more compact grouping structures for attackers to exploit. In terms of efficiency, Table IV shows that training time increases with 
+
+γ, since a larger pseudo-label space requires more augmented samples, which enlarges the training set and computational cost. Overall, γ introduces a privacy–efficiency trade-off while keeping utility stable; we recommend γ=2.0 as a practical default balancing stronger protection and moderate overhead. 
+
+DP budget ε. ε determines the strength of DP noise in-jected into activations: a smaller ε corresponds to a stronger perturbation. Fig. 4 suggests that overly strong perturbation (e.g., ε=2.0) can incur up to about 3% accuracy loss in some settings, indicating that excessive noise may distort useful representations. On the other hand, Table I shows that reducing 
+
+ε suppresses clustering-based label matching, and Table II further confirms that stronger DP noise leads to lower SSIM under inversion attacks, i.e., weaker reconstruction quality. Therefore, ε governs a direct privacy–utility trade-off. We select ε=5.0 as a reasonable compromise that substantially re-duces attack success while keeping accuracy close to baseline. 
+
+Watermark length B. B’s length affects the payload ca-pacity and robustness of trainer identification, but it should not penalize utility. Fig. 2 shows that varying B does not noticeably change model accuracy, consistent with water-mark embedding applied after convergence and behaving as a lightweight post-training step. Although Table IV indicates that larger B increases embedding and verification time, the overhead remains millisecond-level, negligible compared to end-to-end training time. Hence, B can be chosen based on the required identity/traceability information (e.g., longer B
+
+for richer identifiers), without materially impacting training. VI. R ELATED WORKS 
+
+1) SL Designs: Users are increasingly unwilling to dis-close sensitive information. SL [2] addresses this by enabling outsourced training without sharing raw data. SplitNN [11] demonstrated SL for medical diagnostics, enabling collabora-tion between centralized, and local institutions while protect-ing patient privacy. Poirot et al. [12] extended SL to multi-center healthcare settings with restricted data sharing. Hu [4]                       
+
+> TABLE VI EXISTING PRIVACY PROTECTION METHODS FOR SL
+> Method Protection Label Privacy Activation Data Performance Preserved Copyright & Train Trace
+> Vanilla SL [11], [12] ✗✗✓✗
+> U-shaped SL [13]–[15] ✓✗✓✗
+> B-SL [42] ✗✓✗✗
+> R3eLU [43] ✗✓✗✗
+> Ours ✓✓✓✓
+
+highlighted the temporal nature of clinical data and proposed grouping patient samples by time to better capture sequential dependencies in SL. Gupta et al. [13] placed the output layer on the client to prevent label exposure. Lyu et al. [15] added parallel computing and optimized resource allocation to improve edge efficiency. UVSL [14] combined the U-shaped design with DP to protect both labels and data. 
+
+2) SL Privacy Threats and Defenses: SL is a privacy-preserving alternative to centralized training, but remains vulnerable to label and feature inference attacks. Abuadbba et al. [44] showed that 1D CNNs trained with SL can match non-split accuracy yet still leak privacy, as servers can infer input features from intermediate outputs, constituting the first feature inference attack in SL. RecoNN [23] trains a reconstruction network using shadow models and shadow samples; at attack time, target weights are input to reconstruct images of the target’s training data. Unsplit [22] jointly searches the input and parameter spaces to reconstruct inputs and produce a func-tional clone whose outputs approximate the client’s smashed data. FORA [45] uses public auxiliary data for feature-level transfer, building a surrogate client to train an attack model that reconstructs private inputs covertly. Pasquini et al. [46] verified across settings that a malicious server can reconstruct a client’s private dataset via feature inference. To mitigate these threats, several defenses have been ex-plored. UVSL [14] keeps label-sensitive layers on the client and adds local DP noise to smashed activations, limiting label inference and input reconstruction. Lyu et al. [15] placed the model tail on the client and perform local backpropagation, preserving label confidentiality. U-shaped designs reduce label exposure but increase communication, since each iteration re-quires at least two round-trips between client and server. Ngoc et al. [42] proposed Binarized SL (B-SL), which binarizes local layers and applies differential privacy to mixed smashed data. Mao et al. [43] introduce a randomized activation, R3eLU, to perturb forward smashed data and backward local gradients while integrating a DP mechanism. 
+
+3) Copyright Protection: As DNNs are co-developed across institutions, model copyright [47] and training traceability are essential. Copyright protection secures legitimate ownership and proper attribution for contributors. Training traceabil-ity verifies that trainers performed the required and correct procedures, ensuring accountability and trust in collaborative settings [48]. EWDNN [16] embeds binary watermarks into weights via a training regularizer, enabling white-box ex-traction without accuracy loss. RIGA [18] adds secret keys, nonlinear mappings, and redundancy to resist detection and 12 removal. Both methods assume centralized, single-node train-ing and are unsuitable for collaborative settings. For distributed scenarios, FedIPR [19] verifies client ownership in federated learning by embedding user-specific watermarks during local training and using challenge–response verification. FedIPR targets gradient-synchronized FL and does not transfer to SL, where model segments are asymmetrically partitioned. 
+
+Ours! Those solutions are not perfect (as compared in Ta-ble VI). We introduce label expansion that obscures both label counts and semantics, preventing the trainers from inferring true labels or the task, and enabling legitimate use only by par-ties holding the true ↔pseudo mapping. We also use chained watermarking that cryptographically links successive training stages to ensure verifiable training integrity. C LI COOPER thus allows multiple compute-constrained clients to train the model and removes reliance on a single high-capacity server. VII. C ONCLUDING REMARKS 
+
+We presented C LI COOPER , a new multi-client SL frame-work that collaboratively preserves data privacy, enables ver-ifiable training, and protects model copyright. Our method integrates label expansion to mask true labels and prevent unauthorized model use, and a Gaussian noise-based mech-anism to safeguard smashed data from inversion. In addition, dynamic chained watermarks provide cryptographically linked training traceability and copyright protection. We experimen-tally confirmed that C LI COOPER maintains 100% of baseline accuracy, with some models even achieving up to 2% accuracy. It effectively defends against strong adversaries: the success rate of internal clustering attacks reduces to 0%, the similarity of inversion-reconstructed samples drops from 45% to 0.03%, and the surrogate model accuracy from model extraction attacks falls to around 1%, equivalent to random guessing. 
+
+TABLE VII LIST OF NOTATION                                                
+
+> Notation Definition
+> C/T/VData client/Trainer client/Verifier
+> D∗/D/DtFinal/Original/Test Dataset
+> Y/Y∗True/Pseudo label of Dataset
+> qThe class number of the dataset
+> giThe expansion factor of the labels Y∗
+> i
+> γThe average expansion factor of Y∗relative to Y
+> GY/G−1
+> YThe one-to-many/many-to-one mapping between true and pseudo label
+> ε/G(·)DP privacy budget/DP noise injection
+> MTiTi’s activation for Ti+1
+> MDP
+> CDP-protected activation
+> ¯Athe activation of the C
+> WThe whole SL model/weights
+> WTiThe ith trainer’s model/weights
+> WCC’s pre-trained encoder/model
+> ΛCopyright information embedded in the model
+> ΛTiTi’s watermark
+> BThe watermark size
+> kTiEmbedding key for ΛTi
+> ZTiSelection matrix for weights in WTi, used for ΛTi
+> μiUnique secret nonce used in hash computation
+> ID TiUnique Tinode identity
+> ηWatermark detection rate
+> O(·)Watermark extraction function
+> lw(·)/lΛ(·)The loss function for main task and embedding watermark
+
+REFERENCES [1] O. Li, J. Sun, X. Yang, W. Gao, H. Zhang, J. Xie, V. Smith, and C. Wang, “Label leakage and protection in two-party split learning,” in International Conference on Learning Representations (ICLR) , 2022. [2] Y. Matsubara, M. Levorato, and F. Restuccia, “Split computing and early exiting for deep learning applications: Survey and research challenges,” 
+
+ACM Computing Surveys (CSUR) , vol. 55, no. 5, pp. 1–30, 2022. [3] Z. Ye, W. Gao, Q. Hu, P. Sun, X. Wang, Y. Luo, T. Zhang, and Y. Wen, “Deep learning workload scheduling in GPU datacenters: A survey,” 
+
+ACM Computing Surveys (CSUR) , vol. 56, no. 6, pp. 1–38, 2024. [4] L. Hu, T. Zhou, Z. Liu, F. Liu, and Z. Cai, “Split learning on segmented healthcare data,” IEEE Transactions on Big Data (TBD) , 2025. [5] D. Jung, J. Lee, H. Jeong, D. Cha, H. Kim, and S. Pack, “Split computing for mobile devices: Energy and latency perspective,” IEEE Transactions on Services Computing (TSC) , 2025. [6] F. Zafari, K. K. Leung, D. Towsley, P. Basu, A. Swami, and J. Li, “Let’s share: A game-theoretic framework for resource sharing in mobile edge clouds,” IEEE Transactions on Network and Service Management (TNSE) , vol. 18, no. 2, pp. 2107–2122, 2020. [7] Z. Lin, G. Qu, X. Chen, and K. Huang, “Split learning in 6G edge networks,” IEEE Wireless Communications , vol. 31, no. 4, pp. 170–176, 2024. [8] B. S. Rawal, L. Berman, and H. Ramcharan, “Multi-client/multi-server split architecture,” in The International Conference on Information Networking 2013 (ICOIN) . IEEE, 2013, pp. 696–701. [9] Z. Li, C. Yan, X. Zhang, G. Gharibi, Z. Yin, X. Jiang, and B. A. Malin, “Split learning for distributed collaborative training of deep learning models in health informatics,” in AMIA Annual Symposium Proceedings ,vol. 2023, 2024, p. 1047. [10] A. Hammoud, H. Otrok, A. Mourad, and Z. Dziong, “On demand fog federations for horizontal federated learning in IoV,” IEEE Transactions on Network and Service Management (TNSM) , vol. 19, no. 3, pp. 3062– 3075, 2022. [11] P. Vepakomma, O. Gupta, T. Swedish, and R. Raskar, “Split learning for health: Distributed deep learning without sharing raw patient data,” 
+
+arXiv preprint arXiv:1812.00564 , 2018. [12] M. G. Poirot, P. Vepakomma, K. Chang, J. Kalpathy-Cramer, R. Gupta, and R. Raskar, “Split learning for collaborative deep learning in health-care,” arXiv preprint arXiv:1912.12115 , 2019. [13] O. Gupta and R. Raskar, “Distributed learning of deep neural network over multiple agents,” Journal of Network and Computer Applications ,vol. 116, pp. 1–8, 2018. [14] L. Wang, H. Chen, L. Zuo, and H. Liu, “U-shaped vertical split learning with local differential privacy for privacy preserving,” in International Conference on Intelligent Computing . Springer, 2024, pp. 72–81. [15] S. Lyu, Z. Lin, G. Qu, X. Chen, X. Huang, and P. Li, “Optimal resource allocation for U-shaped parallel split learning,” in IEEE Globecom Workshops (GC Wkshps) . IEEE, 2023, pp. 197–202. [16] Y. Uchida, Y. Nagai, S. Sakazawa, and S. Satoh, “Embedding water-marks into deep neural networks,” in ACM on International Conference on Multimedia Retrieval (ICMR) , 2017, pp. 269–277. [17] T. Wang and F. Kerschbaum, “Attacks on digital watermarks for deep neural networks,” in ICASSP 2019 , 2019, pp. 2622–2626. [18] ——, “Riga: Covert and robust white-box watermarking of deep neural networks,” in Proceedings of the Web Conference (WWW) , 2021, pp. 993–1004. [19] B. Li, L. Fan, H. Gu, J. Li, and Q. Yang, “FedIPR: Ownership verifica-tion for federated deep neural network models,” IEEE Transactions on Pattern Analysis and Machine Intelligence (TPAMI) , vol. 45, no. 4, pp. 4521–4536, 2022. [20] Y. Li, B. Cao, M. Peng, L. Zhang, L. Zhang, D. Feng, and J. Yu, “Direct acyclic graph-based ledger for Internet of Things: Performance and security analysis,” IEEE/ACM Transactions on Networking , vol. 28, no. 4, pp. 1643–1656, 2020. [21] Z. Wang, P. Wang, K. Liu, P. Wang, Y. Fu, C.-T. Lu, C. C. Aggarwal, J. Pei, and Y. Zhou, “A comprehensive survey on data augmentation,” 
+
+IEEE Transactions on Knowledge and Data Engineering , pp. 1–20, 2025. [22] E. Erdo˘ gan, A. K¨ upc ¸ ¨ u, and A. E. C ¸ ic ¸ek, “Unsplit: Data-oblivious model inversion, model stealing, and label inference attacks against split learning,” in Proceedings of the Workshop on Privacy in the Electronic Society , 2022, pp. 115–124. [23] B. Balle, G. Cherubin, and J. Hayes, “Reconstructing training data with informed adversaries,” in IEEE Symposium on Security and Privacy (SP) . IEEE, 2022, pp. 1138–1156. 
+
+13 [24] Y. Adi, C. Baum, M. Cisse, B. Pinkas, and J. Keshet, “Turning your weakness into a strength: Watermarking deep neural networks by backdooring,” in USENIX Security Symposium (USENIX Sec) , 2018, pp. 1615–1631. [25] A. Kassis and U. Hengartner, “Unmarker: A universal attack on defen-sive image watermarking,” in IEEE Symposium on Security and Privacy (SP) . IEEE, 2025, pp. 2602–2620. [26] W. Zong, Y.-W. Chow, W. Susilo, J. Baek, J. Kim, and S. Camtepe, “IPRemover: A generative model inversion attack against deep neural network fingerprinting and watermarking,” in Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) , vol. 38, no. 7, 2024, pp. 7837–7845. [27] A. Pegoraro, C. Segna, K. Kumari, and A.-R. Sadeghi, “DeepEclipse: How to break white-box DNN-watermarking schemes,” in USENIX Security Symposium (USENIX Sec) , 2024, pp. 5287–5304. [28] Y. Wang, C. Yang, S. Lan, L. Zhu, and Y. Zhang, “End-edge-cloud collaborative computing for deep learning: A comprehensive survey,” 
+
+IEEE Communications Surveys & Tutorials , vol. 26, no. 4, pp. 2647– 2683, 2024. [29] J. Weng, J. Weng, C. Cai, H. Huang, and C. Wang, “Golden grain: Building a secure and decentralized model marketplace for mlaas,” IEEE Transactions on Dependable and Secure Computing (TDSC) , vol. 19, no. 5, pp. 3149–3167, 2021. [30] M. Chen, X. Wu, X. Tang, T. He, Y. S. Ong, Q. Liu, Q. Lao, and H. Yu, “Free-rider and conflict aware collaboration formation for cross-silo federated learning,” Advances in Neural Information Processing Systems , vol. 37, pp. 54 974–55 004, 2024. [31] J. Liu, R. Zhang, S. Szyller, K. Ren, and N. Asokan, “False claims against model ownership resolution,” in 33rd USENIX Security Sympo-sium (USENIX Security 24) , 2024, pp. 6885–6902. [32] C. Thapa, P. C. M. Arachchige, S. Camtepe, and L. Sun, “SplitFed: When federated learning meets split learning,” in Proceedings of the AAAI conference on artificial intelligence , vol. 36, no. 8, 2022, pp. 8485– 8493. [33] A. M. Ikotun, A. E. Ezugwu, L. Abualigah, B. Abuhaija, and J. Hem-ing, “K-means clustering algorithms: A comprehensive review, variants analysis, and advances in the era of big data,” Information Sciences , vol. 622, pp. 178–210, 2023. [34] A. Lang and E. Schubert, “BETULA: Fast clustering of large data with improved BIRCH CF-Trees,” Information systems , vol. 108, p. 101918, 2022. [35] H. Xu and N. Pham, “Scalable dbscan with random projections,” Ad-vances in Neural Information Processing Systems , vol. 37, pp. 27 978– 28 008, 2024. [36] B. Cao, Z. Zhang, D. Feng, S. Zhang, L. Zhang, M. Peng, and Y. Li, “Performance analysis and comparison of PoW, PoS and DAG based blockchains,” Digital Communications and Networks , vol. 6, no. 4, pp. 480–485, 2020. [37] W. Jiang, H. Li, G. Xu, T. Zhang, and R. Lu, “A comprehensive defense framework against model extraction attacks,” IEEE Transactions on Dependable and Secure Computing (TDSC) , vol. 21, no. 2, pp. 685– 700, 2024. [38] M. Bayer, M.-A. Kaufhold, and C. Reuter, “A survey on data augmen-tation for text classification,” ACM Computing Surveys , vol. 55, no. 7, pp. 1–39, 2022. [39] G. Yu, Y. Jiang, Q. Wang, X. Wang, B. Ma, C. Sun, W. Ni, and R. P. Liu, “Split unlearning,” ACM SIGSAC Conference on Computer and Communications Security (CCS) , 2025. [40] N. Phan, X. Wu, H. Hu, and D. Dou, “Adaptive laplace mechanism: Differential privacy preservation in deep learning,” in IEEE International Conference on Data Mining (ICDM) . IEEE, 2017, pp. 385–394. [41] P. Lv, H. Ma, K. Chen, J. Zhou, S. Zhang, R. Liang, S. Zhu, P. Li, and Y. Zhang, “MEA-Defender: a robust watermark against model extraction attack,” in IEEE Symposium on Security and Privacy (SP) . IEEE, 2024, pp. 2515–2533. [42] N. D. Pham, A. Abuadbba, Y. Gao, K. T. Phan, and N. Chilamkurti, “Binarizing split learning for data privacy enhancement and computation reduction,” IEEE Transactions on Information Forensics and Security (TIFS) , vol. 18, pp. 3088–3100, 2023. [43] Y. Mao, Z. Xin, Z. Li, J. Hong, Q. Yang, and S. Zhong, “Secure split learning against property inference, data reconstruction, and fea-ture space hijacking attacks,” in European Symposium on Research in Computer Security (ESORICS) . Springer, 2023, pp. 23–43. [44] S. Abuadbba, K. Kim, M. Kim, C. Thapa, S. A. Camtepe, Y. Gao, H. Kim, and S. Nepal, “Can we use split learning on 1D CNN models for privacy preserving training?” in ACM Asia Conference on Computer and Communications Security (AsiaCCS) , 2020, pp. 305–318. [45] X. Xu, M. Yang, W. Yi, Z. Li, J. Wang, H. Hu, Y. Zhuang, and Y. Liu, “A stealthy wrongdoer: Feature-oriented reconstruction attack against split learning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 12 130–12 139. [46] D. Pasquini, G. Ateniese, and M. Bernaschi, “Unleashing the tiger: Inference attacks on split learning,” in ACM SIGSAC Conference on Computer and Communications Security (CCS) , 2021, pp. 2113–2129. [47] Q. Wang, G. Yu, Y. Sai, H. D. Bandara, and S. Chen, “Is your AI truly yours? leveraging blockchain for copyrights, provenance, and lineage,” 
+
+IEEE Transactions on Services Computing (TSC) , pp. 1–19, 2025. [48] M. Cao, L. Zhang, and B. Cao, “Toward on-device federated learning: A direct acyclic graph-based blockchain approach,” IEEE Transactions on Neural Networks and Learning Systems , vol. 34, no. 4, pp. 2028–2042, 2021. 
+
+14

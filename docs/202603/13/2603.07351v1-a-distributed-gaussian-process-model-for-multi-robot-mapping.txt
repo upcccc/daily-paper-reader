@@ -1,0 +1,598 @@
+Title: A Distributed Gaussian Process Model for Multi-Robot Mapping
+
+URL Source: https://arxiv.org/pdf/2603.07351v1
+
+Published Time: Tue, 10 Mar 2026 00:57:43 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# A Distributed Gaussian Process Model for Multi-Robot Mapping 
+
+Seth Nabarro 1∗, Mark van der Wilk 2 and Andrew J. Davison 1
+
+Abstract — We propose DistGP : a multi-robot learning method for collaborative learning of a global function using only local experience and computation. We utilise a sparse Gaussian process (GP) model with a factorisation that mirrors the multi-robot structure of the task, and admits distributed training via Gaussian belief propagation (GBP). Our loopy model outperforms Tree-Structured GPs [1] and can be trained online and in settings with dynamic connectivity. We show that such distributed, asynchronous training can reach the same performance as a centralised, batch-trained model, albeit with slower convergence. Last, we compare to DiNNO [2], a distributed neural network (NN) optimiser, and find DistGP achieves superior accuracy, is more robust to sparse communi-cation and is better able to learn continually. 
+
+I. I NTRODUCTION 
+
+Many mapping tasks involve large areas and dynamic maps, suggesting a divide-and-conquer approach using mul-tiple robots. Centralised communication and computation is often not feasible in domains like environmental monitoring [3], robotic agriculture [4] or space exploration [5], which involve many robots accumulating large datasets in poorly connected regions. Further, centralised approaches can be slow where robots may need up-to-date local models to guide exploration. These considerations motivate decentralised ap-proaches, with local computation and mesh connectivity. In this work, we present DistGP: a multi-robot algorithm to fit an arbitrary global function using only local observation and computation; with peer-to-peer communication. We use sparse GPs whose inducing points approximate a full GP at lower cost, and act as local summaries of the function. They provide a useful abstraction for data fusion and inter-robot exchange. Further, they are assumed to be Gaussian distributed, enabling decentralised inference with GBP. We first consider tree-structured GPs (TSGPs) [1], whose inducing points are partitioned into sparsely connected blocks. Each block covers a distinct region of the input space and is maintained by a single robot. Robots exchange GBP messages with their neighbours to ensure their inducing points are consistent. TSGP restricts connectivity to a tree to guarantee rapid convergence, however we show empirically that this constraint limits accuracy: inducing points close in Euclidean space may not be directly connected, leading to discontinuities at their boundary. Further, in dynamic multi-robot scenarios, two communicating robots are prevented from sharing information if doing so would introduce a cycle. To address this limitation, we propose a simple extension: relax the tree constraint and allow cycles. While GBP in  
+
+> 1Dyson Robotics Lab, Imperial College London
+> 2Department of Computer Science, University of Oxford
+> ∗
+
+sdn09@ic.ac.uk 
+
+our loopy model requires more iterations to converge, we demonstrate a substantial improvement in accuracy. More-over, our approach is better suited to dynamic and asyn-chronous settings, where inter-robot communication patterns are continually changing – unsupported by TSGP, whose message schedule requires fixed connectivity. Our loopy model naturally exploits all robot encounters and converges with asynchronous message passing. Our proposed loopy factor graph model is illustrated in Fig. 1. Our motivations are similar to Yu et al. [2], who use a distributed NN optimiser (DiNNO) for multi-robot learning. In contrast to DiNNO, DistGP i) enforces inter-robot consis-tency locally, only where both robots have inducing points, rather than in global weight-space, ii) is a probabilistic model supporting on-the-fly data fusion for online learning, and iii) is scalable as each robot stores only a local map estimate. In short our contributions are as follows: 1) A new distributed GP model, trainable with GBP, which outperforms TSGPs [1]. 2) Empirical analysis showing the model can be built on-the-fly and admits distributed, asynchronous inference via GBP. It is thus well-suited to multi-robot mapping. 3) Experimental evaluation of our method on environmen-tal monitoring and occupancy mapping simulations. We show superior performance to DiNNO [2]. II. R ELATED WORK 
+
+a) Distributed NN Maps: Many works build distributed implicit neural maps through inter-robot collaboration [2], [6], [7], [8], [9], either using consensus alternating direction method of multipliers (CADMM) [10] or direct regularisa-tion to constrain NN weights to be similar. DiNNO [2] is most similar to ours as it is a general method for multi-robot function learning rather than a specific method for distributed 
+
+3D reconstruction. While distributed neural maps enforce agreement in global weight space, we represent maps with factorised GPs which enable local consistency constraints, specific to regions in which both robots have inducing points. In DiNNO, each robot maintains a NN estimate of the global map, which are brought into agreement by CADMM. In this work however, we seek to build a distributed map: each robot maintains their local segment of the map and inter-robot interactions are used to ensure each segment is consistent with its neighbours. We argue DistGP is: 1) more scalable. For problems with large areas and large numbers of robots, each robot having a global map is inefficient and reaching consensus is more challenging. 2) more modular. We divide the map into segments which can be individually copied and communicated      
+
+> arXiv:2603.07351v1 [cs.RO] 7 Mar 2026 Factor Graph Variable | Factor Graph Factor | Observed trajectory | Current location | Inter-robot communication (a) Before inter-robot exchange (b) After inter-robot exchange
+
+Fig. 1: In DistGP , each robot maintains a block of inducing points which parameterise their local GP (far-left) and into which observations can be fused. Communicating robots harmonise models by connecting inducing points via GP consistency factors and exchanging GBP messages (far-right). Here, the map at each point is predicted by the closest robot. Before communication (centre-left) the map is discontinuous and inaccurate, but this is resolved using only local inter-robot exchanges (centre-right). as required. In contrast, it is unclear how a map stored in the weights of a NN can be subdivided. 3) also able to generate a shared global map. In the extreme case that each robot shares its own inducing point posterior, and all others it has received thus far, we can achieve global map sharing as in DiNNO. 
+
+b) Multi-Robot GPs: As in this work, [11] use adistributed GP for multi-robot learning. Each robot first trains a local GP on its observations and they are combined as a mixture of GPs, with location-varying weights. The Expec-tation Maximisation algorithm optimises the local models in tandem with the mixture weights of the different obser-vations. Unlike our method, full connectivity is needed for normalised mixture weights, and all robots must generate a prediction at any test point. In addition, the use of dense GPs precludes scaling to large datasets. [12] present a multi-agent inducing point GP method for human trajectory prediction, however they do not consider the problem of distributed learning of a function over the space being navigated. 
+
+c) Multi-Robot GBP: Recent work has shown GBP to be an effective distributed solver. Our work draws inspiration from [13], in using GBP exchange between robots to enable collaborative estimation. However, [13] estimate the robot locations, where we estimate a distributed map. Like us, [14] utilise GBP for multi-robot mapping. Each robot maintains a grid of the input space with one variable per cell to represent its function value. These are updated via i) observation by the robot or ii) inter-robot communication where two robots enforce consistency between their pairs of grid variables. Unlike DistGP, this method does not benefit from function approximation – it is unable to generalise to unobserved regions and can only be queried at fixed resolution. III. B ACKGROUND 
+
+A. Gaussian Process Regression 
+
+A GP is a generalisation of a Gaussian distribution to the infinite dimensional space of functions. It is defined by a mean function μ : RD → R, and a covariance (or kernel) function kθ : RD×D → R, where D is the input dimension. 
+
+kθ (xa, xb) is the covariance between the function values at pairs of input locations (xa, xb) and has hyperparameters θ.For regression, a GP can be used as a prior p(f (·)|θ) on the function to be fitted, f : RD → R. For an iid Gaussian likelihood on observations y = [ y1, . . . , y N ]⊺ at inputs X =[x⊺ 
+
+> 1
+
+, . . . , x⊺ 
+
+> N
+
+]⊺, the posterior of f (·) at test point x∗ is: 
+
+p (f (x∗)|y) = N (μ∗, Σ∗) (1) 
+
+μ∗ := kx∗x
+
+ Kx + σ2Ix
+
+−1 y,
+
+Σ∗ := Kx∗ − kx∗x
+
+ Kx + σ2Ix
+
+−1 kxx ∗ ,
+
+where Kx ∈ RN ×N has ij th element kθ (xi, xj ), Kx∗ ∈
+
+R1×1 has element kθ (x∗, x∗), kxx ∗ is a length N vector with lth element kθ (xl, x∗), and σ is the observation noise. Hyperparameters θ and σ can be trained by gradient ascent of the (log-)marginal likelihood, p(y|θ) = R p(y|f )p(f |θ)d f .The time complexity of the matrix inverse in (1) is 
+
+O(N 3), which is prohibitive for large datasets, motivating approximations with cheaper training and prediction. 
+
+B. Inducing Point Approximations 
+
+Inducing point GPs seek to compress the dataset of N
+
+observations into M < N pseudo-datapoints (inducing points) which capture its important characteristics at reduced computational cost. One such method is the Fully Indepen-dent Training Conditional (FITC) approximation [15], [16]. The inducing variables u ∈ RM approximate f (·) at the chosen input locations Z = [ z⊺ 
+
+> 1
+
+, . . . , z⊺ 
+
+> M
+
+]⊺. The generative model is 
+
+q(f , u) = q(f |u)p(u) = 
+
+> N
+
+Y
+
+> i=1
+
+p(fi|u)p(u), (2) where the conditional independence of f |u is a model assumption which enables cheaper inference and learning, 
+
+p(u) is a dense GP prior over the inducing points. The re-sulting posterior predictive p (f (x∗)|y, X ) requires inversion of dense M ×M and diagonal N ×N matrices, thus avoiding the O(N 3) cost of inverting a dense N × N matrix. 
+
+C. Tree-Structured Gaussian Process Approximations 
+
+While inducing point approximations such as FITC are efficient when M << N , Bui and Turner [1] argue that many datasets require M ≈ N for accurate prediction. For efficient inference in this setting, they propose approximating a dense prior over u by dividing them into blocks u =[u⊺ 
+
+> B1
+
+, . . . , u⊺ 
+
+> BK
+
+]⊺ and connecting them in a tree 
+
+q(u) = q(uB1 )
+
+> K
+
+Y
+
+> k=2
+
+p(uBk |upar( Bk )), (3) where B1 is the root node and par( Bk) is the parent of Bk.Each block generates a disjoint observation subset fCk
+
+q(f |u) = 
+
+> K
+
+Y
+
+> k=1
+
+q(fCk |uBk ). (4) with connections between elements of f and u determined by proximity. For example, fa := f (xa) may be connected to the uBk whose input location centroid is closest to xa. By minimising the KL divergence from the dense joint p(f , u)
+
+to approximation q(f , u), they derive the form of factors 
+
+q(uBk |upar( Bk )) and q(fCk |uBk ), showing they are equal to standard GP conditionals p(uBk |upar( Bk )) and p(fCk |uBk ).As TSGP has a sparse set of factors {p(uBk |upar( Bk ))}k
+
+in place of a dense prior p(u), inference can be efficient in models where the number of inducing points is large. Bui and Turner [1] show how the posteriors {q(uBk |y)}k can be inferred with GBP message passing. The tree-structured topology ensures GBP converges in one sweep from leaves to root and another from root to leaves. After inference, prediction at a new x∗ can be made by finding a nearby block of inducing points uBk∗ (e.g. with input locations whose centroid is closest) and estimating 
+
+f (x∗) by marginalising over its posterior q (uBk∗ |y):
+
+q (f (x∗)|y) = 
+
+Z
+
+p (f (x∗)|uBk∗ ) q (uBk∗ |y) duBk∗ . (5) This prediction relies only on the closest uBk∗ , avoiding test-time communication with other parts of the graph. 
+
+D. Belief Propagation 
+
+Belief propagation (BP) [17] is a message passing al-gorithm to compute the marginal beliefs of variables in a graphical model. Given the joint distribution’s factorisation 
+
+p(x1, . . . , xN ) = 1
+
+Z
+
+Y
+
+> j
+
+ϕj ({xl}l∈nei( j)), (6) BP computes (or estimates) {p(xj )}Nj=1 . If factors ϕj are conditional on observations y, then the marginals constitute a mean-field posterior q(x1, . . . , xn|y) = Qni=1 p(xi|y).Each edge in a factor graph stores both a factor-to-variable message mϕj xi (xi) and a variable-to-factor mes-sage mxi ϕj (xi). BP iterates between updating these: 
+
+mϕj xi (xi) ← X 
+
+> {xr}nei( j)\i
+
+ϕj ({xl}nei( j)) Y
+
+> k∈nei( j)\i
+
+mxk ϕj (xk) (7) 
+
+mxi ϕj (xi) ← Y
+
+> s∈nei( i)\j
+
+mϕs xi (xi), (8) where nei( r) \ s is the set of all nodes connected to r except 
+
+s. After convergence, the marginals are given by the product of incoming message from all connected factors to a variable, 
+
+p(xi) = Y
+
+> s∈nei( i)
+
+mϕs xi (xi). (9) Message and belief updates are more efficient using the natural parameterisation of messages and factors, as the product of messages reduces to the sum of their parameters. BP is only guaranteed to converge to exact marginals in tree-structured models, where convergence can be reached by a leaves-to-root then root-to-leaves sweep of message updates. Despite a lack of guarantees, BP often performs well on tasks involving cyclic graphs [18], [19]. 
+
+1) Gaussian Belief Propagation: For Gaussian models, the natural parameters are the precision (inverse covariance) 
+
+Λ := Σ −1 and information vector η := Σ −1μ. Factor-to-variable updates (7) take the form (see [20]) 
+
+ηϕj xi ← η(ϕj ) 
+
+> i
+
+−Λ(ϕj )
+
+> i, \i
+
+
+
+Λ(ϕj ) 
+
+> \i, \i
+
++ Λ x\i ϕj
+
+−1
+
+η(ϕj ) 
+
+> \i
+
++ ηx\i ϕj
+
+
+
+Λϕj xi ← Λ(ϕj ) 
+
+> i,i
+
+− Λ(ϕj )
+
+> i, \i
+
+
+
+Λ(ϕj ) 
+
+> \i, \i
+
++ Λ x\i ϕj
+
+−1
+
+Λ(ϕj )
+
+> \i,i
+
+where (η(ϕj ), Λ(ϕj )) are parameters of ϕj and subscript  
+
+> x\i→ϕj
+
+denotes concatenation of all messages incoming to 
+
+ϕj except that from xi. Variable-to-factor messages (8) are 
+
+ηxi ϕj ← X
+
+> k∈nei( i)\j
+
+ηϕk xi , Λxi ϕj ← X
+
+> k∈nei( i)\j
+
+Λϕk xi .
+
+As in the general case, convergence in loopy Gaussian models is not guaranteed, though if GBP does converge in such cases, marginal means are guaranteed to be correct [21]. IV. M ETHOD 
+
+A. Problem Statement 
+
+We aim to learn a scalar map f : RD → R distributed be-tween K robots, fdist = {fk}Kk=1 , fdist (x∗) = fi(x∗) ⇐⇒ 
+
+x∗ ∈ R i, where partial map fi(·) is maintained by robot i
+
+which covers region Ri. For static maps, D = Dspace , where dynamic maps are also a function of time: D = Dspace + 1 .−2 
+
+> 0
+> 2
+
+(a) Ground truth + noise −3  
+
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+
+(b) Training data −3 
+
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+
+(c) TSGP 0.0  
+
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+
+(d) TSGP Abs. Error −3 
+
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+
+(e) TSGP + 9 Edges 0.0  
+
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+
+(f) TSGP + 9 Edges Abs. Error 
+
+Fig. 2: Limitations of TSGP. Some robots remain uncon-nected to ensure tree connectivity (as in c). This leads to discontinuities in the prediction at the boundary between unconnected robots (d), which can be reduced significantly by adding loop-forming edges (f) (see white rectangles). 
+
+B. Improving Over Tree-Structured GPs 
+
+The following features TSGP make it a good candidate for distributed multi-robot mapping: 1) Each inducing block uBk models a different subset of observations (4), so robots can update their local posteriors q(uBk |yCk ) with new experience without needing to communicate with others. 2) Each uBk only connects to its neighbours (3). With GBP inference, this ensures inter-robot messages are local exchanges – no global communication is needed. To evaluate TSGP, we train it on simulated multi-robot data. We sample a static, ground truth function from a GP with D = 2 , which the robots observe (with additive Gaussian noise) at each timestep. The input space covering 
+
+[−1, 1] ×[−1, 1] is divided into a 4×4 grid, with a robot occu-pying each cell. We generate robot trajectories by randomly sampling a target within each cell, which the robot heads towards at a constant speed. Once within ϵ = 0 .02 , the target is resampled. The resulting observations are presented in Fig. 2b. Each robot’s inducing points are placed on a regular grid spanning its cell. Blocks of inducing points between robots in adjacent cells are connected, such that the graph 0 10 20 30 40       
+
+> # Extra Edges
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> MSE ( ← )
+> Tree
+> No Connections
+> Full GP
+> Tree + xEdges 010 20 30 40
+> # Extra Edges
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Neg. Log Likelihood ( ← )
+
+Fig. 3: Benefit of additional edges. The prediction error (vertical axis) reduces as more edges are added to the TSGP model (horizontal axis, x = 0 is TSGP), but plateaus after 
+
+∼ 9 extra edges, where accuracy is equal to a dense GP prior on all inducing points (green). Results averaged over 10 
+
+seeds, errorbars cover ±1 standard error (SE) around mean. of all inducing point blocks forms a tree (black arrows in Fig. 2c). The model is batch-trained on the full dataset. The resulting predictions and error (Figs. 2c and 2d) show discontinuities in the learnt function and large errors at the boundaries between unconnected cells. This pathology results from the model’s tree-structure: a tree connecting nodes on a grid with D ⩾ 2 will necessarily include unconnected neighbours. The learnt function is discontinuous at their boundary due to an absence of inter-robot factors. To quantify this effect, we train a sequence of models, starting at TSGP and adding edges one-by-one, prioritising those between robots close in Euclidean space but distant in the graph. We also train two baselines: i) with no inter-robot connections (each robot fits an independent FITC GP), and ii) with a full GP prior over all inducing points. We train each model 10 times on different datasets, each randomly sampled as in Fig. 2b. We evaluate on a dense grid, but remove test points less than d = 0 .06 from any training observations. The results (Fig. 3) show that models with more edges have higher accuracy, until ∼ 9 additional edges after which performance matches the full GP. Examining predictions and errors for a model with 9 extra edges on the example dataset (Figs. 2e and f) we see discontinuities are much reduced (e.g. in white rectangles, Figs. 2d and 2f). We believe performance plateaus at 9 extra edges (red arrows, Fig. 2e) because here each node connects to its immediate NESW neighbours. Further longer-range edges have little impact. This is consistent with repeated analyses on 3×3 and 5×5
+
+grids, which plateau at 4 and 16 extra edges respectively. 
+
+C. Asynchronous Model Construction and Training 
+
+We have shown that TSGP’s mapping performance can be improved with additional connections. However, we have thus far assumed that all data are available upfront, and any robot could be connected to any other. In multi-robot map-ping these assumptions are not realistic, so we now design a model which can be trained incrementally, with dynamic connectivity as per the robots’ relative locations. We will now describe (1) how observations are fused into local models, (2) where new inducing points are added, (3) how inter-robot connections are made, (4) how kernel hyperparameters are learnt and (5) how predictions are generated. 1) Adding New Observations: Desirable features of a robot’s local model include i) scalability w.r.t the number of observations, ii) ability to efficiently incorporate new observations, iii) ability to discard old observations after model update. To this end, we employ the FITC GP ap-proximation [15], [16] (see factor graph in Fig. 1a). For a robot with inducing points uBi and observations y(Ci) =[y(Ci)1 , . . . , y (Ci) 
+
+> Ni
+
+]⊺ at X(Ci) = [( x(Ci)1 )⊺, . . . , (x(Ci) 
+
+> Ni
+
+)⊺]⊺, this approximation can be written 
+
+q(yi, fCi |uBi ) = 
+
+> Ni
+
+Y
+
+> n=1
+
+p(y(Ci) 
+
+> n
+
+|f (Ci) 
+
+> n
+
+)p(f (Ci) 
+
+> n
+
+|uBi ). (10) For Ni < M i, this approximation has inference complex-ity O  M 2 
+
+> i
+
+Ni
+
+, and is therefore scalable to large Ni. Further, a new observation y(Ci) 
+
+> Ni+1
+
+can be easily added online by cre-ating a f (Ci) 
+
+> Ni+1
+
+variable, new p(y(Ci)
+
+> Ni+1
+
+|f (Ci)
+
+> Ni+1
+
+), p(f (Ci)
+
+> Ni+1
+
+|uBi )
+
+factors, and calculating the resulting message to variable 
+
+uBi . Last, individual observations can be discarded after their message from factor p(f (Ci) 
+
+> n
+
+|uBi ) to uBi has been computed. We maintain a unary factor on uBi to accumulate messages from discarded observations. After this, factors 
+
+p(y(Ci) 
+
+> n
+
+|f (Ci) 
+
+> n
+
+), p(f (Ci) 
+
+> n
+
+|uBi ) and variable fi,m are removed. Discarding observation factors online introduces two sources of approximation relative to batch fitting. First, in most cases we add inducing points incrementally, as the robot gathers experience. Thus inducing points which have been added after an observation factor has been discarded will not benefit from the corresponding message. This does not affect inference when the inducing point locations are fixed throughout. Second, for non-linear observation factors 
+
+p(y(Ci) 
+
+> n
+
+|f (Ci) 
+
+> n
+
+), the message to uBi depends on the estimate of f (Ci) 
+
+> n
+
+. Observations added after y(Ci) 
+
+> n
+
+is removed could have affected E[f (Ci) 
+
+> n
+
+] and therefore the message to uBi .
+
+2) Adding New Inducing Points: We efficiently add induc-ing points to the model using the greedy variance selection 
+
+method of [22]. This method i) chooses an inducing point at the observation location with the highest marginal output variance under p(f (Ci) 
+
+> n
+
+|uBi ), ii) adds it to ZBi , iii) updates the model and iv) repeats until Mi is reached. In our setting, the set of observations grows with time; we do not have the static dataset assumed in [22]. Nonetheless we employ greedy variance selection in an online fashion, adding a new inducing point to the model every k timesteps. We restrict our choice of new locations to observations which have not yet been fused and discarded (see Sec. IV-C.1). This ensures that the new inducing point will benefit from a strong message from the co-located observation. In addition to selecting inducing points from observations, we find adding inducing points near the boundary between connecting robots provides the model more flexibility to make their representations consistent. To this end, we use two strategies: i) each robot adds a line of inducing points along the boundary; or ii) each robot adds inducing points at the same location as a subset of the other’s near the boundary. 
+
+3) Adding New Connections: We next consider how two communicating robots should exchange information to syn-chronise their representations. We connect their inducing points via a shared factor, but what form should this factor take? We first observe that the optimal prior over inducing points, i.e. that which most closely approximates a full GP over observations, is itself a full GP over the inducing points: 
+
+p(uB1 , . . . , uBb ) = N (0, K Zall ) (11) where KZall ∈ RM ×M is the kernel matrix over all inducing points. This joint prior can be factorised sequentially: 
+
+p(uB1 , . . . , uBb ) = p(uB1 )
+
+> b
+
+Y
+
+> i=2
+
+p(uBi |{ uBj }j<i ) (12) meaning it can be distributed s.t. each robot “owns” one factor. However, this fully connected structure is computa-tionally infeasible: inference scales as O(M 3), where M := P 
+
+> i
+
+dim( uBi ). Moreover, in realistic multi-robot settings, each robot can only communicate with nearby peers, where this factorisation implies all-to-all communication. Despite these constraints, (12) provides a theoretical tar-get: it implies an inter-robot communication protocol which would converge to the ideal p(uB1 , . . . , uBb ) in the limit of full connectivity. The protocol is as follows: 1) Initialisation: To begin, each robot has a unary GP prior on its inducing variables p(uBi ) = N (0, K ZBi ),equal to the message that uBi would receive from a global dense prior over inducing points (11), due to the marginal consistency of GPs. This ensures message updates are well-conditioned, enabling inference in each robot’s local model before any inter-robot contact. 2) Inter-robot Exchange: Suppose robot i now en-counters j. The two compare their indices to de-termine which will act as the parent in the con-necting factor. If i > j , for example, robot j will be the parent whose inducing points will condition 
+
+i’s prior. Three updates are now executed: i) the unary prior is amended to a conditional: p(uBi ) →
+
+p(uBi |uBj ) and connected to uBj , ii) variable-to-factor messages muBi p(uBi |uBj ), m uBj p(uBi |uBj )
+
+are updated, and iii) factor-to-variable messages 
+
+mp(uBi |uBj ) uBi , m p(uBi |uBj ) uBj are updated. 3) Decoupling: The message exchanges in 2 are executed every timestep the two robots are within range. After separation, the child i stores the previous state of 
+
+muBj p(uBi |uBj ) and p(uBi |uBj ). The factor may be further conditioned on another robot’s inducing vari-ables later. A unary factor with value mp(uBi |uBj ) uBj
+
+is added to uBj .In the limit of all-to-all communication, we highlight that this routine constitutes inference in a model with a full GP prior (12). However, there are two sources of approximation in our approach. First, robots which are always far away and never make contact may never be connected via a shared edge. These robots are treated as independent. Second, robots which connect and then move out of range will be propagating stale messages. Thus, the asynchronous nature of the connections may limit performance. We empirically evaluate the impact of these approximations in Sec. IV-D. 
+
+4) Distributed Hyperparameter Learning: Kernel hyper-parameters θ are typically tuned by gradient ascent of the log-marginal likelihood (see Sec. III-A). Bui and Turner [1] propose a message-passing routine to update kernel hyperparameters in TSGP. However, their method requires a full up-down sweeps of the tree to compute the gradient before it is applied. This is not applicable in our case, with cyclic models and sporadic connectivity. Instead, we compute stochastic, approximate marginal likelihood gradients based on each robot’s individual experience, and use this to update their local copy of the kernel hyperparameters. We interleave hyperparameter tuning and GBP, updating the GP factors using the latest hyperparameters at each stage. 
+
+5) Prediction: Prediction at a test point x∗ can be made directly from the posterior of a chosen block of inducing points as in (5). The choice of which block q(uBi |y) for a query x∗ should ideally be consistent with how observations are connected to inducing points during training. However, this will depend on the application and where q(uBi |y)
+
+are stored at prediction time. For DistGP, we explore two methods for mapping test queries to robots: i) predict at x∗
+
+with the robot whose current location xri,t is closest, r∗ =argmin ri∈{ r1,...,r R}|| x∗ − xri,t || 2 and ii) pre-allocate the input space regions {R i} in which each robot is responsible for mapping and predicting: r∗ = ri ⇐⇒ x∗ ∈ R i.
+
+D. Evaluation of Asynchronous Model Construction 
+
+To quantify the impact of asynchronous model construc-tion and GBP (as described in Sec. IV-C), we compare its performance to a batch-fitted model with a full GP prior over all inducing points. We generate the trajectories and observations as in Sec. IV-B, and again place inducing points on a regular grid within each robot’s cell. However, in this case the robots learn online, incorporating new observations, connecting and exchanging messages as per Sec. IV-C. Robots can only communicate with others in a dcomm = 0 .15 
+
+radius of their current location. This distance is a small fraction of the overall input space covering [−1, 1] ×[−1, 1] .For comparison, we fit the batch models every 400 steps, using all observations made so far. We evaluate predictions in six randomly chosen 0.3×0.3 subregions which are “held out”: robots may move through these regions but do not make observations when inside them. The results in Fig. 4 show that while the distributed imple-mentation (blue) is slower to converge, it achieves the same result as the batch-fitted dense GP prior over all inducing points (green). Further, the distributed implementation is able to rapidly achieve performance superior to a batch-fitted TSGP (orange) and a batch fitted model without connections (red). These results suggest we can maintain accuracy while learning a distributed map asynchronously. V. E XPERIMENTS 
+
+We now evaluate DistGP, testing it on two distributed map-ping simulations: sea-surface temperature (SST) prediction and occupancy mapping. We compare against DiNNO [2]. 0 5 10 15 20 25        
+
+> # 10 3Timesteps
+> 0.050
+> 0.075
+> 0.100
+> 0.125
+> 0.150
+> 0.175
+> 0.200
+> MSE ( ← )
+> Asynchr., Cyclic, Distributed
+> Batch, Tree-Structured
+> Batch, Full GP
+> Batch, No Connections 0510 15 20 25
+> # 10 3Timesteps
+> −0.4
+> −0.2
+> 0.0
+> 0.2
+> Neg. Log-Likelihood ( ← )
+
+Fig. 4: Asynchronous + distributed vs batch + centralised model. We compare i) online learning, ad-hoc inter-robot connections, ad-hoc GBP (blue) against ii) a centralised implementation with synchronous GBP sweeps on batch data (red, orange, green). The former converges to the same performance as the centralised, dense prior (green). Averages over 10 seeds, error bars cover ±1 SE around the mean. 
+
+A. Dynamic Sea Surface Temperature Tracking 
+
+Many environmental monitoring applications require dy-namic maps over large areas, in regions with poor connec-tivity. These challenges motivate a decentralised multi-robot mapping approach like ours. To evaluate our method in this setting, we simulate a multi-robot SST monitoring problem. The Optimally Interpolated SST (OISST) dataset [23], [24] combines satellite, buoy and ship measurements, and inter-polates them on a dense grid of 1/4 lat/lon resolution at daily frequency. We select 5 disjoint ocean regions, each covering a 4400 ×4400 km 2 area, and divided into a 5×5 grid. We simulate 25 aquatic robots spread over the region, one per cell, which make pointwise SST measurements as they move around. We assume the robots move at a low speed of 
+
+7km/h, can communicate with others within dcomm =1500 km and observe the temperature every 3 hours. As we only have access to daily mean temperatures, we assume the field remains constant throughout each day. The aim is for the combined robot predictions over the area to accurately match the ground truth map at any given point in time. As the robots move slowly and the map evolves with time, their observation coverage is limited. To do well, therefore, requires robots are able to exchange useful information with their peers to improve their predictions in less recently observed regions. Combined predictions are generated on a dense grid, with each robot predicting the SST at all test points inside their cell. We train our method by adding observations online and incorporating their messages into the inducing point posterior as per Sec. IV-C. Each robot retains 5 observations in their model after which we fuse them into the unary factor on their inducing variables. Every other step, one of these observations is selected as a new inducing point via greedy variance selection. While this amounts to a relatively dense set of inducing points, we only retain the 200 most recent inducing points, as older inducing points become irrelevant to current predictions as the field evolves. When two robots in adjacent cells connect, they both add a line of inducing points close to their shared border to provide extra flexibility Region DistGP (Ours) DiNNO                               
+
+> Central Atlantic 0.134 ±0.001 0.175 ±0.001
+> North Indian Ocean 0.160 ±0.001 0.222 ±0.001
+> South Indian Ocean 0.230 ±0.001 0.316 ±0.002
+> West Pacific 0.108 ±0.001 0.166 ±0.001
+> East Pacific 0.240 ±0.002 0.303 ±0.001
+
+TABLE I: SST prediction MSE. Error in predicted temper-atures over the map, averaged over all timesteps after a 25 
+
+day “burn-in”. Intervals cover ± SE over 4 seeds.                                           
+
+> Comm. Setting DistGP (Ours) DiNNO
+> Default 0.134 ±0.001 0.175 ±0.001
+> Comm. Interval 1→50.138 ±0.001 0.249 ±0.001
+> Comm. Interval 1→10 0.143 ±0.001 0.294 ±0.001
+> dcomm 1500km →1100km 0.143 ±0.001 0.420 ±0.005
+> dcomm 1500km →700km 0.169 ±0.001 −†
+
+TABLE II: Varying communication. MSE with different communication settings for the Central Atlantic region. 
+
+> †
+
+optimisation diverged. Intervals cover ± SE over 4 seeds. to make their fitted functions consistent. We use the product of two Mat´ ern-1/2 kernels as our covariance function, one over 2D space and one over time; and we tune kernel θ as well as the observation noise σ with the distributed method described in Sec. IV-C.4. The base model for DiNNO is a 6-layer MLP with width 
+
+64 and leaky-ReLU activations. At each timestep we train these networks using minibatch samples from the previous two weeks observations. This window length was found to perform best during validation. Hyperparameters for both methods were chosen based on simulations in the Central Atlantic region from 2022 /01 /01 to 2022 /07 /01 . We eval-uate global map accuracy on a dense grid at every 3 hour timestep between 2022 /07 /01 and 2023 /03 /15 , following a 
+
+25 day burn-in period. The results (Tab. I), show that DistGP significantly out-performs DiNNO for all regions, suggesting more effective information sharing. We further examine the robustness of both methods under different communication settings: i) less frequent (every 5 or 10 steps instead of every step), and ii) shorter range ( dcomm ∈ { 700km , 1100km } instead of 
+
+1500 km). In both cases, we find DiNNO suffers considerable degradation in accuracy where DistGP performs similarly to the more frequent, longer-range communication. 
+
+B. Online Occupancy Mapping 
+
+We now evaluate on the 2D online mapping simulation from Yu et al. [2]. The trajectories of 7 robots around a 
+
+2D environment (Fig. 5a) are predefined 1, and each robot makes a sweep of simulated LIDAR measurements from their position at each timestep. The aim is to use these observations, and inter-robot communication, to learn a map online. To simulate streaming data, Yu et al. [2] give each robot a buffer of the 400 most recent scans to train its model (total scans per trajectory ∼ 4 × 10 3). However, each robot 
+
+> 1See Fig. 3 of [2] for trajectories
+
+has to repeat its trajectory ∼ 100 s of times to achieve a good map. We believe this is due to catastrophic forgetting in NNs, and ask whether our probabilistic representation enables greater efficiency. We treat each LIDAR scan of ∼ 500 observations as a batch, use it to update the inducing point posterior, then discard it as per Sec. IV-C.1 (in contrast to DiNNO’s 400 
+
+scan buffer). As the occupancy observations are discrete 
+
+yn ∈ { 0, 1}, we use binary observation factors with energy equal to binary cross-entropy (BCE), and pn = σ(f (xn)) 
+
+as the predicted probability of occupancy. We linearise these factors to approximate outgoing messages as Gaussian. Observing that the variation in the map is concentrated at the walls of the environment, we choose inducing points to be close to the walls. From each LIDAR scan we extract a set of candidate inducing points by concatenating: i) the input locations for which density is 1 (positive examples), and ii) positive examples perturbed a small distance back towards the robot (negative examples). We choose new inducing points from this shortlist using the greedy variance method. Upon making contact, two robots connect via a shared factor (Sec. IV-C). Each robot also subsamples a set of the other’s nearby inducing point locations and creates new in-ducing points in their own model at these locations. Further, as the trajectories are partially overlapping, the robots ex-change inducing point posteriors, allowing them to predict in regions observed by the other without having to incorporate all the other’s inducing points into their own model. All robots use a Mat´ ern-1/2 kernel with fixed lengthscale. While our method generates a map distributed between robots, DiNNO produces an estimate of the global map on each robot. We therefore use two modes of evaluation: 1) Global map accuracy . As in [2], we assess DiNNO by the average accuracy of all robots’ global maps. For our method, we construct the global map which would be achieved by the robots exchanging both i) their own inducing point posterior and ii) posteriors received from others, when connecting. 2) Distributed map accuracy. In each evaluation round, we asses the accuracy when predicting each test point using the closest robot. As the locations change over time, the same test point may be predicted by different robots over the course of the experiment. The maps (Figs 5b, c and d) show that DistGP is able to converge to an accurate map in a single pass, i.e. with each robot traversing their trajectory once. In contrast, DiNNO must repeat the trajectories hundreds of times to get close to the ground truth. We further note that our final map more closely matches the ground truth under both metrics (Fig. 6), and the distributed and centralised predictions perform almost identically for both methods. VI. C ONCLUSION 
+
+We have presented DistGP: a method for multi-robot mapping in which each robot learns an sparse GP and communicates with others via GBP to ensure consistency. It extends TSGP [1] to include loops (which boost accuracy) (a) Ground truth (b) DistGP (ours), single pass (c) DiNNO, single pass (d) DiNNO, 200 passes 
+
+Fig. 5: Distributed occupancy mapping. Our method converges to an accurate map in a single pass through the robots’ trajectories, as observations are fully fused into the model. In contrast, DiNNO trains NNs iteratively and therefore requires many passes to overcome catastrophic forgetting. We note that our map at convergence is also more accurate than DiNNO’s. 10 2 10 3 10 4  
+
+> # Timesteps
+> 0.2
+> 0.4
+> 0.6
+> Binary Cross-Entr.  DistGP (Ours)
+> DiNNO
+> 1 Pass
+> Distributed Pred.
+> Centralised Pred. 10 210 310 4
+> # Timesteps
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> MSE
+
+Fig. 6: Test error during mapping (log-scale horizontal axis). and support asynchronous GBP. Our experiments demon-strate the inducing point map representation enables effective online data fusion and robust inter-robot communication relative to NN-based DiNNO [2]. There are many possibilities to build on this work. First, GPs are known to provide accurate uncertainty estimates in many settings, making them effective surrogate models for Bayesian optimisation, and useful for active learning. Our method could be an exciting opportunity for distributed Bayesian optimisation or active learning, in which multiple robots explore different subregions of the input space in parallel. Second, we note that each robot learns kernel hyperparameters in isolation. A message passing procedure to facilitate collaborative estimation in loopy graphs could improve performance considerably. VII. A CKNOWLEDGEMENTS 
+
+We are grateful to Javier Yu for his advice on tuning DiNNO. SN and AJD are funded by EPSRC Prosperity Partnerships (EP/S036636/1) and Dyson Techonology Ltd. REFERENCES [1] T. D. Bui and R. E. Turner, “Tree-structured gaussian process ap-proximations,” Advances in Neural Information Processing Systems ,vol. 27, 2014. [2] J. Yu, J. A. Vincent, and M. Schwager, “Dinno: Distributed neural network optimization for multi-robot collaborative learning,” IEEE Robotics and Automation Letters , vol. 7, no. 2, pp. 1896–1903, 2022. [3] M. Dunbabin and L. Marques, “Robots for environmental monitoring: Significant advancements and applications,” IEEE Robotics & Automa-tion Magazine , vol. 19, no. 1, pp. 24–39, 2012. [4] D. Albani, J. IJsselmuiden, R. Haken, and V. Trianni, “Monitoring and mapping with robot swarms for agricultural applications,” in 2017 14th IEEE International Conference on Advanced Video and Signal Based Surveillance (AVSS) . IEEE, 2017, pp. 1–6. [5] L. Yliniemi, A. K. Agogino, and K. Tumer, “Multirobot coordination for space exploration,” AI Magazine , vol. 35, no. 4, pp. 61–74, 2014. [6] Y. Deng, Y. Tang, Y. Yang, D. Wang, and Y. Yue, “Macim: Multi-agent collaborative implicit mapping,” IEEE Robotics and Automation Letters , vol. 9, no. 5, pp. 4369–4376, 2024. [7] M. Asadi, K. Zareinia, and S. Saeedi, “Di-nerf: Distributed nerf for collaborative learning with relative pose refinement,” IEEE Robotics and Automation Letters , 2024. [8] H. Zhao, B. Ivanovic, and N. Mehr, “Distributed nerf learning for col-laborative multi-robot perception,” arXiv preprint arXiv:2409.20289 ,2024. [9] ——, “Ramen: Real-time asynchronous multi-agent neural implicit mapping,” arXiv preprint arXiv:2502.19592 , 2025. [10] S. Boyd, N. Parikh, E. Chu, B. Peleato, J. Eckstein, et al. , “Dis-tributed optimization and statistical learning via the alternating di-rection method of multipliers,” Foundations and Trends® in Machine learning , vol. 3, no. 1, pp. 1–122, 2011. [11] W. Luo and K. Sycara, “Adaptive sampling and online learning in multi-robot sensor coverage with mixture of gaussian processes,” in 2018 IEEE international conference on robotics and automation (ICRA) . IEEE, 2018, pp. 6359–6364. [12] G. Habibi and J. P. How, “Human trajectory prediction using similarity-based multi-model fusion,” IEEE Robotics and Automation Letters , vol. 6, no. 2, pp. 715–722, 2021. [13] R. Murai, J. Ortiz, S. Saeedi, P. H. Kelly, and A. J. Davison, “A robot web for distributed many-device localization,” IEEE Transactions on Robotics , vol. 40, pp. 121–138, 2023. [14] A. Patwardhan and A. J. Davison, “A distributed multi-robot frame-work for exploration, information acquisition and consensus,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) .IEEE, 2024, pp. 12 062–12 068. [15] E. Snelson and Z. Ghahramani, “Sparse gaussian processes using pseudo-inputs,” Advances in neural information processing systems ,vol. 18, 2005. [16] L. Csat´ o and M. Opper, “Sparse on-line gaussian processes,” Neural computation , vol. 14, no. 3, pp. 641–668, 2002. [17] J. Pearl, Probabilistic reasoning in intelligent systems: networks of plausible inference . Elsevier, 2014. [18] R. Gallager, “Low-density parity-check codes,” IRE Transactions on information theory , vol. 8, no. 1, pp. 21–28, 1962. [19] K. Murphy, Y. Weiss, and M. I. Jordan, “Loopy belief propaga-tion for approximate inference: An empirical study,” arXiv preprint arXiv:1301.6725 , 2013. [20] A. J. Davison and J. Ortiz, “Futuremapping 2: Gaussian belief prop-agation for spatial ai,” arXiv preprint arXiv:1910.14139 , 2019. [21] Y. Weiss and W. Freeman, “Correctness of belief propagation in gaussian graphical models of arbitrary topology,” Advances in neural information processing systems , vol. 12, 1999. [22] D. R. Burt, C. E. Rasmussen, and M. Van Der Wilk, “Convergence of sparse variational inference in gaussian processes regression,” Journal of Machine Learning Research , vol. 21, no. 131, pp. 1–63, 2020. [23] R. W. Reynolds, T. M. Smith, C. Liu, D. B. Chelton, K. S. Casey, and M. G. Schlax, “Daily high-resolution-blended analyses for sea surface temperature,” Journal of climate , vol. 20, no. 22, pp. 5473–5496, 2007. [24] B. Huang, C. Liu, V. Banzon, E. Freeman, G. Graham, B. Hankins, T. Smith, and H.-M. Zhang, “Improvements of the daily optimum interpolation sea surface temperature (doisst) version 2.1,” Journal of Climate , vol. 34, no. 8, pp. 2923–2939, 2021.

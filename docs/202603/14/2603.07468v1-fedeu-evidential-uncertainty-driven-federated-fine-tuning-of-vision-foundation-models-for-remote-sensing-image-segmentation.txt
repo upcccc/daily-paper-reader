@@ -1,0 +1,707 @@
+Title: FedEU: Evidential Uncertainty-Driven Federated Fine-Tuning of Vision Foundation Models for Remote Sensing Image Segmentation
+
+URL Source: https://arxiv.org/pdf/2603.07468v1
+
+Published Time: Tue, 10 Mar 2026 01:06:52 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 1
+
+# FedEU: Evidential Uncertainty-Driven Federated Fine-Tuning of Vision Foundation Models for Remote Sensing Image Segmentation 
+
+Xiaokang Zhang, Senior Member, IEEE, Xuran Xiong, Jianzhong Huang and Lefei Zhang, Senior Member, IEEE 
+
+Abstract —Remote sensing image segmentation (RSIS) in fed-erated environments has gained increasing attention because it enables collaborative model training across distributed datasets without sharing raw imagery or annotations. Federated RSIS combined with parameter-efficient fine-tuning (PEFT) can un-leash the generalization power of pretrained foundation models for real-world applications, with minimal parameter aggregation and communication overhead. However, the dynamic adaptation of pretrained models to heterogeneous client data inevitably increases update uncertainty and compromises the reliability of collaborative optimization due to the lack of uncertainty estimation for each local model. To bridge this gap, we present FedEU, a federated optimization framework for fine-tuning RSIS models driven by evidential uncertainty. Specifically, personal-ized evidential uncertainty modeling is introduced to quantify epistemic variations of local models and identify high-risk areas under local data distributions. Furthermore, the client-specific feature embedding (CFE) is exploited to enhance channel-aware feature representation while preserving client-specific properties through personalized attention and an element-aware parameter update approach. These uncertainty estimates are uploaded to the server to enable adaptive global aggregation via a Top-k
+
+uncertainty-guided weighting (TUW) strategy, which mitigates the impact of distribution shifts and unreliable updates. Extensive experiments on three large-scale heterogeneous datasets demon-strate the superior performance of FedEU. More importantly, FedEU enables balanced model adaptation across diverse clients by explicitly reducing prediction uncertainty, resulting in more robust and reliable federated outcomes. The source codes will be available at https://github.com/zxk688/FedEU. 
+
+Index Terms —Image segmentation, federated learning, fine-tuning, evidential learning, and remote sensing imagery. 
+
+I. I NTRODUCTION 
+
+# REMOTE sensing image segmentation (RSIS) plays a critical role in numerous earth observation applications, including land cover/use mapping, disaster assessments, urban management, and environmental monitoring. With the growing availability of high-resolution remote sensing imagery, it has been widely used for pixel-wise identification and segmenta-tion of specific objects, such as buildings, roads, vegetation, 
+
+This work was supported in part by the National Natural Science Foundation of China under Grant No. 42371374. Xiaokang Zhang is with the School of Artificial Intelligence, Wuhan University, Wuhan 430072, China (e-mail: zhangxiaokang@whu.edu.cn) Xuran Xiong is with the School of Information Science and Engineering, Wuhan University of Science and Technology, Wuhan 430081, China (e-mail: xiongxuran@wust.edu.cn). Jianzhong Huang and Lefei Zhang are with the School of Computer Science, Wuhan University, Wuhan 430072, China (email: hjz 2000@whu.edu.cn; zhanglefei@whu.edu.cn). Manuscript received April 19, 2005; revised August 26, 2015. 
+
+and water bodies, from satellite or aerial imagery [1], [2]. In this context, deep learning models such as Convolutional Neural Networks (CNNs) and Transformers have become dominant, delivering high accuracy and efficiency across com-plex remote sensing datasets [3]. Recent works leveraging the power of pretrained foundation models with millions (or billions) of parameters, represented by Transformers, have shown promising results when fine-tuned for real-world remote sensing applications [4], [5]. Through large-scale pretraining on extensive datasets, these models learn universal represen-tations that enable efficient transfer to downstream tasks [6], [7]. Traditional deep learning methods typically rely on central-ized training, where the local data from participants is sent to a central data processing center for processing. Unfortunately, remote sensing datasets are often dispersed across institutions due to concerns over geospatial security, storage limits, and industrial competition, resulting in the widespread issue of data islands [8]. In real applications and engineering, distributed computing has been successfully applied, especially when large volumes of satellite imagery are available [9]–[11]. While this approach enables direct access to large datasets and straightforward implementation, it poses serious privacy concerns when sensitive or proprietary data, such as ultra-high-resolution images and annotations from different clients, are inevitably involved [12], [13]. Recently, federated learning (FL) has gained attention as an effective approach to tackling this issue by facilitating collaborative model development across multiple parties while keeping data decentralized. This paradigm preserves data pri-vacy and mitigates security risks by avoiding the transmission of raw data. For RSIS tasks, FL enables institutions to jointly train powerful models without sharing imagery or annotations, thereby breaking data barriers, improving generalization across regions, and advancing scalable remote sensing interpretation [14], [15]. Unfortunately, applying traditional FL directly to large pretrained models is impractical, as the optimization and transmission of billions of parameters incur substantial com-putational burdens on clients and lead to high communication overhead. To address this limitation, parameter-efficient fine-tuning (PEFT) methods provide an effective alternative by restricting optimization and communication to only a small subset of parameters [4], [16], [17]. Moreover, embedding efficient fine-tuning of pretrained models within a federated learning framework can enhance the efficiency of adopting foundation models for vision tasks in distributed and privacy- 
+
+> arXiv:2603.07468v1 [cs.CV] 8 Mar 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 2
+
+sensitive demands, while reducing communication overhead between the server and clients. Existing federated optimization studies have predominantly explored FedAvg [18] as the baseline approach, where each client trains locally on its own dataset and sends model updates to a central server for averaging aggregation. To tackle the model drifts caused by data heterogeneity, various local regularization and enhanced global aggregation strategies have been investigated [19], [20]. Building on this, personalized federated optimization methods have been proposed to ac-commodate client-specific variations while maintaining shared knowledge, by dynamically adapting updates based on local data or jointly optimizing global and local models [21]–[26]. Despite those achievements, federated fine-tuning for RSIS tasks still encounters several key challenges. 1) Most FL methods focus on image-level recognition and classification tasks [27]–[31]. For RSIS tasks that require pixel-wise prediction, spatial and statistical heterogeneity often lead to inconsistent optimization objectives among clients [14], [15], highlighting the need for specialized federated learning strategies. 2) In federated optimization, balancing global generalization and local personalization remains difficult [32], [33]. Un-reliable local predictions and biased updates can mislead global aggregation, degrading performance and causing unstable convergence. Without reliable uncertainty esti-mation, abnormal updates cannot be identified or sup-pressed, further contaminating the global model. 3) Despite its potential, federated fine-tuning of a pretrained model is still underexplored for RSIS. Existing methods mainly employ a simple combination of centralized PEFT and the FedAvg algorithm [34]–[38]. Unlike conventional FL, federated fine-tuning must dynamically adapt pre-trained models to heterogeneous client data while main-taining global consistency [39]. This process amplifies update uncertainty and compromises the reliability of collaborative optimization, making it unclear whether federated fine-tuning can deliver stable and trustworthy gains over local adaptation. To bridge these gaps, we proposed an evidential uncertainty-driven federated fine-tuning framework named FedEU for RSIS based on evidential deep learning. A key component is the computation of the epistemic uncertainties associated with each client’s predictions via a domain-specific evidential uncertainty head, which captures the evidence-based confi-dence of the shared model for the client’s data distribution. By uploading the uncertainties and updated model parameters to the server, the framework dynamically adjusts the aggregation process to optimize global model updates based on local models’ prediction uncertainty. The main contributions of this article are as follows.  
+
+> •
+
+We propose a novel evidential uncertainty-driven person-alized federated fine-tuning framework, where epistemic uncertainty is fully exploited to guide both local training and global aggregation. To the best of our knowledge, this is the first work introducing evidential learning into federated optimization.  
+
+> •
+
+We design two personalization strategies: personalized evidential estimation for uncertainty-guided local train-ing, and client-specific feature embeddings (CFE) with adaptive element-wise parameter update, improving ro-bustness to spatial heterogeneity and imaging variations.  
+
+> •
+
+A Top-k uncertainty-guided weighting (TUW) strategy is developed for global aggregation, which identifies high-risk regions, down-weights unreliable models, and sup-presses misleading local patterns to dynamically optimize the aggregation process.  
+
+> •
+
+Extensive experiments on three large-scale datasets demonstrate that our approach achieves significant im-provements in prediction performance and robustness for federated RSIS. The remainder of this article is structured in the following manner. Section II provides a concise review of related works on federated fine-tuning for the RSIS task. Section III outlines the key components and training process of the proposed FedEU approach. Section IV presents the performance evalu-ation and comparative analysis of FedEU. Finally, Section V concludes the study. II. R ELATED WORKS 
+
+A. Federated Image Segmentation 
+
+RSIS has evolved by exploiting architectures such as U-Net, Transformers, and CNN-Transformer hybrids to enhance representation learning and semantic understanding capabil-ities [40]–[43] based on centralized training. On this basis, large-scale pre-trained foundation models can be effectively adapted to downstream RSIS tasks through fine-tuning with only a limited amount of labeled data, thereby achieving strong generalization performance [4], [5]. Meanwhile, FL has emerged as a new optimization paradigm applicable to diverse models and tasks [44]–[46]. Specifically, the classical FedAvg method [47] aggregated local model updates by averaging to train a global model, but suffers from performance drops under non-IID data. To alleviate this, approaches such as FedProx [48] and FedProto [49] aim to mitigate client drift and enhance model aggregation across local clients by guiding local models toward the global optimum. To address spatial structure and fine-grained feature alignment in the pixel-wise segmentation tasks, FedSeg [50] proposed a modified cross-entropy loss and pixel-level contrastive learning to align local updates with the global model. Furthermore, FedUKD [51] integrated knowledge distillation into a federated U-Net model for land use classification. Federated RSIS remains under-explored and faces the challenges of high spectral and spatial heterogeneity inherent in remote sensing data, with the increased complexity of model optimization in federated environments. 
+
+B. Federated Fine-Tuning 
+
+Recently, parameter-efficient fine-tuning of pretrained mod-els for RSIS has drawn sustained attention [4], [52] as it reduces the cost of model adaptation by updating only a small subset of parameters. Federated fine-tuning combines the power of pre-trained large models with the flexibility of JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 30 1
+
+0
+
+> .. .
+
+0
+
+0 1
+
+## LoRA 
+
+Client 2 
+
+> Client-specific feature embeddings
+
+Client 1 
+
+Decoder SAM Encoder EU Head Seg. Head 
+
+> Client-specific feature embeddings
+
+Decoder SAM Encoder EU Head Download Download  
+
+> Conv Softplus
+
+Top-k weighted aggregation 
+
+Upload Server Upload Server   
+
+> low high
+> ... Personalized update
+> ... ...
+> ...
+> Client ID Personalized attention Personalized uncertainty estimation
+
+PEFT PEFT 
+
+Seg. Head  
+
+> Fig. 1. The framework of FedEU. The local network is a typical encoder-decoder framework with a segmentation head and an evidential uncertainty (EU) head. Furthermore, the CFE module is introduced to enable each client to assign personalized attention to different channels and calibrate its feature representations accordingly through dynamic parameter update. In the local training, the local model generates predictive evidential uncertainties via the EU head. In the global aggregation, the Top-kuncertainty-based weights are used to guide model parameter aggregation on the server side.
+
+federated learning to adapt these models to specific, decen-tralized datasets while reducing the communication overheads [34], [53]. By replacing traditional federated model training with PEFT, participants are allowed to collaboratively optimize prompts instead of full model weights [35], [36], [54]. Recent FedFMS [37] and FLAP-SAM frameworks [38] proposed parameter-efficient approaches to adapt the Segment Anything Model (SAM) within federated frameworks, balancing its pow-erful representations with federated learning constraints while achieving strong performance on distributed datasets. The straightforward combination of centralized PEFT algorithms with standard FL methods struggles to align locally fine-tuned models with global objectives, resulting in inconsistent segmentation accuracy across diverse domains. Moreover, the high uncertainty and bias in local updates can compromise the reliability of global aggregation, increasing the risk of overfit-ting to local distributions and degrading overall generalization. 
+
+C. Personalization and Regularization in Federated Optimiza-tion 
+
+Recent advances in FL have introduced various personaliza-tion and regularization strategies across clients while retaining the shared knowledge [21], [22]. These approaches can be broadly categorized into two categories: local calibration and dual-regularization. The local calibration approach attempts to dynamically adjust client updates based on local data char-acteristics and mitigate inter-client data heterogeneity [25], [55]. For example, Per-FedAvg [24] utilized meta-functions to initialize the local models. FedALA [25] proposed adaptive local aggregation that dynamically adjusts client updates based on local data characteristics. Moreover, customized model architecture searching and model structure pruning have been exploited to achieve the specificity of local models [28]–[30]. For the dual-regularization approach, global consistency and local adaptation are jointly constrained in the training process [56], [57]. For instance, in FedTGP [58] and FedProto [49], the derived deviations across local and global prototypes were utilized to optimize global model updates via an attention-weighted aggregation scheme. And in turn, the global proto-JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 4
+
+types were used to constrain the local model training. Global geometric priors can be used to guide sample generation and simulate cross-domain distributions [59]. More recently, pFedCSPC [33] enhanced client collaboration by providing personalized initial models through adaptive aggregation and leveraging global prototypes to guide local representation learning, thereby alleviating data imbalance and overfitting. While existing methods can alleviate bias from client data het-erogeneity, they neglect the impact of model-specific epistemic variations during global aggregation, especially the unreliable predictions. In comparison, we propose an uncertainty-aware strategy that identifies high-risk predictions, calibrates local features, and refines global aggregation to better align with client-specific objectives. III. M ETHODOLOGY 
+
+As shown in Fig. 1, the proposed FedEU is built on an end-to-end decoder-based RSIS model, where the encoder is adapted from SAM with a PEFT module for model tuning. Moreover, it incorporates client-specific embeddings and evi-dential uncertainty estimation in local training. These uncer-tainties are further used to guide model parameter aggregation on the server side through a TUW method. Two prediction heads are equipped after the decoder, one for segmentation outputs and the other for evidential uncertainty modeling. 
+
+A. Preliminaries 
+
+In a typical FL framework, a centralized server is re-sponsible for orchestrating the distributed training process among K participating clients, indexed by K = {1, 2, . . . , K }.Each client k possesses its own private dataset, denoted as 
+
+Dk = {(xk,j , y k,j )}Nk
+
+> j=1
+
+, where xk,j and yk,j represent the j-th input sample and corresponding label from the local dataset of client k, respectively. The goal of FL is to collaboratively train a unified global model with identical architecture and hyperparameter settings across clients, without exchanging raw data. The optimization process seeks to minimize a weighted global loss function, formulated as: 
+
+min  
+
+> Θ
+
+J(Θ) = X
+
+> k∈K
+
+qkLk(Θ; Dk), (1) where Θ represents the global model parameters, Lk(·; ·) in-dicates the local loss function evaluated on client k’s data, and 
+
+qk is a non-negative weight assigned to each client, satisfying P 
+
+> k∈K
+
+qk = 1 . Typically, qk is determined proportionally to the local data volume as qk = Nk 
+
+> N
+
+, where the total number of training samples is N = P 
+
+> k∈K
+
+Nk.In FedEU, we aim to collaboratively learn individual local models {Θ1, . . . , ΘK } for each client, without exchanging the private data. The overall segmentation network Θ can be divided into several components, including the frozen encoder 
+
+ΘEn , the trainable PEFT module ΘP, the CFE module ΘCfe ,the decoder ΘDe , the segmentation head ΘSeg , and the EU head 
+
+ΘDir .
+
+B. Client-Specific Feature Embeddings 
+
+The client embedding mechanism aims to encode client-specific characteristics, such as feature variations in data distributions, to construct effective model personalization. Considering the underlying distributional variance of image data across clients, it is desirable for each client to focus on different feature channels [55]. To this end, the CFE module is introduced based on the channel attention mechanism to guide each client toward personalized feature representation learning along distinct directions, as shown in Fig. 2. Specifically, for the k-th client, the encoded feature of an image at the l-th encoding stage is denoted as fk ∈ RC× H   
+
+> 2l×W
+> 2l
+
+, where C is the channel number, and H and W are the input image height and width, respectively. To simplify the communication cost, the client embedding δk ∈ RK was initialized as a one-hot vector, with the length set as the number of clients K, where the k-th value is 1 and others are 0. On this basis, the feature fk is integrated with the client embedding δk to enhance the client-specific representation. To achieve this, the length of δk was first extended to match the dimensionality of fk for improved training stability. Therefore, the updated client embedding δ∗
+
+> k
+
+can be obtained by: 
+
+δ∗ 
+
+> k
+
+= MLP 2
+
+ IN  MLP 1(δk) , (2) where MLP denotes a multi-layer perceptron consisting of a fully connected layer followed by a ReLU activation function, and IN denotes the instance normalization operation. Next, the global averaging on each channel of the feature fk was performed to generate a channel descriptor that can represent the abundant contextual information while saving computa-tional cost. The global average pooling on the l-th encoded feature fk is expressed as: dk = 1
+
+> Hl·Wl
+
+PHl
+
+> h=1
+
+PWl 
+
+> w=1
+
+f h,w k ,where Hl = H 
+
+> 2l
+
+and Wl = W 
+
+> 2l
+
+are the spatial dimensions after 
+
+l-th encoding, and f h,w k is the value of the encoded feature at location [h, w ]. 
+
+> Fig. 2. Illustration of the CFE module, which is inspired by [55]. It employs a personalized channel attention mechanism by embedding domain identifiers into the feature representations and three MLP layers are adopted to perform gated channel attention. The layer parameters are updated via an element-wise strategy considering the dynamics of the training process.
+
+To enhance the adaptability of channel attention to client-specific characteristics, a gating-based mechanism is adopted to generate more expressive attention weights. Specifically, the JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 5
+
+personalized client embedding δ∗ 
+
+> k
+
+and the channel-wise global descriptor dk are first transformed through two independent MLP layers. The output of the client embedding branch is activated by the Sigmoid function to generate a gating vector, while the output of the descriptor branch is activated by the Tanh function to retain both positive and negative contextual cues. The final channel attention weights ak are obtained by element-wise multiplication of the two branches: 
+
+ak = σ MLP 1(δ∗ 
+
+> k
+
+) ⊙ tanh  MLP 2(dk), (3) 
+
+f f inal k = fk + fk ⊗ ak, (4) where σ means the Sigmoid function and ⊙ denotes the element-wise multiplication. This gating design allows the model to adaptively emphasize or suppress different channels based on both client-specific characteristics and image content, thereby improving the representation capacity for downstream tasks. Finally, f f inal k is fed into the decoder used for further processing in the model. 
+
+C. Uncertainty-Guided Local Training 
+
+Evidential deep learning focuses on quantifying and manag-ing the epistemic uncertainty in model predictions [60]. In the context of local training, this approach enables each client to train models on their own data while incorporating uncertainty measures that reflect the reliability of the learned parameters. By using evidential learning, the local model in FedEU not only provides predictions but also estimates the uncertainty associated with those predictions to enhance model robustness. For the i-th sample, the evidence eci derived for the c-th class can be used to quantify the support provided by data for assigning a sample to a specific class. Then, the variable 
+
+αci = eci + 1 can be used to parameterize the Dirichlet distribution. By placing the Dirichlet distribution over the prior 
+
+pi = [ p1i, . . . , p Ci ], the distribution can be defined as follows 
+
+Dir ( pi | αi) = 1
+
+B (αi)
+
+> C
+
+Y
+
+> c=1
+
+pαci −1 
+
+> ci
+
+, (5) where C represents the number of classes in a classification problem, where αi = [ α1i, . . . , α Ci ] and B (αi) are multino-mial Beta functions. Then, the uncertainty can be obtained as inversely proportional to the total evidence: 
+
+Ui = C/ 
+
+> C
+
+X
+
+> c=1
+
+(eci + 1) . (6) Subsequently, a loss function is formulated to minimize the Bayesian risk associated with the squared error loss, expressed as ∥yi − pi∥22. In addition, a Kullback-Leibler (KL) divergence term is incorporated as a regularizer to discourage excessive uncertainty in the model’s predictions: 
+
+Lkeu =
+
+> Nk
+
+X
+
+> i=1
+
+Z
+
+∥yi − pi∥22
+
+1
+
+B (αi)
+
+> C
+
+Y
+
+> c=1
+
+pαci −1 
+
+> ci
+
+dpi
+
++ λ
+
+> Nk
+
+X
+
+> i=1
+
+KL [D (pi | ˜αi) ∥D (pi | ⟨ 1, . . . , 1⟩)] 
+
+(7) where D (pi | ⟨ 1, . . . , 1⟩) refers to a uniform Dirichlet dis-tribution, where the vector ⟨1, . . . , 1⟩ implies that each class shares an identical concentration parameter, corresponding to a state of maximum uncertainty. Therefore, the overall training objective for each client is the combination of the binary cross-entropy-based segmentation loss Lseg and the evidential uncertainty loss Leu , as follows: 
+
+Lk(Θ) = Lseg (Θ \ ΘDir ∪ ΘEn ) + μLeu (Θ \ ΘSeg ∪ ΘEn ), (8) where the hyperparameter μ controls the contribution of the two terms. Following this, each client k updates its local model param-eters Θtk via mini-batch stochastic gradient descent (SGD) to progressively approach optimal values: 
+
+Θt+1  
+
+> k
+
+= Θ tk − η∇L k Θt, (9) where η denotes the learning rate. The resulting updated parameters Θt+1  
+
+> k
+
+are then used both for participation in global aggregation during communication round t, and as the starting point for local training in round t + 1 .
+
+D. Uncertainty-Guided Global Aggregation 
+
+In FedEU, the TUW strategy adopts an uncertainty-constrained model aggregation by prioritizing the reduction of risks in the most uncertain and vulnerable regions, rather than simply minimizing the average risk. According to in-formation theory, high-uncertainty regions are typically more information-dense and harder to compress, making them more representative of the model’s generalization ability. Clients with more uncertain regions are considered less reliable and should have lower aggregation weights to avoid introducing misleading patterns into the global model. Therefore, FedEU enhances robustness by reducing the impact of pseudo-optimal regions and guiding the global model to focus on critical, yet under-learned, knowledge. To capture the most informative uncertainty regions dur-ing each local training round, we adopt a pixel-level Top-k
+
+selection strategy for estimating client-level uncertainty. This strategy ensures that clients with more confident local predic-tions are assigned higher contributions during global model aggregation. Specifically, for client k, we first compute the pixel-wise uncertainty map Uk[h, w ] across all local samples. Then, we select the top τ pixels with the highest uncertainty values, denoted as RTop-τc , and calculate the average uncer-tainty over these pixels, as follows: 
+
+¯uk,i = 1
+
+τ
+
+X
+
+> (h,w )∈R Top-τk,i
+
+Uk,i [h, w ]. (10) Then, the average ¯utk of all samples in this training round is computed for the client, which can be obtained by ¯utk =
+
+> 1
+> Nk
+
+PNk 
+
+> i=1
+
+¯utk,i . Then, the confident deviations across all clients can be used to quantify the federated weights wtk of the k-th client as follows: 
+
+ωtk =
+
+(
+
+Nk/ P 
+
+> k′∈K t
+
+Nk′ , t = 0 (1 − ¯utk)/ P 
+
+> k′∈K t
+
+(1 − ¯utk′ ). t ≥ 1 (11) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 6
+
+Here, clients with higher ωtk will contribute more to the global aggregation, ensuring that well-trained and more confident clients have a greater influence in the federated optimization process. This dynamic reweighting mechanism effectively mitigates the impact of uncertain clients and enhances overall model performance. At the end of each communication round, the global model is updated by aggregating the local parameter changes using an adaptive weighting mechanism, as defined below: 
+
+∆Θ t+1 = X
+
+> k∈K t
+
+ωtk ⊙ ∆Θ t+1  
+
+> k
+
+, ∀k ∈ K t (12) where ωtk represents the adaptive weight that reflects the contribution of client k’s local model to the global decision boundary. The aggregated update ∆Θ t+1 is then applied to refine the global model parameters: Θt+1 = Θ t+∆Θ t+1 . Each local update from client k is computed as the difference be-tween two successive local model states: ∆Θ t+1  
+
+> k
+
+= Θ t+1  
+
+> k
+
+−Θtk.
+
+E. Adaptive Update of CFE 
+
+In the above-mentioned global aggregation process, all parameters of a client model share the same weight. To incorporate fine-grained personalization into the local model, the update of the CFE module is performed via an adaptive element-wise aggregation manner as follows: 
+
+ˆΘt+1 Cfe ,k := Θ t 
+
+> Cfe ,k
+
++ (Θ t+1 Cfe − Θt
+
+> Cfe ,k
+
+) ⊙ Ψk,s.t. ξ(ψ) = max(0 , min(1 , ψ )) , ∀ψ ∈ Ψk
+
+(13) where the parameters of CFE, ˆΘt+1 Cfe ,k , are updated through an adaptive fusion of the global model and local model updates, guided by the coefficient matrix Ψk. This process can be regarded as the model calibration after each client performs local model training [25]. The clipping operation ξ(·)
+
+is applied for regularization to make sure ψ falls into [0 , 1] .The coefficient matrix Ψk can be learned by the gradient-based optimization method: 
+
+Ψk ← Ψk − η∇ΨLk( ˆΘt
+
+> Cfe ,k
+
+, Dtk; Θ t
+
+> Cfe
+
+). (14) During this process, all trainable parameters of the segmenta-tion network are frozen, except those in the CFE module. 
+
+F. Implementation 
+
+The implementation of the proposed FedEU framework is summarized in Algorithm 1. At each communication round, the server broadcasts the current global model parameters to the selected clients. Each client initializes its local model using the global model and incorporates the CFE module to adaptively calibrate the representation space. Local training is performed using a mini-batch stochastic gradient descent algorithm. During training, the evidential uncertainty of each sample is estimated via the Dirichlet-based output of the evidential classifier. Within each client, a Top-k subset of training samples with the highest uncertainty is selected to compute the client-level local uncertainty. Upon completion of local training, clients evaluate the uncertainty of their models and upload the model parameters along with the 
+
+Algorithm 1: FedEU 
+
+Input: Θ: model parameters; T : number of communication rounds; E: number of local training epochs; η: learning rate; μ: evidential loss ratio; {C k}Kk=1 : all clients; S: the server 
+
+Output: Personalized local model parameters 
+
+{Θ1, . . . , ΘK } 
+
+> 1
+
+Initialize the global model Θ; 
+
+> 2
+
+for t = 0 , . . . , T − 1 do  
+
+> 3
+
+Select training clients Ck ∈ {C k}Kt
+
+> k=1
+
+; 
+
+> 4
+
+Ck downloads Θt from S; 
+
+> 5
+
+if t > 0 then  
+
+> 6
+
+Θtk ← Θt ∪ Θt
+
+> Dir ,k
+
+;
+
+/* Local Training */  
+
+> 7
+
+for each client do  
+
+> 8
+
+Θt+1  
+
+> k
+
+← Θtk − η∇Jk(Θ t); 
+
+> 9
+
+Ck computes Utk by (6);  
+
+> 10
+
+∆Θ t+1  
+
+> k
+
+← Θt+1  
+
+> k
+
+− Θtk; 
+
+> 11
+
+Ck uploads ¯utk and ∆Θ t+1  
+
+> k
+
+to S;
+
+/* Global Aggregation */  
+
+> 12
+
+Calculate the weight wtk by (11);  
+
+> 13
+
+∆Θ t+1 ← P wtk ⊙ ∆Θ t+1  
+
+> k
+
+; 
+
+> 14
+
+Θt+1 ← Θt − ∆Θ t+1 ;
+
+/* Client Embeddings */  
+
+> 15
+
+for each client do  
+
+> 16
+
+Download Θt+1 from S; 
+
+> 17
+
+Update Ψk by (14);  
+
+> 18
+
+Personalize the CFE by (13);              
+
+> TABLE I DESCRIPTION OF THE EXPERIMENTAL SETUPS ABOUT CLIENTS AND SAMPLES WITH AN IMAGE SIZE OF 512 ×512 . Dataset Clients Fine-tuning samples Test samples GF-7 675 / 43 / 43 / 44 / 45 / 58 101 GLH 530 / 30 / 30 / 30 / 30 / 30 250 GVLM 671 / 93 / 141 / 81 / 161 / 72 208
+
+uncertainty estimates to the server. The server then performs an uncertainty-aware aggregation, where local models with lower overall uncertainty receive higher weights in the global model update, reducing the influence of models with high uncertainty or severe distribution drift. The aggregated global model is then broadcast back to clients for the next training round. This iterative process continues until convergence. The image encoder adopts the ViT-B variant of Segment Anything Model (SAM), pre-trained on the SA-1B dataset [62]. It contains 12 Transformer blocks, each integrated with a lightweight fine-tuning module (e.g., Adapter). Moreover, the encoder is followed by a normal CNN-based decoder that produces the final segmentation outputs. To be noticed, our work primarily focuses on federated optimization, while the fine-tuning strategy adopts the widely used Adapter-tuning-based PEFT methods. Specifically, the core components of the adapter consist of a downscale MLP layer, a ReLU activation JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 7Lanzhou_1 
+
+60 
+
+Guangzhou 
+
+_424 
+
+Lanzhou_620 
+
+Tianjin_80 
+
+Chongqing 
+
+_630       
+
+> True Positives True Negatives False Positives False Negatives True Positives True Negatives False Positives False Negatives
+
+(a)  (b)  (c)  (d)  (e)  (f)  (g)  (h) (a) (b) (c) (d) (e) (f) (g) (h)    
+
+> True Positives True Negatives False Positives False Negatives
+
+(a) (b) (c) (d) (e) (f) (g) (h)  (i) 
+
+FedBN  FedEU Per -FedAvg FedPM FedNova FedProx FedAvg  FedBN FedEU Per -FedAvg FedPM FedNova FedProx FedAvg 
+
+Fig. 3. Visual comparison of building extraction results from various FL algorithms on the GF-7 dataset. (a) Original image. (b) Ground truth. (c)-(h) The segmentation results obtained by (c) FedAvg, (d) FedProx, (e) FedSeg, (f) FedTGP, (g) Per-FedAvg, (h) FedBN and (i) FedEU. True positives, true negatives, false positives and false negatives are denoted by white, black, red, and blue, respectively. TABLE II THE TEST ACCURACIES (%) ON THE GF-7 DATASET .Method Chongqing Guangzhou Lanzhou Ningbo Shenzhen Tianjin Total IoU OA IoU OA IoU OA IoU OA IoU OA IoU OA IoU OA FedAvg [47] 45.39 89.37 46.46 88.97 47.00 84.67 50.67 87.19 46.16 86.87 56.19 90.42 48.66 88.18 FedProx [48] 55.27 93.17 41.67 88.52 42.71 85.97 55.84 90.07 45.33 87.30 52.63 90.32 49.73 89.68 FedSeg [50] 52.19 90.49 49.54 90.00 57.40 91.31 52.86 89.24 48.21 88.67 52.49 90.32 52.11 90.49 FedTGP [58] 52.03 92.09 47.83 89.66 49.21 87.04 56.67 90.33 51.22 89.03 55.77 91.02 52.29 90.72 Per-FedAvg [24] 50.90 93.79 56.22 90.90 49.80 91.35 54.07 89.34 45.35 90.26 54.09 89.35 51.74 91.06 FedBN [61] 52.14 92.16 47.08 89.43 53.28 89.09 54.93 89.77 49.31 88.38 52.00 90.45 51.46 89.88 FedEU (Ours) 57.66 95.51 61.09 93.53 61.28 92.52 65.23 92.38 53.57 90.38 61.15 93.80 55.32 91.26 
+
+function and an upscale MLP layer. Specifically, it interleaves transformer layers with a feed-forward bottleneck module, using a skip connection to adapt the layer’s output before passing it to the next layer. IV. E XPERIMENTS 
+
+A. Datasets 
+
+To comprehensively evaluate the proposed approach, we conduct experiments on three widely used RSIS datasets, including the GaoFen-7 (GF-7) Building Dataset, the GLH-Water Dataset, and the Global Very-High-Resolution Land-slide Mapping (GVLM) Dataset. These datasets cover diverse land-cover types and exhibit notable spectral heterogeneity, making them suitable for federated model learning evaluation. Detailed dataset configurations are summarized in Table I. We use a relatively small number of samples for fine-tuning the pre-trained models and a larger set for testing. 
+
+1) GaoFen-7 (GF-7) Building Dataset: The GF-7 Building Dataset [63] offers high-resolution imagery at 0.65 meters, col-lected from several urban regions in China, including Tianjin, Lanzhou, Chongqing, Ningbo, Guangzhou, and Shenzhen. It contains a total of 5, 175 image-label pairs, each comprising 
+
+512 × 512 pixel tiles, and spans an area of approximately 
+
+573 .17 square kilometers. The dataset spans various geograph-ical locations, providing a broad range of samples. Each client in the FL setup receives a sub-dataset linked to a specific city, ensuring the non-IID nature required for algorithm evaluation. 
+
+2) GLH-Water Dataset: The GLH-Water Dataset [64] con-tains 250 satellite images and surface water annotations, which are globally distributed and represent various water body types, such as rivers, lakes, ponds in forests, irrigation fields, JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 8117_97       
+
+> 20_507
+> 160_108
+> 160_126
+> 20_91
+> True Positives True Negatives False Positives False Negatives True Positives True Negatives False Positives False Negatives
+
+(a)  (b)  (c)  (d)  (e)  (f)  (g)  (h) (a) (b) (c) (d) (e) (f) (g) (h)    
+
+> True Positives True Negatives False Positives False Negatives
+
+(a) (b) (c) (d) (e) (f) (g) (h)    
+
+> FedBN FedEU Per -FedAvg FedPM FedNova FedProx FedAvg FedBN FedEU Per -FedAvg FedPM FedNova FedProx FedAvg
+
+(i) (i)       
+
+> 117_97
+> 20_507
+> 160_108
+> 160_126
+> 20_91
+> True Positives True Negatives False Positives False Negatives True Positives True Negatives False Positives False Negatives
+
+(a)  (b)  (c)  (d)  (e)  (f)  (g)  (h) (a) (b) (c) (d) (e) (f) (g) (h)    
+
+> True Positives True Negatives False Positives False Negatives
+
+(a) (b) (c) (d) (e) (f) (g) (h)    
+
+> FedBN FedEU Per -FedAvg FedPM FedNova FedProx FedAvg FedBN FedEU Per -FedAvg FedPM FedNova FedProx FedAvg
+
+(i) (i)  
+
+> Fig. 4. Visual comparison of water extraction results from various FL algorithms on the GLH-water dataset. (a) Original image. (b) Ground truth. (c)-(h) The segmentation results obtained by (c) FedAvg, (d) FedProx, (e) FedSeg, (f) FedTGP, (g) Per-FedAvg, (h) FedBN and (i) FedEU. True positives, true negatives, false positives and false negatives are denoted by white, black, red, and blue, respectively.
+
+barren areas, and urban regions. Each original image has dimensions of 12 ,800 × 12 ,800 pixels and a ground sampling distance of 0.3 meters. For experimental purposes, the dataset is partitioned into five subsets according to geographic regions, and the large-sized images are further cropped into smaller patches of size 512 × 512 pixels. 
+
+3) Global Very-High-Resolution Landslide Mapping (GVLM) Dataset: The GVLM dataset [65] is a large-scale benchmark for high-resolution landslide detection. It comprises 17 pairs of ultra-fine resolution remote sensing images, each with a spatial resolution of 0.59 meters. The data is organized into subsets corresponding to six geographically diverse landslide sites—located in Vietnam, China, India, Chile, Kyrgyzstan, and Georgia—each assigned to a distinct client for federated landslide extraction tasks. Due to pronounced spectral diversity and intensity fluctuations across these regions, this dataset presents considerable challenges for federated learning models to achieve robust and consistent training performance. 
+
+B. Implementation Details 
+
+The proposed FedEU is compared with various state-of-the-art FL algorithms, including FedAvg [47], FedProx [48], FedTGP [58], FedSeg [50], Per-FedAvg [24] and FedBN [61], where the last two approaches are personalized optimization methods. In the process of FedEU, each client adopts the same hyperparameters. The Adam optimizer was used for gradient updates. The number of communication rounds T was set to 
+
+200 , and the learning rate and mini-batch size for local training were set to 0.001 and 8, respectively. Additionally, the number of local training epochs E is set to 5. For the hybrid loss, the weight μ in the total loss is set to 0.8.Two widely used metrics, Overall Accuracy (OA) and Intersection over Union (IoU), were employed to evaluate the proposed method in the experiment. The OA metric evaluates the model’s ability to correctly classify both positive and negative samples. In contrast, IoU quantifies the overlap between predicted and ground truth regions by comparing their intersection to their union. While OA provides a broad evaluation of a model’s accuracy, IoU is particularly valuable for assessing spatial consistency in object segmentation. 
+
+C. Experimental Results 1) GF-7 Building Dataset: Fig. 3 shows the performance of FedEU and other FL methods on the GF-7 dataset for building extraction. While FedAvg and FedProx perform reasonably well on small buildings, they struggle with boundary delin-eation for large structures, leading to significant false positives. FedTGP and FedSeg partially alleviate data heterogeneity but still face difficulties in modeling complex building structures and capturing personalized features within the global model. Due to non-IID data across clients, existing FL methods often exhibit large omissions within building interiors. In contrast, FedEU more accurately distinguishes building boundaries and JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 9
+
+TABLE III THE TEST ACCURACIES (%) ON THE GLH DATASET .Method Client 1 Client 2 Client 3 Client 4 Client 5 Total IoU OA IoU OA IoU OA IoU OA IoU OA IoU OA FedAvg [47] 62.16 80.12 76.19 89.66 71.51 88.29 81.38 90.77 51.80 72.81 64.00 81.17 FedProx [48] 62.67 79.96 75.98 89.52 73.25 88.98 82.00 91.40 51.52 72.80 64.13 81.98 FedSeg [50] 62.37 79.41 71.40 87.82 72.53 88.41 83.31 91.95 53.97 73.78 63.95 81.56 FedTGP [58] 71.74 85.98 82.48 92.86 84.14 93.87 87.74 94.02 55.70 74.39 70.22 85.34 Per-FedAvg [24] 77.45 88.41 91.22 96.52 93.13 97.42 95.69 97.99 68.19 86.42 80.40 91.11 FedBN [61] 69.91 84.63 78.12 90.35 81.68 92.10 85.99 93.94 46.84 68.01 72.51 85.81 FedEU (Ours) 77.43 89.06 92.29 97.01 92.46 97.16 95.81 98.04 70.64 87.12 85.73 93.68 A
+
+oi_vietnam_30 
+
+dagu_india_166 
+
+s lagos_chile_58 
+
+Osh_200 
+
+Los_57       
+
+> True Positives True Negatives False Positives False Negatives True Positives True Negatives False Positives False Negatives
+
+(a)  (b)  (c)  (d)  (e)  (f)  (g)  (h) (a) (b) (c) (d) (e) (f) (g) (h)    
+
+> True Positives True Negatives False Positives False Negatives
+
+(a) (b) (c) (d) (e) (f) (g) (h)  (i) 
+
+FedBN  FedEU Per -FedAvg FedPM FedNova FedProx FedAvg  FedBN FedEU Per -FedAvg FedPM FedNova FedProx FedAvg 
+
+A
+
+oi_vietnam_30 
+
+dagu_india_166 
+
+s lagos_chile_58 
+
+Osh_200 
+
+Los_57       
+
+> True Positives True Negatives False Positives False Negatives True Positives True Negatives False Positives False Negatives
+
+(a)  (b)  (c)  (d)  (e)  (f)  (g)  (h) (a) (b) (c) (d) (e) (f) (g) (h)    
+
+> True Positives True Negatives False Positives False Negatives
+
+(a) (b) (c) (d) (e) (f) (g) (h)  (i) 
+
+FedBN  FedEU Per -FedAvg FedPM FedNova FedProx FedAvg  FedBN FedEU Per -FedAvg FedPM FedNova FedProx FedAvg 
+
+Fig. 5. Visual comparisons on the GVLM dataset. (a) Original image. (b) Ground truth. (c)-(h) The segmentation results obtained by (c) FedAvg, (d) FedProx, (e) FedSeg, (f) FedTGP, (g) Per-FedAvg, (h) FedBN and (i) FedEU. True positives, true negatives, false positives and false negatives are denoted by white, black, red, and blue, respectively. TABLE IV THE TEST ACCURACIES (%) ON THE GVLM DATASET .Method Vietnam China India Chile Kyrgyzstan Georgia Total IoU OA IoU OA IoU OA IoU OA IoU OA IoU OA IoU OA FedAvg [47] 83.06 99.67 47.63 98.29 35.45 98.86 71.62 90.76 82.52 97.60 66.75 95.26 59.26 96.24 FedProx [48] 83.68 99.69 47.24 98.29 35.65 98.83 71.64 90.76 82.11 97.53 66.42 95.14 59.36 96.25 FedSeg [50] 84.10 99.69 46.71 98.26 35.31 98.87 71.92 90.85 81.54 97.51 66.35 95.19 58.89 96.61 FedTGP [58] 83.58 99.68 47.39 98.28 66.55 99.46 71.31 90.66 82.70 97.62 47.79 91.80 64.90 96.06 Per-FedAvg [24] 84.64 99.70 51.13 98.16 64.90 99.37 93.54 98.12 85.24 97.99 73.93 96.49 72.45 98.13 FedBN [61] 82.12 99.66 52.26 98.33 63.21 99.39 92.87 97.95 70.17 94.79 65.82 94.39 71.07 97.42 FedEU (Ours) 83.21 99.65 52.16 98.33 70.78 99.56 93.30 98.07 85.11 98.00 73.02 96.21 76.63 98.25 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 10 
+
+suppresses noise from data heterogeneity. As shown in Ta-ble II, client-level performance varies significantly due to distributional differences. Compared methods fail to balance global generalization and client-specific adaptation, whereas FedEU achieves consistent improvements in IoU and OA, with IoU gains ranging from 3.58% to 6.66% over other methods. While some methods perform well on specific clients, their weak generalization limits overall effectiveness, highlighting FedEU’s advantage in accommodating diverse client needs. 
+
+2) GLH-Water Dataset: Fig. 4 presents the visualization results on the GLH dataset. Due to varying environmental and lighting conditions across clients, significant data het-erogeneity exists, posing challenges for FL. For example, in some cases (e.g., the first and fifth rows), river pixels are difficult to distinguish, leading to frequent false detections and omissions. Methods like FedAvg, FedProx, and FedSeg often produce fragmented results with false negatives, while FedTGP improves smoothness but still suffers from client drift caused by distributional differences. In contrast, FedEU better handles such heterogeneity, reducing noisy predictions and improving the consistency of water body extraction. As shown in Table III, FedEU outperforms other methods, achieving 5.33%–21 .78% gains in IoU and 2.57%–12 .51% 
+
+improvements in OA, demonstrating its generalization capa-bility in non-IID scenarios. Specifically, FedEU significantly outperforms other methods on Client 2, Client 4, and Client 5, while Per-FedAvg and FedBN achieve slightly better results on Client 3, respectively. Despite this, the consistently superior average results confirm the robustness and effectiveness of FedEU. 
+
+3) GVLM Dataset: As shown in Fig. 5, the heterogeneity of landslide images across clients is more pronounced than that of buildings or water bodies, due to the irregular and fragmented boundaries of landslide regions. These character-istics make accurate segmentation more difficult. Additionally, discontinuities in landslide regions within some clients can propagate through global aggregation, leading to missed de-tections in others (e.g., rows 3 and 5). FedAvg produces overly consistent boundary predictions across clients, failing to adapt to diverse ground truths. While FedBN, FedTGP, FedSeg, and Per-FedAvg mitigate client drift to some extent using regularization and prototype alignment, they still struggle with precise boundary delineation. In contrast, FedEU leverages ev-idential uncertainty to guide more personalized local learning, resulting in better handling of image heterogeneity. As shown in Table IV, FedEU achieves the best overall IoU of 76 .63% 
+
+and OA of 98 .25% , significantly outperforming all competing methods in the aggregated results. While Per-FedAvg achieves slightly better results on the Vietnam, Chile, and Georgia subsets, the consistently strong performance of FedEU across diverse clients highlights its robustness and effectiveness in handling distributional heterogeneity for cross-region RSIS. 
+
+D. Ablation Studies 
+
+To evaluate the contribution of each component in the pro-posed framework, we conducted an extensive ablation study, with the results summarized in Table V, where CQ, GZ, LZ,                                                           
+
+> TABLE V ABLATION STUDIES (%) OF KEY COMPONENTS IN FED EU ON THE GF-7. CFE TUW CQ GZ LZ NB SZ TJ Total 55.46 57.92 59.81 55.67 50.69 55.85 52.46
+> ✓54.45 60.65 60.33 55.87 51.78 56.80 53.28
+> ✓54.19 59.36 60.44 56.25 51.70 56.82 54.07
+> ✓✓57.62 61.09 61.50 55.91 52.75 55.15 55.32 (a) (b) (c)
+> (d) (e) (f)
+> Fig. 6. Analysis of the weight μin the EU head on the prediction performance. (a) to (f) are results in the clients of Chongqing, Guangzhou, Lanzhou, Ningbo, Shenzhen and Tianjin, respectively.
+
+NB, SZ, and TJ refer to Chongqing, Guangzhou, Lanzhou, Ningbo, Suzhou, and Tianjin, respectively. The results demon-strate that both the CFE module and the uncertainty constraints significantly enhance overall performance. Specifically, re-moving the CFE module led to degraded performance in areas with pronounced client-specific characteristics, such as Chongqing and Guangzhou, emphasizing the necessity of in-tegrating client-specific information to better capture localized patterns. Moreover, when the TUW and uncertainty constraints for global aggregation were excluded, performance in some cities, such as Lanzhou, slightly improved, while others, including Chongqing and Guangzhou, declined. It showed that the model exhibited diminished personalization across clients due to increased client drift, resulting in a noticeable drop in IoU accuracy. This highlights the critical role of uncertainty-aware aggregation in mitigating the effects of non-IID data. The ablation results demonstrate that these modules collec-tively mitigate client drift, enhance segmentation accuracy, and strengthen the model’s robustness under heterogeneous data distributions. 
+
+E. Parameter Analysis 
+
+To evaluate the effect of evidential uncertainty loss on model performance, we conduct a parameter sensitivity analysis on the weighting factor μ. As shown in Fig. 6, we examine IoU (%) variations across six clients from different cities, with μ
+
+ranging from 0 to 0.8. The results indicate that FedEU is rela-tively robust to the choice of μ within a moderate range (e.g., [0.2, 0.6]), where IoU scores remain stable across most clients. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 11 (a)  (b)  (c)    
+
+> (d) (e) (f)
+> Fig. 7. Training performance with uncertainty constraints using the GF-7 dataset. (a) to (f) are results in the clients of Chongqing, Guangzhou, Lanzhou, Ningbo, Shenzhen and Tianjin, respectively.
+
+In clients (a), (c), (d), and (f), performance steadily improves or fluctuates slightly within this range, confirming that the uncertainty loss provides consistent benefits without causing instability. Although clients (b) and (e) show more noticeable variation, the impact remains limited and does not significantly degrade segmentation quality. This robustness highlights the practicality of FedEU, as it maintains strong performance without requiring extensive hyperparameter tuning. 
+
+F. Uncertainty Analysis 1) On the Convergence: To further analyze the impact of the proposed personalization and regularization strategies on model training and uncertainty estimation, we tracked the changes in evidential uncertainty and prediction accuracy throughout the training process. As illustrated in Fig. 7, FedEU exhibits a rapid decline in uncertainty at the early training stages, followed by stabilization. It demonstrates a consistent and stable reduction in uncertainty across all clients, and it provides more accurate predictions as the prediction uncer-tainty decreases. When the CFE module is removed, the model exhibits slower convergence to the local data distribution. Notably, the absence of the TUW results in consistently higher uncertainty for clients such as Guangzhou, Lanzhou, Shenzhen and Tianjin, caused by unreliable model updates and biased alignment direction under heterogeneous data dis-tributions. Significant fluctuations in prediction accuracy are also observed in clients such as Guangzhou and Tianjin. In contrast, incorporating CFE and TUW constraints promotes faster convergence and more stable prediction performance, and the prediction uncertainties can be reduced more rapidly. These findings confirm that the proposed FedEU achieves rapid convergence of evidential uncertainty, improves the robustness of uncertainty estimates and ensures stable and balanced model adaptation across diverse clients. 
+
+2) On the Prediction Errors: Furthermore, we visualized evidential uncertainty and prediction errors to explore their relations on the GF-7 dataset using FedEU and its variants. As shown in Fig. 8, higher uncertainties are mainly concentrated inside and along the edges of building entities. FedEU and its variations provide reliable uncertainty estimation for model prediction because they leverage maximum entropy theory to effectively capture high uncertainty in unreliable predictions, demonstrating their advantage in uncertainty estimation and reliable decision-making. Without the CFE module, the model may assign high confidence scores to incorrect predictions in background regions with false alarms, indicating over-confidence in its erroneous outputs. A similar phenomenon is observed in some omitted areas within building entities when the TUM module is eliminated. Meanwhile, the model produces more prediction errors accompanied by higher uncer-tainties. Overall, the uncertainty quantification mechanism in FedEU can effectively capture high uncertainty in unreliable predictions and reduce their impacts to improve the model’s adaptability across diverse clients. V. C ONCLUSION 
+
+This paper first explored the remote sensing image seg-mentation (RSIS) based on the vision foundation model in federated environments by leveraging the parameter-efficient fine-tuning (PEFT) approach to unleash the generalization capability of the vision foundation model, like the Segment Anything Model (SAM), while reducing aggregation and com-munication overhead. To achieve this, we proposed FedEU, JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 12 (a)  (b)  (c)  (d)  (e)  (f)  (g)  (h) (a) (b) (c) (d) (e) (f) (g) (h)  
+
+> Fig. 8. Visual analysis of the distributions of evidential uncertainty and prediction errors with different ablations on the GF-7 dataset. (a) Original image. (b) Ground truth. (c)-(d) FedEU. (e)-(f) w/o CFE. (g)-(h) w/o TUW.
+
+a novel evidential uncertainty-driven federated optimization method. The core idea of FedEU is to fully leverage the variations of the model’s epistemic uncertainty as constraints to guide the federated optimization. Specifically, domain-specific evidential uncertainty modeling and a client-specific feature embedding (CFE) module are introduced to enable per-sonalized representation learning and capture local model un-certainties. Furthermore, a Top-k uncertainty-guided weighted (TUW) aggregation strategy is proposed to control the im-pact of distribution shifts and high-uncertainty predictions on the global model. By guiding the local training and global aggregation using evidential uncertainty, FedEU significantly enhances robustness and generalization of the segmentation model under heterogeneous conditions. Experimental results demonstrate that FedEU outperforms several state-of-the-art federated optimization methods on three large-scale remote sensing datasets. Ablation studies and uncertainty analyses show that the CFE module effectively captures local data characteristics, while the uncertainty-aware constraints reduce client drift and ensure stable convergence under non-IID conditions. The uncertainty estimations further confirm that FedEU mitigates overconfidence in challenging scenarios and better aligns high-uncertainty regions with pre-diction errors, thereby making reliable aggregation decisions. This demonstrates the effectiveness of FedEU’s uncertainty estimates and further strengthens the robustness and reliability of the segmentation model. Future work will focus on extend-ing FedEU to multimodal federated learning and incorporating communication-efficient strategies to enhance scalability and reduce training overhead in large-scale deployments. REFERENCES [1] L. Ding, H. Tang, Y. Liu, Y. Shi, X. X. Zhu, and L. Bruzzone, “Adversarial shape learning for building extraction in vhr remote sensing images,” IEEE Transactions on Image Processing , vol. 31, pp. 678–690, 2022. [2] L. Zhang, M. Lan, J. Zhang, and D. Tao, “Stagewise unsupervised domain adaptation with adversarial self-training for road segmentation of remote-sensing images,” IEEE Transactions on Geoscience and Remote Sensing , vol. 60, pp. 1–13, 2021. [3] L. Zhang and L. Zhang, “Artificial intelligence for remote sensing data analysis: A review of challenges and opportunities,” IEEE Geoscience and Remote Sensing Magazine , vol. 10, no. 2, pp. 270–294, 2022. [4] X. Lu and Q. Weng, “Multi-lora fine-tuned segment anything model for urban man-made object extraction,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–19, 2024. [5] Z. Dong, Y. Gu, and T. Liu, “Upetu: A unified parameter-efficient fine-tuning framework for remote sensing foundation model,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–13, 2024. [6] A. Fuller, K. Millard, and J. Green, “Croma: Remote sensing represen-tations with contrastive radar-optical masked autoencoders,” Advances in Neural Information Processing Systems , vol. 36, 2024. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 13 
+
+[7] F. Bastani, P. Wolters, R. Gupta, J. Ferdinando, and A. Kembhavi, “Satlaspretrain: A large-scale dataset for remote sensing image under-standing,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 16772–16782, 2023. [8] Y. Li, J. Tan, B. Dang, M. Ye, S. A. Bartalev, S. Shinkarenko, L. Wang, Y. Zhang, L. Ru, X. Guo, et al. , “Unleashing the potential of remote sensing foundation models via bridging data and computility islands,” 
+
+The Innovation , 2025. [9] J. Tan, C. Zhang, B. Dang, and Y. Li, “Towards privacy-preserved pre-training of remote sensing foundation models with federated mutual-guidance learning,” arXiv preprint arXiv:2503.11051 , 2025. [10] W. Xie, J. Ma, T. Lu, Y. Li, J. Lei, L. Fang, and Q. Du, “Distributed deep learning with gradient compression for big remote sensing image interpretation,” IEEE Transactions on Neural Networks and Learning Systems , pp. 1–15, 2024. [11] Z. Wu, J. Sun, Y. Zhang, Y. Zhu, J. Li, A. Plaza, J. A. Benediktsson, and Z. Wei, “Scheduling-guided automatic processing of massive hyper-spectral image classification on cloud computing architectures,” IEEE Transactions on Cybernetics , vol. 51, no. 7, pp. 3588–3601, 2021. [12] S. Moreno- ´ Alvarez, M. E. Paoletti, A. J. Sanchez-Fernandez, J. A. Rico-Gallego, L. Han, and J. M. Haut, “Federated learning meets remote sensing,” Expert Systems with Applications , p. 124583, 2024. [13] Y. Xu, T. Bai, W. Yu, S. Chang, P. M. Atkinson, and P. Ghamisi, “Ai security for geoscience and remote sensing: Challenges and future trends,” IEEE Geoscience and Remote Sensing Magazine , vol. 11, no. 2, pp. 60–85, 2023. [14] J. Tan, Y. Li, S. A. Bartalev, S. Stanislav, B. Dang, Y. Zhang, L. Yuan, and W. Chen, “Bridging data islands: Geographic heterogeneity-aware federated learning for collaborative remote sensing semantic segmenta-tion,” arXiv preprint arXiv:2404.09292 , 2024. [15] B. B¨ uy¨ uktas ¸, G. Sumbul, and B. Demir, “Federated learning across decentralized and unshared archives for remote sensing image classi-fication: A review,” IEEE Geoscience and Remote Sensing Magazine ,vol. 12, no. 3, pp. 64–80, 2024. [16] Y. Liu, P. Wu, M. Wang, and J. Liu, “Cpal: Cross-prompting adapter with loras for rgb+x semantic segmentation,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 35, no. 6, pp. 5858–5871, 2025. [17] X. Pu, H. Jia, L. Zheng, F. Wang, and F. Xu, “Classwise-sam-adapter: Parameter-efficient fine-tuning adapts segment anything to sar domain for semantic segmentation,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 18, pp. 4791–4804, 2025. [18] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y. Arcas, “Communication-Efficient Learning of Deep Networks from Decentral-ized Data,” in Proceedings of the 20th International Conference on Artificial Intelligence and Statistics (A. Singh and J. Zhu, eds.), vol. 54 of Proceedings of Machine Learning Research , pp. 1273–1282, PMLR, 20–22 Apr 2017. [19] C. Hao, W. Xie, D. Li, H. Qin, H. Ye, L. Fang, and Y. Li, “Fedcs: Coreset selection for federated learning,” in Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 15434–15443, 2025. [20] H. Wang, W. Xie, J. Ma, D. Li, and Y. Li, “Fedsls: Exploring federated aggregation in saliency latent space,” in Proceedings of the 32nd ACM International Conference on Multimedia , pp. 7182–7190, 2024. [21] A. Z. Tan, H. Yu, L. Cui, and Q. Yang, “Towards personalized federated learning,” IEEE transactions on neural networks and learning systems ,vol. 34, no. 12, pp. 9587–9603, 2022. [22] F. Sabah, Y. Chen, Z. Yang, M. Azam, N. Ahmad, and R. Sarwar, “Model optimization techniques in personalized federated learning: A survey,” 
+
+Expert Systems with Applications , vol. 243, p. 122874, 2024. [23] J. Li, M. Gong, Z. Liu, S. Wang, Y. Zhang, Y. Zhou, and Y. Gao, “Toward multiparty personalized collaborative learning in remote sensing,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–16, 2024. [24] A. Fallah, A. Mokhtari, and A. Ozdaglar, “Personalized federated learning with theoretical guarantees: A model-agnostic meta-learning approach,” in Advances in Neural Information Processing Systems 
+
+(H. Larochelle, M. Ranzato, R. Hadsell, M. Balcan, and H. Lin, eds.), vol. 33, pp. 3557–3568, Curran Associates, Inc., 2020. [25] J. Zhang, Y. Hua, H. Wang, T. Song, Z. Xue, R. Ma, and H. Guan, “Fedala: Adaptive local aggregation for personalized federated learning,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 37, pp. 11237–11244, 2023. [26] Y. Zhang, Y. Wang, Y. Li, Y. Xu, S. Wei, S. Liu, and X. Shang, “Fed-erated discriminative representation learning for image classification,” 
+
+IEEE Transactions on Neural Networks and Learning Systems , vol. 36, no. 2, pp. 3204–3217, 2025. [27] H. Lin, C. Zhang, D. Hong, K. Dong, and C. Wen, “Fedrsclip: Federated learning for remote sensing scene classification using vision-language models,” IEEE Geoscience and Remote Sensing Magazine , pp. 2–18, 2025. [28] Z. Hu, M. Gong, Z. Dong, Y. Lu, J. Li, and Y. Zhao, “Heterogeneity-aware pruning framework for personalized federated learning in remote sensing scene classification,” Knowledge-Based Systems , p. 113007, 2025. [29] S. Wang, J. Li, Z. Liu, M. Gong, Y. Zhang, Y. Zhao, B. Deng, and Y. Zhou, “Personalized multiparty few-shot learning for remote sensing scene classification,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–15, 2024. [30] J. Li, S. Wang, R. Yang, M. Gong, Z. Hu, N. Zhang, K. Sheng, and Y. Zhou, “Toward federated customized neural architecture search for remote sensing scene classification,” IEEE Transactions on Geoscience and Remote Sensing , vol. 63, pp. 1–12, 2025. [31] A. K. Aksoy, M. Ravanbakhsh, and B. Demir, “Multi-label noise robust collaborative learning for remote sensing image classification,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 5, pp. 6438–6451, 2024. [32] X. Zhang, J. Wang, W. Bao, Y. Zhang, X. Zhu, H. Peng, and X. Zhao, “Improving generalization and personalization in model-heterogeneous federated learning,” IEEE Transactions on Neural Networks and Learn-ing Systems , 2024. [33] L. Meng, Z. Qi, L. Wu, X. Du, Z. Li, L. Cui, and X. Meng, “Improving global generalization and local personalization for federated learning,” 
+
+IEEE Transactions on Neural Networks and Learning Systems , vol. 36, no. 1, pp. 76–87, 2025. [34] H. Chen, Y. Zhang, D. Krompass, J. Gu, and V. Tresp, “Feddat: An approach for foundation model finetuning in multi-modal heterogeneous federated learning,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, pp. 11285–11293, 2024. [35] H. Zhao, W. Du, F. Li, P. Li, and G. Liu, “Fedprompt: Communication-efficient and privacy-preserving prompt tuning in federated learning,” in ICASSP 2023 - 2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pp. 1–5, 2023. [36] T. Guo, S. Guo, J. Wang, X. Tang, and W. Xu, “Promptfl: Let federated participants cooperatively learn prompts instead of models – federated learning in age of foundation model,” IEEE Transactions on Mobile Computing , vol. 23, no. 5, pp. 5179–5194, 2024. [37] Y. Liu, G. Luo, and Y. Zhu, “ FedFMS: Exploring Federated Foundation Models for Medical Image Segmentation ,” in proceedings of Medical Image Computing and Computer Assisted Intervention – MICCAI 2024 ,vol. LNCS 15008, Springer Nature Switzerland, October 2024. [38] M. Asokan, J. G. Benjamin, M. Yaqub, and K. Nandakumar, “A federated learning-friendly approach for parameter-efficient fine-tuning of sam in 3d segmentation,” in Medical Image Computing and Com-puter Assisted Intervention – MICCAI 2024 Workshops (M. E. Celebi, M. Reyes, Z. Chen, and X. Li, eds.), (Cham), pp. 226–235, Springer Nature Switzerland, 2025. [39] P. M Ghari and Y. Shen, “Personalized federated learning with mixture of models for adaptive prediction and model fine-tuning,” Advances in Neural Information Processing Systems , vol. 37, pp. 92155–92183, 2024. [40] J. Geng, S. Song, and W. Jiang, “Dual-path feature aware network for remote sensing image semantic segmentation,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 34, no. 5, pp. 3674– 3686, 2024. [41] X. Ma, X. Zhang, M.-O. Pun, and M. Liu, “A multilevel multimodal fusion transformer for remote sensing semantic segmentation,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–15, 2024. [42] Y. Wang, H. Zhang, Y. Hu, X. Hu, L. Chen, and S. Hu, “Geometric boundary guided feature fusion and spatial-semantic context aggregation for semantic segmentation of remote sensing images,” IEEE Transac-tions on Image Processing , vol. 32, pp. 6373–6385, 2023. [43] R. Xu, C. Wang, J. Zhang, S. Xu, W. Meng, and X. Zhang, “Rssformer: Foreground saliency enhancement for remote sensing land-cover seg-mentation,” IEEE Transactions on Image Processing , vol. 32, pp. 1052– 1064, 2023. [44] D. Li, W. Xie, Y. Li, and L. Fang, “Fedfusion: Manifold-driven federated learning for multi-satellite and multi-modality fusion,” IEEE Transac-tions on Geoscience and Remote Sensing , vol. 62, pp. 1–13, 2023. [45] D. Li, W. Xie, Z. Wang, Y. Lu, Y. Li, and L. Fang, “Feddiff: Diffusion model driven federated learning for multi-modal and multi-clients,” 
+
+IEEE Transactions on Circuits and Systems for Video Technology , 2024. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015 14 
+
+[46] R. Jia, W. Xie, J. Lei, and Y. Li, “Adaptive hierarchical aggregation for federated object detection,” in Proceedings of the 32nd ACM International Conference on Multimedia , pp. 3732–3740, 2024. [47] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y Arcas, “Communication-efficient learning of deep networks from decentralized data,” in Artificial intelligence and statistics , pp. 1273–1282, PMLR, 2017. [48] T. Li, A. K. Sahu, M. Zaheer, M. Sanjabi, A. Talwalkar, and V. Smith, “Federated optimization in heterogeneous networks,” Proceedings of Machine learning and systems , vol. 2, pp. 429–450, 2020. [49] Y. Tan, G. Long, L. Liu, T. Zhou, Q. Lu, J. Jiang, and C. Zhang, “Fedproto: Federated prototype learning across heterogeneous clients,” in Proceedings of the AAAI conference on artificial intelligence , vol. 36, pp. 8432–8440, 2022. [50] J. Miao, Z. Yang, L. Fan, and Y. Yang, “Fedseg: Class-heterogeneous federated learning for semantic segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 8042–8052, 2023. [51] R. Kanagavelu, K. Dua, P. Garai, N. Thomas, S. Elias, S. Elias, Q. Wei, L. Yong, and G. S. M. Rick, “Fedukd: Federated unet model with knowledge distillation for land use classification from satellite and street views,” Electronics , vol. 12, no. 4, p. 896, 2023. [52] X. Ma, X. Zhang, M.-O. Pun, and B. Huang, “A unified framework with multimodal fine-tuning for remote sensing semantic segmentation,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 63, pp. 1– 15, 2025. [53] P. Saha, D. Mishra, F. Wagner, K. Kamnitsas, and J. A. Noble, “Fedpia– permuting and integrating adapters leveraging wasserstein barycenters for finetuning foundation models in multi-modal federated learning,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, pp. 20228–20236, 2025. [54] W. Deng, C. Thrampoulidis, and X. Li, “Unlocking the potential of prompt-tuning in bridging generalized and personalized federated learning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 6087–6097, 2024. [55] J. Wang, Y. Jin, and L. Wang, “Personalizing federated medical image segmentation via local calibration,” in European Conference on Com-puter Vision , pp. 456–472, Springer, 2022. [56] X. Zhang, B. Zhang, W. Yu, and X. Kang, “Federated deep learning with prototype matching for object extraction from very-high-resolution remote sensing images,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–16, 2023. [57] J. Wang, Y. Jin, D. Stoyanov, and L. Wang, “Feddp: Dual personaliza-tion in federated medical image segmentation,” IEEE Transactions on Medical Imaging , vol. 43, no. 1, pp. 297–308, 2024. [58] J. Zhang, Y. Liu, Y. Hua, and J. Cao, “Fedtgp: Trainable global prototypes with adaptive-margin-enhanced contrastive learning for data and model heterogeneity in federated learning,” in Proceedings of the AAAI conference on artificial intelligence , vol. 38, pp. 16768–16776, 2024. [59] Y. Ma, W. Dai, W. Huang, and J. Chen, “Geometric knowledge-guided localized global distribution alignment for federated learning,” in Pro-ceedings of the Computer Vision and Pattern Recognition Conference ,pp. 20958–20968, 2025. [60] M. Sensoy, L. Kaplan, and M. Kandemir, “Evidential deep learning to quantify classification uncertainty,” Advances in neural information processing systems , vol. 31, 2018. [61] X. Li, M. Jiang, X. Zhang, M. Kamp, and Q. Dou, “Fed {bn }: Feder-ated learning on non-{iid } features via local batch normalization,” in 
+
+International Conference on Learning Representations , 2021. [62] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo, et al. , “Segment anything,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 4015–4026, 2023. [63] P. Chen, H. Huang, F. Ye, J. Liu, W. Li, J. Wang, Z. Wang, C. Liu, and N. Zhang, “A benchmark gaofen-7 dataset for building extraction from satellite images,” Scientific Data , vol. 11, no. 1, p. 187, 2024. [64] Y. Li, B. Dang, W. Li, and Y. Zhang, “Glh-water: A large-scale dataset for global surface water detection in large-size very-high-resolution satellite imagery,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, pp. 22213–22221, 2024. [65] X. Zhang, W. Yu, M.-O. Pun, and W. Shi, “Cross-domain landslide mapping from large-scale remote sensing images using prototype-guided domain-aware progressive representation learning,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 197, pp. 1–17, 2023. 
+
+Xiaokang Zhang (Senior Member, IEEE) received the Ph.D. degree in photogrammetry and remote sensing from Wuhan University, Wuhan, China, in 2018. From 2019 to 2022, he was a Postdoctoral Re-search Associate with The Hong Kong Polytechnic University, Hong Kong, and The Chinese University of Hong Kong, Shenzhen, Shenzhen, China. He is currently an Associate Professor with the School of Artificial Intelligence, Wuhan University, Wuhan, China. He has authored or coauthored more than 60 scientific publications in international journals and conferences. His research interests include remote sensing image analysis, computer vision and machine learning. 
+
+Xuran Xiong is pursuing his bachelor’s degree in Electronic Information Engineering at Wuhan Uni-versity of Science and Technology, Wuhan, China. His research interests include federated learning, semantic segmentation, and remote sensing. 
+
+Jianzhong Huang is a senior experimentalist at Wuhan University. His research interests mainly focus on computer systems, intelligent computing systems, and intelligent Internet of Things, with a focus on practical applications and experimental exploration in these fields. 
+
+Lefei Zhang (Senior Member, IEEE) received the B.S. and Ph.D. degrees from Wuhan University, Wuhan, China, in 2008 and 2013, respectively. He was a Big Data Institute Visitor with the Department of Statistical Science, University College London, U.K., and a Hong Kong Scholar with the Department of Computing, The Hong Kong Polytechnic Uni-versity, Hong Kong, China. He is a professor with the School of Computer Science, Wuhan University, Wuhan, China, and also with the Hubei Luojia Laboratory, Wuhan, China. His research interests include pattern recognition, image processing, and remote sensing. Dr. Zhang serves as an associate editor of IEEE Transactions on Geoscience and Remote Sensing and IEEE Geoscience and Remote Sensing Letters.

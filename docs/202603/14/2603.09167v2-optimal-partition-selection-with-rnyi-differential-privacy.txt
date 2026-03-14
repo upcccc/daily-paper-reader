@@ -1,0 +1,1435 @@
+Title: Optimal partition selection with R\'enyi differential privacy
+
+URL Source: https://arxiv.org/pdf/2603.09167v2
+
+Published Time: Thu, 12 Mar 2026 00:47:48 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Optimal partition selection with R´ enyi differential privacy 
+
+Charlie Harrison Google 
+
+csharrison@google.com 
+
+Pasin Manurangsi Google Research 
+
+pasin@google.com 
+
+March 12, 2026 
+
+Abstract 
+
+A common problem in private data analysis is the partition selection problem, where each user holds a set of partitions (e.g. keys in a GROUP BY operation) from a possibly unbounded set. The challenge here is in maximizing the set of released partitions while respecting a differ-ential privacy constraint. Previous work [DVGM21] presented an optimal ( ε, δ )-DP algorithm when each user submits only a single partition. We generalize this approach to find the opti-mal algorithm under δ-approximate ( α, ε )-R´ enyi differential privacy (RDP), which allows much tighter analysis under composition. Motivated by the non-existence of a general optimality result in the case where users submit multiple partitions each, we present an extension of our optimal algorithm tuned for L2 bounded weighted partition selection which can be used as a drop-in improvement over the Gaussian mechanism any time the partition frequency is not also needed. We show that our primitive can be easily plugged into state of the art partition selection algorithms (PolicyGaussian from [GGK +20] and MAD2R from [CCAEZ25]), improving perfor-mance both for parallel and sequential adaptive algorithms. Finally, we show that there is an inherent cost to algorithms which do support releasing the frequency as well as the partitions. Specifically, we formulate a basic notion of optimal approximate RDP algorithm for partition selection using additive noise, and show that there is a numerical separation between additive and non-additive noise mechanisms for this problem. 
+
+# 1 Introduction 
+
+Differential privacy [DMNS06a] is a strong notion of privacy which bounds the information a worst-case attacker can learn about the output of a privacy mechanism. Since its inception, various relaxations of differential privacy have gained in popularity. In particular, R´ enyi differential privacy (RDP) [Mir17] and approximate RDP [PS22] are most relevant to this work. These relaxations typically provide much better utility in scenarios where many mechanisms are composed together. The problem of identifying the set of “keys” in a dataset is common in private data analysis. This comes up for instance, when determining the set of output partitions in a private GROUP BY query, or when trying to release a dataset of high dimensional items like arbitrary strings or URLs. In many cases, the set of possible outputs is exponential or even infinite, which precludes (non-trivial) mechanisms which introduce false positives. Therefore, we limit our approach to cases where the mechanism must emit only a subset of the true partitions. 1
+
+> arXiv:2603.09167v2 [cs.CR] 11 Mar 2026
+
+1.1 Related work 
+
+Some of the earliest work in private partition selection comes from [KKMN09], who analyzed search logs to privately release the set of user queries. Their approach leveraged adding additive Laplace noise to the count of each query, and only keeping queries whose count exceeded some threshold. This basic recipe (sometimes replacing Laplace noise with Gaussian noise) became a popular approach to partition selection, and has been proposed in various private query engines [WZL +20, AGJ +22]. In the case where a user only contributes to a single partition, [DVGM21] proved the optimal 
+
+algorithm under ( ε, δ )-DP. That is, each partition is released with the maximum possible probability under the privacy constraint. Our work generalizes this result, as taking the limit α → ∞ under 
+
+δ-approximate ( α, ε )-RDP recovers ( ε, δ )-DP exactly. By allowing a relaxation to finite α, we can show utility improvements when under composition (or, equivalently, to handle users contributing multiple partitions). [GGK +20] formalized the partition selection problem as “differentially private set union”, and innovated on algorithms to handle cases where users contribute more than one partitions. Their proposed algorithm is adaptive and greedy, where each user’s contribution is dependent on previous users’. [CWG22] follow a similar recipe, proceeding user-by-user in a dependent manner. While these sequential algorithms typically allow releasing the most partitions for the same privacy budget, they are difficult to scale for large datasets or query systems. [SDH23, CCAEZ25] both attempt to design adaptive algorithms that can be implemented in a highly parallelizable fashion. Finally, our work involves numerically computing optimal additive noise mechanisms. This overall approach was used in [GGA +25] to find variance-optimal mechanisms under an RDP con-straint, with the goal of improving an overall privacy guarantee under composition. Unlike their approach which attempted to minimize variance, we minimize tail bounds , enabling us to choose a tighter truncation threshold and therefore release more partitions. 
+
+1.2 Our contributions 
+
+Optimal partition selection (Section 3). In Theorem 14, we present an optimal partition selection algorithm (under approximate RDP) when users only submit a single partition. Our algorithm exactly recovers the result from [DVGM21] in the limit when α → ∞ , but for finite α
+
+we can leverage the tight composition afforded by RDP. We additionally show that when users can submit more than one partition, there is no single optimal mechanism (Theorem 16). 
+
+Weighted partition selection with the SNAPS mechanism (Section 4). We extend our core algorithm to handle real valued weights associated with partitions. Under this framework, we derive the SNAPS algorithm (Smooth Norm-Aware Partition Selection) which satisfy the privacy constraints when the users hold vectors with sensitivities bounded by arbitrary Lr norms. In particular, when r = 2, we can plug our algorithm into more complex adaptive mechanisms like DP-SIPS [SDH23], MAD2R [CCAEZ25], or PolicyGaussian [GGK +20] which use the Gaussian mechanism as a subroutine for partition selection. 
+
+Numerical experiments (Section 5). We replace the Gaussian mechanism with the SNAPS mechanism described above in two weighted partition selection algorithms: MAD2R [CCAEZ25] and PolicyGaussian [GGK +20]. Adopting our subroutine improves performance of both of these 2approaches, yielding state-of-the-art approaches for partition selection in both the parallel and sequential regimes. 
+
+Optimal partition selection with additive noise (Section 6). Motivated by the fact that [DVGM21] nearly matches utility with the truncated discrete Laplace mechanism, we present a convex program to find the optimal partition selection mechanism when a) users only submit a single partition, and b) when the algorithm must be the post-processing of an additive noise mechanism. We find a numerical separation in privacy between additive and non-additive approaches to partition selection. Since one benefit of using additive noise is that we privatize the count as well as the partition itself simultaneously, this result can be seen as the “cost of releasing the count” associated with any partition. When the count is not needed, our result demonstrates that additive-noise based techniques are (unfortunately) sub-optimal. 
+
+# 2 Preliminaries 
+
+For every K ∈ N, we use [ K] to denote the set {1, . . . , K }. For a given distribution P , we will write 
+
+P+ to denote the shift of P by one. That is, P (x) = P+(x − 1). Let Ber( p) denote the Bernoulli distribution. For X ∼ Ber( p), P(X = 1) = p = 1 − P(X = 0). 
+
+2.1 Privacy tools 
+
+We will begin by defining the relevant privacy notions used in this work. Below, we define differential privacy (DP) under a generic neighboring notion. Specific neighboring notions relevant to our work will be introduced when we formalize the problem in Section 2.2. 
+
+Definition 1 (Differential privacy [DMNS06b]) . A randomized algorithm M : X → Y satisfies 
+
+(ε, δ )-differential privacy (( ε, δ )-DP) if, for all neighboring inputs X, X ′ ∈ X , and for all S ⊆ Y ,
+
+P(M (X) ∈ S) ≤ eε · P(M (X′) ∈ S) + δ.
+
+As mentioned earlier, we are interested in variants of DP that uses (approximate) R´ enyi diver-gence to measure the divergence between M (X) and M (X′). We start by recalling R´ enyi divergence and its approximate counterpart below. 
+
+Definition 2 (R´ enyi divergence [R´ en61]) . Let P and Q be probability distributions on Ω. Then the R´ enyi divergence between P and Q at order α, denoted Dα (P ‖ Q), is 
+
+Dα (P ‖ Q) = 1
+
+α − 1 log 
+
+(∫ 
+
+> Ω
+
+P (x)αQ(x)1−αdx
+
+)
+
+,
+
+where P (·), Q (·) denote the probability mass/density functions of P and Q, respectively. 1 The R´ enyi divergence at α = 1 is defined as 
+
+D1 (P ‖ Q) = lim  
+
+> α→1
+
+Dα (P ‖ Q) = DKL (P || Q) = 
+
+∫
+
+> Ω
+
+P (x) log 
+
+( P (x)
+
+Q(x)
+
+)
+
+dx.            
+
+> 1If Pis not absolutely continuous with respect to Q, we define D α(P‖Q) = ∞for all α≥1.
+
+3Definition 3 (Approximate R´ enyi divergence [PS22]) . Let P and Q be probability distributions over Ω and δ ∈ [0 , 1] , then 
+
+Dδα (P ‖ Q) = inf {Dα
+
+(P ′ ∥∥ Q′) : P = (1 − δ)P ′ + δP ′′ , Q = (1 − δ)Q′ + δQ ′′ }
+
+i.e. P and Q can both be expressed as a convex combination of two distributions with weights 
+
+1 − δ and δ, respectively. 
+
+For notational convenience, we will sometimes write random variables in place of their distri-butions in D α (· ‖ · ) when there is no ambiguity. The privacy notion of our interest can now be defined as follows: 
+
+Definition 4 (Approximate R´ enyi DP [PS22]) . A randomized algorithm M : X → Y satisfies 
+
+δ-approximate ( α, ˆε)-R´ enyi differential privacy (denoted (δ, α, ε )-RDP for brevity) if, for all neigh-boring inputs X, X ′ ∈ X , Dδα (M (x) ‖ M (x′)) ≤ ˆε.
+
+Standard R´ enyi differential privacy [Mir17] is a special case of approximate RDP with δ = 0, which it shares the following straightforward composition properties with. 
+
+Proposition 5 (Approximate RDP composition) . Let M1 and M2 satisfy (δ1, α, ε 1) and (δ2, α, ε 2)
+
+RDP, respectively. Then M1 ◦ M2 satisfies (δ, α, ε 1 + ε2) RDP, where δ = δ1 + δ2 − δ1 · δ2 ≤ δ1 + δ2.
+
+In particular, if we have distributions P1, P 2, Q 1, Q 2 such that Dδ1 
+
+> α
+
+(P1 ‖ Q1) ≤ ε1 and Dδ2 
+
+> α
+
+(P2 ‖ Q2) ≤
+
+ε2, then Dδ1 +δ2 
+
+> α
+
+(P1 ⊗ P2 ‖ Q1 ⊗ Q2) ≤ ε1 + ε2.
+
+Converting from approximate RDP to approximate DP is a simple extension of [CKS20] to add the extra δ term. 
+
+Proposition 6. Let M satisfy (δ, α, ε )-RDP. Then M satisfies (ˆδ, ˆε)-DP for 
+
+ˆδ = δ + exp(( α − 1)( ε − ˆε)) 
+
+α ·
+
+(
+
+1 − 1
+
+α
+
+)α−1
+
+.
+
+2.2 Partition selection 
+
+In this section we will formalize the problem of partition selection. Let U be a universe of elements. A dataset X is represented as a vector in ZU
+
+> ≥0
+
+, where Xu is the number of occurrences of item u.
+
+Definition 7 (Private partition selection) . A partition selection mechanism M : ZU 
+
+> ≥0
+
+→ 2U takes as input a database and returns as many partitions as possible in the database (under the privacy constraint). In other words, the output M (X) must be a subset of {u ∈ U | Xu > 0}.
+
+We say that two datasets X, X ′ are neighbors under Lr norm bound ∆ if ‖X − X′‖r ≤ ∆. We focus on differentially private algorithms based on applying a partition selection primitive 
+
+independently on each element, as formalized below. 
+
+Definition 8 (Differentially private partition selection primitive) . A partition selection primitive is a function π : Z≥0 → [0 , 1] where π(0) = 0 . Its corresponding partition selection mechanism Mπ
+
+works as follows: For every u ∈ U , include u independently in the output with probability π(Xu).We say that π is (δ, α, ε )-RDP for ∆r = ∆ if Mπ is δ-approximate (α, ε )-RDP under the neighboring notion for Lr norm bound ∆.
+
+4We similarly define weighted partition selection and weighted partition selection primitive (de-noted by a release probability function φ : R≥0 → [0 , 1]) identically as above, except that each dataset is now represented as a vector of non-negative real numbers , i.e. X ∈ RU
+
+> ≥0
+
+. Here Xu denote the total weight of item u. Moreover, we also sometimes allow multiple norm bounds. 
+
+Remark 9. For notational convenience, our “dataset” above already consists of total counts or weights of elements. However, this can also be a result of a function (e.g. policy from [GGK +20]) of an underlying database. As long as this function results has bounded Lr-sensitivity, we can apply our mechanisms. 
+
+Finally, we outline what we mean by optimality of partition selection. 
+
+Definition 10. A partition selection primitive π∗ is optimal for (δ, α, ε )-RDP with ∆r = ∆ if it satisfies (δ, α, ε )-RDP for ∆r = ∆ and, additionally, for any other partition selection primitive π
+
+satisfying the same privacy constraint and all n ∈ N, π∗(n) ≥ π(n).
+
+Definition 11. A partition selection mechanism M is optimal for (δ, α, ε )-RDP with ∆r = ∆ if it satisfies (δ, α, ε )-RDP for ∆r = ∆ and additionally, for any other partition selection mechanism 
+
+M ′ satisfying the privacy constraint: E[|M (X)|] ≥ E[|M ′(X)|] for all datasets X.
+
+# 3 Optimal partition selection 
+
+Like [DVGM21], we will start by focusing on the unweighted case where each user only contributes a single element to a single partition, i.e. 2 ∆1 = 1. In this case, we will describe a simple formula for the optimal partition selection primitive π∗ for ( δ, α, ε )-RDP. Before do so, it will be useful to describe how the approximate R´ enyi divergence between two Bernoulli random variables behaves. 
+
+Lemma 12. Let P ∼ Ber( p), Q ∼ Ber( q) and α > 1. Fixing p, Dα (P ‖ Q) is decreasing in q on the interval [0 , p ] and increasing in q on the interval [p, 1] . Similarly, for a fixed q, Dα (P ‖ Q) is decreasing in p in [0 , q ] and increasing in p on [q, 1] .Proof. Clearly, D α (P ‖ Q) is minimized at 0 when p = q. The result follows from the joint quasi-convexity of R´ enyi divergence for α ≥ 0 (see [VEH14]). 
+
+Lemma 13. Let P ∼ Ber( p), Q ∼ Ber( q), and δ ∈ [0 , 1) . Then 
+
+Dδα (P ‖ Q) = 
+
+
+
+Dα
+
+(
+
+Ber 
+
+( p
+
+> 1−δ
+
+) ∥ ∥∥ Ber 
+
+( q−δ
+
+> 1−δ
+
+)) 
+
+p < q − δ
+
+Dα
+
+(
+
+Ber 
+
+( p−δ
+
+> 1−δ
+
+) ∥ ∥∥ Ber 
+
+( q
+
+> 1−δ
+
+)) 
+
+p > q + δ
+
+0 |p − q| ≤ δ. 
+
+Furthermore, fixing p, Dδα (P ‖ Q) is decreasing in q on the interval [0 , p ] and increasing in q
+
+on the interval [p, 1] . Similarly for a fixed q, Dδα (P ‖ Q) is decreasing in p on [0 , q ] and increasing in p on [q, 1] .      
+
+> 2Since this is the unweighted case, we can also set ∆ r= 1 for any 1 < r < ∞(or ∆ 0= ∆ ∞= 1) instead.
+
+5Proof. From Definition 3, we want to find distributions P ′ ∼ Ber( p′), Q ′ ∼ Ber( q′) that minimize Dα (P ′ ‖ Q′) such that P = (1 − δ)P ′ + δP ′′ and Q = (1 − δ)Q′ + δQ ′′ . From Lemma 12, it suffices to move p′ and q′ closer to equality. The maximum we can increase p′ to is clearly p/ (1 − δ) by setting P ′′ = 0, and the minimum is ( p − δ)/(1 − δ) by setting P ′′ = 1. The same is true for Q and the first result naturally follows by observing in cases where p′ and q′ would otherwise cross, they can be made equal instead. The second observation follows directly from applying Lemma 12 to each term. 
+
+Theorem 14. Let 
+
+L(q) = max 
+
+{
+
+p ∈ [q, 1] : D δα (Ber( p) ‖ Ber( q)) ≤ ε ∧ Dδα (Ber( q) ‖ Ber( p)) ≤ ε
+
+}
+
+and 
+
+π∗(n) = 
+
+{
+
+0 n = 0 
+
+L(π∗(n − 1)) n > 0 .
+
+Then π∗(n) is the optimal partition selection primitive for (δ, α, ε )-RDP with ∆1 = 1 .Proof. (Privacy) Consider any two neighbors X, X ′ whose counts of a partition u ∈ U are n, n ′
+
+respectively (and the counts of other items are the same) where n = n′ − 1. In either case, by construction we have Dδα
+
+(Mπ∗ (X) ∥∥ Mπ∗ (X′)) = D δα (Ber( π∗(n)) ‖ Ber( π∗(n − 1))) ≤ ε, 
+
+and, Dδα
+
+(Mπ∗ (X′) ∥∥ Mπ∗ (X)) = D δα (Ber( π∗(n − 1)) ‖ Ber( π∗(n))) ≤ ε. 
+
+Thus, Mπ∗ is δ-approximate ( α, ε )-RDP as desired. 
+
+(Optimality) First we will show that L is increasing in q. Fix any p > q . By Lemma 13, the divergence terms D δα (Ber( p) ‖ Ber( q)) and D δα (Ber( q) ‖ Ber( p)) are decreasing as q increases towards p. Therefore as q increases, larger values of p satisfy the divergence constraints. Now consider any partition selection primitive π where π(n0) > π ∗(n0); let n0 be the smallest such index, so that π(n0 − 1) ≤ π∗(n0 − 1). Since π∗(n0) = L(π∗(n0 − 1)), the monotonicity of 
+
+L implies that π(n0) > L (π(n0 − 1)). In other words, D δα (Ber( π(n0)) ‖ Ber( π(n0 − 1))) > ε or Dδα (Ber( π(n0 − 1)) ‖ Ber( π(n0))) > ε . This means that Mπ is not δ-approximate ( α, ε )-RDP. 
+
+Algorithm 1 computes π∗ iteratively. It reduces the problem to computing the value of p which satisfies an exact (pure) RDP guarantee between Ber( p) and a fixed Ber( q). Both p1 and p2 can be solved and guarantee convergence with simple bisection techniques, as they reduce to solving bounded convex and quasi-convex minimization problems, respectively. 
+
+3.1 General optimality of π∗
+
+Here we will extend our optimality result to show π∗ dominates mechanisms that do not necessarily consider each partition independently. Like, [DVGM21], we restrict to the ∆ 1 = 1 case. 
+
+Theorem 15. Mπ∗ is the optimal partition selection mechanism for (δ, α, ε )-RDP with ∆1 = 1 
+
+Proof. Consider a single partition u, and denote f (u) = Pr( u ∈ M (X)) the probability of releasing 
+
+u under an arbitrary mechanism M under ( δ, α, ε )-RDP. Fixing all other partitions, we have f (u) ≤
+
+π∗(Xu) by Theorem 14. Thus, E[|M (X)|] = ∑ 
+
+> u∈U
+
+f (u) ≤ ∑ 
+
+> u∈U
+
+π∗(Xu) = E[|Mπ∗ (X)|].
+
+6Algorithm 1 Procedure to compute π∗(n)
+
+Input: n ∈ Z≥0, ε > 0, α > 1, δ ∈ (0 , 1) 
+
+π ← 0
+
+loop n times 
+
+if π + δ ≥ 1 then return 1
+
+end if 
+
+q = min 
+
+{
+
+1, π
+
+> 1−δ
+
+}
+
+p1 ← { p ∈ [q, 1] : D α (Ber( p) ‖ Ber( q)) = ε}
+
+p2 ← { p ∈ [q, 1] : D α (Ber( q) ‖ Ber( p)) = ε}
+
+p = min( p1 ∪ p2)
+
+π ← min {1, p + δ − pδ }
+
+end loop return π
+
+3.2 Non-existence of optimal partition selection when ∆1 6 = 1 
+
+Unlike the case ∆ 1 = 1, we show below that, when ∆ 1 6 = 1, the optimal selection mechanism does 
+
+not exist for certain regime of parameters. 
+
+Theorem 16. For any 0 < α, ε, δ such that 34 π∗(2) > 3 · π∗(1) , there is no optimal selection mechanism even for ∆1 = 2 .Proof. Suppose for the sake of contradiction that there exists an optimal selection mechanism M ∗
+
+for ( δ, α, ε )-RDP with ∆ 1 = 2 and universe U = {1, 2}. Consider neighboring datasets X1 = (1 , 1) and X0 = (0 , 0). Notice that, by comparing P(M ∗(X1) 6 = ∅) and P(M ∗(X0) 6 = ∅) = 0, we have 
+
+P(M ∗(X1) 6 = ∅) ≤ π∗(1) . (1) We consider two cases, based on P(M ∗(X1) = U ). 
+
+Case I: P(M ∗(X1) = U ) < π ∗(1) . In this case, consider another mechanism M ′ where P(M ′(X1) = 
+
+U ) = π∗(1) , P(M ′(X1) = ∅) = 1 − π∗(1), and P(M ′(X) = ∅) = 1 for all X 6 = X1. It is simple to check that M is δ-approximate ( α, ε )-RDP and that E[|M ∗(X1)|] < E[|M ′(X1)|], a contradiction. 
+
+Case II: P(M ∗(X1) = U ) ≥ π∗(1) . Note that from (1), we must have P(M ∗(X1) = U ) = π∗(1) and P(M ∗(X1) = ∅) = 1 − π∗(1). Consider another dataset X2 = (3 , 1), which is a neighbor of X1.By comparing P(M ∗(X2) /∈ { U, ∅} ) with P(M ∗(X1) /∈ { U, ∅} ) = 0, we have 
+
+P(M ∗(X2) /∈ { U, ∅} ) ≤ π∗(1) .
+
+Consider yet another dataset X3 = (3 , 0), which is a neighbor of X2. By the guarantee of partition selection, we must have P(M ∗(X3) = U ) = 0 Similarly, by comparing P(M ∗(X2) = U ) with 
+
+P(M ∗(X3) = U ) = 0, we have 
+
+P(M ∗(X2) = U ) ≤ π∗(1) .           
+
+> 3Here π∗is as defined in Theorem 14 for ∆ 1= 1.
+> 4It is simple to see that the inequality π∗(2) >3·π∗(1) holds for all sufficiently large εand sufficiently small δ.
+
+7Together, this implies that 
+
+E[|M ∗(X2)|] = 1 · P(M ∗(X2) = {1}) + 1 · P(M ∗(X2) = {2}) + 2 · P(M ∗(X2) = U )= P(M ∗(X2) /∈ { U, ∅} ) + 2 · P(M ∗(X2) = U )
+
+≤ 3π∗(1) 
+
+< π ∗(2) .
+
+Meanwhile, consider a mechanism M ′′ that ignores all elements of U except for 1 and include 1 in the output with probability π∗(⌈i/ 2⌉). This mechanism satisfies δ-approximate ( α, ε )-RDP and 
+
+E[|M ′′ (X2)|] = π∗(2), which contradicts the optimality of M ∗.
+
+It remains an interesting open question to extend the above non-optimality result to a larger regime of parameters ε, δ .
+
+# 4 Weighted partition selection and the SNAPS mechanism 
+
+In this section we consider the more general weighted partition selection problem, where users hold a weight associated with each partition. We introduce a new mechanism: SNAPS (Smooth Norm-Aware Partition Selection). We remark that, due to the non-optimality result from Section 3.2, there is no optimal mechanism in this setting. Therefore, we aim to design an algorithm that provides a good utility and is practical. Our idea is to derive a weighted partition selection primitive which affords users a “smooth” privacy loss depending on how much weight they hold. This allows us to derive a composition-based mechanism where users can hold multiple partitions with a total bound on the Lr weight norm. To define the primitive, we let 
+
+L(q, ε, δ ) = max 
+
+{
+
+p ∈ [q, 1] : D δα (Ber( p) ‖ Ber( q)) ≤ ε ∧ Dδα (Ber( q) ‖ Ber( p)) ≤ ε
+
+}
+
+.
+
+Definition 17 (Weighted partition selection primitive) . Given parameters ε0, δ 0, r, ε 1, δ 1, ∆disc , ∆ >
+
+0, first we define the discretized weighted partition selection primitive ψr over non-negative integers as follows: 
+
+• For n = 0 , let ψr (0) = 0 
+
+• For n > 0, let Ndisc = ⌈ ∆
+
+> ∆disc
+
+⌉ and 
+
+ψr(n) = min  
+
+> i∈[min {n,N disc }]
+
+L
+
+(
+
+ψr(n − i), ε 0 + ε1 ·
+
+(
+
+∆disc (i − 1) 
+
+)r
+
+, δ 0 + δ1 ·
+
+(
+
+∆disc (i − 1) 
+
+)r)
+
+We define the weighted partition selection primitive φr on non-negative real numbers as follows: 
+
+φr(y) = ψr
+
+(⌊ y
+
+∆disc 
+
+⌋) 
+
+.
+
+We next point out that the definition of weighted partition selection primitive almost immedi-ately gives the privacy guarantee for ∆ 0 = 1 setting, as shown below. 5    
+
+> 5We note that if we impose an additional constraint on the minimum weight value that a user can submit, we can avoid the need for ε0, δ 0params with a fine enough discretization. Furthermore, this additional restriction does indeed improve utility relative to Definition 17. We avoid this for sake of presenting an algorithm which can always replace the Gaussian mechanism for partition selection.
+
+8Lemma 18. For ∆0 = 1 and ∆∞ ≤ ∆, the weighted partition selection primitive φr satisfies 
+
+(δ0 + δ1 · ∆r
+
+> ∞
+
+, α, ε 0 + ε1 · ∆r
+
+> ∞
+
+)-RDP. Proof. Consider any two neighboring datasets X, X ′ which differs on a single item u. Assume w.l.o.g. that Xu ≤ X′
+
+> u
+
+. By our assumption, we have X′ 
+
+> u
+
+− Xu ≤ ∆∞. Let z = ⌊ Xu
+
+> ∆disc
+
+⌋ and 
+
+z′ =
+
+⌊ X′
+
+> u
+> ∆disc
+
+⌋
+
+. We also have i := z′ − z ≤ ⌈ ∆∞/∆disc ⌉ ≤ Ndisc .Let δ = δ0 + δ1 · ∆r 
+
+> ∞
+
+and ε = ε0 + ε1 · ∆r
+
+> ∞
+
+. We have max {Dδα
+
+(Mφr (X′) ∥∥ Mφr (X)) , Dδα
+
+(Mφr (X) ∥∥ Mφr (X′))}
+
+= max {Dδα
+
+(φr(X′
+
+> u
+
+) ∥∥ φr(Xu)) , Dδα
+
+(φr(Xu) ∥∥ φr(X′
+
+> u
+
+))}
+
+= max {Dδα
+
+(Ber ( ψr(z)) ∥∥ Ber (ψr(z′))) , Dδα
+
+(Ber (ψr(z′)) ∥ ∥ Ber ( ψr (z)) )}.
+
+Finally, by definition of ψr(z′) = ψr(z + i), it is at most L(ψr(z), ε 0 + ε1 · (∆disc (i − 1) )r , δ 0 + δ1 ·
+
+(∆disc (i − 1) )r) ≤ L(ψr (z), ε, δ ), where the inequality follows from i − 1 ≤ ∆∞/∆disc . Thus, by definition of L, the above term is bounded above by ε as desired. 
+
+The above result can be easily extended to the case ∆ 0 > 1 with Lr norm bound ∆ r, with the cost being a ∆ 0 multiplicative factor in front of ε0, δ 0, as formalized below. 
+
+Theorem 19 (SNAPS Mechanism) . For any ∆0 ∈ N and ∆r ≤ ∆, the weighted partition selection primitive φr satisfies (δ0 · ∆0 + δ1 · ∆rr, α, ε 0 · ∆0 + ε1 · ∆rr)-RDP. We refer to the associated weighted partition selection mechanism Mφr as the SNAPS mechanism. Proof. Consider any pair of neighboring input datasets X, X ′ with ‖X−X′‖r ≤ ∆r and ‖X−X′‖0 ≤
+
+∆0. In particular, let S ⊆ U denote the set of all u ∈ U such that Xu 6 = X′
+
+> u
+
+. Let ε = ε0 · ∆0 + ε1 · ∆rr
+
+and δ = δ0 · ∆0 + δ1 · ∆rr. We have Dδα
+
+(Mφr (X) ∥∥ Mφr (X′)) = D δα
+
+(⊗
+
+> u∈S
+
+φr(Xu)
+
+∥∥∥∥∥⊗
+
+> u∈S
+
+φr(X′
+
+> u
+
+)
+
+)
+
+.
+
+Let δu = δ0 + δ1 · | Xu − X′
+
+> u
+
+|r and εu = ε0 + ε1 · | Xu − X′
+
+> u
+
+|r . From Lemma 18, we have Dδu
+
+> α
+
+(φr(Xu) ∥∥ φr(X′
+
+> u
+
+)) ≤ εu.
+
+Notice that ∑ 
+
+> u∈S
+
+δu ≤ δ and ∑ 
+
+> u∈S
+
+εu ≤ ε. Thus, applying the composition theorem (Propo-sition 5), we can conclude that D δα (Mφr (X) ‖ Mφr (X′)) ≤ ε. As a result, the mechanism is 
+
+δ-approximate ( α, ε )-RDP. 
+
+We find that the SNAPS mechanism can often be parameterized to outperform the Gaussian mechanism for weighted partition selection for L2 bounded input, and it can replace the Gaussian mechanism in all cases when the noisy weight vector output is not needed. 95 Experiments                          
+
+> Figure 1: Gaussian and SNAPS mechanism release prob-abilities for (1 ,10 −5)-DP. SNAPS is parameterized as in Section 5. The Gaussian probabilities are determined following [GGK +20, CCAEZ25], i.e. by splitting the δ
+> budget evenly in two, one for computing the analyti-cal Gaussian σ, and one for determining the threshold
+> τ= max k∈[∆ 0]{1/√k+σ·Φ−1
+> (
+> (1 −δ/ 2) 1/k
+> )
+> }.
+
+We showcase the versatility of the SNAPS mechanism by plugging it into two adap-tive partition selection mechanisms, MAD2R [CCAEZ25] and PolicyGaussian [GGK +20]. 6
+
+Both algorithms use an adaptive process to op-timize the weight vector associated with each user while maintaining an L2 norm bound. We replace the Gaussian mechanism with the SNAPS mechanism into the very last step in both cases. 
+
+Datasets. We consider a number of datasets commonly used in benchmarking differentially private partition selection. Reddit [GGK +20] is a dataset of posts to r/askreddit , Wiki [Wij] is a dataset of Wikipedia abstracts. Twitter [Axe17] is a dataset of customer sup-port tweets, Finance [Aen] is a dataset of stock market news data, Amazon [ML13, ZZL15] is a dataset of Amazon reviews, and IMDb [MDP +11] is a dataset of movie reviews. For each datasets, we replicate methodology in [GGK +20, CCAEZ25]: each token in a document is a partition, and each document corresponds to a user. In datasets where actual users are tracked, we combine users’ documents. 
+
+Algorithms and parameters. We match the benchmarking conditions of [CCAEZ25] by setting ∆0 = 100, and ensuring all algorithms satisfy (1 , 10 −5)-DP. 
+
+• MAD2R [CCAEZ25]. We use a basic composition privacy split of [ .1, . 9] across two rounds. We set dmax = 50 , b min = 0 .5, b max = 2 , C lb = 1, and Cub = 3. The adaptive threshold is set to β = 2 standard deviations above the baseline threshold. 
+
+• Policy [GGK +20]. We use only a single pass, and set the adaptive threshold to β = 4 standard deviations above the baseline threshold. 
+
+• SNAPS. When integrating SNAPS into the above mechanisms, we match all of the above parameters. However, rather than setting the adaptive threshold as a function of the Gaussian noise (and β), we set it so that the release probability under SNAPS is equalized with the Gaussian mechanism at that threshold (i.e. for β = 2 we choose a threshold that will release with probability ∼ 95% under SNAPS). Furthermore in all cases we set 7 α = 18 .5, ε 0 =            
+
+> 6We use https://github.com/heyyjudes/differentially-private-set-union and
+> https://github.com/jusyc/dp_partition_selection for PolicyGaussian and MAD2R implementations, re-spectively.
+> 7While these parameters were generally selected for good utility, we did not perform an exhaustive hyperparameter search. In particular, we use the exact same parameters for the ( .9, . 9·10 −5)-DP stage of MAD2R.
+
+10 10 −5, δ 0 = 5 · 10 −5, ∆disc = 5 · 10 −4, though of course it yields different release probabilities than plotted in Figure 1. To translate approximate RDP guarantees from our algorithm to approximate DP, we leverage Proposition 6 as implemented by [DPT26]. In particular, to match a (ˆ ε, ˆδ)-DP guarantee, we ensure our SNAPS mechanism satisfies ( ˆδ/ 2, α, ε )-RDP such that the ( α, ε )-RDP guarantee gives (ˆ ε, ˆδ/ 2)-DP. In other words, we use half our δ budget in RDP → DP conversion. In Figure 1, we plot the release probabilities between the Gaussian mechanism and SNAPS for the above parameterizations. As predicted by the plot, we should expect the SNAPS experiment variants to always outperform the Gaussian variants, which is validated by the results in Table 1, showing that SNAPS improves utility (as measured by the output size) by 10-20% in all cases. 
+
+Dataset PolicyGaussian PolicySNAPS MAD2R MAD2R-SNAPS 
+
+Reddit 7161 (± 10) 8486 (± 22) 6187 (± 22) 7161 (± 20) 
+
+Wiki 11467 (± 22) 13793 (± 47) 10431 (± 42) 12170 (± 39) 
+
+Twitter 15814 (± 45) 18407 (± 43) 13847 (± 29) 15739 (± 53) 
+
+Finance 20129 (± 31) 22952 (± 30) 17695 (± 48) 19969 (± 33) 
+
+Amazon 77840 (± 95) 89416 (± 71) 65273 (± 91) 73703 (± 107) 
+
+IMDB 3582 (± 21) 4447 (± 18) 3829 (± 23) 4559 (± 17) 
+
+Table 1: Comparison of output size of partition selection algorithms, with ε = 1 , δ = 10 −5, and ∆0 = 100. Results for each algorithm are averaged over 5 trials, with one standard deviation reported. The best parallel result is bolded, and the best sequential result is underlined. 
+
+# 6 Additive noise for partition selection 
+
+After exploring weighted partition selection in Section 4, we now pivot back to the notion of optimal 
+
+partition selection. A fundamental limitation of our optimal algorithm defined by π∗ (Theorem 15) is that, unlike the Laplace or Gaussian mechanism, it does not allow releasing the total weight 
+
+of released partitions along with the set of released partitions. We observe that all mechanisms which add noise to the weight vector and then perform thresholding as a post-processing step allow releasing the weight as a byproduct, as long as the additive noise alone suffices to guarantee privacy. This is formalized below. 
+
+Definition 20. An additive-noise partition selection mechanism MP,τ (n) is parameterized by a truncated probability distribution P with support 8 on Y ⊆ (−∞ , τ ] ⊆ Z. MP,τ (n) samples Z ∼ P
+
+and releases n+Z, then keeps the partition if n+Z > τ . The associated partition selection primitive is πP,τ (n) = PZ∼P (n + Z > τ ).
+
+Since πP,τ (0) = PZ∼P (Z > τ ) = 0, πP,τ is a valid partition selection primitive. Crucially, it is also a post-processing of an additive noise mechanism. As such, for privacy it suffices to bound      
+
+> 8Defining additive-noise partition selection mechanisms this way precludes using the standard discrete Laplace / Gaussian mechanism (i.e. they need to be truncated). This is done to both simplify our subsequent optimization technique, and also to naturally define the class of mechanisms as pure post-processing of additive noise. This is fortunately without much loss of generality for our purposes (optimality for ∆ 0= 1), since truncation on the right followed by normalization preserves privacy and decreases the release probability by at most δ.
+
+11 the loss associated with releasing Z + q(D) where q(D) is a sensitivity 1 query. This approach is precisely what allows us to release the noisy count. The property of releasing the total partition weight “for free” is a valuable aspect of these additive noise mechanisms. For instance, a private GROUP BY followed by a SUM in private SQL can be implemented with a single additive mechanism which simultaneously releases the partitions and their sums. As such, it would be very desirable if additive noise can come close to matching the privacy of π∗ for the same level of “utility”. In the α → ∞ regime explored in [DVGM21], the truncated discrete Laplace mechanism was shown to be nearly optimal in most regimes, and exactly optimal for certain settings of ε and δ. In this section, we show that there is an unfortunate inherent separation in privacy between additive mechanisms and the optimal mechanism in the α < ∞ regime. Throughout section, we follow the same restrictions as Section 3 (and [DVGM21]) and only consider the ∆ 1 = 1 case. 
+
+6.1 Approximate RDP of truncated additive noise mechanisms 
+
+Given a discrete distribution P over the integers with finite support, our goal is to evaluate the approximate RDP guarantee of P as an additive noise mechanism. Recall from Section 2 that P+
+
+is the distribution of P shifted by one. It is simple to see–by following definitions–that the additive noise mechanism is δ-approximate (α, ε )-RDP for ε = max {Dδα (P+ ‖ P ) , Dδα (P ‖ P+)}, and this is tight. Before we proceed to any specific optimization problems related to additive noise mechanisms, let us consider the generic problem of computing D δα (P ‖ Q) for arbitrary distributions P, Q . For this problem, we first observe that the exponentiation R´ enyi divergence and approximate R´ enyi divergence is convex. 
+
+Lemma 21. Let P and Q be distributions over some finite set U . Then for α > 1, e(α−1)D α (P ‖ Q) =
+
+Ex∼Q
+
+[( P (x)
+
+> Q(x)
+
+)α]
+
+is jointly convex in P and Q.Proof. Define g(t) = tα which is convex for α > 1 on [0 , ∞). The term inside the expectation is 
+
+f (u, v ) = uαv1−α. For v > 0 this is equal to u · g(u/v ) which is the perspective function of g which is jointly convex in v and u. Furthermore, this convexity is preserved for the edge case when v = 0 where f (0 , 0) = 0 and f (u, 0) = ∞ for u > 0. The lemma statement follows due to the fact that expectations of jointly convex functions are jointly convex. 
+
+Proposition 22. Let P and Q be distributions over some finite set U . Then for α > 1, e(α−1)D δα (P ‖ Q)
+
+is jointly convex in (P, Q, P ′, Q ′), where P ′, Q ′ are the minimizing distributions in Definition 3: 
+
+Dδα (P ‖ Q) = inf {Dα (P ′ ‖ Q′) : P = (1 − δ)P ′ + δP ′′ , Q = (1 − δ)Q′ + δQ ′′ }.Proof. Observe that by Definition 3, e(α−1)D δα (P ‖ Q) is the value of the following optimization problem: minimize ∑
+
+> x
+
+P ′(x)αQ′(x)1−α
+
+subject to ∑ P ′(x) = ∑ Q′(x) = 1 ,
+
+0 ≤ P ′(x) ≤ P (x)
+
+1 − δ ,
+
+12 0 ≤ Q′(x) ≤ Q(x)
+
+1 − δ .
+
+Let f (P ′, Q ′) = ∑ 
+
+> x
+
+P ′(x)αQ′(x)1−α. By Lemma 21, each term in the sum is jointly convex in (P ′(x), Q ′(x)), so f is jointly convex in ( P ′, Q ′). The constraints define a convex set in the joint space of ( P, Q, P ′, Q ′). Specifically, the inequality constraints are linear. The function of interest is the partial minimization of a jointly convex function over a convex set, which preserves convexity. 
+
+Fast Algorithm for Computing Approximate R´ enyi Divergence. From Proposition 22, it is feasible to numerically solve for the approximate R´ enyi divergence of two discrete distributions supported on a finite domain via standard convex optimization. However, there exists a greedy algorithm to compute this in O(n log n) time for any two discrete distributions P and Q with total support size n using a “water-filling” approach, as described below. Instead of P ′, Q ′, it will be easier to describe an algorithm for finding ˜P = (1 − δ)P ′ and ˜Q = (1 − δ)Q′. The algorithm works as follows: 1. Compute ˜P by finding a cutoff λP such that if we clip all likelihood ratios ˜P (x)/Q (x) to be at most λP , the total mass removed from P is exactly δ. More formally, find λP such that 
+
+∑
+
+> x
+
+˜P (x) = 1 − δ for ˜P (x) = min {P (x), λ P Q(x)}
+
+2. Compute ˜Q by finding a cutoff λQ such that if we clip all likelihood ratios ˜P (x)/ ˜Q(x) to be at least λQ, the total mass removed from Q is exactly δ. That is, find λQ such that 
+
+∑
+
+> x
+
+˜Q(x) = 1 − δ for ˜Q(x) = min {Q(x), ˜P (x)/λ Q}
+
+The approximate R´ enyi divergence between P and Q is just the R´ enyi divergence between the normalized versions of P ′ and Q′. Note that λP (resp. λQ) can be computed simply in O(n log n)time by iterating over the ratios P (x)/Q (x) (resp. ˜P (x)/Q (x)) in a sorted order, and manipulating the cumulative masses. More details and the proof of correctness are given in Section A. It should be note that, remarkably, the distributions P ′ and Q′ do not depend on α at all. 
+
+6.2 Characterizing π∗ as an additive noise mechanism. 
+
+Recall that we have computed the optimal partition selection primitive π∗ in Section 3. In this section, we note that this mechanism can be viewed as an additive-noise partition selection strategy, and compute its privacy guarantees using the approach in the previous subsection. 
+
+Definition 23. For a given optimal partition selection primitive π∗, denote by Π the discrete distribution with support on {0, . . . , n d − 1} where nd = min {n ∈ N : π∗(n) = 1 } and 
+
+Π( x) = π∗(nd − x) − π∗(nd − 1 − x) ∀x ∈ { 0, . . . , n d − 1}
+
+It is easy to see that π∗ is increasing and, for δ > 0, nd is always finite (i.e. nd ≤ ⌈ 1/δ ⌉). Thus, Π is a valid distribution. Furthermore, the additive-noise partition selection primitive from Π with threshold τ = nd − 1 satisfies 
+
+πΠ,τ (n) = PZ∼Π(Z > τ − n) = 
+
+> nd−1
+
+∑ 
+
+> x=τ−n+1
+
+Π( x) = π∗(n).
+
+13 In other words, the additive noise mechanism characterized by Π precisely matches the π∗ strategy. Since π∗ exactly characterizes Π up to translation, no other additive-noise distribution can both 1) exactly match the utility of π∗ and 2) improve privacy over Π. We can numerically compute the privacy guarantee of the additive noise mechanism for Π using the approach in Section 6.1. Figure 3 shows there is a clear separation in privacy between π∗ and Π, which show a separation between any additive-noise partition selection strategies which exactly 
+
+match the selection probabilities of π∗ in the α < ∞ regime. 
+
+6.3 Optimal additive noise with a single point-wise utility 
+
+Figure 2: Probability mass functions (centered at 0) for optimal additive noise distributions sat-isfying π(61) = 1 at various values of α as minimized by the convex program in Theorem 26. As 
+
+α grows, the optimal distribution converges to a truncated discrete Laplace (Proposition 27). At smaller α the optimal distribution becomes platykurtic, with a flatter peaks and thinner tails. In the previous section, we showed that there is a privacy gap if we exactly match the selection probabilities of π∗ with additive noise. In this section we will relax this to a specific point-wise guarantee: for a fixed nd ∈ N, we will find additive noise mechanisms which satisfy πP,r (nd) = 1 (i.e. those that release the partition with count at least nd deterministically 9), while achieving the best possible privacy guarantee (minimizing ε for fixed δ, α ). Similar to Proposition 22, we can in fact find the optimal additive noise by formulating this as a convex optimization, but when P is not fixed apriori. The point-wise utility bound imposes a single constraint on P : that it has support only on {0, . . . , n d − 1}. Under that constraint, it suffices to find the P that minimizes the privacy objective max {Dδα (P ‖ P+) , Dδα (P+ ‖ P )}. This can be stated equivalently as follows. minimize max 
+
+{∑
+
+> x
+
+P ′
+
+> 1
+
+(x)αQ′
+
+> 1
+
+(x)1−α, ∑
+
+> x
+
+Q′
+
+> 2
+
+(x)αP ′
+
+> 2
+
+(x)1−α
+
+}
+
+(2) subject to ∑ P (x) = ∑ P ′ 
+
+> i
+
+(x) = ∑ Q′
+
+> i
+
+(x) = 1 ,
+
+0 ≤ P ′
+
+> 1
+
+(x) ≤ P (x)
+
+1 − δ , 0 ≤ Q′
+
+> 1
+
+(x) ≤ P (x − 1) 
+
+1 − δ .      
+
+> 9By restricting to π(nd) = 1, we simplify the optimization problem substantially to a finite convex problem. In principle this can be extended to π(nd) = γfor any γ > 0, at some increase in complexity.
+
+14 Figure 3: The privacy of various mechanisms under the constraint that π(61) = 1 i.e. additive noise must be bounded in [0 , 60] (or equivalently [ −30 , 30] due to translation invariance). π∗
+
+clearly dominates all additive mechanisms for small and moderate α. The (truncated) Gaussian and Laplace plots were computed by numerically solving for the scale parameters that ensure 
+
+f (−30) = f (30) = δ in their respective PMFs after truncation and normalization. 0 ≤ P ′
+
+> 2
+
+(x) ≤ P (x)
+
+1 − δ , 0 ≤ Q′
+
+> 2
+
+(x) ≤ P (x − 1) 
+
+1 − δ .
+
+Immediately we can show that under this optimization problem, we must have P ′
+
+> 1
+
+(0) = Q′
+
+> 1
+
+(0) = 
+
+P ′
+
+> 2
+
+(nd) = Q′
+
+> 2
+
+(nd) = 0, otherwise either we explicitly violate the constraints, or the objective function is infinite. We can show even more structure to this problem though. 
+
+Proposition 24. The optimization problem to Equation (2) is symmetric in P . Namely, if P is an optimal solution, then ¯P defined by ¯P (x) = P (nd − 1 − x) is also an optimal solution. Proof. Let ( P, P ′
+
+> 1
+
+, Q ′
+
+> 1
+
+, P ′
+
+> 2
+
+, Q ′
+
+> 2
+
+) be an optimal solution. Define ¯P (x) = P (nd − 1 − x) and ¯P1′(x) = Q′
+
+> 2
+
+(nd − x) ¯Q1′(x) = P ′
+
+> 2
+
+(nd − x)¯P2′(x) = Q1(nd − x) ¯Q2′(x) = P ′
+
+> 1
+
+(nd − x).
+
+The new objective on our transformed solution becomes max 
+
+{∑
+
+> x
+
+¯P1′(x)α ¯Q1′(x)1−α, ∑
+
+> x
+
+¯Q2′(x)α ¯P2′(x)1−α
+
+}
+
+= max 
+
+{∑
+
+> x
+
+Q′
+
+> 2
+
+(nd − x)αP ′
+
+> 2
+
+(nd − x)1−α, ∑
+
+> x
+
+P ′
+
+> 1
+
+(nd − x)αQ1(nd − x)1−α
+
+}
+
+= max 
+
+{∑
+
+> y
+
+Q′
+
+> 2
+
+(y)αP ′
+
+> 2
+
+(y)1−α, ∑
+
+> y
+
+P ′
+
+> 1
+
+(y)αQ1(y)1−α
+
+}
+
+,
+
+15 which is identical to the original objective. It suffices to verify that the constraints are satisfied. ¯P1′(x) = Q′
+
+> 2
+
+(nd − x) ≤ P (nd − 1 − x)
+
+1 − δ = ¯P (x)
+
+1 − δ
+
+¯Q1′(x) = P ′
+
+> 2
+
+(nd − x) ≤ P (nd − x)
+
+1 − δ = ¯P (x − 1) 
+
+1 − δ ,
+
+and similarly the constraints on ( ¯ P2′, ¯Q2′) hold by symmetry. 
+
+When our problem is symmetrical, it gives us even more structure to exploit. 
+
+Lemma 25. Let P be a symmetric distribution and Q = P + 1 its shift by one. Then Dδα(P || Q) = 
+
+Dδα(Q|| P ).
+
+Proof. The proof follows from showing that ( P, Q ) is identical to ( Q, P ) under a change of variables, i.e. a re-labeling of outcomes. Assume without loss of generality (up to a shift in coordinates) that 
+
+P is symmetric around 0 and P (x) = P (−x). Now consider the change of variable y = 1 − x. Then we can show a bijection 
+
+P (y) = P (1 − x) = P (x − 1) = Q(x)
+
+Q(y) = P (−x) = P (x)
+
+The above results allow us to simplify Equation (2) substantially. 
+
+Theorem 26. For a fixed α > 1, δ ∈ (0 , 1) , n d ∈ N, let P, P ′ be distributions on {0, . . . , n d − 1}
+
+and {1, . . . , n d − 1} respectively which minimize the following convex program: minimize ∑
+
+> x
+
+P ′(x)αP ′(nd − x)1−α
+
+subject to P (x) ≥ 0,
+
+∑
+
+> x
+
+P (x) = ∑
+
+> x
+
+P ′(x) = 1 ,
+
+0 ≤ P ′(x) ≤ P (x)
+
+1 − δP (x) = P (nd − 1 − x)
+
+Then P minimizes ε in the (δ, α, ε )-RDP guarantee among all distributions X which satisfy πX (nd) = 1.Proof. By Proposition 24 and convexity, there must exist an optimal solution to Equation (2) that is symmetric. Furthermore, by Lemma 25 it suffices to consider only one of the terms in the objective function. We will show that the remaining problem is invariant upon reflecting and shifting P ′ 
+
+> 1
+
+and Q′
+
+> 1
+
+in Equation (2). Consider the following transformations: ¯P ′(x) = Q′
+
+> 1
+
+(nd − x)16 ¯Q′(x) = P ′
+
+> 1
+
+(nd − x)These map to the original problem constraints since P ′(0) = Q′(0) = P ′(nd) = Q′(nd) = 0 is implied for any feasible solution due to the symmetry of P . Substituting y = nd − x yields 0 ≤ ¯P ′(x) ≤ P (x)
+
+1 − δ ⇐⇒ 0 ≤ Q′
+
+> 1
+
+(y) ≤ P (y − 1) 
+
+1 − δ
+
+0 ≤ ¯Q′(x) ≤ P (x − 1) 
+
+1 − δ ⇐⇒ 0 ≤ P ′
+
+> 1
+
+(y) ≤ P (y)
+
+1 − δ .
+
+Thus, if ( P, P ′
+
+> 1
+
+, Q ′
+
+> 1
+
+) is feasible, then so is ( P, ¯P ′, ¯Q′). Similarly, the objective function is invariant under the same transformation by Lemma 25. Now, consider averaging our optimal ( P, P ′
+
+> 1
+
+, Q ′
+
+> 1
+
+) and ( ¯P , ¯P ′, ¯Q′) to generate ( P, ˜P ′, ˜Q′). Due to convexity, this will also be optimal. Furthermore, ˜P ′(x) = 1
+
+2 (P ′
+
+> 1
+
+(x) + ¯P ′(x)) = 1
+
+2 (P ′
+
+> 1
+
+(x) + Q′
+
+> 1
+
+(nd − x)) ˜Q′(x) = 1
+
+2 (Q′
+
+> 1
+
+(x) + ¯Q′(x)) = 1
+
+2 (Q′
+
+> 1
+
+(x) + P ′
+
+> 1
+
+(nd − x)) .
+
+Therefore ˜Q′(nd − x) = 1 
+
+> 2
+
+(Q′
+
+> 1
+
+(nd − x) + P ′
+
+> 1
+
+(nd − (nd − x))) = ˜P ′(x). This allows us to further eliminate Q1 from Equation (2) by replacing it with a shifted and reflected version of P1.
+
+While the optimization problem in Theorem 26 is convex, its objective is not numerically stable for large values of α. In practice, we perform the optimization in log-probabilities (which is not convex), and certify optimality by measuring the duality gap (using complementary slackness) of the convex objective in linear space. Figure 2 plots optimal distributions at various values of α.The plots suggest that as α → ∞ , the optimal distribution for π(nd) = 1 converges to truncated discrete Laplace. We prove this convergence below, which aligns with the findings in [DVGM21]. Furthermore, we plot the privacy of the optimal additive mechanism (for a specific point-wise utility guarantee) against π∗ in Figure 3, showing a numerical separation in privacy even in this weaker setting where the additive noise needs to compete with π∗ only at a single point nd.
+
+Proposition 27. For a fixed odd nd > 2 and δ ∈ (0 , 1/n d], the unique distribution X supported on 
+
+{0, . . . , n d − 1} that minimizes ε subject to (ε, δ )-DP for πX (nd) = 1 is a truncated discrete Laplace distribution: 
+
+P (x) = A · e−ε|x−μ|
+
+where μ = nd−1 
+
+> 2
+
+and A is the constant such that ∑ P (x) = 1 .Furthermore, when δ ∈ (1 /n d, 1] , the minimum ε is 0 which can be achieved when X is the uniform distribution. (However, this is not the unique distribution achieving (0 , δ )-DP.) 
+
+In the following proof, we use [ x]+ as a shorthand for max {x, 0}. Furthermore, recall that the (ε, δ )-DP can be characterized by the hockey stick divergence, which will be more convenient for us to work with. Namely, let Dhs  
+
+> eε
+
+(P ‖ Q) = 
+
+∫
+
+> Ω
+
+[P (x) − eε · Q(x)] + dx. 
+
+17 It is known that Dδ
+
+> ∞
+
+(P ‖Q) ≤ ε if and only if D hs  
+
+> eε
+
+(P ‖ Q) ≤ δ. We will use the latter formulation in the proof below. 
+
+Proof. We will first consider the case δ ∈ (0 , 1/n d]. Define Z(ε) = δ ∑nd−1 
+
+> x=0
+
+eε(μ−| x−μ|). Let ε∗ be the unique 10 non-negative real number such that Z(ε∗) = 1. Finally, let P ∗ denote the truncated discrete Laplace distribution supported on {0, . . . , n d − 1} with P ∗(x) = δ · eε∗(μ−| x−μ|). This is a valid distribution since Z(ε∗) = 1, and it is simple to check that D hs 
+
+> eε∗
+
+(P ∗ ∥∥ P ∗
+
+> +
+
+) = δ, implying that the resulting additive mechanism is ( ε∗, δ )-DP as desired. Suppose for the sake of contradiction that there is some other distribution ˜P supported on 
+
+{0, . . . , n d − 1} that satisfies (˜ ε, δ )-DP for some ˜ ε < ε . By Proposition 24, we may assume without loss of generality that ˜P is symmetric around μ. Then, consider any i ∈ { 1, . . . , n d − 1}. Since ˜P
+
+satisfies (˜ ε, δ )-DP, we have 
+
+δ ≥ Dhs 
+
+> e˜ε
+
+( ˜P
+
+∥∥∥ ˜P+
+
+)
+
+= ∑
+
+> x∈{ 0,...,n d−1}
+
+[ ˜P (x) − e˜ε · ˜P (x − 1) 
+
+]
+
+> +
+
+≥ ∑
+
+> x∈{ 0,...,i }
+
+e−˜εx ·
+
+[ ˜P (x) − e˜ε · ˜P (x − 1) 
+
+]
+
+> +
+
+≥ ∑
+
+> x∈{ 0,...,i }
+
+e−˜εx ·
+
+( ˜P (x) − e˜ε · ˜P (x − 1) 
+
+)
+
+= e−˜εx · ˜P (x).
+
+From this and from symmetry of ˜P , we have ˜P (x) ≤ δ · min {e˜εx , e ˜ε(nd−1−x)} = δ · e˜ε(μ−| x−μ|) < P ∗(x). (3) However, this means that 
+
+∑
+
+> x∈{ 0,...,n d−1}
+
+˜P (x) < ∑
+
+> x∈{ 0,...,n d−1}
+
+P ∗(x) = 1 ,
+
+which is a contradiction since ˜P is a distribution. To see the uniqueness of P ∗ for ( ε∗, δ )-DP, notice that, when ˜ ε = ε∗, (3) becomes ˜P (x) ≤ P ∗(x)for all x. Since both ˜P and P ∗ are distributions, this implies that they must be the same. For the case of δ ∈ (1 /n d, 1], it is simple to verify that the uniform distribution satisfies ( ε, δ )-DP for ε = 0, and this is the smallest ε possible. 
+
+We end this section by remarking that noise with bounded support has applications in DP beyond partition selection (e.g. in multi-party DP [BGG +22]). Thus, the tools developed here might be useful elsewhere; we leave this to future work. 
+
+# 7 Conclusion 
+
+This work continues the direction started by [DVGM21] in deriving optimal mechanisms for parti-tion selection. We generalize their result to approximate RDP, handling finite values of α. When        
+
+> 10 The uniqueness follows from monotonicity of Z(ε), Z(0) = ndδ≤1 and lim ε→∞ Z(ε) = ∞.
+
+18 users only submit a single partition, this result alone is of practical utility in cases where the mech-anism will be composed many times due to the tighter composition properties of (approximate) RDP. In the finite α regime we also show that there is a separation in privacy between mechanisms which are post-processing of additive noise mechanisms and those which are not; there is an inherent cost to “releasing the weight” of a partition. This differs from the α → ∞ regime as noted by [DVGM21], and implies that if the partition weight is not needed, analysts and mechanism designers should strongly consider using non-additive mechanisms to maximize utility. Furthermore, we use our recipe for the optimal mechanism to create a selection mechanism targeting Lr norm constraints on vector contributions. When r = 1 it gives us a drop-in replacement for the Laplace mechanism which is used as a subroutine in [CWG22]. When r = 2 it gives us a drop-in replacement for the Gaussian mechanism which is used as a subroutine in [SDH23], [GGK +20] and [CCAEZ25]. When injecting SNAPS into the latter two algorithms, we show improved utility across the board over a variety of datasets. There are several interesting open questions left by our work, as highlighted below. 
+
+• Beyond Drop-In Replacement: Our focus has been to devise partition selection primitives that can be used as drop-in replacements for additive noise mechanisms, such as the (trun-cated) Gaussian and Laplace. However, some sophisticated partition selection mechanisms– including those used in our experiments [CCAEZ25, GGK +20]–operate in multiple stages, which are more tailored towards Lr sensitivity. It would be interesting to see if these inter-mediate steps can be designed in conjunction with the optimal partition selection primitive for better compatability and overall utility. 
+
+• Tighter Composition: Our primary motivation for considering (approximate) RDP is due to its composition property. Another technique for tight privacy accouting which is widely used is through the so-called privacy loss distributions (PLDs) [MM18, SMM19, KJH20, GLW21, GKKM22, DGK +22]. Using PLD requires tracking the dominating pairs (aka “worst case”) of neighboring output distributions [ZDW22]. For our mechanisms, there do not seem to be a tight dominating pair. Thus, it is an interesting direction to design a partition selection mechanism that is more amenable to PLD-based privacy accounting. 
+
+# References 
+
+[Aen] Miguel Aenlle. Daily financial news for 6000+ stocks. [AGJ +22] Kareem Amin, Jennifer Gillenwater, Matthew Joseph, Alex Kulesza, and Sergei Vas-silvitskii. Plume: Differential privacy at scale. CoRR , abs/2201.11603, 2022. [Axe17] Stuart Axelbrooke. Customer support on twitter, 2017. [BGG +22] James Bell, Adri` a Gasc´ on, Badih Ghazi, Ravi Kumar, Pasin Manurangsi, Mariana Raykova, and Phillipp Schoppmann. Distributed, private, sparse histograms in the two-server model. In CCS , pages 307–321, 2022. [CCAEZ25] Justin Y. Chen, Vincent Cohen-Addad, Alessandro Epasto, and Morteza Zadimoghad-dam. Scalable private partition selection via adaptive weighting. In ICML , 2025. 19 [CKS20] Cl´ ement L Canonne, Gautam Kamath, and Thomas Steinke. The discrete gaussian for differential privacy. NeurIPS , 33:15676–15688, 2020. [CWG22] Ricardo Silva Carvalho, Ke Wang, and Lovedeep Gondara. Incorporating item fre-quency for differentially private set union. In AAAI , 2022. [DGK +22] Vadym Doroshenko, Badih Ghazi, Pritish Kamath, Ravi Kumar, and Pasin Manu-rangsi. Connect the dots: Tighter discrete approximations of privacy loss distributions. 
+
+PoPETS , 2022(4):552–570, 2022. [DMNS06a] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. Calibrating noise to sensitivity in private data analysis. In TCC , page 265–284, 2006. [DMNS06b] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. Calibrating noise to sensitivity in private data analysis. In TCC , page 265–284, 2006. [DPT26] Google Differential Privacy Team. Privacy loss distributions, 2026. [DVGM21] Damien Desfontaines, James Voss, Bryant Gipson, and Chinmoy Mandayam. Differ-entially private partition selection. PoPETS , 2022(1):339–352, November 2021. [GGA +25] Atefeh Gilani, Juan Felipe Gomez, Shahab Asoodeh, Flavio P Calmon, Oliver Kosut, and Lalitha Sankar. Optimal additive noise mechanisms for differential privacy. arXiv preprint arXiv:2504.14730 , 2025. [GGK +20] Sivakanth Gopi, Pankaj Gulhane, Janardhan Kulkarni, Judy Hanwen Shen, Milad Shokouhi, and Sergey Yekhanin. Differentially private set union. In ICML , pages 3627–3636, 2020. [GKKM22] Badih Ghazi, Pritish Kamath, Ravi Kumar, and Pasin Manurangsi. Faster privacy accounting via evolving discretization. In ICML , pages 7470–7483, 2022. [GLW21] Sivakanth Gopi, Yin Tat Lee, and Lukas Wutschitz. Numerical composition of differ-ential privacy. In NeurIPS , pages 11631–11642, 2021. [KJH20] Antti Koskela, Joonas J¨ alk¨ o, and Antti Honkela. Computing tight differential privacy guarantees using FFT. In AISTATS , pages 2560–2569, 2020. [KKMN09] Aleksandra Korolova, Krishnaram Kenthapadi, Nina Mishra, and Alexandros Ntoulas. Releasing search queries and clicks privately. In WWW , page 171–180, 2009. [MDP +11] Andrew L. Maas, Raymond E. Daly, Peter T. Pham, Dan Huang, Andrew Y. Ng, and Christopher Potts. Learning word vectors for sentiment analysis. In Proceedings of the 49th Annual Meeting of the Association for Computational Linguistics: Human Lan-guage Technologies , pages 142–150, Portland, Oregon, USA, June 2011. Association for Computational Linguistics. [Mir17] Ilya Mironov. R´ enyi differential privacy. In CSF , pages 263–275, 2017. [ML13] Julian McAuley and Jure Leskovec. Hidden factors and hidden topics: understand-ing rating dimensions with review text. Proceedings of the 7th ACM conference on Recommender systems , 2013. 20 [MM18] Sebastian Meiser and Esfandiar Mohammadi. Tight on budget? Tight bounds for 
+
+r-fold approximate differential privacy. In CCS , pages 247–264, 2018. [PS22] Nicolas Papernot and Thomas Steinke. Hyperparameter tuning with renyi differential privacy. In ICLR , 2022. [R´ en61] Alfr´ ed R´ enyi. On measures of entropy and information. In Proceedings of the Fourth Berkeley Symposium on Mathematical Statistics and Probability, Volume 1: Contribu-tions to the Theory of Statistics , 1961. [SDH23] Marika Swanberg, Damien Desfontaines, and Samuel Haney. Dp-sips: A simpler, more scalable mechanism for differentially private partition selection. PoPETS , 2023. [SMM19] David M. Sommer, Sebastian Meiser, and Esfandiar Mohammadi. Privacy loss classes: The central limit theorem in differential privacy. PoPETS , 2019(2):245–269, 2019. [VEH14] Tim Van Erven and Peter Harremos. R´ enyi divergence and kullback-leibler divergence. 
+
+IEEE Transactions on Information Theory , 60(7):3797–3820, 2014. [Wij] Mark Wijkhuizen. Simple/normal wikipedia abstracts v1. [WZL +20] Royce J Wilson, Celia Yuxin Zhang, William Lam, Damien Desfontaines, Daniel Simmons-Marengo, and Bryant Gipson. Differentially private sql with bounded user contribution. PoPETS , 2:230–250, 2020. [ZDW22] Yuqing Zhu, Jinshuo Dong, and Yu-Xiang Wang. Optimal accounting of differential privacy via characteristic function. In AISTATS , pages 4782–4817, 2022. [ZZL15] Xiang Zhang, Junbo Zhao, and Yann LeCun. Character-level convolutional networks for text classification. In C. Cortes, N. Lawrence, D. Lee, M. Sugiyama, and R. Gar-nett, editors, Advances in Neural Information Processing Systems , volume 28. Curran Associates, Inc., 2015. 
+
+# A Water-Filling Algorithm 
+
+We give more detail of the “water-filling” algorithm from Section 6.1. Throughout this section, we assume that the total variation distance of A, B is greater than δ (i.e. ∑ 
+
+> x
+
+min {A(x), B (x)} < 1−δ). Otherwise, the approximate R´ enyi divergence is simply zero. 
+
+A.1 O(n log n) Implementation of the Algorithm 
+
+To implement the algorithm efficiently, we observe that computing the cutoffs λP and λQ requires finding a threshold that truncates exactly δ probability mass from the tail of a likelihood ratio distribution. We define a generic subprocedure ComputeCutoff to compute this threshold. This subprocedure takes as input probability distributions A, B over a discrete domain X of size n, and a target mass δ ∈ (0 , 1). It then outputs a ratio λ > 1 such that ∑ 
+
+> x
+
+min {A(x), λ · B(x)} = 1 − δ.The subprocedure ComputeCutoff (A, B, δ ) works as follows: 21 1. Sort Ratios: Compute the likelihood ratios r(x) = A(x) 
+
+> B(x)
+
+for all x ∈ X . Sort the domain to 
+
+x1, x 2, . . . , x n such that r(x1) ≥ r(x2) ≥ · · · ≥ r(xn). Define an auxiliary bound r(xn+1 ) = 0. 2. Initialize: Set cumulative masses SA = 0 and SB = 0. 3. Linear Scan: For k = 1 , 2, . . . , n :(a) Update prefix sums: SA ← SA + A(xk ) and SB ← SB + B(xk). (b) Calculate the hypothetical mass removed if the cutoff were exactly r(xk+1 ): 
+
+δk = SA − r(xk+1 )SB
+
+(c) Termination: If δk ≥ δ, the exact cutoff λ lies within [ r(xk+1 ), r (xk)]. Because the removed mass is strictly linear with respect to the cutoff in this interval, we simply return: 
+
+λ = SA − δ
+
+SB
+
+Main Algorithm. The cutoffs in our algorithm can then be computed via two independent calls to the subprocedure: 
+
+λP = ComputeCutoff (P, Q, δ ), λQ = 1
+
+ComputeCutoff (Q, ˜P , δ ) .
+
+This results in O(n log n)-time algorithm as claimed. 
+
+A.2 Proof of Correctness 
+
+Problem Formulation. Recall that we define ˜P (x) = (1 − δ)P ′(x) and ˜Q(x) = (1 − δ)Q′(x). The equivalent minimization problem is: minimize ∑
+
+> x
+
+˜P (x)α ˜Q(x)1−α
+
+subject to ∑
+
+> x
+
+˜P (x) = 1 − δ, ∑
+
+> x
+
+˜Q(x) = 1 − δ, 
+
+˜P (x) − P (x) ≤ 0, ˜Q(x) − Q(x) ≤ 0,
+
+− ˜P (x) ≤ 0, − ˜Q(x) ≤ 0.
+
+Note that, for α > 1, the objective function f ( ˜P , ˜Q) = ∑ 
+
+> x
+
+˜P (x)α ˜Q(x)1−α is strictly convex. 
+
+Lagrangian. Let νP , ν Q ∈ R be the multipliers for the equality constraints, and μP (x), μ Q(x) ∈ R
+
+be the multipliers for the inequality constraints. The Lagrangian is 11 :
+
+L( ˜P , ˜Q, ν P , ν Q, μ P , μ Q) = ∑
+
+> x
+
+˜P (x)α ˜Q(x)1−α        
+
+> 11 We only consider solutions which are interior points for the lower bounds (non-negativity strictly satisfied) and we thus omit their multipliers. Note that this is without loss of generality since our algorithm’s solution satisfies this for all xsuch that P(x), Q (x)>0. (For all other x’s, we are forced to set ˜P(x) = ˜Q(x) = 0 anyway.)
+
+22 − νP
+
+(∑
+
+> x
+
+˜P (x) − (1 − δ)
+
+)
+
+− νQ
+
+(∑
+
+> x
+
+˜Q(x) − (1 − δ)
+
+)
+
++ ∑
+
+> x
+
+μP (x)( ˜P (x) − P (x)) + ∑
+
+> x
+
+μQ(x)( ˜Q(x) − Q(x)) .
+
+Output Solution and Lagrangian Multipliers. Let ˜P and ˜Q be the solutions produced by the water-filling algorithm. We note that λP ≥ 1 ≥ λQ. The former inequality follows from our assumption that ∑ 
+
+> x
+
+min {P (x), Q (x)} < 1 − δ, while the latter follows from 1 − δ = ∑ 
+
+> x
+
+˜Q(x) ≤∑ 
+
+> x
+
+˜P (x)/λ Q = (1 − δ)/λ Q.Let R(x) = ˜P (x) 
+
+> ˜Q(x)
+
+. The sample space can be partitioned into three regions based on the ratio   
+
+> P(x)
+> Q(x)
+
+:
+
+• Region 1 (P (x)/Q (x) > λ P ): We have ˜P (x) = λP Q(x), ˜Q(x) = Q(x) = ⇒ R(x) = λP .
+
+• Region 2 (λQ ≤ P (x)/Q (x) ≤ λP ): We have ˜P (x) = P (x), ˜Q(x) = Q(x) = ⇒ R(x) = P (x) 
+
+> Q(x)
+
+.
+
+• Region 3 (P (x)/Q (x) < λ Q): We have ˜P (x) = P (x), ˜Q(x) = P (x) 
+
+> λQ
+
+=⇒ R(x) = λQ.We explicitly define the Lagrangian multipliers for this proposed solution as follows: 
+
+νP = αλ α−1
+
+> P
+
+νQ = (1 − α)λαQ
+
+μP (x) = νP − αR (x)α−1 = α (λα−1 
+
+> P
+
+− R(x)α−1)
+
+μQ(x) = νQ − (1 − α)R(x)α = ( α − 1) (R(x)α − λαQ
+
+)
+
+Verification of KKT Conditions. Since the problem is strictly convex, the KKT conditions are sufficient for global optimality. We verify that our proposed solution and multipliers satisfy all four KKT conditions: 1. Stationarity: By taking the gradient of L and substituting our defined multipliers, station-arity holds by construction for all x:
+
+∂L
+
+∂ ˜P (x) = αR (x)α−1 − νP + μP (x) = 0 
+
+∂L
+
+∂ ˜Q(x) = (1 − α)R(x)α − νQ + μQ(x) = 0 2. Primal Feasibility: By the definition of the algorithm, 0 ≤ ˜P (x) ≤ P (x) and 0 ≤ ˜Q(x) ≤
+
+Q(x). The chosen cutoffs λP , λ Q explicitly guarantee ∑ ˜P (x) = 1 − δ and ∑ ˜Q(x) = 1 − δ.3. Dual Feasibility: As discussed above, R(x) ∈ [λP , λ Q]. Since α > 1, we thus have μP (x) = 
+
+α(λα−1 
+
+> P
+
+− R(x)α−1) ≥ 0 and μQ(x) = ( α − 1)( R(x)α − λαQ) ≥ 0. 4. Complementary Slackness: 
+
+23 • For ˜P : If ˜P (x) < P (x), then x must be in Region 1, meaning R(x) = λP . Substituting this yields μP (x) = α(λα−1 
+
+> P
+
+− R(x)α−1) = 0. Thus, μP (x)( ˜P (x) − P (x)) = 0 for all x.
+
+• For ˜Q: If ˜Q(x) < Q (x), then x must be in Region 3, meaning R(x) = λQ. Substituting this yields μQ(x) = ( α − 1)( λαQ − λαQ) = 0. Thus, μQ(x)( ˜Q(x) − Q(x)) = 0 for all x.The solution generated by the sequential water-filling algorithm, coupled with the defined mul-tipliers, satisfies the KKT sufficiency conditions. As a result, the solution is optimal. 
+
+24

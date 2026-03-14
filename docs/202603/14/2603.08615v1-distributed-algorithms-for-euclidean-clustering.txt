@@ -1,0 +1,4699 @@
+Title: Distributed Algorithms for Euclidean Clustering
+
+URL Source: https://arxiv.org/pdf/2603.08615v1
+
+Published Time: Tue, 10 Mar 2026 02:36:11 GMT
+
+Number of Pages: 51
+
+Markdown Content:
+# Distributed Algorithms for Euclidean Clustering 
+
+Vincent Cohen-Addad ∗ Liudeng Wang † David P. Woodruff ‡ Samson Zhou §
+
+March 10, 2026 
+
+Abstract 
+
+We study the problem of constructing (1 + ε)-coresets for Euclidean (k, z )-clustering in the distributed setting, where n data points are partitioned across s sites. We focus on two prominent communication models: the coordinator model and the blackboard model. In the coordinator model, we design a protocol that achieves a (1 + ε)-strong coreset with total communication complexity ˜O
+
+(
+
+sk + dk   
+
+> min( ε4,ε 2+ z)
+
++ dk log( n∆) 
+
+)
+
+bits, improving upon prior work (Chen et al., NeurIPS 2016) by eliminating the need to communicate explicit point coordinates in-the-clear across all servers. In the blackboard model, we further reduce the communication complexity to ˜O
+
+(
+
+s log( n∆) + dk log( n∆) + dk  
+
+> min( ε4,ε 2+ z)
+
+)
+
+bits, achieving better bounds than previous approaches while upgrading from constant-factor to (1 + ε)-approximation guarantees. Our techniques combine new strategies for constant-factor approximation with efficient coreset constructions and compact encoding schemes, leading to optimal protocols that match both the communication costs of the best-known offline coreset constructions and existing lower bounds (Chen et al., NeurIPS 2016, Huang et. al., STOC 2024), up to polylogarithmic factors. 
+
+# 1 Introduction 
+
+Clustering is the process of partitioning a dataset by grouping points with similar properties and separating those with differing properties. The study of clustering dates back to the 1950s [ S+56 ,Mac67 ], and its many variants find applications in fields such as bioinformatics, combinatorial optimization, computational geometry, computer graphics, data science, and machine learning. In the Euclidean (k, z )-clustering problem, the input consists of a set X of n points x1, . . . , x n ∈ Rd,along with a cluster count k > 0 and an exponent z > 0. The objective is to find a set C of at most 
+
+k centers that minimizes the clustering cost: 
+
+min  
+
+> C⊂ Rd,|C|≤ k
+
+cost( X, C) := min  
+
+> C⊂ Rd,|C|≤ kn
+
+∑
+
+> i=1
+
+min  
+
+> c∈C
+
+∥xi − c∥z
+
+> 2
+
+.
+
+When z = 1 and z = 2 , the (k, z )-clustering problem reduces to the classical k-median and k-means clustering problems, respectively. These models remain the most widely utilized formulations in practice, with significant research dedicated to their algorithmic foundations [ CCFM97 , CGTS99 ,
+
+> ∗
+
+Google Research. cohenaddad@google.com 
+
+> †
+
+Texas A&M University. eureka@tamu.edu 
+
+> ‡
+
+Carnegie Mellon University. dwoodruf@andrew.cmu.edu 
+
+> §
+
+Texas A&M University. samsonzhou@gmail.com 
+
+1
+
+> arXiv:2603.08615v1 [cs.DS] 9 Mar 2026
+
+CG99 , Mey01 , COP03 , FMS07 , FMSW10 , FL11 , FSS13 , CKM16 , CS17 , CLN +20 , BFL +21 , CSS21 ,BCJ +22 , CLSS22 , EFS +22 , TWZ +22 , BLST23 , CSS23 , WZZ23 , BDJ +25 , CJY +25 , CLS25 , KLR +25 ]. Due to the substantial growth in modern datasets, focus has shifted toward large-scale computa-tional models that can process data across multiple machines without requiring centralized access to the full dataset. The distributed model of computation has become a popular framework for handling such large-scale data. In the distributed setting, the points x1, . . . , x n of X are partitioned across 
+
+s different machines, and given an input accuracy parameter ε > 0, the goal is for the machines to collectively find a clustering C of X with cost that is a (1 + ε)-multiplicative approximation of the optimal clustering of X, while minimizing the total communication between machines. As in other models, a set C of k centers implicitly defines the clustering, since each point is assigned to its nearest center. Since transmitting the entire dataset or an explicit cluster label for each point would incur communication linear in n = |X|, it is more feasible to design protocols that exchange only succinct summaries, such as small sets of representative points or coresets. We also note that because of finite precision, input points are assumed to lie within the grid {1, . . . , ∆}d, which can be communicated efficiently using a small number of bits per coordinate. A standard strategy for efficient distributed clustering is to have each machine construct a small weighted subset of its local points, i.e., a coreset, that preserves the clustering cost for any choice of 
+
+k centers. These local coresets can then be merged at a coordinator or hierarchically aggregated to approximate the clustering objective over the full dataset. Naturally, smaller coresets correspond to lower communication costs and faster centralized processing. In the offline setting, where the full dataset X is available on a single machine without resource constraints, coreset constructions are known that select ˜O
+
+> (
+
+min   
+
+> (1
+> ε2
+
+· k2− zz+2 , 1min( ε4,ε 2+ z ) · k
+
+> ))
+
+weighted points of X [CSS21 , CLSS22 ,CLS +22 , HLW24 ]12 . As is common, we assume ∆ = poly (n) so that each coordinate can be stored in 
+
+O (log( nd ∆)) bits, allowing efficient communication and storage. Thus, offline coreset constructions have size independent of n, an essential feature given that modern datasets often contain hundreds of millions of points. 
+
+1.1 Our Contributions 
+
+We study the construction of (1 + ε)-coresets for Euclidean (k, z )-clustering in the distributed setting, focusing on the coordinator and blackboard communication models. 
+
+The coordinator model. In the coordinator (message passing) model, the s sites, i.e., servers, communicate only with the coordinator over private channels, using private randomness. Protocols are assumed without loss of generality to be sequential, round-based, and self-delimiting, i.e., in each round the coordinator speaks to some number of players and awaits their responses before initiating the next round and all parties know when each message has been completely sent. Given ε > 0, the goal is a protocol Π where the coordinator outputs a (1 + ε)-coreset for Euclidean (k, z )-clustering that minimizes the communication cost, i.e., the total number of bits exchanged in the worst case. We achieve optimal communication protocols for clustering in this model, matching known lower bounds from [CSWZ16, HLW24]:                       
+
+> 1We write ˜O(f(n, d, k, ∆,1
+> ε
+> )) to denote O(f(n, d, k, ∆,1
+> ε
+> )) ·polylog (f(n, d, k, ∆,1
+> ε
+> )) .
+> 2The bound further refines to ˜O
+> (
+> min
+> (k4/3
+> ε2,kε3
+> ))
+> for k-median.
+
+2Theorem 1.1 (Communication-optimal clustering in the coordinator model, informal) . Given accuracy parameter ε ∈ (0 , 1) , there exists a protocol on n points distributed across s sites that produces a (1 + ε)-strong coreset for (k, z )-clustering that uses ˜O
+
+> (
+
+sk + dk   
+
+> min( ε4,ε 2+ z)
+
++ dk log( n∆) 
+
+> )
+
+total bits of communication in the coordinator model. 
+
+We note that our results also yield the optimal bounds for k-median, matching [ HLW24 , BCP +24 ]; for clarity, we omit this special case in the remainder of the paper. By comparison, the protocol of [ BEL13 ], combined with more recent coreset constructions such as [ CSS21 , CLSS22 , BCP +24 ], achieves a (1 + ε)-strong coreset using O   
+
+> (skd
+> min( ε4,ε 2+ z)
+
+log( n∆) 
+
+> )
+
+bits of communication. At first glance, one might expect our bounds to follow by straightforward generalizations of these approaches; however, as we explain in Appendix 3, this is not the case. For example, our result shows that no points need to be communicated “in the clear” across sites—there is no O (sd log( n∆)) dependence in the communication. This is surprising, since one might expect the coordinates of a constant-factor approximation to be broadcast to all users. Moreover, the 1 
+
+> ε
+
+factors in our bounds do not multiply either the number of sites s or the log (n∆) cost of transmitting a single coordinate. Finally, our results extend to arbitrary connected communication topologies, even when certain pairs of sites are not allowed to interact. The formal statement is deferred to Theorem C.7 in Appendix C. Coordinator model Communication cost (bits) Merge-and-reduce, with [BCP +24] ˜O
+
+( skd   
+
+> min( ε4,ε 2+ z)
+
+log( n∆) 
+
+)
+
+[BEL13], z = 2 O
+
+( d2kε4 log( n∆) + sdk log( sk ) log( n∆) 
+
+)
+
+[BEL13] in conjunction with [BCP +24] O
+
+( dk   
+
+> min( ε4,ε 2+ z)
+
+log( n∆) + sdk log( sk ) log( n∆) 
+
+)
+
+Theorem 1.1 (this work) ˜O
+
+(
+
+sk + dk   
+
+> min( ε4,ε 2+ z)
+
++ dk log( n∆) 
+
+)
+
+Blackboard model Communication cost (bits) [CSWZ16] ˜O
+
+(
+
+(s + dk ) log 2(n∆) 
+
+)
+
+Theorem 1.2 (this work) ˜O
+
+(
+
+s log( n∆) + dk log( n∆) + dk  
+
+> min( ε4,ε 2+ z)
+
+)
+
+Fig. 1: Table of (k, z )-clustering algorithms in the distributed setting. We remark that [ CSWZ16 ]only achieves a constant-factor-approximation, whereas we achieve a (1 + ε)-approximation. 
+
+The blackboard model. Next, we consider the blackboard model of communication, where each of the s sites can broadcast messages that are visible to all of the other sites. Formally in the blackboard model, communication occurs through a shared public blackboard that is visible to all servers. Each server again has access to private sources of randomness. Unlike the coordinator model, there is no designated coordinator to relay messages; instead, any server may write messages directly onto the blackboard. All servers can immediately observe the entire contents of the blackboard at any point in time. As before, we assume without loss of generality that the protocol is sequential and round-based, meaning that in each round, one or more servers write to the blackboard, and all servers can then read the newly posted messages before the next round begins. Accordingly, messages must be self-delimiting so that all servers can correctly parse when a message has been fully posted. 3Given an accuracy parameter ε, the objective is to perform a protocol Π such that a (1 + ε)-coreset for Euclidean (k, z )-clustering is explicitly written onto the blackboard. The communication cost of Π is defined as the total number of bits written to the blackboard over the course of the protocol, measured in the worst case. We note that the blackboard model can sometimes yield lower communication costs compared to the coordinator model, as messages need only be written once to be accessible to all servers simultaneously. Indeed we achieve a distributed protocol for the blackboard model with substantially less communication than our protocol for the coordinator model, tight with existing lower bounds [CSWZ16, HLW24]. 
+
+Theorem 1.2 (Communication-optimal clustering in the blackboard model, informal) . There exists a protocol on n points distributed across s sites that produces a (1 + ε)-strong coreset for 
+
+(k, z )-clustering that uses ˜O
+
+> (
+
+s log( n∆) + dk log( n∆) + dk  
+
+> min( ε4,ε 2+ z)
+> )
+
+total bits of communication in the blackboard model. 
+
+By comparison, the state-of-the-art protocol achieves a constant factor approximation using 
+
+˜O
+
+> (
+
+(s + dk ) log 2(n∆) 
+
+> )
+
+total communication [ CSWZ16 ]. Thus compared to the work of [ CSWZ16 ], not only do we achieve a (1 + ε)-coreset construction in the blackboard setting, but also we remove extraneous log (n∆) factors. Conceptually, the message of Theorem 1.2 is similar to that of Theorem 1.1: some amount of exact coordinates need to be communicated (perhaps only to a small number of sites in the coordinator setting) for a constant-factor communication, but no further overhead is necessary for improving to a (1 + ε)-approximation. Finally, we remark that for both the blackboard model and the coordinator model, our coresets have size ˜O 
+
+> (kε4
+> )
+
+for the important cases of k-median and k-median due to sensitivity sampling [ BCP +24 ] and in general not only match known lower bounds [ HLW24 ] but also can be further optimized in certain regimes of n
+
+and k [CSS21, CLSS22]. 
+
+Technical and algorithmic novelties. We remark that our work introduces several algorithmic and technical innovations that may be of independent interest. For instance, we describe a number of existing approaches and why they do not work in Appendix 3. Traditional sensitivity sampling selects entire data points with probability proportional to their importance. While effective in centralized settings, this approach does not translate efficiently to distributed environments: transmitting full points or high-dimensional centers incurs prohibitive communication costs, and naive adaptive sampling requires frequent updates from all sites. To address these challenges, we introduce several novel techniques. First, in the blackboard model, we show that adaptive sampling is robust to outdated information, leading to a “lazy” adaptive sampling protocol where sites only update the blackboard when their local weight estimates change significantly. Sampling from this outdated distribution still guarantees a constant-factor approximation, reducing both the number of transmitting sites per round and the total number of rounds. An additional L1 sampling subroutine further detects significant changes in global weight without querying all sites, improving communication efficiency. In the coordinator model, we introduce a communication-efficient subroutine based on coordinate-wise sampling. Rather than sending full high-dimensional centers, the coordinator and a site perform a distributed binary search on the site’s sorted coordinates to find the closest match. Only a small offset is transmitted, decoupling communication from the dimension d.Overall, we combine these techniques with coordinate-wise sensitivity sampling: each point is decomposed along its coordinates, and dimensions are sampled based on their significance. This 4allows the coordinator to send compact summaries to each site, with servers requesting additional information only when necessary. However, the reconstructed samples may not correspond to any actual point in the dataset, requiring careful analysis to show that the overall clustering costs are not significantly distorted. We believe these techniques could also benefit other distributed settings, such as regression and low-rank approximation. This fits into a general body of work on methods for quantizing data for better memory and communication efficiency, which is often a bottleneck for large language and other models. 
+
+# 2 Preliminaries 
+
+For a positive integer n, we denote by [n] the set {1, . . . , n }. We use poly (n) to represent an arbitrary polynomial function in n, and polylog (n) to denote a polynomial function in log n. An event is said to occur with high probability if it holds with probability at least 1 − 1/ poly( n).Throughout this paper, we focus on Euclidean (k, z )-clustering. Given vectors x, y ∈ Rd, we let dist (x, y ) denote their Euclidean distance, defined as ∥x − y∥2, where ∥x − y∥22 = ∑di=1 (xi − yi)2.For a point x and a set S ⊂ Rd, we extend the notation dist (x, S ) := min s∈S dist (x, s ). We also use 
+
+∥x∥z to denote the Lz norm of x, given by ∥x∥zz = ∑di=1 xzi . Given a fixed exponent z ≥ 1 and finite sets X, C ⊂ Rd with X = {x1, . . . , x n}, we define the clustering cost cost( X, C ) as 
+
+cost( X, C ) := 
+
+> n∑
+> i=1
+
+dist (xi, C )z .
+
+We now recall generalized versions of the triangle inequality. 
+
+Fact 2.1 (Generalized triangle inequality) . For any z ≥ 1 and any points x, w, y ∈ Rd, it holds that dist (x, y )z ≤ 2z−1(dist (x, w )z + dist (w, y )z ).
+
+Fact 2.2 (Claim 5 in [SW18]) . Suppose z ≥ 1, x, y ≥ 0, and ε ∈ (0 , 1] . Then 
+
+(x + y)z ≤ (1 + ε) · xz +
+
+> (
+
+1 + 2zε
+
+> )z
+
+· yz .
+
+Next, we define the notion of a strong coreset for (k, z )-clustering. 
+
+Definition 2.3 (Coreset) . Let ε > 0 be an approximation parameter, and let X = {x1, . . . , x n} ⊂ Rd
+
+be a set of points. A coreset for (k, z )-clustering consists of a weighted set (S, w ) such that for every set C ⊂ Rd of k centers, 
+
+(1 − ε)
+
+> n∑
+> t=1
+
+dist (xt, C )z ≤ ∑
+
+> q∈S
+
+w(q)dist (q, C )z ≤ (1 + ε)
+
+> n∑
+> t=1
+
+dist (xt, C )z .
+
+We will use the following known coreset construction for (k, z )-clustering: 
+
+Theorem 2.4. [CLSS22 , HLW24 , CLS +22 ] For any ε ∈ (0 , 1) , there exists a coreset construction for Euclidean (k, z )-clustering that samples ˜O
+
+> (
+
+min   
+
+> (1
+> ε2
+
+k2− zz+2 , k 
+
+> min( ε4,ε 2+ z)
+> ))
+
+weighted points from the input dataset. 
+
+5We also recall the classical Johnson-Lindenstrauss lemma, which enables dimensionality reduction while approximately preserving pairwise distances: 
+
+Theorem 2.5 (Johnson-Lindenstrauss lemma) . [JL84 ] Let ε ∈ (0 , 1/2) and m = O  
+
+> (1
+> ε2
+
+log n
+
+> )
+
+.Given a set X ⊂ Rd of n points, there exists a family of random linear maps Π : Rd → Rm such that with high probability over the choice of π ∼ Π, for all x, y ∈ X,
+
+(1 − ε)∥x − y∥2 ≤ ∥ πx − πy ∥2 ≤ (1 + ε)∥x − y∥2.
+
+We remark that exist more efficient dimensionality reduction techniques for (k, z )-clustering [ MMR19 ,ISZ21] though for the purposes of our guarantees, Johnson-Lindenstrauss suffices. Finally, we recall Hoeffding’s inequality, a standard concentration bound: 
+
+Theorem 2.6 (Hoeffding’s inequality) . Let X1, . . . , X n be independent random variables with 
+
+ai ≤ Xi ≤ bi for each i. Let Sn = ∑ni=1 Xi. Then for any t > 0,
+
+P (|Sn − E[Sn]| > t ) ≤ 2 exp 
+
+> (
+
+− t2
+
+> ∑ni=1
+
+(bi − ai)2
+
+> )
+
+.
+
+We next recall the following formulation of sensitivity sampling paradigm, given in Algorithm 1. 
+
+Algorithm 1 SensitivitySampling 
+
+Input: Dataset X = {x1, . . . , x n} ⊂ [∆] d and integer k
+
+Output: Weighted set A = {(ai, w ai )} 
+
+> 1:
+
+Compute an O (1) -approximation S = {s1, s 2, · · · , s k}. Let Cj ⊂ X be the cluster centered at 
+
+sj . For a point x ∈ Cj , let ∆p := cost( Cj , S )/|Cj | denote the average cost of Cj 
+
+> 2:
+
+For x ∈ Cj , let 
+
+μ(x) := 14 · 
+
+> (
+
+1
+
+k|Cj | + cost( x, S )
+
+k cost( Cj , S ) + cost( x, S )cost( X, S ) + ∆x
+
+cost( X, S )
+
+> )
+
+. 
+
+> 3:
+
+m ← ˜O (k/ε 2 · min( ε−2, ε −z )), A ← ∅  
+
+> 4:
+
+for i ← 1 to m do  
+
+> 5:
+
+Sample point ai independently from the distribution μ, A ← A ∪ { (ai, 1 
+
+> m·μ(ai)
+
+)} 
+
+> 6:
+
+end for  
+
+> 7:
+
+return A
+
+Theorem 2.7. [BCP +24] Sensitivity sampling, c.f., Algorithm 1, outputs a (1 + ε)-coreset of size 
+
+˜O  
+
+> (k
+> min( ε4,ε 2+ z)
+> )
+
+for Euclidean (k, z )-clustering with probability at least 0.99 .
+
+We next recall the following distributed protocol for determining the larger of two integers. 
+
+Theorem 2.8. [Nis93 ] Given two O (log n) bit integers X and Y , there exists a protocol GreaterThan 
+
+that uses ˜O (log log n) total bits of communication and determines whether X = Y , X < Y or 
+
+X > Y .
+
+We recall the following protocol for applying the Johnson-Lindenstrauss transformation using low communication cost. 6Theorem 2.9. [KN10 ] For any integer d > 0, and any 0 < ε, δ < 12 , there exists a family A of matrices in Rℓ×d with ℓ = Θ 
+
+> (
+
+ε−2 log 1
+
+> δ
+> )
+
+such that for any x ∈ Rd,
+
+Pr  
+
+> A∈A
+
+[∥Ax ∥2 /∈ [(1 − ε)∥x∥2, (1 + ε)∥x∥2]] < δ. 
+
+Moreover, A ∈ A can be sampled using O
+
+> (
+
+log  
+
+> (lδ
+> )
+
+log d
+
+> )
+
+random bits and every matrix A ∈ A has at most α = Θ 
+
+> (
+
+ε−1 log  
+
+> (1
+> δ
+> )
+
+log  
+
+> (lδ
+> ))
+
+non-zero entries per column, and thus Ax can be evaluated in 
+
+O (α · ∥ x∥0) time if A is written explicitly in memory. 
+
+Adaptive sampling. We now introduce the adaptive sampling algorithm from [ ADK09 ] and generalize the analysis to (k, z )-clustering. 
+
+Algorithm 2 AdaptiveSampling 
+
+Input: Dataset X = {x1, . . . , x n} ⊂ [∆] d; approximation parameter γ ≥ 1
+
+Output: Bicriteria approximation S for (k, z )-clustering on X 
+
+> 1:
+
+S ← ∅ , N ← O (k), γ ← Θ(1)  
+
+> 2:
+
+for t ← 1 to N do  
+
+> 3:
+
+Choose st to be xi ∈ X with probability di∑ di
+
+, where 1 
+
+> γ
+
+· di ≤ cost( xi, S ) ≤ γ · di 
+
+> 4:
+
+S ← S ∪ { st} 
+
+> 5:
+
+end for  
+
+> 6:
+
+return S
+
+[ ADK09 ] showed that adaptive sampling achieves a bicriteria approximation for k-means, i.e., 
+
+z = 2 . For completeness, we shall extend the proof to show that it works for weighted case and any 
+
+z ≥ 1, though we remark that the techniques are standard. 
+
+Theorem 2.10. There exists an algorithm, c.f., Algorithm 2 that outputs a set S of O (k) points such that with probability 0.99 , cost (S, X ) ≤ O (1) · cost (COPT , X ), where COPT is an optimal 
+
+(k, z )-clustering of X.
+
+As stated, the version of adaptive sampling in Algorithm 2 requires updating cost (x, S ) after each update, leading to a high cost of communication. We will introduce the lazy sampling algorithm. The combination of our updated adaptive sampling algorithm and the lazy sampling algorithm can provide a lower number of updates required, and thus a lower overall communication cost, while still guaranteeing the result of the (O (1) , O (1)) -bicriteria approximation. Suppose that we have s sites, every site has a local dataset Xi and every data point x has a sampling weight dx. Let Di = ∑ 
+
+> x∈Xi
+
+dx and D = ∑si=1 Di. Our goal is to sample a point x with probability px = dx 
+
+> D
+
+. In the case of adaptive sampling, dx is just cost (x, S ). To avoid a high cost of communication, our strategy is that the coordinator only holds ˜Di, an approximation of real Di
+
+that Di ≤ ˜Di < λD i, and only updates ˜Di when it deviates far from Di. Then we can use dx 
+
+> ˜D
+
+to sample the point, where ˜D = ∑si=1 ˜Di.Since ˜D may be larger than D, the site i will send ⊥ with probability ˜Di−Di
+
+> ˜Di
+
+. Fortunately, the probability of returning ⊥ is constant, and the probability that we sample x conditioned on not returning ⊥ is just dx 
+
+> D
+
+. Therefore, by Markov’s inequality, we can sample at least N points under 7Algorithm 3 LazySampling 
+
+Input: {dx}x∈X , the sampling weight; { ˜Di}i∈[s], a constant approximation to {Di}i∈[s] that Di ≤
+
+˜Di ≤ λD i, where Di = ∑ 
+
+> x∈Xi
+
+dx for every site i
+
+Output: Either ⊥ or a point x sampled under distribution dx 
+
+> D
+
+, where D = ∑ 
+
+> x∈X
+
+dx 
+
+> 1:
+
+˜D ← ∑si=1 ˜Di, x ← ⊥  
+
+> 2:
+
+The coordinator generates an index i with probability = ˜Di
+
+˜D 
+
+> 3:
+
+The coordinator sends sampling request to site i 
+
+> 4:
+
+x ← y with probability dy
+
+˜Di 
+
+> 5:
+
+return x
+
+the distribution dx 
+
+> D
+
+with probability at least 0.99 after repeating LazySampling a total of O (N )
+
+times. 
+
+Lemma 2.11. Let x be the result returned by Algorithm 3 and E be the event that Algorithm 3 does not return ⊥. If ∑ Dj ≤ ∑ ˜Dj < λ ∑ Dj , Pr [E] ≥ 1 
+
+> λ
+
+and Pr [x = y|E ] = dy 
+
+> D
+
+. Furthermore, there exists some constant γ ≥ 1 such that after running Algorithm 3 a total of γN times, it will return at least N points sampled by the distribution dx 
+
+> D
+
+with probability at least 0.99 .Proof. Let Fi be the event that the result is sampled by the site i. Since Pr [Fi] = ˜Di
+
+˜D and 
+
+Pr [E|F i] = ∑
+
+> x∈Xi
+> dx
+
+˜Di
+
+= Di
+
+˜Di
+
+, then by the law of total probability, 
+
+Pr [E] = 
+
+> s
+
+∑
+
+> i=1
+
+Pr [E|F i] · Pr [Fi] = 
+
+> s
+
+∑
+
+> i=1
+
+Di
+
+˜Di
+
+· ˜Di
+
+˜D = D
+
+˜D ≥ DλD = 1
+
+λ .
+
+For any y ∈ Xi, we have 
+
+Pr [x = y|E ] = Pr [x = y]
+
+Pr [E] = 1
+
+Pr [E] · ˜Di
+
+˜D · dy
+
+˜Di
+
+= ˜DD · ˜Di
+
+˜D · dy
+
+˜Di
+
+= dy
+
+D .
+
+Furthermore, let 
+
+Zi =
+
+{0, if LazySampling returns ⊥
+
+1, otherwise .
+
+After running LazySampling for γN times, the number of times LazySampling does not return 
+
+⊥ is just ∑γN i=1 Zi. Since E [Zi] = Pr [E] ≥ 1 
+
+> γ
+
+, we have E
+
+[∑γN i=1 Zi
+
+]
+
+≥ γλ N . By Markov’s inequality, there exists some γ ≥ 1 such that Pr 
+
+[∑γN i=1 Zi < N 
+
+]
+
+≤ 0.01 . Hence, LazySampling will sample at least N points with probability at least 0.99 .Finally, in Algorithm 4 we recall the standard algorithm that provides an efficient approximate encoding of a number by storing the exponent of the number after rounding to a power of a fixed base λ.
+
+Theorem 2.12. The output from Algorithm 4 can be used to compute a number ̂ m such that 
+
+m ≤̂ m < λm .
+
+8Algorithm 4 PowerApprox 
+
+Input: Number to be encoded m, base λ > 1
+
+Output: An integer i that λi is a λ approximation of m 
+
+> 1:
+
+Let i be the integer such that m ≤ λi < λm  
+
+> 2:
+
+return i
+
+Efficient encoding for coreset construction for (k, z )-clustering. We recall the following efficient encoding for a given coreset for (k, z )-clustering given by [ CAWWZ25 ]. Given a dataset 
+
+X, which may represent either the original inputs or a weighted coreset derived from some larger dataset, we begin by computing a constant-factor approximation C′ for the (k, z )-clustering problem on X. For every x ∈ X, let πC′ (x) denote the nearest center in C′ to x. Each point x can then be decomposed as x = πC′ (x) + ( x − πC′ (x)) , separating it into its closest center and a residual vector. To obtain a (1 + ε)-approximation for (k, z )-clustering, it suffices to round each coordinate of the offset vector x − πC′ (x) to the nearest power of (1 + ε′), where ε′ = poly 
+
+> (
+
+ε, 1 
+
+> d
+
+, 1log( n∆) 
+
+> )
+
+. Let y′
+
+denote this rounded vector. We then encode each point as x′ = πC′ (x) + y′, storing both the index of the center πC′ (x) and the exponent values of the rounded offset. T his representation uses O
+
+> (
+
+log k + d log   
+
+> (1
+> ε
+
+, d, log( n∆) 
+
+> ))
+
+bits per point. The full algorithm is detailed in Algorithm 5. 
+
+Algorithm 5 Compact Encoding for Coreset Generation in (k, z )-Clustering 
+
+Input: Dataset X ⊂ [∆] d with weights w(·), accuracy parameter ε ∈ (0 , 1) , number of clusters k,parameter z ≥ 1, failure probability δ ∈ (0 , 1) 
+
+Output: (1 + ε)-approximate coreset for (k, z )-clustering  
+
+> 1:
+
+ε′ ← poly( εz )poly( k, log( nd ∆))  
+
+> 2:
+
+Compute a constant-factor (k, z )-clustering solution C′ on X 
+
+> 3:
+
+for each x ∈ X do  
+
+> 4:
+
+Set c′(x) as the nearest center to x in C′ 
+
+> 5:
+
+Compute the residual vector y′ = x − c′(x) 
+
+> 6:
+
+Round each coordinate of y′ to the nearest power of (1 + ε′) to obtain y 
+
+> 7:
+
+Define x′ = ( c′(x), y ), where y stores the exponent for each coordinate  
+
+> 8:
+
+Add x′ to the new set: X′ ← X′ ∪ { x′} 
+
+> 9:
+
+end for  
+
+> 10:
+
+return (C′, X ′)
+
+We have the following guarantees for the efficient encoding from [CAWWZ25]: 
+
+Lemma 2.13. [CAWWZ25 ] Let ε ∈
+
+> (
+
+0, 12
+
+> )
+
+, and let X′ be the weighted dataset S, constructed using the offsets from the center set C′ as defined in Algorithm 5. Then, for any set of centers C ⊂ [∆] d
+
+with |C| ≤ k, the following holds: 
+
+(1 − ε) · cost( C, X ) ≤ cost( C, X ′) ≤ (1 + ε) · cost( C, X ).
+
+Lemma 2.14. [CAWWZ25 ] Let X be a coreset where the point weights lie within the range 
+
+[1 , poly (nd ∆)] . Then the transformed set X′ forms a (1 + ε)-strong coreset for X, and its total space requirement is O (dk log( n∆)) + |X| · polylog 
+
+> (
+
+k, 1 
+
+> ε
+
+, log( nd ∆) , log 1
+
+> δ
+> )
+
+bits. 
+
+93 Technical Overview 
+
+In this section, we provide a technical overview for our distributed protocols, for both the blackboard model and the coordinator/message-passing model. 
+
+Previous approaches and why they do not work. A natural question is whether simple approaches could achieve similar communication bounds. One might hope, for instance, that combining the space upper bounds of [ ZTHH25 ] with existing distributed clustering algorithms would suffice. However, it is not immediately clear how to translate space bounds into better distributed clustering bounds. For instance, as an application of their space bounds, [ ZTHH25 ]achieved a distributed protocol with total communication ˜O 
+
+> (sdk ε4
+> )
+
+, for appropriate ranges of k
+
+and ε, which is actually worse than the third row of Figure 1 and thus worse than our bounds of 
+
+˜O
+
+> (
+
+sk + dk ε4 + dk log n
+
+> )
+
+for the same regime. Another approach might be that each server computes a local coreset, e.g., [ HV20 , CSS21 ,CLSS22 , CLS +22 , BCP +24 ], possibly with the incorporation of dimensionality reduction, e.g., [SW18 , MMR19 , ISZ21 ], and then either broadcasting these coresets in the blackboard model or sending these coresets to the coordinator in the message-passing model. However, this uses communication O  
+
+> (sdk ε4
+
+log n
+
+> )
+
+bits, compared to our bounds of ˜O
+
+> (
+
+sk + dk ε4 + dk log n
+
+> )
+
+. Similarly, any approach based on locality sensitivity hashing, possibly with the aid of dimensionality reduction or other compressions, e.g., Kashin representations [ LV10 , AFN +24 ], would require at least each server computing a local coreset and thus succumbing to the same pitfalls. These limitations highlight that overcoming the inherent overheads in naïve strategies is far from straightforward, and motivate the need for new techniques. Our framework is designed precisely to address these challenges by simulating centralized algorithms through communication-optimal primitives, thereby breaking the bottlenecks that defeat such strawman approaches. 
+
+(1 + ε)-coreset for the blackboard model. Our starting point is the distributed protocol of [CSWZ16 ], which first adapts the central RAM algorithm of [ MP04 ] to publish a weighted set 
+
+S of O (k log n) centers that is a constant-factor bicriteria approximation for (k, z )-clustering. It can be shown that a constant-factor approximation to (k, z )-clustering on S achieves a constant-factor approximation C to the optimal clustering on the input set X. Since S is already available on the blackboard, this step is immediate. The total communication cost of their algorithm is 
+
+O
+
+> (
+
+(s + kd ) log 2 n
+
+> )
+
+.We observe that the sites can easily calculate the number of points in X served by each center 
+
+c ∈ C. We recall that using this information as well as cost (X, C ) can be used to find constant-factor approximations of the sensitivity s(x) of each point x, c.f. [ CWZ23 ]. Thus, the sites can subsequently sample ˜O
+
+> (
+
+min   
+
+> (k2
+> ε2
+
+, k 
+
+> min( ε4,ε 2+ z)
+> ))
+
+points of X using sensitivity sampling to achieve a (1 + ε)-coreset. We can then use an efficient encoding scheme to express each sampled point in 
+
+O
+
+> (
+
+log k + d log   
+
+> (1
+> ε
+
+, d, log( n∆) 
+
+> ))
+
+bits. This achieves the desired dependency for the points acquired through sensitivity sampling, but the communication from the constant-factor approximation is sub-optimal. Thus, it remains to find a more communication-efficient protocol for the constant-factor approximation. 10 Constant-factor approximation in the blackboard model. Although there are many options for the constant-factor approximation in the blackboard model, they all seem to have their various shortcomings. For example, the aforementioned Mettu-Plaxton protocol [ MP04 ] requires O (log n)
+
+rounds of sampling, which results in O (k log n) points. A natural approach would be to form coresets locally at each site so that the total number of weighted points is O (sk ) rather than n.Unfortunately, when generalized to weighted points, Mettu-Plaxton requires O (log W ) rounds, where W is total weight of the points, which is poly( n) for our purposes. Another well-known prototype is the adaptive sampling framework [ ADK09 , BEL13 ], which can be used to implement the well-known kmeans++ algorithm [ AV07 ] in the distributed set-ting [ BMV +12 ]. This approach iteratively samples a fixed number of points with probability proportional to the z-th power of the distances from the previously sampled points; adaptive sam-pling samples O (k) points for O (1) -approximation while kmeans++ samples k points for O (log k)-approximation. However, since all sites i ∈ [s] must report the sum Di of the z-th power of the distances of their points to the sampled points after each iteration, these approaches naïvely require 
+
+O (sk log n) bits of communication, which is prohibitive for our goal. Instead, we perform lazy updating of the sum Di of the z-th power of the distances of their points to the sampled points. The blackboard only holds estimates ̂ Di for Di, based on the last time the site i reported its value. The sites then attempt adaptive sampling, where the site i is sampled with a probability proportional to ̂ Di. When sampled, site i uses ̂ Di to attempt to sample a point locally, but this can fail because ̂ Di ≥ Di, which means that a randomly chosen integer in ̂
+
+Di may not correspond to an integer in Di. Fortunately, the failure probability would be constant if ̂
+
+Di is a constant approximation of Di, so the total number of rounds of sampling is still O (k) by the Markov inequality. If the site i fails to sample a point, we expect Di to be a constant fraction smaller than ̂ Di, prompting site i to update its value Di on the blackboard. This can happen at most O (s log n) times. If each site i rounds Di to a power of 2, then Di can be approximated within a factor of 2 by transmitting only the exponent of the rounding, using O (log log n) bits. Thus, the total communication for the constant-factor approximation is ˜O (s log n + kd log n).The primary downside is that the total number of communication rounds could reach O (s log n),since each of the s sites may update its Di value up to O (log n) times. 
+
+Communication round reduction in the blackboard model. A natural approach to round reduction would be to have all s sites report their updated Di values when we fail to sample a point. However, because we sample O (k) points, this results in communication complexity O (sk ).Instead, we check whether the global weight ∑ 
+
+> i∈[s]
+
+Di has decreased by 164 compared to the amount ∑ 
+
+> i∈[s]̂
+
+Di on the blackboard. To do this, we first perform the L1 sampling in each round. That is, the blackboard picks the site i with probability pi =̂ Di∑ 
+
+> i∈[s]̂Di
+
+and computes Di 
+
+> pi
+
+. Observe that in expectation this quantity is ∑ 
+
+> i∈[s]
+
+Di and its variance is at most (∑ 
+
+> i∈[s]
+
+Di)2, up to a constant factor. Thus, repeating O (1) times and taking the average, we get a ∑ 
+
+> i∈[s]
+
+Di additive approximation to ∑ 
+
+> i∈[s]
+
+Di, which is enough to identify whether the sum has decreased by a factor of 164 from ∑ 
+
+> i∈[s]̂
+
+Di. We can then take O (log log n) instances to union bound over O (log n log k)
+
+iterations. Now the other observation is that as long as our sampling probabilities have not decreased by  
+
+> 164
+
+, then we can simultaneously take many samples at the same time. Thus, we start at i = 0 and collect 2i samples from the s sites using the adaptive sampling distribution. We then check if the 11 total weight ∑ 
+
+> i∈[s]
+
+Di is less than 164  
+
+> ∑
+> i∈[s]̂
+
+Di, and if not, we increment i and sample 2i samples, and repeat until either 2i > k or the total weight ∑ 
+
+> i∈[s]
+
+Di is less than 164  
+
+> ∑
+> i∈[s]̂
+
+Di.Note that this takes O (log n log k) rounds of sampling, which is enough for the failure probability of the L1 sampling procedure. Moreover, since we can use O (log log n) bits of communication to approximate L1 sampling by rounding the values of Di to a power of 2 and returning the exponent. Since each time the total weight ∑ 
+
+> i∈[s]
+
+Di is less than 164  
+
+> ∑
+> i∈[s]̂
+
+Di, we require all s sites to update their weights, then the communication is ˜O (s log n + kd log n) across the O (log n log k) rounds of communication. 
+
+Applying sensitivity sampling in the blackboard model. To apply the sensitivity sampling framework of [ BCP +24 ], a constant approximation of the number of each cluster |Cj | and the cost of each cluster cost (Cj , S ) is necessary, where S is a (O (1) , O (1) )-bicriteria approximation of the optimal solution. Each site needs O (log log n) bits to upload such a constant approximation for a cluster. Since there are s sites and O (k) clusters, it would lead to O (sk log log n) bits of communication, which is prohibitive for our goal. Instead, we adapt Morris counters, which are used for approximate counting in the streaming model, to the distributed setting. We use a counter r to store the logarithm of the number/cost of the cluster, and increase the counter by 1 with probability  
+
+> 12r
+
+for every time we count the number/cost of the cluster. Each site applies the Morris counters sequentially and only uploads the increment on the blackboard. Similar to Morris counters, such a subroutine can return a constant approximation of the number/cost of the cluster. If all counters remain the same after counted by a site, that site needs to use O (1) bits to tell the next site that nothing needs to be updated, which would use at most O (1) . Otherwise, O (log log n) bits are needed to update a changed counter. Since each counter can increase at most O (log n) times and there are O (k) numbers of number/cost of the cluster to be counted, it would use O (k log n) bits to upload all the updates. Therefore, at most ˜O (s + k log n) bits are needed to upload a constant approximation of the number of each cluster |Cj | and the cost of each cluster cost( Cj , S ).Each site can apply the sensitivity sampling locally after knowing a constant approximation of the number of each cluster |Cj | and the cost of each cluster cost (Cj , S ). Combined with the efficient encoding for the (1 + ε)-coreset, we can upload the coreset using O     
+
+> ((dlog log n+log k)k
+> min( ε4,ε 2+ z)
+> )
+
+bits, which achieves our desired bounds for the blackboard model. 
+
+Coordinator/message-passing model. For the message-passing/coordinator model, our starting point is once again adaptive sampling, which can be performed over O (k) rounds to achieve a constant-factor approximation C using O (skd log n) total bits of communication [ BEL13 ]. We can again use sensitivity sampling on C along with our efficient encoding scheme to achieve the desired communication for the subsequent (1 + ε)-coreset. Thus, the main question again is how to improve the constant-factor protocol. To that end, we first introduce a subroutine EfficientCommunication that can send the loca-tion of the point using low communication cost. The intuition behind EfficientCommunication 
+
+is similar to the efficient encoding, which uses the points a site owns to encode the point we want to send. The only difference is that we use different points to efficiently encode the coordinates for each dimension, rather than just using a single point to encode the point we want to send. Recall that there exists GreaterThan protocol, which given two log n bit integers, figures out which one is greater with constant probability, using ˜O (log log n) bits of communication. Moreover, this procedure can be repeated O (log( sk )) times to achieve a failure probability 1poly( sk )
+
+12 to union bound over poly (sk ) possible steps. With the help of GreaterThan , we can compare the coordinates of the points in the i-th dimension x(i) 
+
+> j
+
+a site owns with the coordinate of the point to receive y(i). By a binary search, we can find the closest coordinate x(i) 
+
+> j
+
+to y(i), which requires 
+
+O (log n) search times, since the site owns at most n points. By another binary search, we can further find ∆y(i) that is a (1 + ε)-approximation of |x(i) 
+
+> j
+
+− y(i)|. Since |x(i) 
+
+> j
+
+− y(i)| = poly (n), we need O (log log n) searches to find ∆y(i). Since the coordinator needs to send the approximate coordinates of the points sampled by adaptive sampling to each site, the total communication cost for adaptive sampling is ˜O (dsk log n) bits, which is still prohibitive for our goal. To address this, we first generate a (1 + O (ε) )-coreset for each site, so that the size of the dataset of each site is O (k), which leads O (log n) searches to find the closest coordinate x(i) 
+
+> j
+
+to 
+
+y(i). Furthermore, we observe that we only need the approximate cost for each point for adaptive sampling. Hence, we can apply Johnson-Lindenstrauss to project the dataset down to O (log( sk )) 
+
+dimensions. Therefore, the total communication cost for adaptive sampling is sk polylog ( log n, s, k )
+
+bits. After achieving an (O (1) , O (1) )-bicriteria approximation for the optimal solution, we can communicate a constant approximation of the number and cost of each cluster using a total 
+
+O (sk log log n) bits of communication. However, each site may assign the points to an incorrect cluster since it only has an approximate location of S. Fortunately, the sensitivity sampling procedure of [ BCP +24 ] still returns a (1 + ε)-coreset if we assign each point to a center so that the distance between them is close to the distance between the point and the center closest to it. Therefore, combined with EfficientCommunication , we can upload the (1 + ε)-coreset using   
+
+> dk
+> min( ε4,ε 2+ z)
+
+polylog(log n, k, 1 
+
+> ε
+
+) bits, which achieves our desired bounds for the blackboard model. 
+
+# 4 Distributed Clustering Protocols in the Blackboard Model 
+
+Recall that in the blackboard model of communication, each of the s sites has access to private randomness and can directly broadcast to a public platform in sequential, round-based steps, with self-delimiting messages immediately visible to all. Throughout this section, we assume without loss of generality that there is a central coordinator managing the process. Our goal is to design efficient protocols for (k, z )-clustering in this setting. 
+
+4.1 Constant-Factor Bicriteria Algorithm 
+
+In this section, we present a new algorithm that achieves an (O (1) , O (1) )-bicriteria approximation; we will use it to construct a (1 + ε)-coreset in Section 4.2. The resulting scheme yields a (1 + ε)-approximation with ˜O
+
+> (
+
+s log n + dk log n + dk  
+
+> min( ε4,ε 2+ z)
+> )
+
+bits of communication and O (log n log k)
+
+rounds, with additional optimizations for the case k = O (log n) given in the appendix. Existing bicriteria algorithms in the blackboard model suffer from communication bottlenecks, e.g., the classical Mettu–Plaxton protocol [ MP04 ] and the subsequent adaptations [ CSWZ16 ] sample O (k)
+
+points in each of O (log n) rounds, incurring O
+
+> (
+
+dk log 2 n
+
+> )
+
+bits of communication. These costs are prohibitive for our target guarantees. To overcome these barriers, we adapt the adaptive sampling framework originally developed for k-median in the centralized setting [ ADK09 , BEL13 ]. The procedure repeatedly samples points in a manner reminiscent of kmeans++ [AV07 , BMV +12 ], but now distributed across s servers. In 13 each iteration, we first sample a server j with probability proportional to Dj , the sum of the 
+
+z-th power of the distances from its points to the current sample, and then sample points within server j according to the adaptive distribution. A naïve implementation requires reporting each Dj
+
+after every iteration, leading to O (sk log n) communication, which is too expensive. To implement this step efficiently, we design the subroutine LazySampling , which draws from the adaptive distribution using only approximate values ˜Dj maintained on the blackboard. Our key innovation is to update these estimates lazily: each site reports a new value only when its true Dj changes by more than a constant factor, which we show suffices for the purposes of adaptive sampling. 
+
+Lemma 4.1. There exists an algorithm LazySampling that samples from the adaptive sampling distribution with probability at least 0.99 provided that ∑ Dj ≤ ∑ ˜Dj < λ ∑ Dj for a fixed constant 
+
+λ > 1. The algorithm uses ˜O (log s + d log n) bits of communication. 
+
+The LazySampling algorithm is a communication-efficient subroutine for adaptive sampling in the blackboard model, formally described in Algorithm 3 in Appendix 2. Each server j maintains an approximate weight ˜Dj for its local dataset, satisfying Dj ≤ ˜Dj ≤ λD j , where Dj is the sum of the 
+
+z-th powers of distances from its points to the current sample. The coordinator first selects a server j
+
+with probability proportional to ˜Dj / ∑ 
+
+> i˜
+
+Di, then requests a point y ∈ Xj , sampled with probability 
+
+dy/ ˜Dj . By updating the ˜Dj lazily, i.e., only when Dj changes significantly, LazySampling ensures points are drawn close to the true adaptive distribution while drastically reducing communication. The algorithm either returns a sampled point or ⊥, and uses only ˜O (log s + d log n) bits per round, enabling scalable execution of the bicriteria algorithm across s servers. This ensures that each site communicates only O (log n) updates, so the total communication for the constant-factor approximation is reduced to ˜O (s log n + kd log n), since each server can only update ˜Dj a total of 
+
+O (log n) times assuming all points lie in a grid with side length poly (n). Because lazy updates rely on approximate values, the protocol must occasionally verify whether the aggregate estimate ∑ 
+
+> j˜
+
+Dj
+
+is still close to the true sum ∑ 
+
+> j
+
+Dj . For this purpose, we use the subroutine L1Sampling , which tests whether the two sums differ by more than a constant factor. 
+
+Lemma 4.2. There exists an algorithm L1Sampling that takes input { ˜Dj }j∈[s] so that ˜Dj ≥ Dj
+
+for all j ∈ [s]. Let ˜D = ∑ 
+
+> j∈[s]˜
+
+Dj and D = ∑ 
+
+> j∈[s]
+
+Dj and let μ > 1 be a parameter. If μ2D ≤ ˜D,then L1Sampling returns True with probability at least 1 − δ. If μD > ˜D, it returns False with probability at least 1 − δ. The algorithm uses ˜O
+
+> (
+
+(log s + log log n) log 1
+
+> δ
+> )
+
+bits of communication. 
+
+L1Sampling checks whether the sum of approximate site costs ˜D is within a constant factor of the true total D by sampling a few sites and aggregating the rescaled sampled values. If the aggregate is sufficiently close to ˜D, the algorithm returns True ; otherwise, it returns False , providing a high-probability guarantee that the lazy estimates remain accurate; the algorithm is presented as Algorithm 9 in Appendix B.2. While this lazy strategy could require up to O (s log n) rounds, we further reduce the round complexity by delaying all updates until the global sum ∑ 
+
+> j
+
+Dj decreases by a constant factor. This event is naturally detected when no new point is sampled in a round, and synchronizing updates in this way brings the total number of rounds down to O (log n log k).Finally, to reduce communication further, we use the subroutine PowerApprox , which encodes each Dj to within a constant factor using only O (log log n) bits: 
+
+Theorem 4.3. Given m = poly (n) and a constant λ > 1, there exists an algorithm PowerApprox (m, λ )
+
+that outputs ˜m encoded in O (log log n) bits, such that m ≤ ˜m < λm .
+
+14 Given m and a base λ > 1, PowerApprox computes the smallest integer i such that λi
+
+approximates m from above, i.e., m ≤ λi < λm , and returns i. This allows each site to communicate a concise representation of its cost using only O (log log n) bits, which can then be decoded to obtain a constant-factor approximation of the original value; we give the full details in Algorithm 4 in Appendix 2. Combined with LazySampling and L1Sampling , this ensures accuracy while keeping communication near-linear. The protocol proceeds by sampling points with LazySampling ,verifying accuracy with L1Sampling , and refreshing estimates via PowerApprox only when necessary. To limit round complexity, sites synchronize updates by reporting only when the global sum ∑ 
+
+> j
+
+Dj decreases by a constant factor, detected whenever a round fails to sample a new point. This reduces the number of rounds from O (s log n) to O (log n log k). Figure 2 informally summarizes the procedure, with the formal procedure appearing in Appendix B.3. Altogether, this yields the first (O (1) , O (1) )-bicriteria approximation for (k, z )-clustering in the blackboard model with near-linear communication and polylogarithmic rounds: 
+
+Algorithm: Bicriteria Approximation for (k, z )-Clustering (Simplified) 
+
+1. Input: Dataset Xi for each site i ∈ [s].2. Output: Set S that is an (O (1) , O (1)) -bicriteria approximation. 3. Initialize: 
+
+• Sample one point into S and compute approximate distances { ˜Dj } for each site. 
+
+• Set counters: N = O (k), M = 0 .4. While M < N (sample roughly k points): 
+
+• Sample new points into S using LazySampling .
+
+• Check accuracy of approximate distances { ˜Dj } with L1Sampling .
+
+• If distances are accurate, sample more aggressively. 
+
+• Otherwise, refine approximate distances { ˜Dj } using PowerApprox .
+
+• Update M with the number of points successfully added. 5. Return S.Fig. 2: Informal version of bicriteria approximation through adaptive sampling. 
+
+Lemma 4.4. There exists an algorithm that outputs a set S such that |S| = O (k) and cost (S, X ) ≤O (1) · cost (COPT , X ) with probability at least 0.98 , where COPT is the optimal (k, z )-clustering of 
+
+X. The algorithm uses ˜O (s log n + kd log n) bits of communication and O (log n log k) rounds of communication with probability at least 0.99 .
+
+4.2 (1 + ε)-Coreset Construction 
+
+To achieve a (1 + ε)-coreset for (k, z )-clustering on an input dataset X given an (O (1) , O (1) )-bicriteria approximation S, we use the following notion of sensitivity sampling. For each center 15 sj ∈ S, let Cj ⊂ X be the cluster centered at sj . For a point x ∈ Cj , let ∆p := cost (Cj , S )/|Cj |
+
+denote the average cost of Cj . For x ∈ Cj , we define 
+
+μ(x) := 14 · 
+
+> (
+
+1
+
+k|Cj | + cost( x, S )
+
+k cost( Cj , S ) + cost( x, S )cost( X, S ) + ∆x
+
+cost( X, S )
+
+> )
+
+.
+
+We define sensitivity sampling to be the process where each point x is sampled with probability proportional to a constant-factor approximation to μ(x). Then we have the following guarantees: 
+
+Theorem 4.5. [BCP +24 ] Sampling ˜O  
+
+> (k
+> min( ε4,ε 2+ z)
+> )
+
+points from constant-factor approximations to the sensitivity sampling probability distribution and then reweighting provides a (1 + ε)-coreset for Euclidean (k, z )-clustering with probability at least 0.99 .
+
+We remark that [ BCP +24 ] obtained optimal bounds for k-median, which immediately extend to our framework as well; we omit further discussion as it naturally generalizes. To apply the sensitivity sampling framework, we require constant-factor approximations of the cluster sizes |Cj |
+
+and costs cost (Cj , S ), given a bicriteria solution S. However, directly uploading these quantities from s servers for O (k) clusters would cost O (sk log log n) bits, which is too high. Instead, we adapt Morris counters [Mor78] for the purposes of distributed approximate counting: 
+
+Lemma 4.6. Suppose each server i holds k numbers ni,j and we have |Nj | = ∑si=1 ni,j = poly (n).There exists an algorithm DistMorris that outputs {̂Nj } such that ˜Nj ∈ [ 34 Nj , 54 Nj ] for all j ∈ [k],with probability 0.99 using ˜O (s + k log n) bits of communication. 
+
+Our Morris counter protocol collectively maintains a counter rj and increments it with probability  
+
+> 12r
+
+for each item in a cluster Cj . This provides a constant approximation to the cluster size |Cj |.Crucially, if a site does not change the global counters {rj }, then it only needs to send a single bit to signal no update. Otherwise, each of the O (k) counters can only increase at most O (log n) times, so the total upload cost for these approximations is O (k log n) bits. We can perform a similar protocol to approximate the cost of each cluster cost (Cj , S ), so that overall, the total communication for these approximations is ˜O (s + k log n) bits. Given these approximations, the servers can then perform sensitivity sampling locally. Finally, we require an efficient encoding of each point x sampled by sensitivity sampling. Informally, each point x is encoded as x′ = πS (x) + y′, where πS (x) is the nearest center in S to x, and y′ is the offset vector x − πS (x) whose coordinates are rounded to the nearest power of (1 + ε′), where ε′ = poly 
+
+> (
+
+ε, 1 
+
+> d
+
+, 1log( n∆) 
+
+> )
+
+. The formal details are given in Appendix 2. Putting everything together, Algorithm 6 achieves the guarantees in Theorem 1.2. 
+
+# 5 Distributed Clustering Protocols in the Coordinator Model 
+
+We now turn to the coordinator (message passing) model, where each server communicates only with the coordinator over private channels. A direct simulation of our blackboard protocol would require O (dsk log n) bits, since O (k) rounds of adaptive sampling would need to be executed across 
+
+s servers. To avoid this prohibitive cost, we design a protocol that simulates adaptive sampling without sending points explicitly to all sites. We first apply a Johnson–Lindenstrauss transformation to reduce the dimension to d′ = O (log( sk )) , preserving pairwise distances up to (1 ± ε). We can then perform adaptive sampling in the projected space, so that when a point s is selected, only its projection π(s) is communicated. To efficiently approximate such locations, we introduce the 16 Algorithm 6 (1 + ε)-coreset for the blackboard model 
+
+Input: A bicriteria set of centers S with constant-factor approximation and |S| = O (k)
+
+Output: A (1 + ε)-coreset A 
+
+> 1:
+
+Use DistMorris to get O (1) -approximation for |Cj | and cost (Cj , S ) for all j ∈ [k] on the blackboard  
+
+> 2:
+
+m ← ˜O
+
+( kε2 min {ε−2, ε −z }
+
+)
+
+▷Set coreset size  
+
+> 3:
+
+for i ← 1 to s \\ Send local approximations to sensitivities do  
+
+> 4:
+
+Ai ← ∅  
+
+> 5:
+
+Compute ˜μ(x) as an O (1) -approximation of μ(x) locally for all x ∈ Xi 
+
+> 6:
+
+Upload ˜μ(Xi) = ∑ 
+
+> x∈Xi
+
+˜μ(x) to blackboard  
+
+> 7:
+
+end for  
+
+> 8:
+
+Sample site i with probability ˜μ(Xi)∑si=1 ˜μ(Xi) independently for m times. ▷Sensitivity sampling  
+
+> 9:
+
+Let mi be the number of times site i is sampled and write mi on blackboard  
+
+> 10:
+
+for i ← 1 to s \\ Iterate through sites to produce samples do  
+
+> 11:
+
+Ai ← ∅  
+
+> 12:
+
+for j ∈ [mi] \\ Sample mi points from site i do  
+
+> 13:
+
+Sample x with probability px = ˜μ(x)
+
+˜μ(Xi) 
+
+> 14:
+
+if x is sampled \\ Efficiently encode each sample then  
+
+> 15:
+
+Let x′ be x efficiently encoded by S and accuracy ε′ = poly( ε) 
+
+> 16:
+
+A ← Ai ∪ { (x′, 1
+
+> m
+
+̂μ(x) )}, where ̂ μ(x) is a (1 + ε 
+
+> 2
+
+)-approximation of ˜μ(x) 
+
+> 17:
+
+end if  
+
+> 18:
+
+end for  
+
+> 19:
+
+Upload Ai to the blackboard  
+
+> 20:
+
+end for  
+
+> 21:
+
+A ← ∪ si=1 Ai 
+
+> 22:
+
+return A
+
+subroutine EfficientCommunication , which transmits an approximate version ˜y of any point 
+
+y using only d log k polylog 
+
+(
+
+log n, 1 
+
+> ε
+
+, 1
+
+> δ
+
+)
+
+bits, rather than the O (d log n) bits required for exact communication: 
+
+Lemma 5.1. Given a point y and a dataset X, there exists an algorithm EfficientCommunication 
+
+that uses d log k polylog ( log n, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) bits of communication and sends ˜y such that ∥y − ˜y∥2 ≤
+
+min x∈X ε∥x − y∥2 with probability at least 1 − δ.
+
+Intuitively, EfficientCommunication allows a site to locate an approximate version of the coordinator’s point y using very little communication. For each coordinate i, the site first identifies the closest local value x(i) 
+
+> is
+
+to y(i) via a binary search using the HighProbGreaterThan protocol. If y(i) does not exactly match, an exponential search determines a small offset ∆y(i) so that x(i) 
+
+> is
+
++∆ y(i)
+
+approximates y(i) within a factor of (1 + ε). By doing this coordinate-wise, the site can efficiently reconstruct a point ˜y that is close to y, guaranteeing |y − ˜y|2 ≤ ε|x − y|2 for any local point x ∈ X,while sending only a small number of bits. This approach combines the intuition of searching for the “nearest neighbor” along each coordinate with controlled, approximate refinement, as illustrated in Figure 3. 17 Algorithm: EfficientCommunication (X, y, ε, δ ) (informal) 
+
+1. Input: 
+
+• A set of points X = {x1, . . . , x l} owned by one site. 
+
+• A point y from the coordinator. 
+
+• Accuracy parameter ε ∈ (0 , 1) and failure probability δ.2. Goal: Send an approximate location ˜y to the site such that ∥y − ˜y∥2 ≤ ε∥x − y∥2 for any 
+
+x ∈ X with probability ≥ 1 − δ.3. For each coordinate i = 1 to d:
+
+• Sort points in X by their i-th coordinate. 
+
+• Use a local binary search via HighProbGreaterThan to find the closest point x(i) 
+
+> is
+
+to 
+
+y(i).
+
+• If y(i) equals x(i) 
+
+> is
+
+, set ∆y(i) = 0 .
+
+• Otherwise: 
+
+◦ Determine the direction γ = sign (y(i) − x(i) 
+
+> is
+
+).
+
+◦ Use exponential search with HighProbGreaterThan to find a value ∆y(i) so that 
+
+x(i) 
+
+> is
+
++ ∆ y(i) approximates y(i) within factor (1 + ε).
+
+• Set ˜y(i) = x(i) 
+
+> is
+
++ ∆ y(i).4. Return ˜y = ( ˜y(1) , . . . , ˜y(d)).
+
+Fig. 3: Informal version of efficient communication in the message-passing algorithm. For full algorithm, see Algorithm 15. Given a bicriteria approximation S obtained from the above efficient implementation of adaptive sampling, we next perform sensitivity sampling to construct a (1 + ε)-coreset. Unfortunately, each server can now assign a point x to another center s′ instead of the closest center s if cost (x, s ′)
+
+is very close to cost (x, s ). Consequently, the sizes |Cj | and costs cost (Cj , S ) for the purposes of sensitivity sampling may be incorrectly computed by the servers. However, this does not compromise the correctness: the sensitivity analysis of [ BCP +24 ] only requires that each point be assigned to a center whose clustering cost is within a constant factor of the optimal assignment. Thus, our procedure still achieves a (1 + ε 
+
+> 4
+
+)-coreset by sensitivity sampling. Once points are sampled, each site encodes the coordinates of its sampled points using the same efficient encoding scheme as in the blackboard model, c.f., Lemma 2.13, ensuring that only a compact representation is sent back to the coordinator. This combination of approximate center assignments and efficient encoding preserves both accuracy and communication efficiency. We give the algorithm in full in Figure 4, which achieves the guarantees of Theorem 1.1, deferring full details to Appendix C. 18 Algorithm: (1 + ε)-coreset for the coordinator model (informal) 
+
+(1) Each site computes a local (1 + ε/ 2) -coreset Pi.(2) Coordinator broadcasts a JL transform π to all sites. (3) Initialize solution set S = {s0} with a random point. (4) For i = 1 to i = O (k) iterations (for bicriteria solution): 
+
+• Using EfficientCommunication , send approximation ˜s(j) 
+
+> i−1
+
+of center si to site j.
+
+• Sites compute approximate costs ˜Dj and send to coordinator. 
+
+• Coordinator selects next center si into S using LazySampling .(5) Sites compute cluster sizes and costs, send constant approximations to coordinator. (6) Coordinator computes total approximations and broadcasts to sites. (7) Sites compute approximate sensitivities ˜μ(x), send total to coordinator. (8) Coordinator samples m = ˜O  
+
+> (k
+> min( ε4,ε 2+ z)
+> )
+
+points across sites based on sensitivities; sites sample points and encode with EfficientCommunication .(9) Merge sampled points into final coreset A′ and return. 
+
+Fig. 4: Informal version of message-passing algorithm. For full algorithm, see Algorithm 16. 
+
+# 6 Empirical Evaluations 
+
+In this section, we present a number of simple experimental results on both synthetic and real-world datasets that complement our theoretical guarantees. We consider k-means clustering in the blackboard setting, using the previous algorithm of [ CSWZ16 ] based on Mettu-Plaxton, denoted MP ,as a baseline. We also implement two versions of our distributed protocol, with varying complexity. We first implement our constant-factor approximation algorithm based on adaptive sampling, denoted AS . Additionally, we implement our constant-factor approximation algorithm based on our compact encoding after adaptive sampling, denoted EAS . All experiments were conducted on a Dell OptiPlex 7010 Tower desktop equipped with an Intel Core i7-3770 3.40 GHz quad-core processor and 16 GB of RAM. We provide all code at https://github.com/samsonzhou/distributed-cluster .
+
+6.1 Real-World Dataset 
+
+To evaluate our algorithms, we conducted our k-means clustering algorithms on the DIGITS dataset [ AK98 ], which consists of 1,797 images of handwritten digits (0-9) and thus naturally associates with k = 10 . Each image has dimension 8 × 8, represented by 64 features, corresponding to the pixel intensities. This dataset is available both through scikit-learn and the UCI repository, and is a popular choice for clustering tasks due to its moderate size and well-defined classes, allowing for a clear evaluation of the clustering performance. 19 (a) Clustering costs (b) Communication Costs 
+
+Fig. 5: Experiments for clustering costs and communication costs on DIGITS dataset For a parameter c, our baseline MP uniformly selects k initial points and then iteratively discards candidates over c log 2 n rounds. Our AS algorithm iteratively samples a single center in each of ck 
+
+rounds, with probability proportional to its distance from the previously sampled centers. Finally, 
+
+EAS quantizes the coordinates of each chosen center of AS to the nearest power of two, mimicking low-precision communication. We compare the clustering costs of the algorithms in Figure 5a and their total communication costs in Figure 5b, both across c ∈ { 11 , 12 , . . . , 20 }.Our results indicate that although adaptive sampling ( AS ) always outperforms Mettu-Plaxton (MP ), when the number of samples is small, the gap is relatively small, so that the rounding error incurred by our efficient encoding in EAS has similar clustering costs for c = 11 in Figure 5a. Surprisingly, the communication cost of MP did not seem to increase with c, indicating that all possible points have already been removed and no further samples are possible. Nevertheless, for all 
+
+c > 11 , our algorithm in EAS clearly outperforms MP and therefore the previous work of [CSWZ16] for both clustering cost and communication cost, c.f., Figure 5b. Our algorithm EAS also exhibits clear tradeoffs in the clustering cost and the communication cost compared to our algorithm AS , as the former is simply a rounding of the latter. 
+
+6.2 Synthetic Dataset 
+
+To facilitate visualization, we generated synthetic datasets consisting of two-dimensional Gaussian mixtures, where the low dimensionality (2D) was chosen to enable visualization of the resulting clusters. Specifically, we created k = 5 Gaussian clusters, each containing n = 100 × 210 points, for a total of 512 , 000 data points. Each cluster was sampled from a distinct Gaussian distribution with a randomly selected mean in the range [−10 , 10] 2 and a randomly generated positive-definite covariance matrix to ensure diverse cluster shapes. We implemented the baseline MP by sampling k points uniformly and pruning candidates based on a distance threshold that doubles each round, across c log 2 n rounds, where c is a hyperparameter. We implemented our algorithm AS by iteratively sampling one center per round across ck rounds, selecting points with probability proportional to their distance from existing centers. EAS then modifies AS by rounding each selected center’s coordinates to the nearest power of q = 2 0.25 ,simulating low-precision communication. We varied the sampling coefficient c ∈ { 11 , . . . , 20 } and measured the k-means clustering cost 20 (a) (b) (c) 
+
+Fig. 6: Experiments for clustering costs and communication costs on synthetic dataset (i.e., the total squared distance from each point to its assigned center). The results, shown in Figure 6, highlight the performance trade-offs between sampling strategies as c increases. Communication costs were also computed (though not plotted), assuming 32 bits per coordinate for MP and AS , and 5 bits per coordinate for EAS due to quantization. Our results for synthetic data echo the trends for the DIGITS dataset. Namely, for all c > 2,our algorithm in EAS clearly outperforms MP for both clustering cost and communication cost, c.f., Figure 6c, while also demonstrating clear tradeoffs in the clustering cost and the communication cost compared to our algorithm AS . We plot the resulting clustering by EAS in Figure 6a. 
+
+# Acknowledgments 
+
+David P. Woodruff is supported in part Office of Naval Research award number N000142112647, and a Simons Investigator Award. Samson Zhou is supported in part by NSF CCF-2335411. Samson Zhou gratefully acknowledges funding provided by the Oak Ridge Associated Universities (ORAU) Ralph E. Powe Junior Faculty Enhancement Award. 
+
+# References 
+
+[ADK09] Ankit Aggarwal, Amit Deshpande, and Ravi Kannan. Adaptive sampling for k-means clustering. In International Workshop on Approximation Algorithms for Combinatorial Optimization , pages 15–28. Springer, 2009. 7, 11, 13, 26, 27, 28 [AFN +24] Hilal Asi, Vitaly Feldman, Jelani Nelson, Huy L. Nguyen, Kunal Talwar, and Samson Zhou. Private vector mean estimation in the shuffle model: Optimal rates require many messages. In Forty-first International Conference on Machine Learning, ICML ,pages 1945–1970, 2024. 10 [AK98] E. Alpaydin and C. Kaynak. Optical Recognition of Handwritten Digits. UCI Machine Learning Repository, 1998. DOI: https://doi.org/10.24432/C50P49. 19, 50 [AV07] David Arthur and Sergei Vassilvitskii. k-means++: the advantages of careful seed-ing. In Proceedings of the Eighteenth Annual ACM-SIAM Symposium on Discrete Algorithms, SODA , pages 1027–1035, 2007. 11, 13 21 [BCJ +22] Vladimir Braverman, Vincent Cohen-Addad, Shaofeng H.-C. Jiang, Robert Krauthgamer, Chris Schwiegelshohn, Mads Bech Toftrup, and Xuan Wu. The power of uniform sampling for coresets. In 63rd IEEE Annual Symposium on Foundations of Computer Science, FOCS , pages 462–473, 2022. 2 [BCP +24] Nikhil Bansal, Vincent Cohen-Addad, Milind Prabhu, David Saulpic, and Chris Schwiegelshohn. Sensitivity sampling for k-means: Worst case and stability optimal coreset bounds. CoRR , abs/2405.01339, 2024. 3, 4, 6, 10, 12, 13, 16, 18, 41 [BDJ +25] Vladimir Braverman, Prathamesh Dharangutte, Shaofeng H.-C. Jiang, Hoai-An Nguyen, Chen Wang, Yubo Zhang, and Samson Zhou. Relative error fair clustering in the weak-strong oracle model. In Forty-second International Conference on Machine Learning, ICML , 2025. 2 [BEL13] Maria-Florina Balcan, Steven Ehrlich, and Yingyu Liang. Distributed k-means and k-median clustering on general communication topologies. In Advances in Neural Information Processing Systems 26: 27th Annual Conference on Neural Information Processing Systems , pages 1995–2003, 2013. 3, 11, 12, 13, 49, 50 [BFL +21] Vladimir Braverman, Dan Feldman, Harry Lang, Adiel Statman, and Samson Zhou. Efficient coreset constructions via sensitivity sampling. In Asian Conference on Machine Learning, ACML , pages 948–963, 2021. 2 [BLST23] Maria Sofia Bucarelli, Matilde Fjeldsø Larsen, Chris Schwiegelshohn, and Mads Toftrup. On generalization bounds for projective clustering. In Advances in Neu-ral Information Processing Systems 36: Annual Conference on Neural Information Processing Systems, NeurIPS , 2023. 2 [BMV +12] Bahman Bahmani, Benjamin Moseley, Andrea Vattani, Ravi Kumar, and Sergei Vassilvitskii. Scalable k-means++. Proc. VLDB Endow. , 5(7):622–633, 2012. 11, 13 [CAWWZ25] Vincent Cohen-Addad, Liudeng Wang, David P. Woodruff, and Samson Zhou. Fast, space-optimal streaming algorithms for clustering and subspace embeddings. CoRR ,abs/2504.16229, 2025. 9 [CCFM97] Moses Charikar, Chandra Chekuri, Tomás Feder, and Rajeev Motwani. Incremental clustering and dynamic information retrieval. In Proceedings of the Twenty-Ninth Annual ACM Symposium on the Theory of Computing , pages 626–635, 1997. 2 [CG99] Moses Charikar and Sudipto Guha. Improved combinatorial algorithms for the facility location and k-median problems. In 40th Annual Symposium on Foundations of Computer Science, FOCS , pages 378–388, 1999. 2 [CGTS99] Moses Charikar, Sudipto Guha, Éva Tardos, and David B. Shmoys. A constant-factor approximation algorithm for the k-median problem. In Proceedings of the Thirty-First Annual ACM Symposium on Theory of Computing , pages 1–10, 1999. 2 [CJY +25] Vincent Cohen-Addad, Shaofeng H.-C. Jiang, Qiaoyuan Yang, Yubo Zhang, and Samson Zhou. Fair clustering in the sliding window model. In The Thirteenth International Conference on Learning Representations, ICLR , 2025. 2 22 [CKM16] Vincent Cohen-Addad, Philip N. Klein, and Claire Mathieu. Local search yields approximation schemes for k-means and k-median in euclidean and minor-free metrics. In IEEE 57th Annual Symposium on Foundations of Computer Science, FOCS , pages 353–364, 2016. 2 [CLN +20] Vincent Cohen-Addad, Silvio Lattanzi, Ashkan Norouzi-Fard, Christian Sohler, and Ola Svensson. Fast and accurate $k$-means++ via rejection sampling. In Advances in Neural Information Processing Systems 33: Annual Conference on Neural Information Processing Systems, NeurIPS , 2020. 2 [CLS +22] Vincent Cohen-Addad, Kasper Green Larsen, David Saulpic, Chris Schwiegelshohn, and Omar Ali Sheikh-Omar. Improved coresets for euclidean k-means. In NeurIPS ,2022. 2, 5, 10 [CLS25] Vincent Cohen-Addad, Silvio Lattanzi, and Chris Schwiegelshohn. Almost optimal PAC learning for k-means. In Proceedings of the 57th Annual ACM Symposium on Theory of Computing, STOC , pages 2019–2030. ACM, 2025. 2 [CLSS22] Vincent Cohen-Addad, Kasper Green Larsen, David Saulpic, and Chris Schwiegelshohn. Towards optimal lower bounds for k-median and k-means coresets. In STOC ’22: 54th Annual ACM SIGACT Symposium on Theory of Computing , pages 1038–1051, 2022. 2, 3, 4, 5, 10 [COP03] Moses Charikar, Liadan O’Callaghan, and Rina Panigrahy. Better streaming algo-rithms for clustering problems. In Proceedings of the 35th Annual ACM Symposium on Theory of Computing , pages 30–39, 2003. 2 [CS17] Vincent Cohen-Addad and Chris Schwiegelshohn. On the local structure of stable clustering instances. In 58th IEEE Annual Symposium on Foundations of Computer Science, FOCS , pages 49–60, 2017. 2 [CSS21] Vincent Cohen-Addad, David Saulpic, and Chris Schwiegelshohn. A new coreset framework for clustering. In STOC: 53rd Annual ACM SIGACT Symposium on Theory of Computing , pages 169–182, 2021. 2, 3, 4, 10 [CSS23] Vincent Cohen-Addad, David Saulpic, and Chris Schwiegelshohn. Deterministic clustering in high dimensional spaces: Sketches and approximation. In 64th IEEE Annual Symposium on Foundations of Computer Science, FOCS , pages 1105–1130, 2023. 2 [CSWZ16] Jiecao Chen, He Sun, David P. Woodruff, and Qin Zhang. Communication-optimal distributed clustering. In Advances in Neural Information Processing Systems 29: Annual Conference on Neural Information Processing Systems , pages 3720–3728, 2016. 2, 3, 4, 10, 13, 19, 20 [CWZ23] Vincent Cohen-Addad, David P. Woodruff, and Samson Zhou. Streaming euclidean 
+
+k-median and k-means with o(log n) space. In 64th IEEE Annual Symposium on Foundations of Computer Science, FOCS , pages 883–908, 2023. 10 23 [EFS +22] Jon C. Ergun, Zhili Feng, Sandeep Silwal, David P. Woodruff, and Samson Zhou. Learning-augmented k-means clustering. In The Tenth International Conference on Learning Representations, ICLR , 2022. 2 [FL11] Dan Feldman and Michael Langberg. A unified framework for approximating and clustering data. In Proceedings of the 43rd ACM Symposium on Theory of Computing, STOC , pages 569–578, 2011. 2 [FMS07] Dan Feldman, Morteza Monemizadeh, and Christian Sohler. A PTAS for k-means clustering based on weak coresets. In Proceedings of the 23rd ACM Symposium on Computational Geometry , pages 11–18, 2007. 2 [FMSW10] Dan Feldman, Morteza Monemizadeh, Christian Sohler, and David P. Woodruff. Coresets and sketches for high dimensional subspace approximation problems. In Pro-ceedings of the Twenty-First Annual ACM-SIAM Symposium on Discrete Algorithms, SODA , pages 630–649, 2010. 2 [FSS13] Dan Feldman, Melanie Schmidt, and Christian Sohler. Turning big data into tiny data: Constant-size coresets for k-means, PCA and projective clustering. In Proceedings of the Twenty-Fourth Annual ACM-SIAM Symposium on Discrete Algorithms, SODA ,pages 1434–1453, 2013. 2 [HLW24] Lingxiao Huang, Jian Li, and Xuan Wu. On optimal coreset construction for euclidean (k, z)-clustering. In Proceedings of the 56th Annual ACM Symposium on Theory of Computing, STOC , pages 1594–1604, 2024. 2, 3, 4, 5 [HV20] Lingxiao Huang and Nisheeth K. Vishnoi. Coresets for clustering in euclidean spaces: importance sampling is nearly optimal. In Proccedings of the 52nd Annual ACM SIGACT Symposium on Theory of Computing, STOC , pages 1416–1429, 2020. 10 [ISZ21] Zachary Izzo, Sandeep Silwal, and Samson Zhou. Dimensionality reduction for wasserstein barycenter. In Advances in Neural Information Processing Systems 34: Annual Conference on Neural Information Processing Systems, NeurIPS , 2021. 6, 10 [JL84] William B Johnson and Joram Lindenstrauss. Extensions of lipschitz mappings into a hilbert space. conference in modern analysis and probability (new haven, conn., 1982), 189–206. In Contemp. Math , volume 26, 1984. 6 [KLR +25] Karthik C. S., Euiwoong Lee, Yuval Rabani, Chris Schwiegelshohn, and Samson Zhou. On approximability of ℓ22 min-sum clustering. In 41st International Symposium on Computational Geometry, SoCG , pages 62:1–62:18, 2025. 2 [KN10] Daniel M Kane and Jelani Nelson. A derandomized sparse johnson-lindenstrauss transform. arXiv preprint arXiv:1006.3585 , 2010. 7 [LV10] Yurii Lyubarskii and Roman Vershynin. Uncertainty principles and vector quantization. 
+
+IEEE Trans. Inf. Theory , 56(7):3491–3501, 2010. 10 [Mac67] J MacQueen. Classification and analysis of multivariate observations. In 5th Berkeley Symp. Math. Statist. Probability , pages 281–297, 1967. 1 24 [Mey01] Adam Meyerson. Online facility location. In 42nd Annual Symposium on Foundations of Computer Science, FOCS , pages 426–431, 2001. 2 [MMR19] Konstantin Makarychev, Yury Makarychev, and Ilya P. Razenshteyn. Performance of johnson-lindenstrauss transform for k-means and k-medians clustering. In Proceedings of the 51st Annual ACM SIGACT Symposium on Theory of Computing, STOC , pages 1027–1038, 2019. 6, 10 [Mor78] Robert Morris. Counting large numbers of events in small registers. Communications of the ACM , 21(10):840–842, 1978. 16, 38 [MP04] Ramgopal R. Mettu and C. Greg Plaxton. Optimal time bounds for approximate clustering. Mach. Learn. , 56(1-3):35–60, 2004. 10, 11, 13 [Nis93] Noam Nisan. The communication complexity of threshold gates. Combinatorics, Paul Erdos is Eighty , 1(301-315):6, 1993. 6, 42 [S +56] Hugo Steinhaus et al. Sur la division des corps matériels en parties. Bull. Acad. Polon. Sci , 1(804):801, 1956. 1 [SW18] Christian Sohler and David P. Woodruff. Strong coresets for k-median and subspace approximation: Goodbye dimension. In 59th IEEE Annual Symposium on Foundations of Computer Science, FOCS , pages 802–813, 2018. 5, 10 [TWZ +22] Murad Tukan, Xuan Wu, Samson Zhou, Vladimir Braverman, and Dan Feldman. New coresets for projective clustering and applications. In International Conference on Artificial Intelligence and Statistics, AISTATS , pages 5391–5415, 2022. 2 [WZZ23] David P. Woodruff, Peilin Zhong, and Samson Zhou. Near-optimal k-clustering in the sliding window model. In Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems, NeurIPS 2023 , 2023. 2 [ZTHH25] Xiaoyi Zhu, Yuxiang Tian, Lingxiao Huang, and Zengfeng Huang. Space complexity of euclidean clustering. IEEE Trans. Inf. Theory , 71(6):4515–4536, 2025. 10 
+
+# A Adaptive Sampling for (k, z )-Clustering 
+
+We first give a high-level overview of why AdaptiveSampling returns a bicriteria approximation. Let {Aj }kj=1 be the clusters that correspond to an optimal (k, z )-clustering. Then we can achieve an 
+
+O (1) -approximation to the optimal cost if the cost for every cluster Aj induced by S is already an 
+
+O (1) -approximation for cost( Aj , C OPT ), where COPT is the set of centers for the optimal solution. We define a cluster Aj as a good cluster if its cost is an O (1) -approximation to cost (Aj , C OPT ), and otherwise we call Aj a bad cluster. We can show that with constant probability, AdaptiveSampling 
+
+samples a center that can transform a bad cluster to a good one. Then, by Markov’s inequality, it follows that we can eliminate all bad clusters in O (k) rounds of sampling, resulting in a constant-factor approximation. We use the following definition of good and bad clusters. 25 Definition A.1. Let Si be the sampled set S in the i-th round in Algorithm 2 and let COPT =
+
+{c1, c 2, · · · , c k} be an optimal solution for (k, z )-clustering. For j ∈ [k], let Aj be the points in X assigned to cj in the optimal clustering, breaking ties arbitrarily, i.e., Aj = {x ∈ X : dist (x, c j ) ≤ dist (x, c ℓ), ∀ℓ ∈ [k]}. We define 
+
+Good i = {Aj : cost( Aj , S i) ≤ γz · cost( Aj , C OPT )}
+
+Bad i = {A1, A 2, · · · , A k} \ Good i
+
+where γz = 2 + (3 + 6 z)z .
+
+By definition, if every cluster is a good cluster, we can guarantee that S is an (O (1) , O (1) )-bicriteria approximation. We will prove that either S is already an (O (1) , O (1) )-bicriteria approxi-mation, or else we will reduce the number of bad clusters after every sampling with some constant probability, which would imply that we can achieve an O (1) -approximation after sampling O (k)
+
+points. 
+
+Lemma A.2. Suppose cost( X, S i) > 2γ2 · γz cost( X, C OP T ), then 
+
+Pr [|Bad i+1 | < |Bad i|] ≥ δ
+
+for some constant δ > 0.
+
+Lemma A.2 is the generalization of Lemma 5 in [ ADK09 ]. We will prove Lemma A.2 by breaking the proof into several lemmas. We first consider a specific parameterization of the generalized triangle inequality. 
+
+Lemma A.3. For any x, y, μ ∈ Rd,dist (x, y )z ≤ 2 · dist (x, μ )z + (1 + 2 z)z · dist (y, μ )z .
+
+Proof. The claim follows from applying Fact 2.2 with ε = 1 , so that by the triangle inequality, dist (x, y )z ≤ (dist (x, μ ) + dist (y, μ )) z ≤ 2 · dist (x, μ )z + (1 + 2 z)z · dist (y, μ )z .We first show that we will sample a point from a bad cluster with constant probability every round. This statement is analogous to Lemma 1 in [ADK09]. 
+
+Lemma A.4. In the i-th round of our algorithm, either cost (X, S i) ≤ 2γ2 · γz cost (X, C OP T ) or else the probability of picking a point from some cluster in Bad i is at least 12 .Proof. Suppose cost (X, S i−1) > 2γ2 · γz cost (X, C OP T ). Then the probability of picking x from some bad cluster is 
+
+Pr [x ∈ Bad i] = 
+
+∑ 
+
+> Aj∈Bad i
+
+∑ 
+
+> xl∈Aj
+
+dl
+
+∑ 
+
+> xl∈X
+
+dl
+
+= 1 −
+
+∑ 
+
+> Aj∈Good i
+
+∑ 
+
+> xl∈Aj
+
+dl
+
+∑ 
+
+> xl∈X
+
+dl
+
+.
+
+Here, we remark that dl is the distance from xl to Si−1 as defined in Algorithm 2. Since 
+
+cost (Aj , S i−1) ≤ γz cost (Aj , C OPT ) if Aj ∈ Good i, and cost (X, S i−1) > 2γ2 · γz cost (X, C OP T )
+
+by the condition we hold, 
+
+Pr [x ∈ Bad i] ≥ 1 − γ2 · γz
+
+∑  
+
+> Aj∈Good i
+
+cost( Aj , C OPT )2γ2 · γz cost( X, C OPT ) ≥ 1 − 12 = 12 .
+
+26 Consider a fixed bad cluster A ∈ Bad i. Let m = w(A) = ∑ 
+
+> x∈A
+
+w(x), where w(x) is the weight of x, and define r =
+
+( cost( A,C OPT )
+
+> m
+
+)1/z 
+
+. Denote μ as the center in COPT corresponding to A. Let y
+
+be the point closest to μ in Si−1. We will show that y (and thus every sampled point in Si−1) is far from μ.
+
+Lemma A.5. dist (y, μ ) ≥ 3r.Proof. Because A is a fixed bad cluster, 
+
+γz cost( A, C OPT ) ≤ cost( A, S i−1) = ∑
+
+> x∈A
+
+w(x) min 
+
+> c∈Si−1
+
+dist (x, c )z ≤ ∑
+
+> x∈A
+
+w(x)dist (x, y )z .
+
+By Lemma A.3, 
+
+∑
+
+> x∈A
+
+w(x)dist (x, y )z ≤ ∑
+
+> x∈A
+
+(2 · w(x) · dist (x, μ )z + (1 + 2 z)z · w(x) · dist (y, μ )z )= 2 cost( A, C OPT ) + (1 + 2 z)z · m · dist (y, μ )z .
+
+Hence 
+
+(1 + 2 z)z · m · dist (y, μ )z ≥ (γz − 2) cost( A, C OPT ).
+
+Since γz = 3 z (1 + 2 z)z + 2 ,
+
+3r =
+
+( γz − 2(1 + 2 z)z · cost( A, C OPT )
+
+m
+
+)1/z 
+
+≤ dist (y, μ ).
+
+Define B(α) = {x ∈ A : dist (x, μ ) ≤ αr } as the points in the fixed bad cluster A that are within distance αr from μ. We will show that the bad cluster A can be transformed into a good cluster if we sample some point x close to the center μ. This statement is analogous to Lemma 2 in [ ADK09 ]. 
+
+Lemma A.6. Let A be any fixed bad cluster defined by COPT and let b ∈ B(α), for 0 ≤ α ≤ 3.Then 
+
+cost( A, S i−1 ∪ { b}) ≤ γz · cost( A, C OPT ).
+
+Proof. 
+
+cost( A, S i−1 ∪ { b}) = ∑
+
+> x∈A
+
+w(x) min  
+
+> c∈Si−1∪{ b}
+
+dist (x, c )z ≤ ∑
+
+> x∈A
+
+w(x) · dist (x, b )z .
+
+By Lemma A.3, 
+
+∑
+
+> x∈A
+
+w(x) · dist (x, b )z ≤ ∑
+
+> x∈A
+
+(2 · w(x) · dist (x, μ )z + (1 + 2 z)z · w(x) · dist (b, μ )z ) .
+
+Since b ∈ B(α) and 0 ≤ α ≤ 3, dist (b, μ ) ≤ αr ≤ 3r. Hence 
+
+cost( A, S i−1 ∪ { b}) ≤ 2 cost( A, C OPT ) + m(1 + 2 z)z (3 r)z
+
+= 2 cost( A, C OPT ) + 3 z (1 + 2 z)z cost( A, C OPT )= γz cost( A, C OPT ).
+
+27 We next show that most of the weights of the points of the fixed bad cluster A fall into B(α).Recall that we define m = w(A) = ∑ 
+
+> x∈A
+
+w(x). Let w(B(α)) = ∑ 
+
+> x∈B(α)
+
+w(x). This statement is analogous to Lemma 3 in [ADK09]. 
+
+Lemma A.7. 
+
+w(B(α)) ≥ m
+
+(
+
+1 − 1
+
+αz
+
+)
+
+, for 1 ≤ α ≤ 3.
+
+Proof. 
+
+cost( A, C OPT ) ≥ cost( A\B(α), C OPT ) = ∑
+
+> x∈A\B(α)
+
+w(x) min 
+
+> c∈COPT
+
+dist (x, c )z .
+
+Since for any x ∈ A, μ is the nearest center to x in COPT , then 
+
+∑
+
+> x∈A\B(α)
+
+w(x) min 
+
+> c∈COPT
+
+dist (x, c )z = ∑
+
+> x∈A\B(α)
+
+w(x)dist (x, μ )z .
+
+Since for any x ∈ A\B(α), dist (x, μ ) ≥ αr , then 
+
+∑
+
+> x∈A\B(α)
+
+w(x)dist (x, μ )z ≥ w(A\B(α)) · (αr )z =
+
+(
+
+1 − w(B(α)) 
+
+m
+
+)
+
+m(αr )z .
+
+Since r =
+
+( cost( A,C OPT )
+
+> m
+
+)1/z 
+
+,
+
+cost( A, C OPT ) ≥
+
+(
+
+1 − w(B(α)) 
+
+m
+
+)
+
+m(αr )z =
+
+(
+
+1 − w(B(α)) 
+
+m
+
+)
+
+αz cost( A, C OPT ).
+
+Therefore, 
+
+w(B(α)) ≥ m
+
+(
+
+1 − 1
+
+αz
+
+)
+
+.
+
+We next show that the cost of points in B(α) is at least a constant fraction of the cost of the bad cluster A and thus we will sample a point near μ with constant probability if we sample a point from A. This statement is analogous to Lemma 4 in [ADK09]. 
+
+Lemma A.8. 
+
+Pr [x ∈ B(α)|x ∈ A and A ∈ Bad i] ≥ 1
+
+γ2
+
+(
+
+1 − 1
+
+αz
+
+) (3 − α)z
+
+γz
+
+.
+
+Proof. Recall that y is the point closest to μ in Si−1. We have 
+
+cost( A, S i−1) = ∑
+
+> x∈A
+
+w(x) min 
+
+> c∈Si−1
+
+dist (x, c )z ≤ ∑
+
+> x∈A
+
+w(x)dist (x, y )z .
+
+Let d = dist (y, μ ). By Lemma A.3, 
+
+cost( A, S i−1) ≤ ∑
+
+> x∈A
+
+(
+
+2w(x)dist (x, μ )z +(1+2 z)z w(x)dist (y, μ )z
+
+)
+
+= 2 cost( A, C OPT )+ m(1+2 z)z dz .
+
+Since r =
+
+( cost( A,C OPT )
+
+> m
+
+)1/z 
+
+, then cost( A, S i−1) ≤ 2mr z + m(1 + 2 z)z dz .28 On the other hand, cost (B(α), S i−1) = ∑ 
+
+> x∈B(α)
+
+w(x) min c∈Si−1 dist (x, c )z . By triangle inequality, dist (x, c ) ≥ dist (c, μ ) − dist (x, μ ) ≥ dist (y, μ ) − dist (x, μ ). Since x ∈ A and A is a bad cluster, then dist (y, μ ) − dist (x, μ ) ≥ 0, so that 
+
+cost( B(α), S i−1) ≥ ∑
+
+> x∈B(α)
+
+w(x)( dist (c, μ ) − dist (x, μ )) z ≥ ∑
+
+> x∈B(α)
+
+w(x)( dist (y, μ ) − dist (x, μ )) z .
+
+For x ∈ B(α), we have dist (x, μ ) ≤ αr , so that cost (B(α), S i−1) ≥ ∑ 
+
+> x∈B(α)
+
+w(x)( dist (y, μ ) − αr )z .By Lemma A.7, w(B(α)) ≥ m
+
+(
+
+1 − 1
+
+> αz
+
+)
+
+, so cost( B(α), S i−1) ≥ m
+
+(
+
+1 − 1
+
+> αz
+
+)
+
+(dist (y, μ ) − αr )z .Since 1 
+
+> γ
+
+· di ≤ cost( xi, S ) ≤ γ · di, cf. Algorithm 2, therefore 
+
+Pr [x ∈ B(α)|x ∈ A and A ∈ Bad i] = 
+
+∑ 
+
+> xi∈B(α)
+
+di
+
+∑ 
+
+> xi∈A
+
+di
+
+≥ 
+
+> 1
+> γ
+
+cost( B(α), S i−1)
+
+γ cost( A, S i−1)
+
+≥ mγ2
+
+(
+
+1 − 1
+
+αz
+
+)
+
+· (dist (y, μ ) − αr )z
+
+m(2 rz + (1 + 2 z)z dist (y, μ )z ) .
+
+By computing the derivative, we can observe that 
+
+(dist (y, μ ) − αr )z
+
+2rz + m(1 + 2 z)z dist (y, μ )z
+
+is an increasing function of dist (y, μ ) for dist (y, μ ) ≥ 3r ≥ αr . Hence 
+
+Pr [x ∈ B(α)|x ∈ A and A ∈ Bad i] ≥ mγ2
+
+(
+
+1 − 1
+
+αz
+
+)
+
+· (3 r − αr )z
+
+m(2 rz + (1 + 2 z)z (3 r)z )= 1
+
+γ2
+
+(
+
+1 − 1
+
+αz
+
+) (3 − α)z
+
+γz
+
+.
+
+Therefore, we will transform a bad cluster A into a good cluster if we sample a point in B(α) ⊂ A
+
+for a ≤ 3, and we will sample such a point in A with constant probability, which means that we will reduce the number of bad clusters with constant probability. 
+
+Lemma A.9. Suppose the point x picked by our algorithm in the i-th round is from A ∈ Bad i and 
+
+Si = Si−1 ∪ { x}. Then 
+
+Pr [cost( A, S i) ≤ γz · cost( A, C OPT )|x ∈ A and A ∈ Bad i)] ≥ δ, 
+
+where 
+
+δ = max 1
+
+γ2
+
+(
+
+1 − 1
+
+αz
+
+) (3 − α)z
+
+γz
+
+.
+
+Proof. The claim follows from Lemma A.6 and Lemma A.8. If cost (X, S i) > 2γ2 · γz cost (X, C OP T ), we will sample a point from a bad cluster with constant probability, and a point sampled from a bad cluster will transform it to a good one with probability. Hence, we will reduce the number of bad clusters with probability. 29 We have proven that we will sample a point from a bad cluster with constant probability. We also proved that a sampled center from a bad cluster will transfer that bad cluster to a good one with constant probability. These two facts lead us to the conclusion that we will transfer a bad cluster to a good one with constant probability for every sampling, which is what Lemma A.2 claimed. 
+
+Lemma A.2. Suppose cost( X, S i) > 2γ2 · γz cost( X, C OP T ), then 
+
+Pr [|Bad i+1 | < |Bad i|] ≥ δ
+
+for some constant δ > 0.Proof. If cost (X, S i) > 2γ2 · γz cost (X, C OP T ), by Lemma A.4, we will sample a point x from some bad cluster with probability at least 12 . By Lemma A.9, if x ∈ A is from some bad cluster, 
+
+cost (A, S i) ≤ γz · cost (A, C OPT ) with probability at least δ. Hence A will become a good cluster in 
+
+Good i+1 with probability at least δ 
+
+> 2
+
+. Therefore, Pr [|Bad i+1 | < |Bad i|] ≥ δ 
+
+> 2
+
+.Now we justify the correctness of adaptive sampling for general z ≥ 1.
+
+Theorem 2.10. There exists an algorithm, c.f., Algorithm 2 that outputs a set S of O (k) points such that with probability 0.99 , cost (S, X ) ≤ O (1) · cost (COPT , X ), where COPT is an optimal 
+
+(k, z )-clustering of X.Proof. By Lemma A.3, the number of bad clusters will decrease with constant probability every round, unless cost (X, S i) ≤ 2γ2 · γz cost (X, C OP T ). Thus, by Markov’s inequality, with probability 
+
+0.99 , the number of bad clusters will be reduced to 0 after O (k) rounds unless cost (X, S i) ≤
+
+2γ2 · γz cost (X, C OP T ). Consequently, either there are no bad clusters or cost (X, S i) ≤ 2γ2 ·
+
+γz cost (X, C OP T ). Both of these cases mean that we have cost (Aj , S ) ≤ 2γ2 · γz · cost (Aj , C OPT ) for all j ∈ [k], so S becomes a constant approximation to the optimal (k, z )-clustering. 
+
+# B Blackboard Model of Communication 
+
+B.1 Bicriteria Approximation in the Blackboard Model 
+
+We first give the initialization algorithm for (k, z )-clustering of blackboard model in Algorithm 7, which generates a point x and uploads an 2-approximation ˜Di of the total cost Di of every site on the blackboard. After Initialization , we use LazySampling to sample O (k) points to get an (O (1) , O (1) )-bicriteria approximation for the (k, z )-clustering. We first show that Algorithm 8 returns an (O (1) , O (1) )-bicriteria approximation for the (k, z )-clustering with O (sk log log n + kd log n) bits of communication and O (k) rounds of communication. 
+
+Lemma B.1. Algorithm 8 outputs a set S with size O (k) using ˜O (sk + kd log n) bits of communi-cation and O (k) rounds of communication, such that with probability at least 0.98 , cost (S, X ) ≤O (1) · cost( COPT , X ), where COPT is the optimal (k, z )-clustering of X.Proof. We show the correctness of the algorithm, i.e., that the clustering cost induced by S is a constant-factor approximation of the optimal (k, z )-clustering cost. We also upper bound the number of points in S.30 Algorithm 7 Initialization 
+
+Input: Dataset Xi given to each site i ∈ [s]
+
+Output: A set S with one sampled point x, approximate cost ˜Di for every site on blackboard  
+
+> 1:
+
+The coordinator samples a point x and upload it on blackboard, S ← { x} 
+
+> 2:
+
+for i ← 1 to s do  
+
+> 3:
+
+ri ← PowerApprox (cost( Xi, S ), 2)  
+
+> 4:
+
+Write ri on the blackboard  
+
+> 5:
+
+end for  
+
+> 6: ˜
+
+Di ← 2ri 
+
+> 7:
+
+return S, ˜Di
+
+Algorithm 8 Lazy Adaptive (k, z )-Sampling for k = O (log n)
+
+Input: The dataset Xi every site i owns, i ∈ [s]
+
+Output: A set S that is an (O (1) , O (1)) -bicriteria approximation for the (k, z )-clustering  
+
+> 1:
+
+Run Initialization to get S and ˜Di 
+
+> 2:
+
+N ← O (k) 
+
+> 3:
+
+for i ← 1 to N do  
+
+> 4:
+
+x ← LazySampling ({cost( x, S )}, { ˜Dj }), and upload x on blackboard  
+
+> 5:
+
+S ← S ∪ { x} 
+
+> 6:
+
+Every site j computes Dj = cost( Xj , S ) 
+
+> 7:
+
+rj ← PowerApprox (Dj , 2) , every site j update rj on the blackboard if rj̸ = log 2 ˜Dj 
+
+> 8: ˜
+
+Dj ← 2rj 
+
+> 9:
+
+end for  
+
+> 10:
+
+return S
+
+Bicriteria approximation guarantee. Since we update ˜Dj every round, we meet the condition 
+
+Dj ≤ ˜Dj < 2Di every time we run LazySampling ({cost (x, S )}, { ˜Dj }) in the algorithm. Thus, by Lemma 2.11, we sample a point x with probability cost( x,S )cost( X,S ) if LazySampling does not return ⊥,and we can get O (k) points which are not ⊥ with probability at least 0.99 after N = O (k) rounds of lazy sampling. Therefore, we will get O (k) sampled points that satisfy the required conditions for adaptive sampling in AdaptiveSampling (Algorithm 2). Therefore, by Lemma A.2, we reduce the size of Bad i with some constant probability p every round. It follows from Theorem 2.10 that Algorithm 8 produces a constant approximation for (k, z )-clustering with probability at least 0.99 .
+
+Communication complexity of Algorithm 8. Initialization uses O (s log log n + d log n)
+
+bits of communication. Uploading the location of a sampled point x requires O (d log n) bits because there are d coordinates that need to be uploaded, and each needs O (log n) bits. Every site needs 
+
+O (1) bits to return ⊥ to the coordinator. Then, all s sites need to write ri on the blackboard. Since ri = O (log n), and encoding ri requires O (log log n) bits, it leads to O (s log log n) bits of communication. Since we will repeat the iteration for O (k) times, the total communication cost would be O (sk log log n + kd log n) bits. Finally, we remark that since we will use two rounds of communication for each iteration of the N = O (k) rounds of sampling, the total number of rounds of communication is O (k).31 B.2 L1 Sampling Subroutine 
+
+In this section, we introduce an L1 sampling algorithm in Algorithm 9. The main purpose of the L1 sampling algorithm is to ultimately improve the communication complexity and the round complexity of the adaptive sampling approach for k = Ω(log n), c.f., Appendix B.3. The sampling algorithm L1Sampling can detect whether ˜D is a good approximation of D.When μ2D ≤ ˜D, which means that ˜D is far from a good approximation, L1Sampling will return True to notify us to update the value of ˜D. On the other hand, when μD > ˜D, which means ˜D is a good enough approximation of D, L1Sampling will return False, so we can save communication cost by avoiding unnecessary updates. 
+
+Algorithm 9 L1-Sampling: L1Sampling ({ ˜Dj }, {Dj }, μ, δ )
+
+Input: Di = cost (Xi, S ), the cost of points in site i; total cost D = ∑si=1 Di; { ˜Di}si=1 and ˜D
+
+written on blackboard, which are approximations to {Di}si=1 and D; μ > 1, the distortion parameter; δ > 0, the failure probability 
+
+Output: A boolean indicator for whether ˜D is a μ2-approximation of D 
+
+> 1:
+
+N ← O 
+
+> (
+
+log 1
+
+> δ
+> )
+
+, T ← 0, λ ← μ 
+
+> 4
+
+, α ← 2μ 
+
+> 2:
+
+for i ← 1 to N do  
+
+> 3:
+
+Sample a site j with probability Pr [j] = ˜Dj 
+
+> ˜D
+
+, update rj ← PowerApprox (Dj , λ ) on blackboard  
+
+> 4:
+
+T ← T + 1 
+
+> Pr [j]
+
+· λrj 
+
+> 5:
+
+end for  
+
+> 6:
+
+if α · T ≤ N · ˜D then  
+
+> 7:
+
+return True  
+
+> 8:
+
+else  
+
+> 9:
+
+return False  
+
+> 10:
+
+end if 
+
+We now justify the correctness of Algorithm 9, i.e., we show that if the total mass has decreased significantly, then the algorithm will return True with probability 1 − δ and similarly if the total mass has not decreased significantly, then the algorithm will return False with probability 1 − δ.
+
+Lemma B.2. Suppose ˜Dj ≥ Dj for all j ∈ [s], and ˜D ≥ D. If μ2D ≤ ˜D, Algorithm 9 
+
+L1Sampling ({ ˜Dj }, {Dj }, μ, δ ) will return True with probability at least 1 − δ. If μD > ˜D,
+
+L1Sampling ({ ˜Dj }, {Dj }, μ, δ ) will return False with probability at least 1 − δ.Proof. Let ̂ Dj = λrj . Since rj is returned by PowerApprox (Dj , λ ), then by Theorem 2.12, we have Dj ≤ λrj =̂ Dj < λD j .Define the random variable 
+
+Zi = 1
+
+pĵ Dj , with probability pj = ˜Dj
+
+> ˜
+
+D .
+
+We will evaluate the range of Zi and E[Zi] so that we can apply Hoeffding’s inequality later. We have ˜Dj ≥ Dj and ̂ Dj < λD j . Hence, 
+
+Zi = 1
+
+pĵ Dj = ˜D
+
+> ˜
+
+Dĵ
+
+Dj ≤ ˜DDj
+
+λD j = λ ˜D. 
+
+32 On the other hand, Zi must be non-negative by definition, so Zi ∈ [0 , λ ˜D].For the range of E[Zi], we have 
+
+E[Zi] = 
+
+> s∑
+> j=1
+
+1
+
+pĵ Dj · pj =
+
+> s∑
+> j=1 ̂
+
+Dj .
+
+Since ̂ Dj ∈ [Dj , λD j ], then we have E[Zi] ∈ [D, λD ]. Similarly by linearity of expectation, since 
+
+T = ∑Ni=1 Zi, then we have E[T ] = N · E[Zi] ∈ [N D, N λD ]. We perform casework on whether 
+
+μ2D ≤ ˜D or μ2D > ˜D, corresponding to each of the two cases in the stated guarantee. 
+
+Case 1: μ2D ≤ ˜D. We first analyze the case μ2D ≤ ˜D. We define N to be the event such that 
+
+L1Sampling ({ ˜Dj }, {Dj }, μ, δ ) returns False when μ2D ≤ ˜D as the false negative event. Observe that this occurs in the algorithm if and only if αT > N ˜D when μ2D ≤ ˜D.Notice that αT > N ˜D is impossible if |T − E[T ]| ≤ λN D since μ2D ≤ ˜D and |T − E[T ]| ≤ λN D 
+
+imply 
+
+αT ≤ α(E[T ] + |T − E[T ]|) ≤ α(λN D + λN D ) ≤ 2αλ μ2 N ˜D = 1
+
+μ N ˜D < N ˜D. 
+
+The first inequality is due to the triangle inequality. The second inequality comes from the fact that 
+
+E[T ] ∈ [N D, N λD ] and |T − E[T ]| ≤ λN D . The third inequality is due to the condition μ2D ≤ ˜D.The equality is because of α = 2 μ and λ = μ 
+
+> 2
+
+. The last inequality is due to μ > 1.Hence under the condition that μ2D ≤ ˜D, the false negative N can only occur if |T − E[T ]| >λN D . Therefore, 
+
+Pr [N ] = Pr 
+
+> [
+
+αT > N ˜D|μ2D ≤ ˜D
+
+> ]
+
+≤ Pr 
+
+> [
+
+|T − E[T ]| > λN D |μ2D ≤ ˜D
+
+> ]
+
+.
+
+Then by Hoeffding’s inequality, c.f., Theorem 2.6, 
+
+Pr 
+
+> [
+
+|T − E[T ]| > λN D |μ2D ≤ ˜D
+
+> ]
+
+≤ 2 exp 
+
+> (
+
+− (λN D )2
+
+> ∑Ni=1
+
+(λD )2
+
+> )
+
+= 2 exp ( −N ) ≤ δ, 
+
+because we have Ni ∈ [0 , λD ] and N = O
+
+> (
+
+log 1
+
+> δ
+> )
+
+. Since we have shown the probability of the event 
+
+N of getting a false negative is no more than δ, then L1Sampling ({ ˜Dj }, {Dj }, μ, δ ) will return True when μ2D ≤ ˜D with probability at least 1 − δ.We next analyze the case μD > ˜D.
+
+Case 2: μD > ˜D. We define the event P that L1Sampling ({ ˜Dj }, {Dj }, μ, δ ) returns True when 
+
+μD > ˜D, i.e., a false positive event. Observe that this can happen if and only if αT ≤ N ˜D when 
+
+μD > ˜D.Notice that αT ≤ N ˜D is impossible if |T − E[T ]| ≤ 12 N D . In fact, if μD > ˜D and |T − E[T ]| ≤  
+
+> 12
+
+N D , then 
+
+αT ≥ α(E[T ] − | T − E[T ]|) ≥ α(N D − 12 N D ) = α
+
+2 N D > α
+
+2μ N ˜D = N ˜D. 
+
+The first inequality is due to the triangle inequality. The second inequality comes from the fact that 
+
+E[T ] ∈ [N D, N λD ] and |T − E[T ]| ≤ 12 N D . The third inequality is due to the condition μD > ˜D.The second equality is because of α = 2 μ.33 Hence under the condition that μD > ˜D, a false positive P can only occur if |T − E[T ]| > 12 N D .Therefore, 
+
+Pr [P] = Pr 
+
+> [
+
+αT ≤ N ˜D|μD > ˜D
+
+> ]
+
+≤ Pr 
+
+> [
+
+|T − E[T ]| > 12 N D |μD > ˜D
+
+> ]
+
+.
+
+Then by Hoeffding’s inequality, c.f., Theorem 2.6, 
+
+Pr 
+
+> [
+
+|T − E[T ]| > 12 N D |μD > ˜D
+
+> ]
+
+≤ 2 exp 
+
+> (
+
+− ( 12 N D )2
+
+> ∑Ni=1
+
+(λD )2
+
+> )
+
+= 2 exp 
+
+> (
+
+− N
+
+4λ2
+
+> )
+
+≤ δ, 
+
+because Ni ∈ [0 , λD ] and N = O
+
+> (
+
+log 1
+
+> δ
+> )
+
+. Since we have shown the probability of the event P is no more than δ, then it follows that L1Sampling ({ ˜Dj }, {Dj }, μ, δ ) will return False if μD > ˜D with probability at least 1 − δ.
+
+B.3 Bicriteria Approximation with Communication/Round Reduction 
+
+In this section, we will introduce another protocol that uses O (log n log k) rounds of communication and ˜O (s log n + kd log n) bits of communication cost. The protocol will use fewer rounds of communication and total communication than Algorithm 8 when k = Ω(log n).We first apply the L1 sampling subroutine L1Sampling to estimate D, which uses a low communication cost. We then update ˜D if the estimation of D from the L1 sampling procedure has decreased significantly. Using such a strategy, we only need to update ˜Dj in very few rounds, saving the communication cost of updating ˜Dj .However, the communication rounds are still O (k), which would be too expensive in some settings. To further decrease the rounds of communication, we use the batch sampling strategy. We double the number of points to be sampled in every round until the total cost D drops significantly. 
+
+D can only decrease significantly for at most O (log n) rounds, so we can reduce the rounds of communication to O (log n log k).Another issue that must be addressed is that we may sample some invalid points because the total cost D may decrease significantly during a round of batch sampling. A sampled point is valid only if it is sampled under the condition that ˜D is a O (1) -approximation of D, so some sampled points may be invalid if D drops significantly during that sampling round. To ensure that we sample enough valid points, we need to count the number of valid samples during the sampling procedure. Rather than setting a fixed number N = O (k) of points to sample, we count the number of valid samples and only terminate sampling after we get at least N valid samples. Fortunately, although we may sample more than N points in such a strategy, we can prove that the total number of points we sample is still O (k).The algorithm appears in full in Algorithm 10. Algorithm 10 uses L1Sampling to detect whether D decreases significantly and needs to be updated. Under the condition that ˜D is a O (1) -approximation of D, it uses batch sampling to sample points, and verify whether ˜D is still a O (1) -approximation of D after batch sampling. If ˜D is still a O (1) -approximation of D, it means that all the sampled points are valid, and we count them. If ˜D is no longer a O (1) -approximation of D, it means the O (1) -approximation condition breaks during the batch sampling, which leads some sampled points invalid. However, the first sampled point must be valid, since we sample it under the condition that ˜D is an O (1) -approximation. Hence, we can add 1 to our valid sampled points count. We repeat the sampling until we have 34 Algorithm 10 Bicriteria approximation algorithm for (k, z )-clustering 
+
+Input: Dataset Xi for each site i ∈ [s]
+
+Output: A set S that is an (O (1) , O (1)) -bicriteria approximation for the (k, z )-clustering  
+
+> 1:
+
+Uniformly sample a point into S and compute constant-factor approximations { ˜Dj } to Dj =cost( Xj , S ) 
+
+> 2:
+
+N ← O (k), M ← 0, μ ← 8, δ ← O    
+
+> (1log 2n
+> )
+> 3:
+
+while M < N \\ Sample roughly k points do  
+
+> 4:
+
+bool ← False , i ← 1 
+
+> 5:
+
+while bool = False \\ Approximate distances { ˜Dj } are accurate do  
+
+> 6:
+
+for l ← 1 to 2i \\ Attempt to sample points into S do  
+
+> 7:
+
+xl ← LazySampling ({cost( x, S )}, { ˜Dj }), upload xl on blackboard  
+
+> 8:
+
+end for  
+
+> 9:
+
+S ← S ∪ (∪2i
+
+> l=1
+
+{xl}), L ← #{xl̸ = ⊥, 1 ≤ l ≤ 2i} ▷Add successful samples to S 
+
+> 10:
+
+M ← M + L 
+
+> 11:
+
+Every site j computes Dj = cost( Xj , S ) ▷Update distances to closest center  
+
+> 12:
+
+bool ← L1Sampling ({ ˜Dj }, {Dj }, μ, δ ) ▷Check approximate distances { ˜Dj } 
+
+> 13:
+
+if bool = False then  
+
+> 14:
+
+i ← i + 1 ▷More aggressive number of samples to reduce number of rounds  
+
+> 15:
+
+else  
+
+> 16:
+
+rj ← PowerApprox (Dj , 2) , every site j update rj on the blackboard if rj̸ = log 2 ˜Dj 
+
+> 17: ˜
+
+Dj ← 2rj ▷All sites update approximate distances  
+
+> 18:
+
+end if  
+
+> 19:
+
+end while  
+
+> 20:
+
+end while  
+
+> 21:
+
+return S
+
+counted at least N = O (k) valid sampled points. Then the returned set S will have O (k) points and is an O (1) -approximation. Furthermore, by using L1Sampling and batch sampling, we can guarantee a low round complexity and total communication for Algorithm 10. We split the proof into three parts. First we will prove that S is an O (1) -approximation and 
+
+|S| = O (k). Secondly, we will prove that the algorithm uses O (log n log k) rounds of communication. Lastly, we will prove that the algorithm uses ˜O (s log n + kd log n) bits of communication with probability at least 0.99 .For the purposes of analysis, we define the concept of valid sample. Suppose x is a point sampled by LazySampling ({cost (x, S )}, { ˜Di}). Then we define x to be a valid sample if it is sampled under the condition D ≤ ˜D < γ · Di for some constant γ.
+
+Lemma B.3. Algorithm 10 will return S such that |S| = O (k) and cost (S, X ) ≤ O (1) ·cost (COPT , X )
+
+with probability at least 0.98 , where COPT is the optimal (k, z )-clustering of X.Proof. Suppose x is a point sampled by LazySampling ({cost (x, S )}, { ˜Di}). If x is a valid sample, it will reduce the size of Bad i with constant probability by Lemma A.2. If we sample N = O (k)
+
+valid points by our algorithm, by Theorem 2.10, we will get a constant approximation S with probability at least 0.99 . We will show that our algorithm indeed samples at least N valid samples for γ = μ2.35 According to the algorithm, ˜Dj is always a 2-approximation of Dj that Dj ≤ ˜Dj < 2Dj after we update ˜Dj . Between two updates of ˜Dj , ˜Dj is fixed, but Dj may only decrease. This means that 
+
+Dj ≤ ˜Dj always holds in Algorithm 10. Since Dj ≤ ˜Dj always holds, D ≤ ˜D always holds, too. If ˜D < μ 2D after we sample L points, it means that all these L points are valid. We will either add L to the counter M if L1Sampling returns False, or add 1 to the counter M if L1Sampling 
+
+returns True. In either case, the number of valid points we sample is at least the number we add to the counter M .If ˜D ≥ μ2D after we sample L points, it means that some points we sample are invalid. However, the first point we sampled must be valid, as it is sampled under the condition ˜D < μ 2D. If 
+
+L1Sampling returns True, we will only add 1 to the counter M . Then the number of new valid samples in this round is at least the number we add to the counter M .Therefore, the number of valid points we sample is at least the number we add to the counter 
+
+M if L1Sampling returns True every time ˜D ≥ μ2D. Since D = poly (n) when we have only one point in S, and every time we update ˜D in Algorithm 10, it holds that D ≤ ˜D < 2D, ˜D ≥ μ2D
+
+can only occur at most O (log n) times. We know L1Sampling will return True if ˜D ≥ μ2D with probability at least 1 − δ. Since δ = O  
+
+> (1log 2n
+> )
+
+, then by a union bound, L1Sampling returns True every time ˜D ≥ μ2D with probability at least 0.99 .Therefore, with probability at least 0.98 , we will sample at least O (k) valid points and they form an O (1) -approximation for the optimal solution. 
+
+Upper bound on the size of S. We will evaluate the number of sampled points that are not counted as valid samples, and show the total number of such points is O (k). Suppose that we update ˜Dj for m times for total. Let Np be the total number of sampled points that are not counted as valid samples, and pi
+
+as the number of points that are not counted as valid samples between the (i − 1) -th and i-th update. Then Np = ∑mi=1 pi. Let Nq be the total number of sampled points that are counted as valid samples, and qi as the number of points that are counted as valid samples between the 
+
+(i − 1) -th and i-th update. Then Nq = ∑mi=1 qi. Since we will terminate the algorithm if we count for N = O (k) valid samples, Nq = O (k). Since the number of points sampled before the i-th update is pi + 1 , and the number of point sampled before these pi + 1 points is pi+1 2 , therefore, 
+
+pi ≤ 2qi. Hence Np ≤ 2Nq = O (k). The points in S are either counted as valid samples or not, so 
+
+|S| = Np + Nq = O (k).We next upper bound the round complexity of our algorithm. 
+
+Lemma B.4. Algorithm 10 uses O (log n log k) rounds of communication with probability at least 
+
+0.99 .Proof. We need O (1) communication rounds in the initial stage Algorithm 7. For the communication rounds in the remaining part of Algorithm 10, we evaluate how many rounds of batch sampling occurs between two update, and evaluate the times of update. Then the product is just the rounds of total sampling. For the rounds of batch sampling that occurs between two update, it must be at most O (log k)
+
+rounds since we double the number of points to be sampled for every other round if we do not update ˜D and the total points to be sampled is O (k). For the times we update ˜D, there are two 36 cases: we update an ‘unnecessary update’ under the condition that ˜D < μD , and we update a ‘necessary update’ under the condition that ˜D ≥ μD . By Lemma B.2, L1Sampling will return True and we will have an ‘unnecessary update’ under the condition that ˜D < μD with probability at most δ. Since there are at most O (log k) successive batch sampling without an update, we will make an ‘unnecessary update’ between two ‘necessary update’ with probability at most O (δ log k).For the ‘necessary update’, we will update ˜D so that D ≤ ˜D < 2D. Since μ = 8 , it means every time we make a ‘necessary update’ under the condition that ˜D ≥ μD , ˜D decreases by at least a factor of 4. Hence, such update can occur at most O (log n) times. Since the probability that we will make an ‘unnecessary update’ between two ‘necessary updates’ is at most O (δ log k), and the times of ‘necessary update’ is at most O (log n), we will make an ‘unnecessary update’ in Algorithm 10 with probability at most O (δ log n log k). Since δ = O  
+
+> (1log 2n
+> )
+
+,we will have no ‘unnecessary update’ in Algorithm 10 with probability at least 0.99 . Since ‘necessary update’ will occur at most O (log n) times, it means we will have at most O (log n) updates of ˜D
+
+with probability at least 0.99 .Therefore, with probability at least 0.99 , Algorithm 10 has O (log n log k) rounds of batch sampling. Then we need to evaluate how many communication rounds we need for a round of batch sampling. For each round of batch sampling, the coordinator can send the request of 2i lazy sampling at the same time, and every site can respond afterwards. Hence there will be two rounds of communication for each iteration of sampling. To get the result returned by L1Sampling , the 
+
+O
+
+> (
+
+log 1
+
+> δ
+> )
+
+= O (log log n) requests can be made simultaneously, so that there are O (1) rounds of communication. Hence, the total rounds of communication in Algorithm 10 is O (log n log k).Finally, we upload rj when we update ˜Dj . All the sites can update the values of rj in the same round. Since we will update at most O (log n) times, we needs O (log n) rounds of communication for total. Summing the rounds of communication across each part of our algorithm, it follows that the total rounds of communication is O (log n log k) with probability at least 0.99 .Finally, we analyze the total communication of our algorithm. 
+
+Lemma B.5. Algorithm 10 uses ˜O (s log n + kd log n) bits of communication with probability at least 0.99 .Proof. The Algorithm 7 subroutine Initialization induces O (d log n + s log log n) bits of com-munication because we only write the sample point x and ri on the blackboard, and ri =
+
+O (log log cost( Xi, S )) = O (log log n).We will update O (k) samples, which will use O (kd log n) total bits of communication. Moreover, we will run L1Sampling at most O (log n log k) times. For each time it runs, the coordinator will choose O
+
+> (
+
+log 1
+
+> δ
+> )
+
+= O (log log n) sites. It uses O (log s) bits to represent a site on the blackboard, so that site knows it is chosen. Each chosen site needs O (log log n)
+
+bits to reply. Hence the total communication cost for running L1Sampling in Algorithm 10 is 
+
+O (log n log k(log s + log log n)) bits. Updating the values {rj } costs O (s log log n) bits for each iteration. Since the value will be updated O (log n) times with probability at least 0.99 , the total cost for updating the values {rj } is 
+
+O (s log n log log n) bits. Therefore, by adding the communication cost for all parts of Algorithm 10 and ignore all the poly-logarithm terms for s, k, log n, the total communication is just ˜O (s log n + kd log n).We have the following full guarantees for Algorithm 10. 37 Lemma B.6. Algorithm 10 will return S such that |S| = O (k) and cost (S, X ) ≤ O (1) ·cost (COPT , X )
+
+with probability at least 0.98 , where COPT is the optimal (k, z )-clustering of X. The algorithm uses ˜O (s log n + kd log n) bits of communication and O (log n log k) rounds of communication with probability at least 0.99 .Proof. The proof follows immediately from Lemma B.3, Lemma B.4, and Lemma B.5. 
+
+B.4 (1 + ε)-Coreset via Sensitivity Sampling in the Blackboard Model 
+
+To achieve a (1 + ε)-coreset for X with the (O (1) , O (1) )-bicriteria approximation S, we use sensitivity sampling. The challenge lies in determining Cj and cost (Cj , S ) to calculate μ(x), as communicating the exact values of Cj and cost (Cj , S ) requires O (sk log n) bits, which is impractical for our purposes. However, a constant approximation of Cj and cost (Cj , S ) suffices to approximate 
+
+μ(x) for the sensitivity sampling, and this can be achieved efficiently with minimal communication through Morris counters. 
+
+Algorithm 11 Morris (r, n )
+
+Input: Initial count index r, and elements number n
+
+Output: New count index m 
+
+> 1:
+
+m ← r 
+
+> 2:
+
+for i ← 1 to n do  
+
+> 3:
+
+With probability 12m , m ← m + 1  
+
+> 4:
+
+end for  
+
+> 5:
+
+return r
+
+Theorem B.7. [Mor78 ] Let X = Morris (0 , n ). Then E
+
+> [
+
+2X − 1
+
+> ]
+
+= n. Moreover, there exists a constant γ > 0 such that if l ≥ γε2 log 1 
+
+> δ
+
+and Y = 1
+
+> l
+> ∑li=1
+> (
+
+2Xi − 1
+
+> )
+
+, where X1, X 2, . . . , X l are l
+
+independent outputs of Morris (0 , n ), then 
+
+Y ∈ [n − εn, n + εn ],
+
+with probability at least 1 − δ.
+
+We can adapt Morris to a distributed version DistMorris to reduce the communication cost. 
+
+Lemma B.8. Let every site i own k numbers ni,j , and |Nj | = ∑si=1 ni,j = poly (n). With probability at least 0.99 , DistMorris ( 14 ) returns constant approximations ˜Nj that ˜Nj ∈ [ 34 Nj , 54 Nj ] for all 
+
+j ∈ [k] using ˜O (s + k log n) bits of communication. Proof. Although we split the process of Morris into a distributed version, its accuracy does not matter. This is because every step of Morris only needs to know the status of the previous step, and every time a site uses a step of Morris , it knows the status of the previous step either because both of these steps occur at this site, or because the status of previous step is accurately uploaded by the previous site. Hence, the statement of the original Morris in Theorem B.7 still holds for our distributed version. 38 Algorithm 12 DistMorris (ε):
+
+Input: Precision parameter ε, every site Si owns k numbers ni,j , j ∈ [k]
+
+Output: Approximation ( ˜N1, ˜N2, · · · , ˜Nk) for sums Nj = ∑si=1 ni,j , j ∈ [k] 
+
+> 1:
+
+l ← O 
+
+( 1 
+
+> ε2
+
+log(100 k)
+
+) 
+
+> 2:
+
+mj,t ← 0 for all j ∈ [k] and t ∈ [l] 
+
+> 3:
+
+for i ← 1 to s do  
+
+> 4:
+
+m′ 
+
+> j,t
+
+← Morris (mj,t , n i,j ) for all j ∈ [k] and t ∈ [l] 
+
+> 5:
+
+if m′ 
+
+> j,t
+
+= mj,t for all j ∈ [k] and t ∈ [l] then  
+
+> 6:
+
+Site i uploads ⊥ on blackboard  
+
+> 7:
+
+else  
+
+> 8:
+
+Site i uploads (m′ 
+
+> j,t
+
+− mj,t , j, t ) for all j ∈ [k] and t ∈ [l] that m′
+
+> j,t
+
+̸ = mj,t  
+
+> 9:
+
+end if  
+
+> 10:
+
+mj,t ← m′ 
+
+> j
+> 11:
+
+end for  
+
+> 12:
+
+˜Nj ← 1
+
+> l
+
+∑lt=1 (2 mj,t − 1) for all j ∈ [k] 
+
+> 13:
+
+return ( ˜N1, ˜N2, · · · , ˜Nk)
+
+By Theorem B.7, ˜Nj ∈ [ 34 Nj , 54 Nj ] with probability at least 1 − 1100 k for any j ∈ [k] if we set 
+
+l = O (log(100 k)) . Then, by a union bound, ˜Nj ∈ [ 34 Nj , 54 Nj ] for all j ∈ [k] at the same time with probability at least 0.99 .To evaluate the total communication cost, we introduce Mi and Mi,j as follows to facilitate the analysis. We set Mi as 0 if site i uploads ⊥ on the blackboard and Mi as the cost of communication to update all (m′ 
+
+> j,t
+
+− mj,t , j, t ) for all j ∈ [k] and t ∈ [l] that m′
+
+> j,t
+
+̸ = mj,t otherwise. We set Mi,j,t to be the communication cost required to update (m′ 
+
+> j,t
+
+− mj,t , j, t ).Every site with Mi = 0 only needs O (1) bits to upload ⊥. Since there are s sites in total, the number of sites with Mi = 0 is at most s. Therefore, the total communication for these sites is 
+
+O (s).For the sites with Mi̸ = 0 , the communication cost used is 
+
+∑ 
+
+> Mi̸=0
+
+Mi =
+
+> s
+
+∑
+
+> i=1
+
+Mi =
+
+> k
+
+∑
+
+> j=1
+> l
+
+∑
+
+> t=1
+
+∑
+
+> i=1
+
+Mi,j,t .
+
+Note that the first equality holds because we only add more terms that all have value zero, whereas the second equality is obtained by dividing Mi into Mi,j,t .Since ˜Nj = 1
+
+> l
+
+∑lt=1 (2 mj,t − 1) ∈ [ 34 Nj , 54 Nj ], then 2mj,t cannot be greater than 2l · Nj =
+
+O (log k poly( n)) . Therefore mj,t ≤ O (log n log log k). Since Mi,j,t must be at least 1 if it is nonzero, there are at most mj,t nonzero Mi,j,t for given j, t . For every non-zero Mi,j,t , since the site uploads 
+
+m′ 
+
+> j,t
+
+− mj,t which is at most the final mj,t , then the site will use no more than O (log mj,t ) bits to update m′ 
+
+> j,t
+
+− mj,t , and O (log k + log l) bits to express j and t. Thus, 
+
+∑
+
+> i=1
+
+Mi,j,t = ∑ 
+
+> i∈[s],M i,j,t ̸=0
+
+Mi,j,t ≤ mj,t · O (log mj,t + log k + log l) .
+
+39 Since mj,t ≤ O (log n log log k) and l = O (log k), then ∑ 
+
+> i=1
+
+Mi,j,t ≤ ˜O (log n). Therefore, 
+
+∑ 
+
+> Mi̸=0
+
+Mi =
+
+> k
+
+∑
+
+> j=1
+> l
+
+∑
+
+> t=1
+
+∑
+
+> i=1
+
+Mi,j,t ≤ kl · ˜O (log n) = ˜O (k log n) .
+
+By summing the communication cost of the sites that upload ⊥ and the communication cost of the other sites, the total communication will be no more than ˜O (s + k log n).Since |Cj | = ∑si=1 |Cj ∩ Xi| and cost (Cj , S ) = ∑si=1 cost (Cj ∩ Xi, S ) for any j ∈ [k], we can use 
+
+DistMorris to approximately evaluate these terms using low communication cost. Since both |Cj |
+
+and cost (Cj , S ) are at most poly (n), the total communication is at most ˜O (s + k log n) bits. Every site i can compute cost (x, S ) for x ∈ Xi locally. Then with the constant-factor approximations for 
+
+|Cj | and cost (Cj , S ), each site can evaluate a constant-factor approximation of the sensitivity μ(x)
+
+locally. Finally, we give an algorithm producing a (1+ ε)-coreset for X with O
+
+( dk ε4 (log k + log 1 
+
+> ε
+
+log log n)
+
+)
+
+bits of communication, given our O (1) -approximation with O (k) points and sensitivity μ(x).
+
+Algorithm 13 (1 + ε)-coreset for the blackboard model 
+
+Input: A constant approximation S, |S| = O (k)
+
+Output: A (1 + ε)-coreset A 
+
+> 1:
+
+Use DistMorris to get O (1) -approximation for |Cj | and cost (Cj , S ) for all j ∈ [k] on the blackboard  
+
+> 2:
+
+m ← ˜O
+
+( kε2 min {ε−2, ε −z }
+
+) 
+
+> 3:
+
+for i ← 1 to s do  
+
+> 4:
+
+Ai ← ∅  
+
+> 5:
+
+Compute ˜μ(x) as an O (1) -approximation of μ(x) locally for all x ∈ Xi 
+
+> 6:
+
+Upload ˜μ(Xi) = ∑ 
+
+> x∈Xi
+
+˜μ(x) 
+
+> 7:
+
+end for  
+
+> 8:
+
+Samples site i with probability ˜μ(Xi)∑si=1 ˜μ(Xi) independently for m times. Let mi be the time site i
+
+are sampled. Write mi on blackboard  
+
+> 9:
+
+for i ← 1 to s do  
+
+> 10:
+
+Ai ← ∅  
+
+> 11:
+
+for j ∈ [mi] do  
+
+> 12:
+
+Sample x with probability px = ˜μ(x)
+
+˜μ(Xi) 
+
+> 13:
+
+if x is sampled then  
+
+> 14:
+
+Let x′ be x efficiently encoded by S and accuracy ε′ = poly( ε) 
+
+> 15:
+
+A ← Ai ∪ { (x′, 1
+
+> m
+
+̂μ(x) )}, where ̂ μ(x) is a (1 + ε 
+
+> 2
+
+)-approximation of ˜μ(x) 
+
+> 16:
+
+end if  
+
+> 17:
+
+end for  
+
+> 18:
+
+Upload Ai to the blackboard  
+
+> 19:
+
+end for  
+
+> 20:
+
+A ← ∪ si=1 Ai 
+
+> 21:
+
+return A
+
+We now justify the correctness and complexity of the communication of Algorithm 13. 40 Lemma B.9. Algorithm 13 returns A such that A is a (1 + ε)-coreset for X with probability at least 0.98 if we already have an (O (1) , O (1) )-bicriteria approximation S. The algorithm uses 
+
+˜O
+
+(
+
+s + k log n + dk  
+
+> min( ε4,ε 2+ z)
+
+)
+
+bits of communication. Proof. By Lemma B.8, we can get an O (1) -approximation for |Cj | and cost (Cj , S ) with prob-ability at least 0.99 . Every site can also get the precise value of cost (x, S ) locally. Since 
+
+μ(x) := 14 ·
+
+( 1  
+
+> k|Cj|
+
++ cost( x,S )  
+
+> kcost( Cj,S )
+
++ cost( x,S )cost( X,S ) + ∆x
+
+> cost( X,S )
+
+)
+
+and ∆p := cost (Cj , S )/|Cj |, we can evalu-ate an O (1) -approximation ˜μ(x) of μ(x). Although [ BCP +24 ] proves Theorem 2.7 in the set-ting that |S| = k and sample points with probability μ(x), they only need |S| = O (k) and  
+
+> 1
+> μ(x)
+
+≤ O (1) · max { 1  
+
+> k|Cj|
+
+, cost( x,S )  
+
+> kcost( Cj,S )
+
+, cost( x,S )cost( X,S ) , ∆x 
+
+> cost( X,S )
+
+} in their proof. Therefore, Theorem 2.7 is still valid under the condition that |S| = O (k) and ˜μ(x) = O (1) · μ(x). Let B = {(x, 1
+
+> m
+
+˜μ(x) )) }, then 
+
+B is an (1 + ε 
+
+> 2
+
+)-coreset for X with probability at least 0.99 if we have O (1) -approximation for |Cj |
+
+and cost( Cj , S ).We have A = {(x′, 1
+
+> m
+
+˜μ(x) )}. Since B is a (1 + ε 
+
+> 2
+
+)-coreset for X, by Lemma 2.13, A is a (1 + ε)-coreset for X. Therefore, Algorithm 13 returns an (1 + ε)-coreset for X with probability at least 
+
+0.98 .We need O (s + k log n) bits to get the O (1) -approximation for |Cj | and cost (Cj , S ). We need 
+
+O (s log m) = ˜O (s) bits to write mi on the blackboard. We need O (log k + d log log n) bits to upload 
+
+x′, because we need to point out which center in S is closest to x, which needs O (log k) bits, and we need to upload the power index, which needs O
+
+(
+
+log 1 
+
+> ε
+
+log log n
+
+)
+
+bits. We need O
+
+( 1 
+
+> ε
+
+log log n
+
+)
+
+bits to upload 1
+
+> m
+
+̂μ(x) because we only need to upload ̂ μ(x), which is a (1 + ε 
+
+> 2
+
+)-approximation of ˜μ(x).Since |A| = O
+
+( k 
+
+> min( ε4,ε 2+ z)
+
+)
+
+, we need ˜O
+
+(
+
+s + k log n + dk  
+
+> min( ε4,ε 2+ z)
+
+)
+
+bits in total. We complete this subsection by claiming that we can get a (1 + ε)-strong coreset with communi-cation cost no more than ˜O
+
+(
+
+s log( n∆) + dk log( n∆) + dk  
+
+> min( ε4,ε 2+ z)
+
+)
+
+bits. 
+
+Theorem B.10. There exists a protocol on n points distributed across s sites that produces a 
+
+(1 + ε)-strong coreset for (k, z )-clustering with probability at least 0.97 that uses 
+
+˜O
+
+(
+
+s log( n) + dk log( n) + dk 
+
+min( ε4, ε 2+ z )
+
+)
+
+total bits of communication in the blackboard model. Proof. We can use Algorithm 10 to generate an (O (1) , O (1) )-bicriteria approximation S, and then use Algorithm 13 to get an (1 + ε)-strong coreset. By Lemma B.6 and Lemma B.9, the returned set A is a (1 + ε)-strong coreset with probability at least 0.97 and uses a communication cost of 
+
+˜O
+
+(
+
+s log( n) + dk log( n) + dk  
+
+> min( ε4,ε 2+ z)
+
+)
+
+bits for total. 
+
+# C Coordinator Model of Communication 
+
+In this section, we discuss our distributed algorithms for the coordinator model of communication. Note that if all servers implement the distributed algorithms from the blackboard setting, the resulting communication would have O (dsk log n) terms simply from the O (k) rounds of adaptive sampling across the s servers. 41 C.1 Efficient Sampling in the Coordinator Model 
+
+To avoid these O (dsk log n) terms in communication cost, we need a more communication efficient method so that we can apply adaptive sampling and upload coreset with low communication cost. We propose an algorithm called EfficientCommunication , which can send the location of a point with high accuracy and low cost. Suppose that a fixed site has a set of points X = {x1, · · · , x l},and another site has a point y. To simulate adaptive sampling while avoiding sending each point explicitly to all sites, our goal is to send a highly accurate approximate location of y to the first site with low cost. To that end, EfficientCommunication approximates and sends the coordinate of a point in every dimension. For the i-th dimension, we use a subroutine HighProbGreaterThan ,which can detect whether y(i) is greater than x(i) 
+
+> j
+
+with high probability, where y(i) is the coordinate of the i-th dimension of y and x(i) 
+
+> j
+
+is the coordinate of the i-th dimension of xj ∈ X.
+
+Algorithm 14 HighProbGreaterThan (x, y, δ )
+
+Input: Integer x, y , failure parameter δ
+
+Output: A boolean bool that shows whether x is greater than y 
+
+> 1:
+
+N ← O 
+
+> (
+
+log 1
+
+> δ
+> )
+
+, r ← 0 
+
+> 2:
+
+for i ← 1 to N do  
+
+> 3:
+
+ri ← 0 if GreaterThan (x, y ) tells us x ≤ y, and ri ← 1 otherwise  
+
+> 4:
+
+r ← r + ri 
+
+> 5:
+
+end for  
+
+> 6:
+
+if rN ≤ 12 then  
+
+> 7:
+
+return False  
+
+> 8:
+
+else  
+
+> 9:
+
+return True  
+
+> 10:
+
+end if 
+
+The subroutine HighProbGreaterThan is an adaptation of GreaterThan by [ Nis93 ]. The main purpose of the subroutine is that by using a binary search, we can find the relative location of 
+
+y(i) to {x(i)1 , · · · , x (i) 
+
+> l
+
+} within log l comparisons. Then, comparing y(i) with x(i) 
+
+> j
+
++ (1 + ε)m, we can find the best x(i) 
+
+> j
+
+and m to approximate y(i). Our algorithm for the coordinator model appears in full in Algorithm 15. We first show correctness of HighProbGreaterThan , running multiple times and taking the majority vote if necessary to boost the probability of correctness. 
+
+Lemma C.1. If HighProbGreaterThan (x, y, δ ) returns False, then x ≤ y with probability at least 1 − δ. If HighProbGreaterThan (x, y, δ ) returns True, then x > y with probability at least 1 − δ. Furthermore, the protocol uses O
+
+> (
+
+log log n log 1
+
+> δ
+> )
+
+bits of communication provided that 
+
+x, y ∈ [− poly( n), poly( n)] .Proof. We define random variable Ei = ri. By Theorem 2.8, GreaterThan will give a wrong answer with probability at most p < 12 , so 
+
+E[Ei|x ≤ y] = 0 · Pr [Ei = 0 |x ≤ y] + 1 · Pr [Ei = 1 |x ≤ y] ≤ p, 
+
+E[Ei|x > y ] = 0 · Pr [Ei = 0 |x > y ] + 1 · Pr [Ei = 1 |x > y ] ≥ 1 − p. 
+
+42 Algorithm 15 EfficientCommunication (X, y, ε, δ )
+
+Input: A set X = {x1, · · · , x l} owned by one site; a point y owned by another site; ε, accuracy parameter; δ, the failure probability 
+
+Output: The second site sends ˜y to the first site, which will be an approximate location of y that 
+
+∥y − ˜y∥2 ≤ ε∥x − y∥2 for any x ∈ X, with probability at least 1 − δ 
+
+> 1:
+
+for i ← 1 to d do  
+
+> 2:
+
+Sort X = {xi1 , · · · , x il } such that x(i) 
+
+> i1
+
+≤ · · · ≤ x(i) 
+
+> il
+
+, where x(i) 
+
+> ij
+
+is the i-th coordinate of xij 
+
+> 3:
+
+x(i) 
+
+> i0
+
+← − ∆, x (i) 
+
+> il+1
+
+← ∆, δ ′ ← O 
+
+(
+
+> δd
+
+(log l+log log n+log 1 
+
+> ε
+
+)
+
+) 
+
+> 4:
+
+Use binary search and HighProbGreaterThan (y(i), x (i) 
+
+> ij
+
+, δ ′) to find x(i) 
+
+> is
+
+that |x(i) 
+
+> is
+
+− y(i)| ≤ |xiij − y(i)| for any ij ∈ { 0, 1, 2, · · · , l, l + 1 } 
+
+> 5:
+
+Use HighProbGreaterThan test whether y(i) = x(i) 
+
+> is
+> 6:
+
+if y(i) = x(i) 
+
+> is
+
+then  
+
+> 7:
+
+∆y(i) ← 0 
+
+> 8:
+
+else  
+
+> 9:
+
+γ ← sign (y(i) − x(i) 
+
+> is
+
+) 
+
+> 10:
+
+Use binary search and HighProbGreaterThan (y(i), x (i) 
+
+> is
+
++ γ · (1 + ε)t, δ ′) to find m that 
+
+|x(i) 
+
+> is
+
++ γ · (1 + ε)m − y(i)| ≤ | x(i) 
+
+> is
+
++ γ · (1 + ε)t − y(i)| for any t ∈ N 
+
+> 11:
+
+∆y(i) ← γ · (1 + ε)m 
+
+> 12:
+
+end if  
+
+> 13:
+
+˜y(i) ← x(i) 
+
+> is
+
++ ∆ y(i) 
+
+> 14:
+
+end forreturn ˜y = ( ˜y(1) , ˜y(2) , · · · , ˜y(d))
+
+Since Ei ∈ [0 , 1] , by Hoeffding’s inequality, c.f., Theorem 2.6, 
+
+Pr 
+
+[ N∑
+
+> i=1
+
+Ei > N
+
+2
+
+∣∣∣∣x ≤ y
+
+]
+
+= Pr 
+
+[ N∑
+
+> i=1
+
+Ei > N p + N
+
+2 − N p 
+
+∣∣∣∣x ≤ y
+
+]
+
+≤ Pr 
+
+[∣∣∣∣
+
+> N
+
+∑
+
+> i=1
+
+Ei − N E[Ei]
+
+∣∣∣∣ > N
+
+2 − N p 
+
+∣∣∣∣x ≤ y
+
+]
+
+≤ 2 exp( −
+
+( N 
+
+> 2
+
+− N p 
+
+)2
+
+N · 12 )= δ, 
+
+and 
+
+Pr 
+
+[ N∑
+
+> i=1
+
+Ei ≤ N
+
+2
+
+∣∣∣∣x > y 
+
+]
+
+= Pr 
+
+[ N∑
+
+> i=1
+
+Ei ≤ N (1 − p) + N
+
+2 − N (1 − p)
+
+∣∣∣∣x > y 
+
+]
+
+≤ Pr 
+
+[∣∣∣∣
+
+> N
+
+∑
+
+> i=1
+
+Ei − N · E[Ei]
+
+∣∣∣∣ > N
+
+2 − N p 
+
+∣∣∣∣x > y 
+
+]
+
+≤ 2 exp( −
+
+( N 
+
+> 2
+
+− N p 
+
+)2
+
+N · 12 )
+
+43 = δ. 
+
+Hence HighProbGreaterThan (x, y, δ ) is correct with probability at least 1 − δ.For the communication cost, since GreaterThan uses O (log log n) bits of communication, provided that x, y ∈ [− poly (n), poly (n)] , and we run GreaterThan for N = O
+
+(
+
+log 1
+
+> δ
+
+)
+
+times, then the total communication cost is O
+
+(
+
+log log n log 1
+
+> δ
+
+)
+
+bits in total. 
+
+EfficientCommunication (X, y, ε, δ ) in Algorithm 15 will send ˜y, a good approximation location of y with probability at least 1 − δ. In addition, it only uses d log l polylog ( log n, log l, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+)
+
+bits. To formally prove these guarantees, we first show ∥y − ˜y∥2 ≤ ε∥x − y∥2 with probability 1 − δ
+
+and then upper bound the total communication of the protocol. 
+
+Lemma C.2. EfficientCommunication (X, y, ε, δ ) will send ˜y to the first site such that ∥y−˜y∥2 ≤
+
+ε∥x − y∥2 with probability at least 1 − δ.Proof. We condition on the correctness of HighProbGreaterThan . We will prove that ∥y − ˜y∥2 ≤
+
+ε∥x − y∥2. First, we will prove |y(i) − ˜y(i)| ≤ ε|x(i) 
+
+> j
+
+− y(i)| for any j ∈ [d] and xj ∈ X.Let X(i) = {− ∆, x (i)1 , x (i)2 , · · · , x (i) 
+
+> l
+
+, ∆}. Assume x(i) 
+
+> s
+
+∈ X(i) that |x(i) 
+
+> s
+
+− y(i)| ≤ | x(i) 
+
+> j
+
+− y(i)| for any x(i) 
+
+> j
+
+∈ X(i). If y(i) = x(i) 
+
+> s
+
+, ˜y(i) is just y(i), which means |y(i) − ˜y(i)| = |x(i) 
+
+> s
+
+− y(i)| = 0 .If y(i)̸ = x(i) 
+
+> s
+
+, we have ˜y(i) = x(i) 
+
+> s
+
++ ∆ y(i) and ∆y(i) = γ · (1 + ε)m, where γ = sign (y(i) − x(i) 
+
+> s
+
+).Assume y(i) − x(i) 
+
+> s
+
+= γ · (1 + ε)m+m′
+
+. Then 
+
+|y(i) − ˜y(i)| = |(y(i) − x(i) 
+
+> s
+
+) − (˜y(i) − x(i) 
+
+> s
+
+)| = |(1 + ε)m+m′
+
+− (1 + ε)m|.
+
+Since |x(i) 
+
+> s
+
++ γ · (1 + ε)m − y(i)| ≤ | x(i) 
+
+> s
+
++ γ · (1 + ε)t − y(i)| for any t ∈ N, |m′| must be less than 1.Hence 
+
+|y(i) − ˜y(i)| = (1 + ε)m+m′
+
+· | 1 − (1 + ε)−m′
+
+| ≤ ε(1 + ε)m+m′
+
+= ε|x(i) 
+
+> s
+
+− y(i)|.
+
+Since |x(i) 
+
+> s
+
+− y(i)| ≤ | x(i) 
+
+> j
+
+− y(i)| for any j, and |y(i) − ˜y(i)| ≤ ε|x(i) 
+
+> s
+
+− y(i)|, thus |y(i) − ˜y(i)| ≤ 
+
+ε|x(i) 
+
+> j
+
+− y(i)|. Therefore, for any xj ∈ X,
+
+∥y − ˜y∥22 =
+
+> d
+
+∑
+
+> i=1
+
+|y(i) − ˜y(i)|2 ≤
+
+> d
+
+∑
+
+> i=1
+
+ε2|x(i) 
+
+> j
+
+− y(i)|2 = ε2 · ∥ xj − y∥2.
+
+Hence ∥y − ˜y∥2 ≤ ε∥x − y∥2 for any x ∈ X.
+
+Analysis of the failure probability. It remains to upper bound the failure probability by count-ing how many times HighProbGreaterThan (·, ·, δ ′) is run in the algorithm. For every dimension 
+
+i, we run HighProbGreaterThan (·, ·, δ ′) to find the closest x(i) 
+
+> is
+
+to y(i) and m to approximate 
+
+y(i) − x(i) 
+
+> is
+
+. To find the closest x(i) 
+
+> is
+
+to y(i), we can use binary search to find x(i) 
+
+> ip
+
+≤ y(i) ≤ x(i) 
+
+> ip+1
+
+, and then compare their midpoint x(i)  
+
+> ip +x(i)
+> ip+1
+> 2
+
+with y(i) to determine which one is closer to y(i). Since there are l + 2 elements in {xii0 , x ii1 , · · · , x iil , x iil+1 }, we need to run HighProbGreaterThan (·, ·, δ ′) for 
+
+log( l + 2) + 1 times in this stage. 44 To find m that |x(i) 
+
+> is
+
++ γ · (1 + ε)m − y(i)| ≤ | x(i) 
+
+> is
+
++ γ · (1 + ε)t − y(i)| for any t ∈ N, we can use binary search to find (1 + ε)q ≤ | y(i) − x(i) 
+
+> is
+
+| ≤ (1 + ε)q+1 , and then compare their midpoint with 
+
+|y(i) − x(i) 
+
+> is
+
+| to determine which one is closer to |y(i) − x(i) 
+
+> is
+
+|. Since we already have x(i) 
+
+> ip
+
+≤ y(i) ≤ x(i)
+
+> ip+1
+
+and |x(i) 
+
+> ij
+
+| ≤ ∆ for all j ∈ { 0, 1, · · · , l + 1 }, we only need to search q among {0, 1, · · · , log 1+ ε ∆}.Since ∆ = poly (n), we can use binary search to find q in at most O
+
+(
+
+log log nε
+
+)
+
+rounds. Thus we need to run HighProbGreaterThan (·, ·, δ ′) for O
+
+(
+
+log log n + log 1
+
+> ε
+
+)
+
+times in this stage. Therefore, we will apply HighProbGreaterThan for at most O
+
+(
+
+d
+
+(
+
+log l + log log n + log 1
+
+> ε
+
+)) 
+
+times. Since 
+
+HighProbGreaterThan (·, ·, δ ′) will return correct result with failure probability at most δ′ and 
+
+δ′ = O
+
+(
+
+> δd
+
+(log l+log log n+log 1 
+
+> ε
+
+)
+
+)
+
+, EfficientCommunication (X, y, ε, δ ) has a failure probability at most δ.Next, we analyze the communication complexity of our algorithm. 
+
+Lemma C.3. EfficientCommunication (X, y, ε, δ ) uses d log ℓ polylog (log n, log ℓ, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) bits of communication for total, where ℓ = |X| is the number of points owned by the first site. Proof. We need to run HighProbGreaterThan (·, ·, δ ′) for at most O
+
+(
+
+d
+
+(
+
+log ℓ + log log n + log 1
+
+> ε
+
+)) 
+
+times. Since HighProbGreaterThan (·, ·, δ ′) cost O
+
+(
+
+log log n log 1
+
+> δ′
+
+)
+
+bits for a single running, it takes d log ℓ polylog(log n, log ℓ, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) bits to run HighProbGreaterThan (·, ·, δ ′) for total. We also need communication to send ˜y = ( ˜y(1) , ˜y(2) , · · · , ˜y(d)) to the first site. However, we only need to send x(i) 
+
+> is
+
+and ∆y(i) to the first site. Since the first site already has the location of all x ∈ X,we only need to send is to identify x(i) 
+
+> is
+
+, which takes O (log ℓ) bits. Since ∆y(i) = γ · (1 + ε)m, we only need to send γ and m. Sending γ requires O (1) bits since γ ∈ {− 1, 0, 1}. Sending m requires 
+
+O
+
+(
+
+log log n + log 1
+
+> ε
+
+)
+
+bits since (1+ ε)m = poly (n). Therefore, it takes at most d log ℓ polylog ( log n, 1 
+
+> ε
+
+)
+
+bits to send ˜y = ( ˜y(1) , ˜y(2) , · · · , ˜y(d)).Hence Algorithm 15 takes at most d log ℓ polylog ( log n, log ℓ, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) to send ˜y to the first site. Putting together Lemma C.2 and Lemma C.3, we have: 
+
+Lemma C.4. EfficientCommunication (X, y, ε, δ ) will send ˜y to the first site such that ∥y−˜y∥2 ≤
+
+ε∥x − y∥2 with probability at least 1 − δ. Furthermore, it only uses d log ℓ polylog (log n, log ℓ, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+)
+
+bits of communication for total, where ℓ = |X| is the number of points owned by the first site. 
+
+C.2 (1 + ε)-Coreset via Sensitivity Sampling in the Coordinator Model 
+
+Given the analysis in Appendix C.1, it follows that we can effectively perform adaptive sampling to achieve a bicriteria approximation at the coordinator. It remains to produce a (1 + ε)-coreset, for which we again use sensitivity sampling. 
+
+EfficientCommunication (X, y, ε, δ ) can send the location of y using low communication cost. However, its communication cost is d log ℓ polylog (log n, log ℓ, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+), where ℓ = |X|. For the coordinator model, suppose that each site i ∈ [s] has a dataset Xi. Since |Xi| = O (n), and the coordinator needs to send the approximate location of all O (k) samples to each site to apply adaptive sampling, which would still require dsk log n polylog ( log n, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) bits to send the location of samples 45 using EfficientCommunication (Xi, y, ε, δ ). Fortunately, we can generate a (1 + ε 
+
+> 2
+
+)-coreset Pi for every Xi, which has a size of ˜O  
+
+> (k
+> min {ε4,ε 2+ z}
+> )
+
+. Since adaptive sampling also works for the weighted case, it is enough to generate an (O (1) , O (1) )-bicriteria approximation for the weighted coreset 
+
+P = ∪i∈[s]Pi. Therefore, only dsk polylog (log n, k, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) bits are necessary to send the location of the samples to each site. To further eliminate the multiple dependency of d, we notice that only the distance between the data point x ∈ Pi and the center generated by adaptive sampling s ∈ S is necessary to apply adaptive sampling and sensitivity sampling. Hence, we can use the Johnson-Lindenstrauss transformation to map P to π(P ) ⊂ Rd′
+
+, where d′ = O (log( sk )) . As a result of the JL transformation, π(P ) is located in a lower-dimensional space, but the pairwise distance is still preserved by the mapping. Therefore, we can further reduce the communication cost needed to send the location of the samples to each site, which is now sk polylog ( log n, s, k, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) bits. Hence, we can apply adaptive sampling and send the exact location of the sampled point s to the coordinator. The coordinator can then use EfficientCommunication (π(Pi), π (s), ε, δ ) to send the approximate location of π(s) to every site, which is accurate enough for every site to update a constant approximation for the cost of points. Thus, we can repeat adaptive sampling using a low cost of communication and get an 
+
+(O (1) , O (1)) -bicriteria approximation S for the optimal (k, z )-clustering. Since every site has an approximate copy of π(S), they can send a constant approximation of 
+
+|Cj ∩ Pi| and cost (Cj ∩ Pi, S ) to the coordinator. However, the site may assign a point to a center in S that is not nearest to it. This is because the site only has an approximate location of π(S),and therefore can assign x to another center s′ if cost (x, s ′) is very close to cost (x, s ), where s is the center closest to x. Fortunately, the proof of Theorem 2.7 does not require that all points x be assigned to its closet point. Theorem 2.7 is still valid if cost (x, s ′) ≤ O (1) · cost (x, s ). Hence, we can generate a (1 + ε 
+
+> 4
+
+)-coreset for P by sensitivity sampling. After applying sensitivity sampling to sample the points, each site can send the sampled points to the coordinator using EfficientCommunication (S, x, ε ′, δ ). By a similar discussion of efficient encoding in Lemma 2.13, we can prove that the sampled points form a (1 + ε 
+
+> 2
+
+)-coreset A′ for 
+
+P = ∪i∈[s]Pi. Therefore, A′ would be a (1 + ε)-coreset for X = ∪i∈[s]Xi, and the coordinator can solve the (k, z )-clustering based on the coreset A′. Since |Pi| = ˜O  
+
+> (k
+> min( ε4,ε 2+ z)
+> )
+
+, we can run 
+
+EfficientCommunication (Pi, y, ε, δ ) using polylog (log n, k, 1 
+
+> ε
+
+, 1 
+
+> δ
+
+) bits of communication to send each sampled point. We give the algorithm in full in Algorithm 16. We now show that Algorithm 16 will return a (1 + ε)-coreset of X with constant probability and uses low communication cost. We will first show that A′ is a (1 + ε)-coreset of X.
+
+Lemma C.5. Algorithm 16 returns a (1 + ε) coreset of X with probability at least 0.96 in the coordinator model. Proof. Since we use EfficientCommunication (π(Pj ), π (si−1), ε ′, δ ) to send ˜s(j)
+
+> i−1
+
+, by Lemma C.4, 
+
+∥π(si−1) − ˜s(j)
+
+> i−1
+
+∥2 ≤ ε′∥π(x) − π(si−1)∥2 for any x ∈ Pj . Hence ∥π(x) − ˜s(j)
+
+> i−1
+
+∥2 would be a (1 + ε′)-approximation of ∥π(x) − π(si−1)∥2.Since π is a Johnson-Lindenstrauss mapping, by Theorem 2.9, ∥π(x)−π(y)∥2 ∈ [ 12 ∥x−y∥2, 32 ∥x−
+
+y∥2] with probability at least 1 − 1 
+
+> O(sk )
+
+. Therefore, ∥π(x) − π(y)∥2 ∈ [ 12 ∥x − y∥2, 32 ∥x − y∥2] holds for any x, y ∈ P = ∪i∈[s]Pi with probability at least 0.99 . Since ∥π(x) − π(y)∥2 is a constant approximation of any x, y ∈ P , and ∥π(x) − ˜s(j)
+
+> i−1
+
+∥2 is a (1 + ε′)-approximation of ∥π(x) − π(si−1)∥2,thus ∥π(x) − ˜s(j)
+
+> i−1
+
+∥2 would be a 4-approximation of ∥x − si−1∥2.46 Algorithm 16 (1 + ε)-coreset for the coordinator model 
+
+Input: The dataset Xi every site i owns, i ∈ [s]
+
+Output: A (1 + ε)-coreset A′ sent to the coordinator  
+
+> 1:
+
+Every site i generates a (1 + ε 
+
+> 2
+
+)-coreset Pi of Xi 
+
+> 2:
+
+The coordinator send random seed to every site that generate Johnson-Lindenstrauss π, such that ∥π(x) − π(y)∥2 ∈ [ 12 ∥x − y∥2, 32 ∥x − y∥2] for any x, y ∈ P = ∪i∈[s]Pi and π(x) ∈ Rd′
+
+where 
+
+d′ = O (log( sk ))  
+
+> 3:
+
+S ← { s0}, where s0 is a point sampled by the coordinator  
+
+> 4:
+
+Sj ← ∅ for j ∈ [s] 
+
+> 5:
+
+N ← O (k) , ε ′ ← O (εz ) , m ← ˜O
+
+( k 
+
+> min( ε4,ε 2+ z)
+
+)
+
+, δ ← O 
+
+( 1
+
+> sk +m
+
+) 
+
+> 6:
+
+for i ← 1 to N do  
+
+> 7:
+
+Use EfficientCommunication (π(Pj ), π (si−1), ε ′, δ ) to send ˜s(j)
+
+> i−1
+
+, an approximation of 
+
+π(si−1) to every site j. Sj ← Sj ∪ { ˜s(j)
+
+> i−1
+
+} 
+
+> 8:
+
+Every site updates the cost cost (π(Pj ), S j ) and sends ˜Dj , a constant approximation of cost (π(Pj ), S j ) to the coordinator  
+
+> 9:
+
+si ← LazySampling ({cost( π(x), S j )}, { ˜Dj }) 
+
+> 10:
+
+end for  
+
+> 11:
+
+Every site j computes |C(j) 
+
+> l
+
+| and cost (π(C(j) 
+
+> l
+
+), S j ) for l ≤ | S|, where C(j) 
+
+> l
+
+= {x ∈ Pj :
+
+dist (π(x), ˜s(j) 
+
+> l
+
+) ≤ dist (π(x), ˜s(j) 
+
+> p
+
+), ∀p ≤ | S|}  
+
+> 12:
+
+Every site j sends a constant approximation of |C(j) 
+
+> l
+
+| and cost 
+
+(
+
+π
+
+(
+
+C(j)
+
+> l
+
+)
+
+, S j
+
+)
+
+to the coordinator  
+
+> 13:
+
+The coordinator computes ∑ 
+
+> l≤| S|
+
+|C(j) 
+
+> l
+
+| and ∑ 
+
+> l≤| S|
+
+cost 
+
+(
+
+π
+
+(
+
+C(j)
+
+> l
+
+)
+
+, S j
+
+)
+
+, and sends constant approximation of them to every site  
+
+> 14:
+
+Every site computes ˜μ(x) as an O (1) -approximation of μ(x) locally for all x ∈ Pj , and send ̂
+
+μ(Pi), a constant approximation of ˜μ(Pi) = ∑ 
+
+> x∈Pi
+
+˜μ(x) to the coordinator  
+
+> 15:
+
+The coordinator samples site j with probability ̂ μ(P j )∑si=1 ̂μ(P i) independently for m times. Let mj
+
+be the time site j are sampled. Sends mj to site j 
+
+> 16:
+
+for i ← 1 to s do  
+
+> 17:
+
+Ai ← ∅ , A ′ 
+
+> i
+
+← ∅  
+
+> 18:
+
+for j ∈ [mi] do  
+
+> 19:
+
+Sample x with probability px = ˜μ(x)
+
+˜μ(Pi) 
+
+> 20:
+
+if x is sampled then  
+
+> 21:
+
+Ai ← Ai ∪ { x, 1
+
+> m
+
+˜μ(x) }, ˜x ← EfficientCommunication (S, x, ε ′, δ ), A ′ 
+
+> i
+
+← A′ 
+
+> i
+
+∪ { ˜x, 1
+
+> m
+
+̂μ(x) },where ̂ μ(x) is a (1 + ε 
+
+> 2
+
+)-approximation of ˜μ(x) 
+
+> 22:
+
+end if  
+
+> 23:
+
+end for  
+
+> 24:
+
+end for  
+
+> 25:
+
+A′ ← ∪ si=1 A′ 
+
+> i
+> 26:
+
+return A′
+
+By sending ˜Dj , an O (1) -approximation of cost (π(Pj ), S j ), the coordinator owns a O (1) -approximation of cost (Pj , S ). Thus, we can apply adaptive sampling, and by Theorem 2.10, 47 S would be an (O (1) , O (1) )-bicriteria approximation of the optimal solution for (k, z )-clustering of 
+
+P = ∪sj=1 Pj with probability at least 0.99 .Since C(j) 
+
+> l
+
+= {x ∈ Pj : dist (π(x), ˜s(j) 
+
+> l
+
+) ≤ dist (π(x), ˜s(j) 
+
+> p
+
+), ∀p ≤ | S|} and 14 · dist (x, s p) ≤
+
+dist (π(x), ˜s(j) 
+
+> p
+
+) ≤ 4 · dist (x, s p), therefore, 116 · dist (x, S ) ≤ dist (π(x), ˜s(j) 
+
+> l
+
+) ≤ 16 · dist (x, S ) if x ∈ C(j) 
+
+> l
+
+.Hence, if we apply sensitivity sampling with 
+
+μ(x) = 14 ·
+
+ 1
+
+k
+
+∣∣∣⋃sj=1 C(j)
+
+> l
+
+∣∣∣
+
++ cost( π(x), S j )
+
+k ∑ 
+
+> l≤| S|
+
+D(j)
+
+> l
+
++ cost( π(x), S j )
+
+∑ 
+
+> l≤| S|,j ∈[s]
+
+D(j)
+
+> l
+
++ ∆x
+
+∑ 
+
+> l≤| S|,j ∈[s]
+
+D(j)
+
+> l
+
+ ,
+
+where D(j) 
+
+> l
+
+= cost 
+
+(
+
+π
+
+(
+
+C(j)
+
+> l
+
+)
+
+, S j
+
+)
+
+and ∆p =
+
+∑ 
+
+> l≤| S|D(j)
+> l
+
+∣∣∣⋃sj=1 C(j)
+
+> l
+
+∣∣∣ , it would return a (1 + ε 
+
+> 4
+
+)-coreset for 
+
+P = ∪sj=1 Pj with probability at least 0.99 .Since we send ˜x to the coordinator by EfficientCommunication (S, x, ε ′, δ ), thus ∥˜x − x∥2 ≤
+
+ε′∥s − x∥2, where s is the point in S closest to x. Since ∥˜x − x∥2 ≤ ε′∥s − x∥2, by the proof of Lemma 2.13, (1 − ε 
+
+> 4
+
+) · cost( C, A ) ≤ cost( C, A ′) ≤ (1 + ε 
+
+> 4
+
+) · cost( C, A ) for any solution |C| = k.Since P is a (1 + ε 
+
+> 2
+
+)-coreset of X, A is a (1 + ε 
+
+> 4
+
+)-coreset of P , and A′ is a (1 + ε 
+
+> 4
+
+)-coreset of A,therefore, A′ is a (1 + ε)-coreset for X.
+
+Evaluation of the success probability. To apply adaptive sampling, we need to apply 
+
+EfficientCommunication (π(Pj ), π (si−1), ε ′, δ ) for every Pj and si−1, which would be O (sk )
+
+times of running in total. Since we need to apply EfficientCommunication (S, x, ε ′, δ ) for every point sampled by sensitivity sampling, it would be m times of running in total. Since δ ← O 
+
+( 1
+
+> sk +m
+
+)
+
+,the probability that all instances of EfficientCommunication returns an approximate location accurate enough is at least 0.99 .Since the Johnson-Lindenstrauss would preserve the pairwise distance up to a multiple constant factor with probability at least 0.99 , the probability that adaptive sampling returns an (O (1) , O (1) )-bicriteria approximation is at least 0.99 , and sensitivity sampling returns a coreset with probability at least 0.99 , therefore, the total probability that Algorithm 16 returns a coreset for X is at least 
+
+0.96 .
+
+Lemma C.6. Algorithm 16 uses ˜O
+
+(
+
+sk + dk   
+
+> min( ε4,ε 2+ z)
+
++ dk log n
+
+)
+
+bits of communication. Proof. Since we apply Johnson-Lindenstrauss to map P to Rd′
+
+where d′ = O (log |P |) = O (log( sk )) ,by Theorem 2.9, the coordinator needs to send an O (log ( sk log( sk )) · log d) bits random seed to each site so that every site can generate the map π. It uses s polylog( s, k, d ) bits. By Lemma C.4, since |Pj | = O (k) and d′ = O (log( sk )) , we need to use polylog ( log n, s, k, 1 
+
+> ε′
+
+, 1 
+
+> δ
+
+)
+
+bits to apply EfficientCommunication (π(Pj ), π (si−1), ε ′, δ ). Since |S| = O (k), we need to use 
+
+d polylog (log n, s, k, 1 
+
+> ε′
+
+, 1 
+
+> δ
+
+) bits to apply EfficientCommunication (S, x, ε ′, δ ). Since we need to apply EfficientCommunication (π(Pj ), π (si−1), ε ′, δ ) for O (sk ) times to send location of π(si−1)
+
+to each site, and apply EfficientCommunication (S, x, ε ′, δ ) for O
+
+( k 
+
+> min( ε4,ε 2+ z)
+
+)
+
+times to send location of points sampled by sensitivity sampling to the coordinator, then the total cost to apply 
+
+EfficientCommunication , in bits, is 
+
+sk polylog 
+
+(
+
+log n, s, k, 1
+
+ε
+
+)
+
++ dk 
+
+min( ε4, ε 2+ z ) polylog 
+
+(
+
+log n, s, k, 1
+
+ε
+
+)
+
+.
+
+48 We need to send the exact location of si−1 to the coordinator, which takes O (dk log n) bits. Every site j sends a constant approximation of |C(j) 
+
+> l
+
+| and cost 
+
+> (
+
+π
+
+> (
+
+C(j)
+
+> l
+> )
+
+, S j
+
+> )
+
+to the coordinator, and the coordinator needs to send constant approximation of ∑ 
+
+> l≤| S|
+
+|C(j) 
+
+> l
+
+| and ∑ 
+
+> l≤| S|
+
+cost 
+
+> (
+
+π
+
+> (
+
+C(j)
+
+> l
+> )
+
+, S j
+
+> )
+
+to every site, which costs O (sk log log n) bits for total. Every site needs to send ̂ μ(Pi) to the coordinator, which costs O (s log log n) bits. The coordinator needs to send mi, the number of points to be sampled to every site, which costs O (s log k) bits. We need O  
+
+> (1
+> ε
+
+log log n
+
+> )
+
+bits to send the weight ̂ μ(x) to the coordinator. Therefore, the total communication cost for Algorithm 16 is 
+
+˜O
+
+> (
+
+sk + dk 
+
+min( ε4, ε 2+ z ) + dk log n
+
+> )
+
+bits. We now give our full guarantees of our algorithm for the coordinator model. 
+
+Theorem C.7. There exists an algorithm that returns a (1 + ε) coreset of X with probability at least 0.96 in the coordinator model and uses ˜O
+
+> (
+
+sk + dk   
+
+> min( ε4,ε 2+ z)
+
++ dk log n
+
+> )
+
+bits of communication. Proof. The proof follows immediately from Lemma C.5 and Lemma C.6. 
+
+C.3 Clustering on General Topologies 
+
+We provide a formal definition of distributed clustering under general topologies. Let V =
+
+{v1, . . . , v n} be a set of n nodes connected via an undirected graph G = ( V, E ), where each edge (vi, v j ) ∈ E represents a direct communication link between sites vi and vj . Each node vi holds a local dataset Xi, and the global dataset is X = ⋃ni=1 Xi. Communication is allowed only along the edges of G.The objective is to compute a set of k centers C = {c1, . . . , c k} that minimizes the global clustering cost for a given norm parameter z ≥ 1:
+
+cost( X, C) = ∑
+
+> x∈X
+
+d(x, C)z ,
+
+where d(x, C) = min cj ∈C d(x, c j ) is the distance from point x to its closest center in C. The goal is to compute an approximate set of centers ˆC while minimizing communication over the edges of G.In [ BEL13 ], the clustering problem is studied under this general-topology setting. They assume 
+
+s sites are connected by an undirected graph G = ( V, E ) with m = |E| edges. Their algorithm constructs a (1 + ε)-coreset, with communication O
+
+> (
+
+m  
+
+> (dk ε4
+
++ sk log sk 
+
+> ))
+
+words for k-means and 
+
+O
+
+> (
+
+m  
+
+> (dk ε2
+
++ sk 
+
+> ))
+
+words for k-median. Since a word requires O (d log n) bits in their model, the corresponding costs are O
+
+> (
+
+mdk log n  
+
+> (dε4
+
++ s log sk 
+
+> ))
+
+bits for k-means and O
+
+> (
+
+mdk log n  
+
+> (dε2
+
++ s
+
+> ))
+
+bits for k-median. Our coordinator-model algorithm can be naturally extended to general topologies: each message to the coordinator traverses at most m edges, multiplying total communication by m. The resulting communication cost, in bits, becomes 
+
+˜O
+
+> (
+
+m
+
+> (
+
+sk + dk 
+
+min( ε4, ε 2+ z ) + dk log n
+
+> ))
+
+.
+
+49 Compared to [ BEL13 ], our approach improves the dependency on n by replacing a multiplicative 
+
+log n factor with an additive term, while preserving the same approximation guarantees for general 
+
+(k, z )-clustering. 
+
+# D Additional Empirical Evaluations 
+
+In this section, we perform additional empirical evaluations on both synthetic and real-world datasets to further support our theoretical guarantees. Unlike the experiments in the blackboard model presented in Section 6, we now focus on assessing our algorithms in the coordinator model . As a baseline, we use the constant-factor approximation algorithm based on adaptive sampling, denoted 
+
+AS . The second applies a standard dimensionality reduction approach to each of the points, using shared randomness, which can be acquired from public randomness, corresponding with the more communication-efficient variant AS-JL . In particular, for a dataset with d features, we generate a random matrix of size d′ × d, where each entry is drawn from the scaled normal distribution  
+
+> 1√d′
+
+· N (0 , 1) and d′ is set to be a constant factor smaller than d, i.e., d′ = d 
+
+> 2
+
+or d′ = d 
+
+> 4
+
+. Finally, we apply our compact encoding scheme to the sampled points, centers produced by adaptive sampling, representing our coordinator model algorithm, denoted by EAS-JL . 
+
+> (a) Clustering costs (b) Communication Costs
+
+Fig. 7: Experiments for clustering costs and communication costs on DIGITS dataset 
+
+D.1 Real-World Dataset 
+
+We first evaluated our algorithms on the DIGITS dataset [ AK98 ], as previously described in Section 6. As before, we use the parameters n = 1797 , d = 64 , and k = 10 . We set d′ = d 
+
+> 4
+
+= 16 for AS-JL 
+
+and EAS-JL . We compare the clustering costs in Figure 5a and communication costs in Figure 5b for c ∈ { 11 , 12 , . . . , 20 }. Our results show that the clustering costs of the centers returned by our algorithm EAS-JL is consistently competitive with the centers returned by the other algorithms AS 
+
+and AS-JL , while using significantly less communication across all settings of c ∈ { 11 , 12 , . . . , 20 }.For example Figure 7 shows that at c = 11 , the clustering cost of EAS-JL is roughly 1.07 times the clustering cost of AS while using 9× less communication. This trend seems to continue throughout the range of the sampling coefficient c, e.g., at c = 20 , the clustering cost of EAS-JL remains roughly 
+
+1.07 times the clustering cost of AS while still using roughly 9× less communication. 50 D.2 Synthetic Dataset 
+
+We next evaluated our algorithms on synthetic datasets consisting of Gaussian mixtures, as in Section 6. Specifically, we generated k = 3 clusters, each containing 640 points for a total of 1920 
+
+points, each with 8 features, for a total dataset size of 15360 . Each cluster was drawn from a distinct Gaussian distribution whose mean was selected uniformly at random from the range [−10 , 10] 8, and whose covariance matrix was generated as a random positive-definite matrix, producing clusters of varying orientations and shapes. We compare clustering costs and communication costs across a sampling coefficient of c ∈{1, 2, . . . , 10 }, and find that EAS-JL consistently achieves clustering performance competitive with both AS and AS-JL while using substantially less communication. For instance, at c = 5 , the clustering costs of EAS-JL and AS are almost equal, while the communication cost of EAS-JL is more than a factor of 4× better. Similarly, at c = 10 , the clustering costs of EAS-JL and AS are almost equal, while the communication cost of EAS-JL is a factor of almost 8× better. These results parallel our findings on real-world data, demonstrating that our algorithm effectively preserves the clustering quality while significantly reducing communication in the coordinator model.  
+
+> (a) (b)
+
+Fig. 8: Experiments for clustering costs and communication costs on synthetic dataset 51

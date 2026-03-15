@@ -1,0 +1,206 @@
+Title: Targeted Speaker Poisoning Framework in Zero-Shot Text-to-Speech
+
+URL Source: https://arxiv.org/pdf/2603.07551v1
+
+Published Time: Tue, 10 Mar 2026 01:11:58 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+# Targeted Speaker Poisoning Framework in Zero-Shot Text-to-Speech 
+
+# Thanapat Trachu ID 1,∗, Thanathai Lertpetchpun ID 2,∗, Sai Praneeth Karimireddy 1,Shrikanth Narayanan ID 21Thomas Lord Department of Computer Science, University of Southern California, USA 
+
+> 2
+
+# Signal Analysis and Interpretation Lab, University of Southern California, USA 
+
+trachu@usc.edu 
+
+# Abstract 
+
+Zero-shot Text-to-Speech (TTS) voice cloning poses severe pri-vacy risks, demanding the removal of specific speaker identi-ties from trained TTS models. Conventional machine unlearn-ing is insufficient in this context, as zero-shot TTS can dy-namically reconstruct voices from just reference prompts. We formalize this task as Speech Generation Speaker Poisoning (SGSP), in which we modify trained models to prevent the gen-eration of specific identities while preserving utility for other speakers. We evaluate inference-time filtering and parameter-modification baselines across 1, 15, and 100 forgotten speak-ers. Performance is assessed through the trade-off between utility (WER) and privacy, quantified using AUC and Forget Speaker Similarity (FSSIM). We achieve strong privacy for up to 15 speakers but reveal scalability limits at 100 speakers due to increased identity overlap. Our study thus introduces a novel problem and evaluation framework toward further advances in generative voice privacy. 
+
+Index Terms : Text-To-Speech Model, Poisoning Generation Model, Speech Privacy, Speech Generation 
+
+# 1. Introduction 
+
+The rapid evolution of generative AI has advanced Text-to-Speech (TTS) systems far beyond conventional speech synthe-sis, enabling high-fidelity voice cloning from prompts as short as three seconds. Recent models [1, 2, 3] demonstrate remark-able expressiveness and speaker similarity. However, this capa-bility also introduces serious real-world risks. Studies show [4] that human listeners struggle to distinguish AI-generated speech from genuine recordings, making these systems highly suscep-tible to misuse. Malicious actors can exploit voice cloning to impersonate individuals such as political leaders [5] and dis-seminate convincing misinformation [6]. These risks highlight the unmet need for mechanisms that could prevent TTS models from replicating specific speaker identities. A closely related research thread is machine unlearning, which aims to selectively remove particular knowledge from a trained model [7, 8]. Unlearning typically seeks to adjust model parameters so that the updated model behaves similarly to one trained without the targeted data. However, this paradigm is not directly applicable to speech generation models. Modern TTS systems exhibit strong zero-shot generalization capabili-ties, enabling them to clone previously unseen speakers from short prompts. As a result, merely approximating the parame-ters of a model trained without certain speakers does not guar-antee the removal of their identities. Addressing this challenge therefore requires a new problem formulation, along with rel-
+
+> *These authors contributed equally.
+
+evant baselines and an evaluation framework to explicitly ac-count for the zero-shot generalization of modern TTS systems. This problem is conceptually related to model poison-ing [9], where the objective is to condition a model against performing certain behaviors. We formalize this goal in our context as Speech Generation Speaker Poisoning (SGSP). Fol-lowing the terminology of machine unlearning, we define a for-get set consisting of speaker identities that the model should not synthesize, and a retain set containing speakers whose syn-thesis capability must be preserved. Our goal is to modify the model such that, when prompted with samples from the for-get set, it fails to reproduce the corresponding speaker identity while maintaining performance on the retain set. A straightforward approach to this problem is to apply pre-processing strategies that replace prompts from the forget set with speakers from the retain set. However, such external filter-ing approaches are inherently vulnerable when model weights are public, i.e., an adversary could bypass the filtering pipeline and directly access the unmodified TTS model [10, 11]. There-fore, we restrict our focus to methods that directly modify the internal model parameters to achieve robust speaker erasure. To this end, we build upon the Teacher-Guided Poisoning (TGP) framework [12], originally proposed for VoiceBox [3], and adapt it to StyleTTS2 [1]. TGP follows a knowledge dis-tillation paradigm [13], where targets from a teacher model guide the speaker poisoning process. We additionally pro-pose Encoder-Guided Poisoning (EGP), which directly learns speaker representations from ground-truth data. We further in-corporate a contrastive objective to explicitly suppress forgotten identities. Together, these components form an efficient frame-work for targeted speaker suppression in zero-shot TTS. Systematic evaluation protocols remain underdeveloped in SGSP. Prior work [12] relies primarily on raw speaker similar-ity to assess the dissimilarity between the synthesized speech and the targeted forget speakers. However, this approach is dif-ficult to interpret, as the effective range depends heavily on the employed speaker verification model [14]. Moreover, average similarity alone does not reflect whether the similarity distribu-tions of the retain and forget sets are well separated. To address these limitations, we introduce a distribution-aware evaluation framework based on Area Under the Curve (AUC) analysis, to-gether with a new, stronger privacy metric, Forget Set Simi-larity (FSSIM), which measures similarity between generated samples and all speakers in the forget set. The main contributions of this work are as follows: 1) We formulate the problem of targeted speaker erasure for zero-shot TTS, clearly defining the forget and retain sets. 2) We establish a naive pre-processing baseline to highlight the lim-itations of external filtering approaches. 3) Building upon this foundation, we adapt Teacher-Guided Poisoning (TGP)    
+
+> arXiv:2603.07551v1 [cs.SD] 8 Mar 2026 Teacher
+> Model
+> Student
+> Model
+> y_retain pred_y
+> Text
+> (a) TGU
+> Retain Set
+> Forget Set
+> sample
+> sample
+> Encoder
+> Model
+> Student
+> Model
+> y_retain pred_y
+> Text
+> (b) EGU
+> Retain Set
+> Forget Set
+> sample
+> sample
+> L2 Loss L2 Loss
+
+Figure 1: Schematic overview of TGP and EGP. (a) TGP: The model generates utterances by sampling retain speakers, and these generated utterances serve as the targets for training the student model. During training, the reference speaker is randomly replaced with a sample from F with a probability of pforget , encouraging the model to produce a random speaker from R when conditioned on a speaker from F. (b) EGP: The training process is identical to TGP, except that the ground truth is taken from the encoder output rather than from the teacher-generated utterance. 
+
+to StyleTTS2 and further propose Encoder-Guided Poisoning (EGP) with a triplet-loss objective for explicit identity suppres-sion. 4) We develop a comprehensive evaluation framework, in-cluding distribution-level AUC analysis and a new privacy met-ric, FSSIM, to systematically assess the effectiveness of speaker erasure. Training code, baselines, model weights, and the eval-uation framework will be released upon acceptance. 
+
+# 2. Problem formulation 
+
+Let S denote the set of speakers that the TTS model is orig-inally trained to generate. Our objective is to manipulate the model such that it cannot generate speech corresponding to any speakers in a forget set F ⊆ S , while preserving the ability to correctly synthesize speech for all other speakers in the retain set R = S \ F . We deliberately sample F from the training set rather than an unseen test set. Recent work [2, 15] demonstrates that models achieve higher fidelity on in-domain speakers com-pared to out-of-domain speakers. Consequently, removing an identity from the training set should be more difficult than re-moving an unseen test speaker. Following this formulation, we evaluate our models across three distinct settings: 1, 15, and 100 speakers in the forget set F.
+
+# 3. SGSP Baselines 
+
+3.1. StyleTTS2 
+
+StyleTTS2 [1] is a state-of-the-art TTS model composed of six modules, which can be grouped into three compo-nents: a speech generation system (text encoder, style encoder, and speech decoder), a TTS prediction system (duration and prosody predictors), and a diffusion sampler (diffusion model). The training process involves several loss functions. The main losses include the mel-spectrogram reconstruction loss (L2), an adversarial loss similar to GAN training, and the diffusion loss, which is an L2 loss between the style-encoder output from the first stage and the output of the diffusion model. As our study focuses on manipulating speaker identity, we fine-tune only the diffusion module using the diffusion loss. This ensures that the speaker poisoning process specifically targets the speaker iden-tity representation, preventing degradation of the other abilities. 
+
+3.2. Na¨ ıve Baselines Pretrained + Speaker Filtering: We utilize WavLM [16] to extract speaker embeddings and compute the cosine similarity between the given reference and the utterances in the forget set 
+
+F. If the similarity exceeds a threshold of 0.86 following the optimal threshold on huggingface 1, the reference is classified as a forget speaker. It is then dynamically replaced by iteratively sampling from the retain set R until a new retain reference with a similarity strictly below 0.86 is found. 
+
+Pretrained + Ground Truth Filtering: This baseline follows the exact same replacement procedure but assumes perfect, ground-truth knowledge of whether the initial reference belongs to F or R, thereby bypassing the initial speaker filtering step. 
+
+3.3. Parameter-Modifying Baselines Teacher-Guided Poisoning (TGP) We propose the Teacher-Guided Poisoning (TGP) framework for the StyleTTS2 archi-tecture [1]. We adapt it to StyleTTS2 using publicly available weights to ensure full reproducibility. Our goal is to train a stu-dent model, initialized from a pretrained StyleTTS2, to generate a random speaker identity in the retain set ( R) given a refer-ence speaker in the forget set ( F). We construct ground truths by conditioning a teacher model on transcripts paired with a randomly sampled speaker in the retain set ( R), forming fine-tuning data for the student model. During fine-tuning, a retain reference provided to the student model is replaced with a for-get reference at a predefined forget ratio pforget , while the refer-ence to the teacher model remains the same. The student model is then optimized using an L2 loss between its output and the teacher’s output. This encourages the student to map speaker identities in F to a random speaker in R, implicitly ignoring speaker identities in F when used as a reference. An overview of the proposed method is shown in Figure 1. 
+
+Encoder-Guided Poisoning (EGP) Encoder-Guided Poison-ing (EGP) shares the exact training objective and training proce-dure with TGP, differing only in the choice of teacher-generated target. As demonstrated by Stanton et al. [17], knowledge dis-tillation struggles to yield performance gains when the student and teacher models share identical capacities. Motivated by this observation, EGP bypasses teacher-generated outputs and in-stead directly uses the output of the style encoder as the fine-tuning target. Consequently, this approach should provide a cleaner optimization signal to the student model. 
+
+Contrastive Learning We employ contrastive learning to ex-plicitly penalize embeddings that remain similar to the forget set ( F). For simplicity, we use the triplet loss [18] as a con-trastive learning objective. This loss pushes the diffusion output (x) away from a negative reference ( n) sampled from F while 
+
+> 1https://huggingface.co/microsoft/ wavlm-base-plus-sv
+
+keeping it anchored to the original ground-truth ( a), of which the identity is in R. To preserve standard utility, this penalty is applied exclusively during F-conditioned generation: 
+
+Ltriplet = max( || x − a|| 22 − || x − n|| 22 + β, 0) , (1) where the margin β ensures the output distance to the negative sample exceeds its distance to the anchor by at least β.
+
+# 4. Evaluation Metrics 
+
+We evaluate the models across two dimensions: utility (preserv-ing intelligibility and retain-speaker similarity) and privacy (en-suring robust, distribution-level erasure of forget-set speakers). 
+
+4.1. Utility Metrics 
+
+To ensure the model maintains high-quality synthesis, we evaluate speech intelligibility, naturalness, and speaker con-sistency. Word Error Rate (WER) is computed using the Whisper-medium ASR model [19] on utterances shorter than 30 seconds. Text is normalized using Whisper’s 
+
+EnglishTextNormalizer 2 prior to evaluation to ensure transcript consistency. We utilize UTMOS [20] as an automated Mean Opinion Score (MOS) proxy. This metric evaluates the perceived naturalness of synthesized speech on a scale from 1 (worst quality) to 5 (best quality). To measure identity preser-vation, we compute the cosine similarity between embeddings of reference and synthesized speech. Embeddings are extracted using the wavlm-base-plus-sv model 3[16], where values closer to 1 signify higher speaker consistency. 
+
+4.2. Privacy Metrics 
+
+We evaluate privacy preservation under two progressively stricter dissimilarity conditions: 
+
+Easy Condition: Prompt–Output Dissimilarity. Under this condition, we measure the cosine similarity between synthe-sized speech and its reference prompt. To provide a distribution-level assessment, we compute the Area Under the Curve (AUC) to quantify the separability between the similarity dis-tributions of the retain and forget sets. An AUC of 0.5 indi-cates complete overlap, whereas 1.0 indicates perfect separa-tion. This condition evaluates whether the model avoids repro-ducing the prompted forgotten identity. 
+
+Strong Condition: Dissimilarity to All Forgotten Speakers. 
+
+To enforce stricter identity suppression, we introduce Forget Set Similarity (FSSIM) , which measures similarity between each generated sample and every speaker in the forget set. We aggregate these similarities using (1) the average similarity (Avg-FSSIM) and (2) the maximum similarity (Max-FSSIM). The worst-case metric (Max-FSSIM) ensures that the generated speech does not resemble any speaker in the forget set. 
+
+# 5. Experimental Setup 
+
+5.1. Dataset 
+
+We evaluate our methods using the LibriTTS [21] dataset. The data construction follows two steps: 
+
+> 2https://github.com/openai/whisper/blob/main/ whisper/normalizers/english.py
+> 3https://huggingface.co/microsoft/ wavlm-base-plus-sv
+
+Table 1: Model performance evaluations for the 1 speaker set-ting. R and F represent the retain and forget sets, respectively. PT stands for Pretrained, SF and GTF denotes speaker filtering and ground truth filtering, respectively. Trip. is Triplet loss.                                                            
+
+> Method WER MOS SSIM AUC ↑R ↓ F ↓ R ↑ F ↑ R ↑ F ↓
+> PT 2.75 2.72 4.29 4.27 0.87 0.88 0.47 PT + SF 2.47 2.57 4.29 4.29 0.63 0.63 0.50 PT + GTF 2.75 2.57 4.29 4.29 0.87 0.63 0.90 TGP 2.74 2.62 4.34 4.34 0.85 0.77 0.71 TGP+Trip. 2.69 2.85 4.36 4.36 0.85 0.74 0.74 EGP 2.90 3.00 4.28 4.29 0.88 0.77 0.79 EGP+Trip. 2.89 7.86 4.27 3.38 0.87 0.48 0.95
+
+Table 2: Model performance evaluations for the 15 and 100 
+
+speaker settings. R and F represent the retain and forget sets, respectively. Additionally, PT stands for Pretrained, GTF de-notes ground truth filtering. Trip. refers to the Triplet loss.                                                           
+
+> Method SSIM AUC ↑FSSIM
+> R ↑ F ↓ Avg ↓Max ↓
+> 15 Speakers Setting
+> PT + GTF 0.87 0.63 0.91 0.70 0.91 TGP 0.81 0.72 0.66 0.71 0.91
+> TGP+Trip. 0.81 0.74 0.64 0.72 0.91
+> EGP 0.87 0.74 0.77 0.70 0.91
+> EGP+Trip. 0.85 0.71 0.76 0.69 0.91 100 Speakers Setting
+> PT + GTF 0.87 0.64 0.91 0.70 0.94 TGP 0.79 0.78 0.53 0.74 0.95 TGP+Trip. 0.78 0.77 0.51 0.74 0.95 EGP 0.83 0.81 0.57 0.72 0.94 EGP+Trip. 0.78 0.72 0.64 0.71 0.91
+
+Speaker and Utterance Partitioning. Combining the 
+
+train-clean-100 and train-clean-360 subsets, we randomly sample n speakers to form the forget set and assign the remainder to the retain set . Each speaker’s utterances are split 90:10 into training and testing sets, yielding four disjoint subsets: forget train , retain train , forget test , and retain test .
+
+Transcript Pairing. For retain train , each utterance is paired with a random transcript from train-clean-100 and 
+
+train-clean-360 . For evaluation, every transcript in the 
+
+test-clean subset is paired with a random utterance from 
+
+retain test (for utility) and forget test (for privacy), ensuring an equal number of inference trials across settings. Finally, for-get train utterances undergo no static pairing; rather, they are dynamically paired with retain transcripts on-the-fly in training. 
+
+5.2. Model 
+
+In this work, we employ StyleTTS2 [1] as a backbone model. We utilize the official pretrained checkpoint trained on the Lib-riTTS corpus 4. Crucially, during the fine-tuning, we freeze all major components (e.g., the text encoder, decoders, and discriminators) and fine-tune only the diffusion module. The model is fine-tuned for 60,000 steps using the AdamW opti-mizer with a learning rate of 1 × 10 −4. For the triplet-loss configuration, we set the loss weight to 1.0 with a margin β of 0.3. The forget ratio α is set to 0.5 across all experiments.                           
+
+> 4https://github.com/yl4579/StyleTTS2 0
+> 5
+> 1 Spk
+> PT PT + SF PT + GTF TGP TGP + Triplet EGP EGP + Triplet
+> 0
+> 5
+> 15 Spks
+> 0.0 0.5 1.0
+> 0
+> 5
+> 100 Spks
+> 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0
+> Cosine Similarity
+> Forget Speakers Retain Speakers
+
+Figure 2: Cosine similarity distributions for the retained speaker set (in orange) and for the forget set (in blue). Rows correspond to different numbers of forgotten speakers (1, 15, or 100), whereas columns correspond to different system configurations. 
+
+# 6. Results and Discussion 
+
+6.1. Single Speaker Setting 
+
+We follow the data creation described in Section 5 and set the number of speakers in the forget set F to 1.
+
+Performance Overview. As shown in Table 1, most baselines maintain high utility (WER and MOS) comparable to the pre-trained model. However, Pretrained + SF fails to preserve pri-vacy, indicating that threshold tuning is necessary even in the single-speaker setting. Pretrained + Oracle shows that strong privacy and high utility can coexist under an ideal filtering step. Among the parameter-modifying approaches, utility remains comparable to the pretrained model, except for EGP+Triplet, which sacrifices slightly on F to achieve superior privacy, yield-ing the highest AUC and lowest speaker similarity in F. Ex-cluding Pretrained + SF, all approaches suppress F similari-ties below this threshold—effectively neutralizing target voice cloning—while maintaining R similarities near or above 0.86. 
+
+Distributional Analysis of AUC. Figure 2 visualizes the co-sine similarity distributions of the retain and forget sets. Aclear relationship emerges between distribution overlap and AUC score. For Pretrained and Pretrained + SF, the two dis-tributions are nearly identical, resulting in AUC values around 0.5. In contrast, Pretrained + GTF and EGP + Triplet exhibit well-separated distributions, corresponding to high AUC scores around ∼0.9. Furthermore, incorporating triplet loss shifts the forget-set distribution toward lower similarity compared to non-triplet variants, increasing the separation between R and F and consequently improving AUC. 
+
+Comparison: EGP vs. TGP. EGP consistently outperforms TGP variants. We believe that this is because the teacher and student share identical model capacities; TGP’s reliance on teacher-generated ground truth introduces unnecessary gener-ative noise. As demonstrated in [17], when the student model’s size matches the teacher model, it struggles to further improve performance through distillation. EGP circumvents this by tar-geting the original style encoder representations, providing a cleaner target and superior performance. 
+
+The Privacy-Utility Trade-off. Triplet loss variants introduce a privacy-utility trade-off. While EGP+Triplet maximizes privacy (lower F similarity, higher AUC), it slightly degrades F utility (WER and MOS) compared to base EGP. We conjecture that the explicit push away from F occasionally forces embeddings into regions associated with lower intelligibility [22]. 
+
+6.2. Multiple Speakers Setting 
+
+Real-world applications often require removing multiple iden-tities simultaneously. We expand the number of speakers in the forget set ( F) to 15 and 100. 
+
+Scalability Challenges in Multi-Speaker SGSU. When scal-ing to multiple forget speakers (Table 2), all methods face in-creased difficulty suppressing target cloning compared to the single-speaker setting. For 15 speakers, parameter-modifying approaches maintain a measurable similarity gap between the retain ( R) and forget ( F) sets. However, in the 100-speaker setting, this distinction largely collapses as shown in Figure 2 
+
+Strong Privacy Condition Under the strong privacy condition, preventing generation of any identity in the forget set, the results reveal a nuanced picture. While the Mean-FSSIM remains be-low the 0.86 verification threshold on average, the Max-FSSIM stays high across both multi-speaker settings, indicating persis-tent worst-case leakage. 
+
+Latent Space Crowding and Triplet Loss. Triplet loss effec-tiveness diminishes significantly, offering only marginal privacy improvements compared to single-speaker setting. As the loss pushes a generated embedding away from one negative sample in F, it inadvertently pushes it toward another negative sample [23]. Higher Max-FSSIM scores in the 100-speaker setting em-pirically highlight this limitation, underscoring that robust and simultaneous SGSU of multiple speaker identities remains an open challenge for future research 
+
+# 7. Conclusion 
+
+In this work, we formalize the targeted speaker poisoning task for zero-shot TTS by introducing parameter-modification base-lines and a comprehensive evaluation framework. While our proposed methods achieve strong trade-offs between privacy and utility for up to 15 targeted speakers, scaling to 100 speak-ers exposes the fundamental limitation of increasing identity overlap between the retain and forget sets, making large-scale SGSU substantially difficult. Rather than posing our analysis as a definitively solved problem, our work establishes a rigorous foundation and an open challenge for the field. By publicly re-leasing our codebase, model weights, and evaluation pipeline, we aim to provide a standardized benchmark to accelerate com-munity efforts in securing generative voice privacy. 8. Generative AI Use Disclosure 
+
+Generative AI tools were used solely to assist with language re-finement, including grammar correction, sentence restructuring, and improvements in clarity and readability. The use of these tools was limited to polishing the presentation of the manuscript and did not contribute to the development of the research it-self. All research concepts, problem formulation, methodolog-ical design, experimental setup, analysis, and conclusions were independently developed by the authors. The authors take full responsibility for the content, accuracy, and scientific integrity of this work. 
+
+# 9. References 
+
+[1] Y. A. Li, C. Han, V. Raghavan, G. Mischler, and N. Mesgarani, “Styletts 2: Towards human-level text-to-speech through style dif-fusion and adversarial training with large speech language mod-els,” Advances in Neural Information Processing Systems , vol. 36, pp. 19 594–19 621, 2023. [2] S. Chen, C. Wang, Y. Wu, Z. Zhang, L. Zhou, S. Liu, Z. Chen, Y. Liu, H. Wang, J. Li, L. He, S. Zhao, and F. Wei, “Neural codec language models are zero-shot text to speech synthesizers,” IEEE Transactions on Audio, Speech and Language Processing , vol. 33, pp. 705–718, 2025. [3] M. Le, A. Vyas, B. Shi, B. Karrer, L. Sari, R. Moritz, M. Williamson, V. Manohar, Y. Adi, J. Mahadeokar et al. ,“Voicebox: Text-guided multilingual universal speech generation at scale,” Advances in Neural Information Processing Systems ,vol. 36, pp. 14 005–14 034, 2023. [4] S. Barrington, E. A. Cooper, and H. Farid, “People are poorly equipped to detect ai-powered voice clones,” Scientific Reports ,vol. 15, no. 1, p. 11004, 2025. [5] J. Rosen, “Fake Biden robocall encourages voters to skip New Hampshire Democratic primary,” https://www.cbsnews.com/ news/fake-biden-robocall-new-hampshire-primary/, 2024, ac-cessed: 2026-03-03. [6] E. Salam, “US mother gets call from ‘kidnapped daughter’ but it’s really an AI scam,” https://www.theguardian.com/us-news/2023/ jun/14/ai-kidnapping-scam-senate-hearing-jennifer-destefano, 2023, accessed: 2026-03-03. [7] T. T. Nguyen, T. T. Huynh, Z. Ren, P. L. Nguyen, A. W.-C. Liew, H. Yin, and Q. V. H. Nguyen, “A survey of machine unlearning,” 
+
+ACM Transactions on Intelligent Systems and Technology , vol. 16, no. 5, pp. 1–46, 2025. [8] L. Bourtoule, V. Chandrasekaran, C. A. Choquette-Choo, H. Jia, A. Travers, B. Zhang, D. Lie, and N. Papernot, “Machine unlearn-ing,” IEEE Symposium on Security and Privacy (SP) , pp. 141– 159, 2021. [9] S. Shan, W. Ding, J. Passananti, S. Wu, H. Zheng, and B. Y. Zhao, “Nightshade: Prompt-specific poisoning attacks on text-to-image generative models,” in 2024 IEEE Symposium on Security and Privacy (SP) , 2024, pp. 807–825. [10] G. Chen, S. Chenb, L. Fan, X. Du, Z. Zhao, F. Song, and Y. Liu, “Who is real bob? adversarial attacks on speaker recognition sys-tems,” IEEE Symposium on Security and Privacy (SP) , pp. 694– 711, 2021. [11] Z. Li, C. Shi, Y. Xie, J. Liu, B. Yuan, and Y. Chen, “Practical adversarial attacks against speaker recognition systems,” in Pro-ceedings of the 21st international workshop on mobile computing systems and applications , 2020, pp. 9–14. [12] T. Kim, J. Kim, D. C. Kim, J. H. Ko, and G.-M. Park, “Do not mimic my voice: Speaker identity unlearning for zero-shot text-to-speech,” in ICML 2025 Workshop on Machine Unlearning for Generative AI , 2025. [13] G. Hinton, O. Vinyals, and J. Dean, “Distilling the knowledge in a neural network,” in NIPS Deep Learning and Representation Learning Workshop , 2015. [14] L. Ferrer, M. McLaren, and N. Br¨ ummer, “A speaker verification backend with robust performance across conditions,” Computer Speech & Language , vol. 71, p. 101258, 2022. [15] Y. Jeon, Y. Kim, and G. G. Lee, “Enhancing zero-shot multi-speaker TTS with negated speaker representations,” in Proceed-ings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 16, 2024, pp. 18 336–18 344. [16] S. Chen, C. Wang, Z. Chen, Y. Wu, S. Liu, Z. Chen, J. Li, N. Kanda, T. Yoshioka, X. Xiao, J. Wu, L. Zhou, S. Ren, Y. Qian, Y. Qian, J. Wu, M. Zeng, X. Yu, and F. Wei, “Wavlm: Large-scale self-supervised pre-training for full stack speech processing,” 
+
+IEEE Journal of Selected Topics in Signal Processing , vol. 16, no. 6, p. 1505–1518, 2022. [17] S. D. Stanton, P. Izmailov, P. Kirichenko, A. A. Alemi, and A. G. Wilson, “Does knowledge distillation really work?” in Advances in Neural Information Processing Systems , 2021. [18] F. Schroff, D. Kalenichenko, and J. Philbin, “Facenet: A unified embedding for face recognition and clustering,” in IEEE Con-ference on Computer Vision and Pattern Recognition (CVPR) .IEEE, 2015, p. 815–823. [19] A. Radford, J. W. Kim, T. Xu, G. Brockman, C. McLeavey, and I. Sutskever, “Robust speech recognition via large-scale weak supervision,” in International conference on machine learning .PMLR, 2023, pp. 28 492–28 518. [20] T. Saeki, D. Xin, W. Nakata, T. Koriyama, S. Takamichi, and H. Saruwatari, “UTMOS: UTokyo-SaruLab System for Voice-MOS Challenge 2022,” in Interspeech , 2022, pp. 4521–4525. [21] Y. Koizumi, H. Zen, S. Karita, Y. Ding, K. Yatabe, N. Morioka, M. Bacchiani, Y. Zhang, W. Han, and A. Bapna, “LibriTTS-R: A Restored Multi-Speaker Text-to-Speech Corpus,” in Interspeech ,2023, pp. 5496–5500. [22] G. Arvanitidis, L. K. Hansen, and S. Hauberg, “Latent space odd-ity: on the curvature of deep generative models,” in International Conference on Learning Representations , 2018. [23] K. Sohn, “Improved deep metric learning with multi-class n-pair loss objective,” Advances in neural information processing sys-tems , vol. 29, 2016.

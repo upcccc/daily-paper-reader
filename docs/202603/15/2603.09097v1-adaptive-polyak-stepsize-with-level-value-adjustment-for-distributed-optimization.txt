@@ -1,0 +1,2567 @@
+Title: Adaptive Polyak Stepsize with Level-value Adjustment for Distributed Optimization
+
+URL Source: https://arxiv.org/pdf/2603.09097v1
+
+Published Time: Wed, 11 Mar 2026 00:26:02 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+> 1
+
+# Adaptive Polyak Stepsize with Level-value Adjustment for Distributed Optimization 
+
+Chen Ouyang, Yongyang Xiong, Jinming Xu, Keyou You, and Yang Shi, Fellow, IEEE 
+
+Abstract —Stepsize selection remains a critical challenge in the practical implementation of distributed optimization. Existing distributed algorithms often rely on restrictive prior knowledge of global objective functions, such as Lipschitz constants. While centralized Polyak stepsizes have recently gained attention for their parameter-free adaptability and fast convergence. However, their extension to distributed settings is hindered by the require-ment for local function values at the global optimum, which are typically unavailable to individual agents. To bridge this gap, we design a novel distributed adaptive Polyak stepsize algorithm with level-value adjustment (DPS-LA), where each agent only needs to solve a computationally efficient linear feasibility problem, thereby eliminating the dependency on global optimal values. Theoretical analysis proves that DPS-LA guarantees network consensus and achieves a linear speedup convergence rate of 
+
+O(1 /√nT ). Numerical results confirm the efficiency of the proposed algorithm. 
+
+Index Terms —distributed optimization, Polyak stepsize, level-value adjustment, linear speedup. 
+
+I. I NTRODUCTION 
+
+Distributed optimization has gained significant attention as a core computational framework for multi-agent systems, fueled by its extensive use in areas such as smart grids [1]–[3], multi-robot networks [4], [5], and federated learning [7], [8]. To improve scalability and communication efficiency, a variety of algorithms have been proposed, ranging from distributed gradient algorithms [9], [10] and mirror descent algorithm [11], [12] to primal-dual algorithms [13], [14]. While these algorithms differ in their design and communication schemes, their practical success remains deeply dependent on a single key element: the selection of an appropriate stepsize policy. The selection of a suitable stepsize is a core element of optimization algorithms. An excessively large stepsize induces oscillation or even divergence, whereas an overly small one leads to prohibitively slow convergence and poor computational efficiency. Therefore, it is essential to choose a stepsize that allows the algorithm to not only converge but also reach the optimal solution, rather than merely settling 
+
+This work was supported in part by the National Natural Science Foundation of China (62203254). ( Corresponding author: Yongyang Xiong )C. Ouyang and Y. Xiong are with the School of Intelligent Systems Engineering, Sun Yat-Sen University, Shenzhen 518107, P.R China. E-mail: 
+
+xiongyy25@mail.sysu.edu.cn 
+
+J. Xu is with the State Key Laboratory of Industrial Control Technology and the College of Control Science and Engineering, Zhejiang University, Hangzhou 310027, China. E-mail: jimmyxu@zju.edu.cn 
+
+K. You is with the Department of Automation, Beijing National Research Center for Information Science and Technology, Tsinghua University, Beijing 100084, China. E-mail: youky@tsinghua.edu.cn 
+
+Y. Shi is with the Department of Mechanical Engineering, University of Victoria, Victoria, BC V8W 2Y2, Canada. E-mail: yshi@uvic.ca 
+
+within a neighborhood of the optimum. One of the primary challenges in distributed gradient-type algorithms arises from the fact that local gradients evaluated at the global optimum are generally non-zero. To achieve exact convergence to the optimal solution, diminishing stepsize strategies are common, provided they satisfy specific decay conditions [6]. However, these strategies suffer from slow convergence rates, limiting their practical applicability, especially in large-scale networked systems. In contrast, constant stepsizes, while facilitating faster initial convergence, typically guarantee convergence only to a neighborhood of the optimal solution, incurring a persistent steady-state error [6]. To address this fundamental trade-off and ensure exact convergence with constant stepsizes, recent research introduces various correction mechanisms and algo-rithmic modifications. Prominent among these are techniques such as gradient tracking [15]–[17]. Particularly, the practical deployment of these algorithms is often hindered by their heavy reliance on a priori knowledge, such as the connectivity of the network topology and Lipschitz constants. To alleviate this dependency and enhance algorithmic robustness, adaptive strategies receive significant attention, including distributed Barzilai–Borwein algorithms [18], [19] and automated stepsize schemes [20]–[22]. Despite these advances, most existing adaptive algorithms still necessitate global information, which is typically unavailable in distributed scenarios. Therefore, developing algorithms capable of efficient and adaptive step-size adjustment solely based on local information remains a significant and pressing challenge in this field. Among the various adaptive strategies, the Polyak stepsize is a particularly compelling candidate due to its exceptional per-formance in centralized optimization. Originally introduced by Polyak [23] for subgradient algorithms, this scheme undergoes significant theoretical expansion in recent years. In the finite-sum setting, the Stochastic Polyak Stepsize (SPS) converges to a neighborhood of the optimum [24], while its decreasing variant DecSPS achieves an O(1 /√T ) rate that matches the optimal complexity of SGD with diminishing stepsizes [25]. Driven by its practical efficacy, extensive research focuses on extending the Polyak framework to broader contexts, including second-order variants [26], proximal formulations [27], and momentum-accelerated algorithms [28]. Despite their efficacy in centralized optimization, Polyak stepsize require the global optimum, which is generally unavailable in distributed set-tings. In this work, we propose a distributed adaptive Polyak stepsize algorithm without knowing the global optimum. A novel level-value adjustment technique is introduced to dy-namically estimate local function values at the global in-
+
+> arXiv:2603.09097v1 [math.OC] 10 Mar 2026 2
+
+formation. Our approach requires each agent to solve only a lightweight linearly constrained problem per iteration. To ensure exact convergence in distributed settings, we further incorporate a decaying mechanism into the stepsize rule. Nu-merical experiments show that the proposed algorithm attains a faster convergence rate than the Distributed Gradient Descent (DGD) algorithm [29]. This performance improvement stems from their fundamentally different stepsize strategies, while allowing each agent to adaptively adjust its own optimal stepsize. The main contributions of this work are summarized as follows. (1) Algorithmically, we propose a novel distributed adaptive Polyak stepsize algorithm DPS-LA for distributed optimiza-tion. A simple example shows that directly applying the Polyak stepsize within the DGD framework leads to algorithmic divergence. By leveraging a level-value adjustment technique to estimate local function values through lightweight linear feasibility problems, the proposed algorithm eliminates the requirement for prior knowledge of the global optimum. (2) Theoretically, we show that DPS-LA achieves a sublin-ear convergence rate of O(1 /√nT ), indicating linear speedup with respect to the number of agents n. Particularly, this implies that the total communication rounds for a given accuracy decrease proportionally with n. To the best of our knowledge, this represents the first theoretical guarantee for a distributed Polyak stepsize algorithm that operates without prior knowledge of the global optimal value. Numerical simu-lations further validate both the effectiveness of the algorithm. The remainder of this paper is organized as follows. Section II formulates the problem. The proposed DPS-LA algorithm is detailed in Section III. Section IV establishes DPS-LA algorithm convergence results. Section V provides numerical performance. Finally, section VI concludes the paper. 
+
+Notation. The vector of all ones in Rn is denoted by 1n.For a matrix W , its (i, j )-th entry is denoted by Wij . A non-negative square matrix W ∈ Rn×n is called stochastic if its row sums are all equal to one (i.e., W 1n = 1n), and doubly stochastic if both its row and column sums are equal to one (i.e., W 1n = 1n and W T1n = 1n). For a nonempty closed convex set X ⊆ Rn, the projection of a point y onto X is defined as PX (y) := argmin x∈X ∥y − x∥.The distance from a point x to the set X is dist (x, X ) := 
+
+∥x − PX (x)∥, while the distance between two sets X and Y
+
+is dist (X , Y) := inf x∈X ,y ∈Y ∥x − y∥. ⌊x⌋ denote the largest integer not exceeding x. The notation y = O(x) indicates that there exists a positive constant M such that y ≤ M x .II. P RELIMINARIES AND PROBLEM FORMULATION 
+
+In this section, we first provide basic of the graph theory, and then formulate the problem of interest. 
+
+A. Graph Theory 
+
+Consider an undirected graph G(V, E), where V =
+
+{1, . . . , n } represents the set of agents, E ⊆ V ×V denotes the set of undirected links, and (i, j ) ∈ E implies that agent j can receive information from agent i. The neighbor set of agent 
+
+i is denoted by Ni = {j : ( j, i ) ∈ E} . Note that (i, j ) ∈ E 
+
+implies (j, i ) ∈ E for undirected graph. The graph G(V, E) is connected if there exists a path for any pair of two distinct agents. The interaction weight matrix associated with G(V, E)
+
+is denoted by W = [ wij ]n×n with wij > 0 if (j, i ) ∈ E or 
+
+i = j, and wij = 0 , otherwise. Regarding the considered graph, we make the following assumption throughout this paper, which is commonly adopted in distributed optimization [30]. 
+
+Assumption 1: The undirected graph is connected and fixed. 
+
+B. Problem Formulation 
+
+Consider a network with n agents, where each agent i ∈ V 
+
+privately holds a function fi : X → R defined over a common closed convex set X ⊆ Rm. All agents collaboratively solve the following optimization problem 
+
+min  
+
+> x∈X
+
+f (x) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+fi(x). (1) Let X ⋆ be a non-empty set of optimal solutions. For x⋆ ∈ X ⋆,the optimal value is denoted by f ⋆ = f (x⋆). We make the following standard assumptions [22], [29]. 
+
+Assumption 2: The constraint set X is compact, convex, and bounded. 
+
+Assumption 3: Each fi is convex in its domain. Assumption 2 invokes the uniform boundedness of gradients on bounded sets [31]. III. A LGORITHM DEVELOPMENT 
+
+In this section, we begin by introducing the standard Polyak stepsize and illustrate its limitations in distributed settings through a straightforward example. We then propose a hor-izontal value adjustment algorithm that dynamically estimates the global optimum required for the Polyak stepsize. Finally, we propose the DPS-LA algorithm. 
+
+A. Gradient Descent with the Polyak Stepsize Algorithm 
+
+Starting from an arbitrary initial point x0 ∈ Rm, the Polyak stepsize update rule is defined as 
+
+xk+1 = xk − f (xk) − f ⋆
+
+∥gk∥2 gk, (2) where gk denotes the gradient of f at xk. If ∥gk∥ = 0 , then 
+
+xk+1 = xk. Intuitively, the core of this stepsize lies in its use of the function-value gap f (xk) − f ⋆ as an adaptive scaling factor. This design makes the stepsize automatically adjust according to both the current progress (through f (xk) − f ⋆)and the local geometry (through ∥gk∥). However, the primary challenge of the Polyak stepsize due to the lack of information about the f ⋆. Recently, numerous estimation strategies are proposed to estimate the optimal value f ⋆ in (2), e.g., [32]– [34]. 3
+
+B. Polyak Stepsize with the Level-value Adjustment Algorithm 
+
+Liu et al. [35] proposed the Polyak Stepsize Violation Detector (PSVD) to address the principal challenge of the un-known optimal value f ⋆ in implementing the Polyak stepsize. They introduced a level-value ¯fk to approximate f ⋆ in (2) 
+
+xk+1 = PX (xk − γ f (xk) − ¯fk
+
+∥gk∥2 gk), 0 < γ < ¯γ < 2. (3) where γ and ¯γ are constants. The core of this approach formulating a linear feasibility problem over a sliding window of η + 1 iterations. Assuming a constant level-value ˜f that underestimates f ⋆, the PSVD problem comprises η + 1 linear inequalities 
+
+
+
+(gk(j))Tx ≤ (gk(j))Txk(j) − 1¯γ sk(j)∥gk(j)∥2
+
+(gk(j)+1 )Tx ≤ (gk(j)+1 )Txk(j)+1 − 1¯γ sk(j)+1 ∥gk(j)+1 ∥2
+
+...
+
+(gk(j)+ η )Tx ≤ (gk(j)+ η )Txk(j)+ η − 1¯γ sk(j)+ η ∥gk(j)+ η ∥2.
+
+(4) Geometrically, a feasible point x must reside within the intersection of these half-spaces. Infeasibility of the PSVD problem indicates that the current level estimate is inconsistent with the observed optimization path, prompting an update to a tighter estimate ¯f ′ according to 
+
+¯f ′ = γ
+
+¯γ ¯fk(j)+ η +
+
+
+
+1 − γ
+
+¯γ
+
+
+
+min  
+
+> k∈[k(j),k (j)+1 ,...,k (j)+ η]
+
+f (xk),
+
+(5) which ensures the new estimate is strictly bounded between the previous level and the optimum 
+
+¯fk(j)+ η < ¯f ′ < f ⋆.
+
+The update rule (5) offers a clear interpretation. Particularly, the level-value ¯f ′ is a convex combination of the previous level-value and the minimum function value observed within the time window. As the gradient algorithm drives the iterates’ function values f (xk) towards f ⋆, this convex combination ensures that the level-value ¯f ′ progressively tightened. As a result, ¯f ′ tends to the optimal value f ⋆. The PSVD thus provides a self-correcting mechanism that dynamically adjusts the level-value, accelerating convergence without requiring prior knowledge of f ⋆.
+
+Remark 1: The core mechanism of the PSVD scheme can be interpreted geometrically through the lens of half-spaces. At each iteration k, the inequality (4) is equivalent to requiring that the optimal solution x⋆ lies within the half-space Hk,defined as Hk := 
+
+n
+
+x ∈ Rm : (−gk )T(x−xk )  
+
+> ∥gk∥
+
+≥ sk ∥gk ∥
+
+> ¯γ
+
+o
+
+. This half-space represents all points sufficiently aligned with the descent direction, given the computed stepsize. The PSVD problem checks the consistency of a sequence of such half-spaces over multiple iterations. If the intersection Tk+Ti=k Hi is non-empty, the half-spaces are mutually consistent, implying the stepsize (and thus the level-value) were appropriate. Con-versely, infeasibility of this intersection provides a rigorous 0 20 40 60 80 100          
+
+> Iteration
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> State Component  x1
+> Diminishing
+> Polyak
+> Optimal x*1020 40 60 80 100
+> Iteration
+> 10 1
+> 10 0
+> Residual Error
+> Diminishing
+> Polyak
+> Fig. 1. In contrast to the diminishing stepsize, the direct integration of the Polyak stepsize into the distributed gradient scheme triggers algorithmic instability and eventual divergence.
+
+certificate that at least one half-space excludes x⋆, indicating a violation of the theoretical stepsize bound. This triggers an adjustment of the level-value, ensuring progressive refinement toward the true optimal value f ⋆.
+
+C. DPS-LA Algorithm 
+
+A critical observation is that the direct application of the Polyak stepsize to distributed gradient descent algorithm (DGD) results in algorithmic divergence. To illustrate this, we consider an undirected connected network comprising three agents in a triangular topology, with the following convex objective functions 
+
+f1(x) = 2 x21 + 3 x22 + x1x2 − 4x1 − 2x2
+
+f2(x) = x21 + 4 x22 − 2x1x2 + 3 x1 − x2
+
+f3(x) = 3 x21 + 2 x22 + x1 − 3x2 + 2 ,
+
+where x = [ x1, x 2]T ∈ R2 and X = {x ∈ R2 : ∥x∥ ≤ 4}.Agents communicate via a doubly-stochastic weight matrix W
+
+constructed using the Metropolis rule [36]. Specifically, for the triangle graph, each edge is assigned a weight of wij = 1 /3.Figure 1 shows that the direct application of the Polyak stepsize fails to achieve consensus. This divergence originates from the structural tension inherent in distributed optimization, where the global objective in (1) typically conflicts with the localized minima of individual functions. Within the DGD framework, agents navigate a dual mandate: performing local gradient descent while simultaneously synchronizing states via neighbor-based consensus. Consequently, a naive application of the Polyak stepsize (2) introduces a critical misalignment, as local function-value gaps fail to accurately reflect the global progress required for consensus. This mismatch ultimately triggers inconsistent update trajectories and leads to oscillatory behavior across the network. 4
+
+To overcome the aforementioned phenomena and obtain a suitable distributed Polyak stepsize algorithm, we first com-pute the individual stepsize βi,k on each agent i ∈ V 
+
+βi,k = γ fi(zi,k ) − f ⋆i
+
+∥∇ f ki ∥2 , (6) where xj,k represents the state of agent j at iteration k, serving as a local estimate of the optimal solution. The variable zi,k =Pnj=1 wij xj,k denotes the aggregated state obtained by fusing information from neighbors. Additionally, f ⋆i := fi(x⋆) is the local function value at the global optimum, and ∇f ki is the gradient of fi evaluated at zi,k . It is worth noting that due to the iterative process being 
+
+xi,k +1 = PX (zi,k − βi,k ∇fi(zi,k )) ,
+
+therefore, zi,k will gradually converge towards the globally optimal point. Correspondingly, the value of f ⋆i in (6) should represent the local function’s value at the globally optimal point. However, as with the standard Polyak algorithm, this value is often unknowable. Hence, we further develop a dis-tributed level-value adjustment algorithm, wherein each agent maintains a linear inequality problem within a time window for t = 0 , 1, . . . , η ,
+
+
+
+∇f ki(j)+ ti
+
+T
+
+(x − zi,k i(j)+ t)
+
+≤ − 1¯γ βi,k i(j)+ t∥∇ f ki(j)+ ti ∥2, (7) When local problem (7) becomes infeasible, it indicates that agent i’s current level-value estimate ¯f ki(j)+ ηi is inconsistent with its optimization trajectory. The level-value is then updated to a tighter estimate 
+
+¯f ′ 
+
+> i
+
+= γ
+
+¯γ ¯f ki(j)+ ηi +
+
+
+
+1 − γ
+
+¯γ
+
+
+
+min  
+
+> k∈[ki(j),...,k i(j)+ η]
+
+fi(zi,k ). (8) This update rule computes ¯f ′ 
+
+> i
+
+as a convex combination of the previous level-value and the minimum function value observed within the local time window, ensuring monotonic tightening towards f ∗ 
+
+> i
+
+.To guarantee exact convergence, we apply a decaying mech-anism 
+
+αi,k = 1
+
+ck
+
+min 
+
+n
+
+max {βi,k , c0α0
+
+2 }, c k−1αi,k −1
+
+o
+
+,
+
+where ck is a non-decreasing positive sequence, α0 is a initial stepsize. The max operator ensures a controllable lower bound, while the min operator guarantees the overall decay of the stepsize. This scheme requires only the solution of simple linearly feasibility problems at each agent, eliminating the need for manual stepsize tuning. Accordingly, we propose a fully automated stepsize scheme for distributed optimization and learning, as outlined in Algorithm 1. 
+
+Remark 2: A pivotal design aspect in the stepsize computa-tion (Step 2) is the aggregated variable zi,k = Pnj=1 wij xj,k .Unlike an agent’s local state xi,k or a global state, zi,k 
+
+constitutes a locally weighted average of neighboring states. This aggregation facilitates information diffusion, providing a local consensus reference that guides the agent’s update. By querying fi and ∇fi at zi,k , agents collectively advance toward 
+
+Algorithm 1 DPS-LA 
+
+Require: Given initial variables xi, 0 ∈ X ; select parameters 
+
+γ, ¯γ such that 0 < γ < ¯γ < 2; non-decreasing positive sequence {ck}∞
+
+> k=0
+
+; αi, −1 = α0 > 0 and level-value 
+
+¯f 0 
+
+> i
+
+< f ⋆i , ∀i ∈ V ; the weight matrix W ∈ Rn×n; and the maximum iteration number K. 
+
+> 1:
+
+for k = 0 , 1, . . . , K − 1 do  
+
+> 2:
+
+Consensus step: zi,k = Pnj=1 wij xj,k . 
+
+> 3:
+
+Stepsize computation: 
+
+βi,k = γ fi(zi,k ) − ¯f ki
+
+∥∇ fi(zi,k )∥2 ,αi,k = 1
+
+ck
+
+min 
+
+n
+
+max 
+
+n
+
+βi,k , c0α0
+
+2
+
+o
+
+, c k−1αi,k −1
+
+o
+
+. 
+
+> 4:
+
+State update: xi,k +1 = PX (zi,k − αi,k ∇fi(zi,k )) . 
+
+> 5:
+
+Feasibility check and level-value update:  
+
+> 6:
+
+if problem (7) with added constraint (∇fi(zi,k )) Tx ≤
+
+(∇fi(zi,k )) Tzi,k − 1¯γ βi,k ∥∇ fi(zi,k )∥2 is infeasible then  
+
+> 7:
+
+Update ¯f k+1  
+
+> i
+
+using rule (8);  
+
+> 8:
+
+Remove all previously added inequalities.  
+
+> 9:
+
+else  
+
+> 10:
+
+¯f k+1  
+
+> i
+
+= ¯f ki . 
+
+> 11:
+
+end if  
+
+> 12:
+
+end for 
+
+a common optimum. This design dictates the objective of the level-value adjustment. Since zi,k converges to the global optimum x⋆, the target for the Polyak stepsize is not the local minimum but fi(x⋆). Our core innovation for approximating this target is a distributed level-value adjustment (Steps 5– 6), which operates as an online cutting-plane algorithm. Each iteration, agent i tests its level-value ¯f ki by solving a local lightweight problem augmented with a new gradient-based inequality. Infeasibility indicates that ¯f ki is an underestimate, prompting an update to a more conservative value. This mechanism creates an adaptive feedback loop, enabling agents to collaboratively learn fi(x⋆).IV. C ONVERGENCE ANALYSIS 
+
+In this section, we first establish the permissible bounds for the stepsize. Subsequently, we prove that the level-value asso-ciated with each agent asymptotically approaches the global optimum, and that the agents achieve optimal consensus. Finally, the sublinear convergence rate of DPS-LA, which achieves a linear speedup, is rigorously established. 
+
+Lemma 1: Consider a non-decreasing sequence of positive real numbers {ck}. Then, for all i ∈ V and k ≥ 1, the stepsize 
+
+αi,k is bounded and satisfies the monotonicity property αi,k ≤
+
+αi,k −1.
+
+Proof: See Appendix A. 
+
+Lemma 2: Given a fixed constant η > 0, the sequence 
+
+{zi,k }ki(j)+ ηk=ki(j) is generated via gradients {∇ fi(zi,k )} and pa-rameters {βi,k } under constant level-values satisfying ¯f ki <f ⋆i . The PSVD problem for a decision vector x ∈ Rm5
+
+is defined by the following system of inequalities for t =0, 1, . . . , η :
+
+
+
+∇f ki(j)+ ti
+
+T
+
+(x − zi,k i(j)+ t) ≤ − 1¯γ βi,k i(j)+ t∥∇ f ki(j)+ ti ∥2.
+
+Infeasibility of this system implies the existence of an index 
+
+k ∈ { ki(j), . . . , k i(j) + η} such that 
+
+βi,k > ¯γ f (zi,k ) − f ⋆i
+
+∥∇ f ki ∥2 .
+
+The corresponding updated level-value ¯f ′ 
+
+> i
+
+, defined as 
+
+¯f ′ 
+
+> i
+
+= γ
+
+¯γ ¯f ki(j)+ ηi +
+
+
+
+1 − γ
+
+¯γ
+
+
+
+min 
+
+> k∈{ ki(j),...,k i(j)+ η}
+
+fi (zi,k ) ,
+
+provides a strictly tighter lower bound satisfying ¯f ki(j)+ ηi <
+
+¯f ′ 
+
+> i
+
+< f ⋆i .
+
+Proof: See Appendix B. It is crucial to emphasize that while in the foundational work by Liu et al. [35], the level update mechanism is designed to converge to the agent’s local optimum f ⋆i in a single-agent context, its behavior is fundamentally altered in our distributed setting. The inclusion of a consensus protocol compels each agent’s state zi,k to converge to the single global optimum x⋆, rather than exploring its own local function’s landscape. The level update is driven by the history of eval-uated function values. Since consensus forces zi,k converge to x⋆, this history becomes dominated by values near fi(x⋆).This directly implies that the level estimate ¯f ki converges not to the local minimum, but to the agent’s functional value at the global solution, fi(x⋆). Thus, in the distributed framework, 
+
+¯f ki effectively serves as an dynamic estimate of the agent’s contribution to the global optimal value, a behavior confirmed by our numerical experiments. Lemma 1 provides a boundedness property of the step sizes, and Lemma 2 demonstrates that the estimated values progressively approach f ⋆i . The subsequent result indicates that agents achieve consensus, where the consensus error is bounded by the gap between the level-value and the optimal value. 
+
+Lemma 3: For a graph sequence satisfying Assumptions 1, the ck = √k + 1 , and the optimization problem (1) satisfying Assumptions 2 and 3, the agent’s estimates xi,k , ∀i ∈ V ,in the distributed gradient algorithm reach a consensus, i.e., 
+
+lim k→∞ ∥xi,k − xj,k ∥ = 0 , ∀i, j ∈ V .
+
+Proof: The proof is similar to that of [29]. 
+
+Lemma 4: Suppose that Assumptions 1–3 hold. Let {¯xk},
+
+{zi,k }, and {xi,k } be the sequences generated by Algorithm 1. Then, the average squared distance to x⋆ satisfies 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2
+
+≤ αmin 
+
+
+
+2 − γck
+
+ "
+
+G 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥zi,k − ¯xk∥ − (f (¯ xk) − f (x⋆)) 
+
+#
+
++ γc 0α0
+
+c2
+
+> k
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ fi(x⋆) − ¯f ki
+
+ , (9) where ¯xk := 1
+
+> n
+
+Pni=1 xi,k and αmin = min 
+
+n γ  
+
+> 2ckLmax
+
+, c0α0
+
+> ck
+
+o
+
+.
+
+Proof: See Appendix C. 
+
+Lemma 5: Suppose Assumptions 1-3 hold, and with the parameter ck = √k + 1 , it can be shown that there ex-ists a subsequence {y(kν )} of the iterates {¯xk} such that 
+
+lim ν→∞ f (y(kν )) − f (x⋆) = 0. For convenience in the subsequent analysis, we define σ = f (x⋆) − ¯f 0, where ¯f 0
+
+is the initial common level-value for all agents. 
+
+Proof: See Appendix D. With consensus guaranteed by Lemma 3 and the gap rela-tionship established in Lemmas 4 and 5. We establish the convergence result of the proposed algorithm. 
+
+Theorem 1 (Convergence of DPS-LA): Suppose that As-sumptions 1–3 hold. The iterative sequences {xi,k } generated by Algorithm 1 converge to a common optimal solution 
+
+x⋆ ∈ X ⋆ in the sense that 
+
+lim  
+
+> k→∞
+
+xi,k = x⋆, ∀i ∈ V .
+
+Proof: See Appendix E. 
+
+Theorem 2 (Convergence rate of DPS-LA): Suppose As-sumptions 1–3 hold, and the parameter selection ck = √k + 1 ,the objective optimality gap for the network average ¯xk
+
+satisfies 
+
+min   
+
+> M≤k≤N
+
+f (¯ xk) − f (x⋆) ≤ O 
+
+ 1
+
+√nT 
+
+
+
+,
+
+where M = ⌊N/ 2⌋.
+
+Proof: See Appendix F. 
+
+Remark 3: The Theorem 1 confirms the overall convergence properties of the algorithm, demonstrating that the selection of parameters does not affect the final convergence outcome. Finally, Theorem 2 shows that for specific values of the sequence ck, the algorithm achieves a convergence rate of 
+
+O(1 /√nT ).V. N UMERICAL EXPERIMENTS 
+
+This section evaluates the Algorithm 1 through numerical simulations in a distributed optimization environment. We consider a multi-agent system consisting of N = 4 agents collaborating to solve a common optimization problem over a decision variable θ ∈ Rd with dimension d = 6 . Each agent i
+
+has a local objective function defined by a quadratic loss, 
+
+fi(θ) = 12 ∥Aiθ − bi∥2,
+
+where elements of the data matrices Ai ∈ R2×6 and vectors 
+
+bi ∈ R2are randomly sampled from uniform distributions 
+
+U (0 , 0.1) and U (0 , 5) , respectively. A key feature of our setup is the definition of a non-trivial, common constraint set for all agents. All agents are subject to the same box constraint, i.e., θ ∈ X = [l, u]. These bounds are systematically generated based on the unconstrained global minimizer, θ⋆
+
+> unc
+
+.Specifically, for each dimension j ∈ { 1, . . . , 6}, the common lower and upper bounds are defined as lj = θ⋆ 
+
+> unc ,j
+
++ 10 + 10 sin   jπ 
+
+> 120
+
+ , u j = θ⋆ 
+
+> unc ,j
+
++20+10 sin   jπ 
+
+> 120
+
+ . This formulation creates a single, shared feasible set X within which the optimal solution must be found. The agents communicate over a connected, undirected random graph. The corresponding doubly stochastic weight matrix W is constructed using the 61
+
+2
+
+3
+
+4
+
+Fig. 2. Network graph of numerical simulation. 0 20 40 60 80 100 Iteration 0.0 2.5 5.0 7.5 10.0 12.5 
+
+> f(θk) − f(θ )
+> Algorithm 1 DGD [28]
+
+Fig. 3. Residual errors comparison of the proposed algorithm and DGD algorithm. 
+
+Metropolis-Hastings rule to govern the consensus updates. The network structure considered in the experiments is shown in Fig. 2. For Algorithm 1, the parameters for each agent are configured as γ = 1 .0 and ¯γ = 1 .5, with the stepsize rule incorporating a scaling factor of ck = 0 .5√k + 1 . The initial level-value is uniformly set to −500 across all agents. We compare its performance against the DGD, which employs a conventional diminishing stepsize rule of αk = 2 
+
+> k+1
+
+. The primary metric used to assess the algorithms is the function value error, defined as Resdual errors (k) = f (¯θk) − f (θ⋆),
+
+where f (·) = PNi=1 fi(·) and ¯θk = 1
+
+> N
+
+PNi=1 θi,k . Additional analyses on consensus error, level-value evolution, and stepsize dynamics are also performed to provide a comprehensive evaluation. From Fig. 3(a), we observe that the proposed algorithm demonstrates a substantially superior convergence rate com-pared to the DGD algorithm. Specifically, the function error of the proposed algorithm decreases precipitously within the initial 50 iterations, rapidly reaching a near-zero steady-state value. In stark contrast, the DGD algorithm exhibits a much slower, gradual reduction in function error, failing to achieve a comparable level of accuracy even after 300 iterations. As illustrated in Fig. 4(a), the estimated level-values ¯f ki
+
+converge rapidly and accurately to the true optimal values 
+
+fi(θ⋆). Furthermore, Fig.4(b) confirms that consensus among agents is also achieved rapidly, contributing to the overall stability and efficiency of the proposed algorithm. This precise estimation enables the algorithm to adaptively compute a more aggressive and near-optimal stepsize, as shown in Fig. 5(a), which significantly accelerates the reduction of the optimality gap. Finally, the results in Fig. 5(b) demonstrate that increasing 0 20 40 60 80 100 Iteration 500 
+
+400 
+
+300 
+
+200 
+
+100 
+
+0Level-values         
+
+> Agent 1 Level-value Agent 1 fi(θ)
+> Agent 2 Level-value Agent 2 fi(θ)
+> Agent 3 Level-value Agent 3 fi(θ)
+> Agent 4 Level-value Agent 4 fi(θ)
+
+(a) Level-values adjustment 0 20 40 60 80 100 
+
+Iteration 
+
+2
+
+4
+
+6
+
+> ‖θi, k  − θ ‖
+> Agent 1
+> Agent 2
+> Agent 3
+> Agent 4
+
+(b) Consensus errors Fig. 4. Evolution of level-values and consensus error for each agent. 
+
+the number of agents improves the convergence rate, thereby validating the theoretical linear speedup property. VI. C ONCLUSION 
+
+In this work, we have investigated the distributed con-strained optimization problem. A distributed gradient algo-rithm, incorporating a Polyak stepsize with a level-value ad-justment mechanism, has been proposed. This design bypasses the conventional requirement for prior knowledge of the global optimal value. We have rigorously shown that the proposed algorithm achieves a convergence rate of O( 1√nT ) in terms of the objective optimality gap. Both theoretical analysis and numerical experiments establish the efficacy. Future works can focus on integrating the proposed algorithm with acceleration techniques, such as gradient tracking and EXTRA, to further enhance convergence performance in diverse network environ-ments. APPENDIX 
+
+A. Proof of Lemma 1 Proof: Firstly, since αi,k ≤ ck−1 
+
+> ck
+
+αi,k −1 and ck is non-decreasing, we have that αi,k is non-increasing. For k = 0 :
+
+αi, 0 = 1
+
+c0
+
+min 
+
+n
+
+max 
+
+n c0α0
+
+2 , β i, 0
+
+o
+
+, c 0α0
+
+o
+
+,
+
+where βi, 0 = γ fi(zi, 0)− ¯f 0 
+
+> i
+> ∥∇ fi(zi, 0)∥2
+
+.If βi, 0 ≤ c0α0 
+
+> 2
+
+, then max  c0α0 
+
+> 2
+
+, β i, 0 = c0α0 
+
+> 2
+
+, and thus αi, 0 = 1 
+
+> c0
+
+min  c0α0 
+
+> 2
+
+, c 0α0 = α0 
+
+> 2
+
+. If βi, 0 > c0α0 
+
+> 2
+
+,then max  c0α0 
+
+> 2
+
+, β i, 0 = βi, 0, and thus αi, 0 = 1 
+
+> c0
+
+·70 20 40 60 80 100 Iteration 10 3
+
+10 2
+
+10 1
+
+10 0
+
+> Stepsize
+> Alg 1 (Agent 1) Alg 1 (Agent 2) Alg 1 (Agent 3) Alg 1 (Agent 4) DGD [28]
+
+(a) Adaptive stepsizes of each agent 0 20 40 60 80 100 Iteration 10 4
+
+10 3
+
+10 2
+
+10 1
+
+10 0   
+
+> f(θk) − f(θ )
+> 3Agents 4Agents 5Agents
+
+(b) Different number of agents Fig. 5. Adaptive stepsizes of each agent and performance comparison with different numbers of agents. 
+
+min {βi, 0, c 0α0}. If in addition βi, 0 ≥ c0α0, then αi, 0 = α0;otherwise if βi, 0 < c 0α0, then αi, 0 = βi, 0 
+
+> c0
+
+∈   α0 
+
+> 2
+
+, α 0
+
+.In all cases, we have αi, 0 ∈  α0 
+
+> 2
+
+, α 0
+
+ =
+
+h c0α0 
+
+> 2c0
+
+, c0α0
+
+> c0
+
+i
+
+.Hence, the base case holds. Now assume by induction that for some k: c0α0
+
+2ck
+
+≤ αi,k ≤ c0α0
+
+ck
+
+,
+
+for k + 1 , we have 
+
+αi,k +1 = 1
+
+ck+1 
+
+min 
+
+n
+
+max 
+
+n c0α0
+
+2 , β i,k +1 
+
+o
+
+, c kαi,k 
+
+o
+
+,
+
+from the induction hypothesis, ckαi,k ∈  c0α0 
+
+> 2
+
+, c 0α0
+
+. Let t =  
+
+> ckαi,k
+> c0
+
+∈ [α0/2, α 0].Consider first the case when βi,k +1 ≤ c0α0 
+
+> 2
+
+. Then 
+
+max  c0α0 
+
+> 2
+
+, β i,k +1 = c0α0 
+
+> 2
+
+, and 
+
+αi,k +1 = 1
+
+ck+1 
+
+min 
+
+n c0α0
+
+2 , c kαi,k 
+
+o
+
+= 1
+
+ck+1 
+
+min 
+
+n c0α0
+
+2 , c 0t
+
+o
+
+= c0
+
+ck+1 
+
+min 
+
+n α0
+
+2 , t 
+
+o
+
+,
+
+since t ≥ α0 
+
+> 2
+
+, we have min  α0 
+
+> 2
+
+, t = α0 
+
+> 2
+
+, thus αi,k +1 = 
+
+> c0α0
+> 2ck+1
+
+. Now consider the case when βi,k +1 > c0α0 
+
+> 2
+
+. Then 
+
+max  c0α0 
+
+> 2
+
+, β i,k +1 = βi,k +1 , and 
+
+αi,k +1 = 1
+
+ck+1 
+
+min {βi,k +1 , c kαi,k }
+
+= 1
+
+ck+1 
+
+min {βi,k +1 , c 0t} ,
+
+if βi,k +1 ≥ c0t, then αi,k +1 = c0tck+1 ∈
+
+h c0α0 
+
+> 2ck+1
+
+, c0α0
+
+> ck+1
+
+i
+
+.If βi,k +1 < c 0t, then αi,k +1 = βi,k +1  
+
+> ck+1
+
+. Since βi,k +1 > c0α0 
+
+> 2
+
+,we have αi,k +1 > c0α0 
+
+> 2ck+1
+
+, and since βi,k +1 ≤ c0t ≤ c0α0,we have αi,k +1 ≤ c0α0 
+
+> ck+1
+
+. In all cases, we have shown that  
+
+> c0α0
+> 2ck+1
+
+≤ αi,k +1 ≤ c0α0 
+
+> ck+1
+
+.
+
+B. Proof of Lemma 2 Proof: Since the constraint system (7) admits no feasible solution, x⋆ ∈ X ⋆ is not feasible to (7). then the optimal point 
+
+x⋆ ∈ X ⋆ is necessarily infeasible to (7). Consequently, there must exist at least one index k ∈ { ki(j), k i(j)+1 , . . . , k i(j)+ 
+
+η} that violates the constraint, such that 
+
+ ∇f ki
+
+T (x⋆ − zi,k ) > − 1¯γ βi,k ∥∇ f ki ∥2.
+
+Rearranging the terms yields a lower bound on the βi,k as follows 
+
+βi,k > ¯γ  ∇f ki
+
+T (zi,k − x⋆)
+
+∥∇ f ki ∥2 . (10) By invoking the first-order condition of convexity, i.e., 
+
+fi(x⋆) ≥ fi(zi,k ) + ( ∇f ki )T(x⋆ − zi,k ), (10) can be simplified to 
+
+βi,k > ¯γ fi(zi,k ) − f ⋆i
+
+∥∇ f ki ∥2 .
+
+Applying the βi,k = γ(fi(zi,k ) − ¯f ki )/∥∇ f ki ∥2, we obtain 
+
+γ fi(zi,k ) − ¯f ki
+
+∥∇ f ki ∥2 > ¯γ fi(zi,k ) − f ⋆i
+
+∥∇ f ki ∥2 .
+
+By canceling the common term ∥∇ f ki ∥2 and solving for f ⋆i ,we arrive at: canceling ∥∇ f ki ∥2 and rearranging terms yields 
+
+f ⋆i >
+
+
+
+1 − γ
+
+¯γ
+
+
+
+fi(zi,k ) + γ
+
+¯γ ¯f ki .
+
+The right-hand side of the above inequality precisely defines the updated level-value ¯f k+1  
+
+> i
+
+as 
+
+¯f k+1  
+
+> i
+
+= γ
+
+¯γ ¯f ki +
+
+
+
+1 − γ
+
+¯γ
+
+
+
+fi(zi,k ). (11) Since ¯γ > γ > 0, the update in (11) represents a convex combination of ¯f ki and fi(zi,k ). Given that ¯f ki < f i(zi,k ) holds by construction, the sequence of level-values satisfies the strict monotonicity and bounding property 
+
+¯f ki < ¯f k+1  
+
+> i
+
+< f ⋆i ,
+
+which implies that ¯f k+1  
+
+> i
+
+serves as a tighter lower bound for the optimal value f ⋆i .
+
+C. Proof of Lemma 4 Proof: We establish the bound by analyzing the evolution of the squared distance for a single agent and then aggregating the results across the network. By the non-expansiveness property of the projection opera-tor PX , it follows that ∥PX (u) − PX (v)∥ ≤ ∥ u − v∥. Setting 
+
+v = x⋆ = PX (x⋆), we have 
+
+∥xi,k +1 − x⋆∥28
+
+≤ ∥ (zi,k − αi,k ∇f ki ) − x⋆∥2
+
+= ∥zi,k − x⋆∥2 − 2αi,k ⟨∇ f ki , z i,k − x⋆⟩ + α2
+
+> i,k
+
+∥∇ f ki ∥2.
+
+(12) Averaging (12) over all n agents and utilizing the consensus property 1
+
+> n
+
+Pni=1 ∥zi,k − x⋆∥2 ≤ 1
+
+> n
+
+Pni=1 ∥xi,k − x⋆∥2 (which holds under Assumption 1), we obtain 
+
+∥xi,k +1 − x⋆∥2
+
+≤ ∥ zi,k − x⋆∥2 − 2αi,k (f (zi,k ) − fi(x⋆)) + α2
+
+> i,k
+
+∥∇ f ki ∥2
+
+≤ ∥ zi,k − x⋆∥2 − 2αi,k (f (zi,k ) − fi(x⋆)) + γck
+
+αi,k (f (zi,k ) − ¯fik)= ∥zi,k − x⋆∥2 − 2αi,k (f (zi,k ) − fi(x⋆)) + γck
+
+αi,k (f (zi,k ) − fi(x⋆) + fi(x⋆) − ¯fik)= ∥zi,k − x⋆∥2 − (2 − γck
+
+)αi,k (f (zi,k ) − fi(x⋆)) + γck
+
+αi,k (fi(x⋆) − ¯f ki )) .
+
+To introduce the average state ¯xk, we decompose the function gap term as fi(zi,k ) − fi(x⋆) = [ fi(zi,k ) − fi(¯ xk)] + [ fi(¯ xk) −
+
+fi(x⋆)] . Since X is compact, fi is G-Lipschitz continuous, implying fi(¯ xk) − fi(zi,k ) ≤ G∥zi,k − ¯xk∥. Substituting this into the average bound yields 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2
+
+≤ Gα min 
+
+
+
+2 − γck
+
+ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥zi,k − ¯xk∥− αmin 
+
+
+
+2 − γck
+
+
+
+(f (¯ xk) − f (x⋆)) + γc 0α0
+
+c2
+
+> k
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(fi(x⋆) − ¯f ki ).
+
+This completes the proof. 
+
+D. Proof of Lemma 5 Proof: we first prove by contradiction that 
+
+lim inf  
+
+> k→∞
+
+f (¯ xk) − f (x⋆) ≤ 0.
+
+Suppose there exist ϵ > 0 and Kϵ such that f (¯ xk)−f (x⋆) ≥ ϵ
+
+for all k ≥ Kϵ.
+
+f (¯ xk) − f (x⋆) ≥ ϵ, 
+
+from Lemma 4, we have 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2
+
+≤ Gα min (2 − γck
+
+)( 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥zi,k − ¯xk∥ − ϵ)+ γc 0α0
+
+c2
+
+> k
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(fi(x⋆) − ¯f ki )) ,
+
+when the ck = √k + 1 , which implies decaying stepsizes for 
+
+αi,k , there exists a constant K′ 
+
+> 1
+
+∈ N+ such that for k > K ′
+
+> 1
+
+,the ck satisfies 
+
+1
+
+ck
+
+≤ ϵG√σγc 0α0
+
+. (13) where G is the Lipschitz constant of f and αi,k is bounded by c0α0 
+
+> ck
+
+. Under Assumption 1, there exists a constant K′ 
+
+> 3
+
+for 
+
+k > K ′
+
+> 3
+
+, by the consensus result, we get 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥¯xk − zi,k ∥ ≤ ϵ
+
+4G . (14) Combing (13) and (14), when k > max {K′
+
+> 1
+
+, K ′
+
+> 3
+
+},
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x∗∥2 − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2
+
+≤ Gα min (2 − γck
+
+) 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥zi,k − ¯xk∥− Gα min (2 − γck
+
+)( f (¯ xk) − f (x⋆)) + γc 0α0
+
+c2
+
+> k
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(fi(x⋆) − ¯f ki )
+
+≤ αmin (2 − γck
+
+) ϵ
+
+4 − αmin (2 − γck
+
+)ϵ
+
++ γc 0α0
+
+c2
+
+> k
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(fi(x⋆) − ¯f ki ) (15) building upon Lemma 2, we establish 1
+
+> n
+
+Pni=1 (fi(x⋆)− ¯f ki ) ≤
+
+f (x⋆) − ¯f 0 = σ, under this condition, the evolution of the average squared distance of the iterates xi,k to an optimal solution x⋆ can be bounded, we have 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x∗∥2 − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x∗∥2
+
+≤ σ
+
+ γc 0α0
+
+c2
+
+> k
+
+− Gα min 
+
+
+
+2 − γck
+
+ 3ϵ
+
+4σ
+
+
+
+,
+
+combining (15), there exist max {K′
+
+> 1
+
+, K ′
+
+> 3
+
+, K ϵ} ∈ N+, such that for all k > max {K′
+
+> 1
+
+, K ′
+
+> 3
+
+, K ϵ},
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 ≤ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2 − O ( 1
+
+ck
+
+)ϵ, 
+
+given that ck = √k + 1 , this implies that there exists a constant C > 0 such that for all sufficiently large k:
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 ≤ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2 − Cϵ 
+
+√k + 1 .
+
+Summing this inequality from k = K0 to K0 + m − 1 yields 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,K 0+m − x⋆∥2 − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,K 0 − x⋆∥2
+
+≤ − Cϵ 
+
+> K0+m−1
+
+X
+
+> k=K0
+
+1
+
+√k + 1 , (16) 9
+
+the series P∞  
+
+> k=1 1√k+1
+
+is a p-series with p = 1 /2, which is known to be divergent. Therefore, as m → ∞ , the partial sum also diverges to infinity 
+
+lim 
+
+> m→∞
+> K0+m−1
+
+X
+
+> k=K0
+
+1
+
+√k + 1 = ∞,
+
+this means we can choose a sufficiently large m such that the negative term on the right-hand side of (16) dominates the constant positive term 
+
+Cδ 
+
+> K0+m−1
+
+X
+
+> k=K0
+
+1
+
+√k + 1 > 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,K 0 − x⋆∥2,
+
+for such a large m, it follows that 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,K 0+m − x⋆∥2 < 0.
+
+This is a contradiction, since the term 1
+
+> n
+
+Pni=1 ∥xi,K 0+m −
+
+x⋆∥2 is an average of squared norms and must be non-negative. So lim inf k→∞ f (¯ xk) − f (x⋆) ≤ 0. As a result, 
+
+lim inf k→∞ f (¯ xk) − f (x⋆) = 0 . So there exists a subsequence 
+
+{y(kν )} of {¯xk} such that lim kν →∞ f (y(kν )) = f (x⋆).
+
+E. Proof of Theorem 1 Proof: Define the ϵ-sublevel set Dϵ = {y ∈ X : f (y) −
+
+f (x⋆) ≤ ϵ} and let d(ϵ) = sup y∈D ϵ dist (y, X ⋆). By convexity and compactness, lim ϵ→0 d(ϵ) = 0 .Similar the proof of Lemma 5, when the ck = √k + 1 ,which implies decaying stepsizes for αi,k , there exists aconstant K′ 
+
+> 1
+
+∈ N+ such that for all k > K ′
+
+> 1
+
+, the ck satisfies 
+
+1
+
+ck
+
+≤ ϵG√σγc 0α0
+
+.
+
+Additionally, there exists a constant K′ 
+
+> 2
+
+∈ N+ such that for all k > K ′
+
+> 2
+
+, stepsize αi,k satisfies 
+
+αi,k ≤ 2ϵ
+
+3 ,
+
+under Assumption 1, and for all k > K ′
+
+> 3
+
+, by the consensus result, we get 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥¯xk − zi,k ∥ ≤ ϵ
+
+4G ,
+
+for the difference between ∥¯xk − x⋆∥ and ∥xi,k − x⋆∥, we have by the triangle inequality 
+
+∥¯xk − x⋆∥2 − ∥ xi,k − x⋆∥2
+
+= |∥ ¯xk − x⋆∥ − ∥ xi,k − x⋆∥| (∥¯xk − x⋆∥ + ∥xi,k − x⋆∥)
+
+≤ ∥ ¯xk − xi,k ∥ (∥¯xk − x⋆∥ + ∥xi,k − x⋆∥) ,
+
+then, from Lemma 3, we know lim k→∞ ∥¯xk − xi,k ∥ = 0 .Furthermore, since the underlying constraint set is bounded, it follows that both ∥¯xk − x⋆∥ and ∥xi,k − x⋆∥ are bounded for all k. This implies that if ¯xk converges to x⋆, then xi,k 
+
+also converges to x⋆, furthermore, for all k > K ′ 
+
+> 4
+
+(for some 
+
+Kd ∈ N+), the average difference in squared distances can be bounded 
+
+|(∥ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+¯xk − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+x⋆∥2 − ∥ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+xi,k − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+x⋆∥2)|≤ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+|(∥¯xk − x⋆∥2 − ∥ xi,k − x⋆∥2)|≤ ϵ2
+
+4 ,
+
+from Lemma 5, we analyze the iterate behavior in two cases: 
+
+Case 1: f (¯ xk) < f (x⋆) + ϵ. In this case, ¯xk ∈ D ϵ. Using the property ∥a + b∥2 ≤ 2∥a∥2 + 2 ∥b∥2 and the algorithm’s update rule, we have 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x∗∥2
+
+≤ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥zi,k − αi,k ∇f ki − x⋆∥2
+
+≤ 2 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥zi,k − x⋆∥2 + α2
+
+> i,k
+
+∥∇ f ki ∥2
+
+!
+
+≤ 2 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2 + ( c0α0
+
+ck
+
+G)2
+
+!
+
+,
+
+when k > K ′
+
+> 4
+
+min  
+
+> x∗∈X ⋆
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2
+
+≤ min   
+
+> x∗∈X ⋆
+
+2 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2 + ( c0α0
+
+ck
+
+G)2
+
+!
+
+≤ 2 min  
+
+> x⋆∈X ⋆
+
+
+
+∥¯xk − x⋆∥2 + ϵ2
+
+4 + ( c0α0
+
+ck
+
+G)2
+
+
+
+≤ 2
+
+
+
+d(ϵ)2 + ϵ2
+
+4 + ( c0α0
+
+ck
+
+G)2
+
+
+
+, (17) where the second inequality uses the bound on the difference between the average of squared norms and the squared norm of the average, and the third inequality follows from the definition of d(ϵ).
+
+Case 2: f (¯ xk) ≥ f (x⋆) + ϵ. Similar to the derivation in Lemma 5, the evolution follows: when k > max {K′
+
+> 1
+
+, K ′
+
+> 3
+
+},
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x∗∥2
+
+≤ σ
+
+ γc 0α0
+
+c2
+
+> k
+
+− Gα min 
+
+
+
+2 − γck
+
+ 3ϵ
+
+4σ
+
+
+
+.
+
+The term in the parenthesis scales as O(1 /c 2
+
+> k
+
+) − O (ϵ/c k). For sufficiently small ϵ, the −O (ϵ/c k) term dominates, ensuring: 
+
+min  
+
+> x⋆∈X ⋆
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 ≤ min  
+
+> x⋆∈X ⋆
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2.
+
+(18) Combining (17) and (18), there exists a final threshold Kfinal =max {K′
+
+> 1
+
+, K ′
+
+> 2
+
+, K ′
+
+> 3
+
+, K ′
+
+> 4
+
+, ν }, such that for all k > K final , the 10 
+
+average squared distance of the iterates to the optimal set converges to zero 
+
+lim  
+
+> k→∞
+
+min  
+
+> x⋆∈X ⋆
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2 = 0 ,
+
+this result demonstrates the convergence of the algorithm’s iterates to the set of optimal solutions X ⋆.
+
+F. Proof of Theorem 2 Proof: This section establishes the sublinear convergence rate of the proposed algorithm. Rearranging the descent in-equality from Lemma 9, we bound the single-step optimality gap as follows 
+
+αmin (2 − γck
+
+)( f (¯ xk) − f (x⋆)) 
+
+≤ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k − x⋆∥2 + Gα min (2 − γck
+
+) 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥zi,k − ¯xk∥− 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥xi,k +1 − x⋆∥2 + γc 0α0
+
+c2
+
+> k
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(fi(x⋆) − ¯f ki ).
+
+(19) To bound the consensus error ∥zi,k − ¯xk∥, we invoke the standard result for distributed gradients [29] 
+
+∥zi,k − ¯xk∥≤ C1βk−1 + C2
+
+> k−2
+
+X
+
+> t=0
+
+βk−t γc 0α0
+
+ct
+
++ 4γc 0α0Gc2
+
+> k
+
+≜ τk, (20) where 0 < β < 1, and C1, C 2 > 0 are constants related to the network topology. Summing (19) over k = M, . . . , T and utilizing the tele-scoping property of the squared distances, we obtain 
+
+min   
+
+> M≤k≤T
+
+f (¯ xk) − f (x⋆)
+
+≤
+
+Pni=1 ∥xi,M − x⋆∥2
+
+√n PTk=M αmin (2 − γck )+
+
+PTk=M Gα min (2 − γck )τk − Pni=1 ∥xi,T +1 − x⋆∥2
+
+√n PTk=M αmin (2 − γck )+
+
+PTk=Mγc 0α0
+
+> c2
+> k
+> 1
+> n
+
+Pni=1 (fi(x⋆) − ¯f ki )
+
+√n PTk=M αmin (2 − γck ) . (21) We now analyze the asymptotic behavior of each component in (21) term by term. For the case ck = √k + 1 , we have 
+
+√n
+
+> T
+
+X
+
+> k=M
+
+αmin (2 − γck
+
+) ≤ √n
+
+> T
+
+X
+
+> k=M
+
+c0α0
+
+2√k + 1 = O(√nT ),
+
+(22) the initial average squared distance, ∥xi,M − x⋆∥2, is bounded by a constant, hence it is O(1) .For the term related to the optimality gap of individual agents and given M = ⌊T / 2⌋
+
+> T
+
+X
+
+> k=M
+
+γc 0α0
+
+c2
+
+> kn
+
+X
+
+> i=1
+
+(fi(x⋆) − ¯f ki )
+
+≤
+
+> T
+
+X
+
+> k=M
+
+γc 0α0
+
+k + 1 
+
+> n
+
+X
+
+> i=1
+
+f ⋆i −
+
+> n
+
+X
+
+> i=1
+
+¯f 0
+
+> i
+
+!
+
+= O(1) , (23) next, we analyze the exponential decay term from τkTX
+
+> k=M
+
+αmin (2 − γck
+
+)βk−1
+
+≤
+
+> T
+
+X
+
+> k=M
+
+c0α0
+
+2√k + 1 (2 − γck
+
+)βk−1
+
+≤
+
+> T
+
+X
+
+> k=M
+
+ c0α0
+
+√k + 1 − γc 0α0
+
+2( k + 1) 
+
+
+
+βk−1 = O
+
+ 1
+
+√T
+
+
+
+. (24) The (24) rapid decay is due to the geometric progression factor 
+
+βk−1. We assume M = ⌊T / 2⌋ for this analysis. For the last and most complex term within τk, which involves a nested sum 
+
+> T
+
+X
+
+> k=M
+
+αmin (2 − γck
+
+)
+
+> k−2
+
+X
+
+> t=0
+
+βk−t γc 0α0
+
+ct
+
+≤
+
+> T
+
+X
+
+> k=M
+
+c0α0
+
+√k + 1 
+
+> k−2
+
+X
+
+> t=0
+
+βk−t γc 0α0
+
+√t + 1 ,
+
+we first consider the inner factor Pk−2 
+
+> t=0
+
+βk−t 1√t+1 . Let p =
+
+k − 2, and we split this sum into two parts 
+
+> k−2
+
+X
+
+> t=0
+
+βk−t 1
+
+√t + 1 = β2
+
+> k−2
+
+X
+
+> t=0
+
+βk−2−t 1
+
+√t + 1 = β2
+
+> p
+
+X
+
+> t=0
+
+βp−t 1
+
+√t + 1 = β2
+
+
+
+> ⌊p/ 2⌋
+
+X
+
+> t=0
+
+βp−t 1
+
+√t + 1 +
+
+> p
+
+X
+
+> t=⌊p/ 2⌋+1
+
+βp−t 1
+
+√t + 1 
+
+ ,
+
+for the first term, P⌊p/ 2⌋ 
+
+> t=0
+
+βp−t 1√t+1 , we have 
+
+> ⌊p/ 2⌋
+
+X
+
+> t=0
+
+βp−t 1
+
+√t + 1 ≤ βp−⌊ p/ 2⌋⌊p/ 2⌋
+
+X
+
+> t=0
+
+1
+
+√t + 1 
+
+using an integral approximation for the sum P⌊p/ 2⌋  
+
+> t=0 1√t+1
+
+:
+
+> ⌊p/ 2⌋
+
+X
+
+> t=0
+
+βp−t 1
+
+√t + 1 
+
+≤ βp/ 2
+
+Z ⌊p/ 2⌋
+
+> 0
+
+1
+
+√t + 1 dt = βp/ 2 2√t + 1 ⌊p/ 2⌋
+
+> 0
+
+= 2 βp/ 2(p⌊p/ 2⌋ + 1 − 1) ,
+
+it is easy to verify that for any 1 > β 1 > √β
+
+lim 
+
+> p→∞
+
+βp/ 2
+
+p⌊p/ 2⌋ + 1 − 1
+
+
+
+βp
+
+> 1
+
+= 0 .
+
+we thus have that P⌊p/ 2⌋ 
+
+> t=0
+
+βp−t 1√t+1 ≤ 2Cβ1 βp 
+
+> 1
+
+, where Cβ1 is a constant. next, we consider the term Ppt=⌊p/ 2⌋+1 βp−t 1√t+1 .We bound it as 
+
+> p
+
+X
+
+> t=⌊p/ 2⌋+1
+
+βp−t 1
+
+√t + 1 ≤ 1
+
+p⌊p/ 2⌋ + 2 
+
+> p
+
+X
+
+> t=⌊p/ 2⌋+1
+
+βp−t11 
+
+= 1
+
+p⌊p/ 2⌋ + 2 β2⌊p/ 2⌋− p+2 1 − βp−⌊ p/ 2⌋
+
+1 − β .
+
+as 1 ≤ 2⌊p/ 2⌋− p+2 ≤ 2 and 1−βp−⌊ p/ 2⌋ 
+
+> 1−β
+
+≤ 11−β , there exists a constant Cβ such that 
+
+> p
+
+X
+
+> t=⌊p/ 2⌋+1
+
+βp−t 1
+
+√t + 1 ≤ Cβ
+
+1
+
+p⌊p/ 2⌋ + 2 .
+
+noticing p = k − 2, we substitute these bounds back into the outer sum 
+
+> T
+
+X
+
+> k=M
+
+αmin (2 − γck
+
+)
+
+> k−2
+
+X
+
+> t=0
+
+βk−t γc 0α0
+
+ct
+
+≤ 2Cβ1
+
+> T
+
+X
+
+> k=M
+
+γc 20α20
+
+2√k + 1 β(k−2) 1 + CβTX
+
+> k=M
+
+√2γc 20α20
+
+2p(k + 1)( k + 3) 
+
+≤ γc 20α20(Cβ1
+
+> T
+
+X
+
+> k=M
+
+1
+
+√k + 1 β(k−2) 1 +
+
+√22 CβTX
+
+> k=M
+
+1
+
+k + 1 )
+
+(25) the first term in this sum is O
+
+ 1√T
+
+
+
+due to the exponential decay β(k−2) 1 . The second term, PTk=M 1 
+
+> k+1
+
+, is O(1) when 
+
+M = ⌊T / 2⌋. Thus, this entire nested sum term is O(1) .Combining the asymptotic bounds for the numerator terms from (22), (23), (24), and (25), we observe that the dominant terms are of order O(1) . Thus, the convergence rate satisfies: 
+
+min   
+
+> M≤k≤T
+
+f (¯ xk) − f (x⋆) ≤ O 
+
+ 1
+
+√nT 
+
+
+
+.
+
+this result shows that the algorithm converges to the optimal solution at a sublinear rate, with the optimality gap shrinking as T increases. REFERENCES [1] Y. Wang, S. Liu, B. Sun, and X. Li, “A Distributed Proximal Pri-mal–Dual Algorithm for Energy Management With Transmission Losses in Smart Grid,” IEEE Transactions on Industrial Informatics , vol. 18, no. 11, pp. 7608-7618, Nov. 2022. [2] J. Zhang, K. You, and K. Cai, “Distributed Dual Gradient Tracking for Resource Allocation in Unbalanced Networks,” IEEE Transactions on Signal Processing , vol. 68, pp. 2186-2198, 2020. [3] K. Zhang, Q. L¨ u, Q. Zhou, H. Li, D. Xia, and T. Huang, “Momentum-Based Distributed Economic Dispatch of Smart Grids in Time-Varying Directed Networks,” IEEE Transactions on Network Science and Engi-neering , vol. 12, no. 5, pp. 3451-3466, 2025. [4] H. Zhang, Y. Zhao, and J. Xu, “Communication-Efficient Data Exchange for Decentralized Loop-Closure Detection in Collaborative SLAM,” in 
+
+2025 American Control Conference (ACC) , 2025, pp. 1185-1191. [5] J. Huang, Y. Huang, Y. Zhao, W. Meng, and J. Xu, “CoCoL: A Communication Efficient Decentralized Collaborative Learning Method for Multi-Robot Systems,” in 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2025, pp. 6219-6226. [6] A. Nedic and A. Ozdaglar, “Distributed Subgradient Methods for Multi-Agent Optimization,” IEEE Transactions on Automatic Control , vol. 54, no. 1, pp. 48-61, Jan. 2009. [7] K. Huang, X. Li, and S. Pu, “Distributed Stochastic Optimization Under a General Variance Condition,” IEEE Transactions on Automatic Control , vol. 69, no. 9, pp. 6105-6120, Sept. 2024. [8] Y. Du and K. You, “Asynchronous Stochastic Gradient Descent Over Decentralized Datasets,” IEEE Transactions on Control of Network Systems , vol. 8, no. 3, pp. 1212-1224, Sept. 2021. [9] K. Yuan, Q. Ling, and W. Yin, “On the Convergence of Decentralized Gradient Descent,” SIAM Journal on Optimization , vol. 26, no. 3, pp. 1835-1854, 2016. [10] S. Wang, and V. Y. F. Tan, “A Mirror Descent-based Algorithm for Corruption-tolerant Distributed Gradient Descent,” IEEE Transactions on Signal Processing , vol. 73, pp. 827-842, 2025. [11] Z. Yu, D. W. C. Ho, and D. Yuan, “Distributed Randomized Gradient-Free Mirror Descent Algorithm for Constrained Optimization,” IEEE Transactions on Automatic Control , vol. 67, no. 2, pp. 957-964, Feb. 2022. [12] X. Fang, B. Zhang, and D. Yuan, “Gossip-based Distributed Stochastic Mirror Descent for Constrained Optimization,” Neural Networks , vol. 175, pp. 106291, 2024. [13] Y. Su, Q. Wang, and C. Sun, “Distributed Primal-Dual Method for Convex Optimization with Coupled Constraints,” IEEE Transactions on Signal Processing , vol. 70, pp. 523-535, 2022. [14] J. Xu, S. Zhu, Y. C. Soh, and L. Xie, “Augmented Distributed Gradient Methods for Multi-agent Optimization under Uncoordinated Constant Stepsizes,” in 2015 54th IEEE Conference on Decision and Control (CDC) , 2015, pp. 2055-2060. [15] L. Xu, X. Yi, G. Wen, Y. Shi, K. H. Johansson, and T. Yang, “Compressed Gradient Tracking Algorithms for Distributed Nonconvex Optimization,” Automatica , vol. 177, no. 112286, 2025. [16] D. Wang, J. Liu, J. Lian, and W. Wang, “Gradient-tracking-based Dis-tributed Nesterov Accelerated Algorithms for Multiple Cluster Games over Time-varying Unbalanced Digraphs,” Automatica , vol. 171, no. 111925, 2025. [17] K. Huang, L. Zhou, and S. Pu, “Distributed Random Reshuffling Methods with Improved Convergence,” IEEE Transactions on Automatic Control , vol. 70, no. 9, pp. 6175-6182, Sep. 2025. [18] J. Gao, X. W. Liu, Y. H. Dai, Y. Huang, and P. Yang, “Achieving Geometric Convergence for Distributed Optimization with Barzilari-Borwein Step Sizes,” Science China Information Sciences , vol. 65, no. 4, pp. 149204, 2022. [19] S. Yang, Y. Shen, J. Cao, and T. Huang, “Distributed Heavy-ball over Time-varying Digraphs with Barzilari-Borwein Step Sizes,” IEEE Transactions on Emerging Topics in Computational Intelligence , vol. 8, no. 6, pp. 4011-4021, 2024. [20] Z. Chen and Y. Wang, “Distributed Optimization and Learning with Automated Stepsizes,” in 2024 IEEE 63rd Conference on Decision and Control (CDC) , 2024, pp. 3121-3126. [21] X. Chen, B. Karimi, W. Zhao, and P. Li, “On the Convergence of Decentralized Adaptive Gradient Methods,” in Proceedings of the 14th Asian Conference on Machine Learning , 2023, pp. 217-232. [22] X. Ren, D. Li, Y. Xi, and H. Shao, “Distributed Subgradient Algorithm for Multi-agent Optimization with Dynamic Stepsize,” IEEE/CAA Jour-nal of Automatica Sinica , vol. 8, no. 8, pp. 1451-1464, 2021. [23] B. T. Polyak, “Introduction to Optimization. Translations Series in Math-ematics and Engineering,” New York, NY, USA: Optimization Software, 1987. [24] N. Loizou, S. Vaswani, I. H. Laradji, and S. Lacoste-Julien, “Stochastic Polyak Step-size for Sgd: An Adaptive Learning Rate for Fast Con-vergence,” in International Conference on Artificial Intelligence and Statistics (AISTATS) , PMLR, 2021, pp. 1306-1314. [25] A. Orvieto, S. Lacoste-Julien, and N. Loizou, “Dynamics of Sgd with Stochastic Polyak Stepsizes: Truly Adaptive Variants and Convergence to Exact Solution,” in Advances in Neural Information Processing Systems , NeurIPS, 2022, pp. 26943–26954. [26] S. Li, W. J. Swartworth, M. Tak´ aˇ c, D. Needell, and R. M. Gower, “SP2: A Second Order Stochastic Polyak Method,” arXiv preprint ,arXiv:2207.08171, 2022. [27] F. Schaipp, R. M. Gower, and M. Ulbrich, “A Stochastic Proximal Polyak Step Size,” arXiv preprint , arXiv:2301.04935, 2023. [28] J. Zhang, C. Jin, and Y. Gu, “Adaptive Polyak Step-Size for Momentum Accelerated Stochastic Gradient Descent With General Convergence Guarantee,” IEEE Transactions on Signal Processing , vol. 73, pp. 462-476, 2025. [29] A. Nedic, A. Ozdaglar, and P. A. Parrilo, “Constrained Consensus and Optimization in Multi-agent Networks,” IEEE Transactions on Automatic Control , vol. 55, no. 4, pp. 922–938, 2010. [30] A. Nedic, A. Olshevsky, and M. G. Rabbat, “Network Topology and Communication-computation Tradeoffs in Decentralized Optimization,” in Proceedings of the IEEE , 2018, vol. 106, no. 5, pp. 953–976. [31] D. P. Bertsekas, A. Nedic, and A. E. Ozdaglar, “Convex Analysis and Optimization,” Belmont, MA, USA: Athena Scientific, 2003. [32] M. Prazeres and A. M. Oberman, “Stochastic Gradient Descent with Polyak’s Learning Rate,” Journal of Scientific Computing , vol. 89, pp. 1–16, 2021. [33] R. M. Gower, A. Defazio, and M. Rabbat, “Stochastic Polyak Stepsize with A Moving Target,” arXiv preprint , arXiv:2106.11851, 2021. 12 
+
+[34] J. Qin, A. Liu, M. Bragin and N. Yu, “AccSPS Learning Rate: Ac-celerated Convergence through Decision-Adjusted Levels for Stochastic Polyak Stepsize,” IEEE Transactions on Automation Science and Engi-neering , Early access, doi: 10.1109/TASE.2025.3613719. [35] A. Liu, M. A. Bragin, X. Chen, and X. Guan, “Accelerating Level-value Adjustment for the Polyak Stepsize,” Journal of Optimization Theory and Applications , vol. 206, no. 3, pp. 71, 2025. [36] L. Xiao, and S. Boyd, “Fast linear iterations for distributed averaging,” 
+
+Systems & Control Letters , vol. 53, no. 1, pp. 65-78, 2004. 
+
+Chen Ouyang received the B.S. degree in infor-mation and computational science, the M.E. degrees in School of Mathematics and Information Science from Guangxi University, Nanning, China, in 2022, 2025, respectively. He is now pursuing his Ph.D. in the School of Intelligent Systems Engineering, Sun Yat-sen University. His current research interests in-clude distributed optimization and machine learning. 
+
+Yongyang Xiong received the B.S. degree in in-formation and computational science, the M.E. and Ph.D. degrees in control science and engineering from Harbin Institute of Technology, Harbin, China, in 2012, 2014, and 2020, respectively. From 2017 to 2018, he was a joint Ph.D. student with the School of Electrical and Electronic Engineering, Nanyang Technological University, Singapore. From 2021 to 2024, he was a Postdoctoral Fellow with the Depart-ment of Automation, Tsinghua University, Beijing, China. Currently, he is an associate professor with the School of Intelligent Systems Engineering, Sun Yat-sen University, Shen-zhen, China. His current research interests include networked control systems, distributed optimization and learning, multi-agent reinforcement learning and their applications. 
+
+Jinming Xu received the B.S. degree in Mechani-cal Engineering from Shandong University, China, in 2009 and the Ph.D. degree in Electrical and Electronic Engineering from Nanyang Technological University (NTU), Singapore, in 2016. From 2016 to 2017, he was a Research Fellow at the EXQUITUS center, NTU; he was also a postdoctoral researcher in the Ira A. Fulton Schools of Engineering, Arizona State University, from 2017 to 2018, and the School of Industrial Engineering, Purdue University, from 2018 to 2019, respectively. In 2019, he joined Zhe-jiang University, China, where he is currently a Professor with the College of Control Science and Engineering. His research interests include distributed optimization and control, machine learning and network science. He has published over 50 peer-reviewed papers in prestigious journals and leading conferences. He has been the Associate Editor of IEEE TRANSACTIONS on SIGNAL and INFORMATION PROCESSING OVER NETWORKS. 
+
+Keyou You (Senior Member, IEEE) received the B.S. degree in statistical science from Sun Yat-sen University, Guangzhou, China, in 2007 and the Ph.D. degree in electrical and electronic engineering from Nanyang Technological University (NTU), Singa-pore, in 2012. After briefly working as a Research Fellow at NTU, he joined Tsinghua University, Beijing, China, where he is currently a Full Professor in the De-partment of Automation. He held visiting positions with Politecnico di Torino, Turin, Italy, Hong Kong University of Science and Technology, Hong Kong, China, University of Melbourne, Melbourne, Victoria, Australia, and so on. His research interests include the intersections between control, optimization and learning, as well as their applications in autonomous systems. Dr. You received the Guan Zhaozhi Award at the 29th Chinese Control Conference in 2010 and the ACA (Asian Control Association) Temasek Young Educator Award in 2019. He received the National Science Funds for Excellent Young Scholars in 2017 and for Distinguished Young Scholars in 2023. He is currently an Associate Editor for Automatica and IEEE TRANSACTIONS ON CONTROL OF NETWORK SYSTEMS. 
+
+Yang Shi (Fellow, IEEE) received the B.Sc. and Ph.D. degrees in mechanical engineering and auto-matic control from Northwestern Polytechnical Uni-versity, Xi’an, China, in 1994 and 1998, respectively, and the Ph.D. degree in electrical and computer en-gineering from the University of Alberta, Edmonton, AB, Canada, in 2005. He was a Research Associate with the Department of Automation, Tsinghua Uni-versity, China, from 1998 to 2000. From 2005 to 2009, he was an Assistant Professor and an Asso-ciate Professor with the Department of Mechanical Engineering, University of Saskatchewan, Saskatoon, SK, Canada. In 2009, he joined the University of Victoria, and currentlu he is a Professor with the Department of Mechanical Engineering, University of Victoria, Victoria, BC, Canada. His current research interests include networked and distributed systems, model predictive control (MPC), cyber-physical systems (CPS), robotics and mechatronics, navigation and control of autonomous systems (AUV and UAV), and energy system applications. Dr. Shi is the IFAC Council Member. He is a fellow of ASME, CSME, Engineering Institute of Canada (EIC), Canadian Academy of Engineering (CAE), Royal Society of Canada (RSC), and a registered Professional Engineer in British Columbia and Canada. He received the University of Saskatchewan Student Union Teaching Excellence Award in 2007, the Faculty of Engineering Teaching Excellence Award in 2012 at the University of Victoria (UVic), and the 2023 REACH Award for Excellence in Graduate Student Supervision and Mentorship. On research, he was a recipient of the JSPS Invitation Fellowship (short-term) in 2013, the UVic Craigdarroch Silver Medal for Excellence in Research in 2015, the Humboldt Research Fellowship for Experienced Researchers in 2018, CSME Mechatronics Medal in 2023, the IEEE Dr.-Ing. Eugene Mittelmann Achievement Award in 2023, the 2024 IEEE Canada Outstanding Engineer Award. He was a Vice-President on Conference Activities of IEEE IES from 2022 to 2025 and the Chair of IEEE IES Technical Committee on Industrial Cyber-Physical Systems. Currently, he is the Editor-in-Chief of IEEE TRANSACTIONS ON INDUSTRIAL ELECTRONICS. He also serves as Associate Editor for Automatica , IEEE TRANSACTIONS ON AUTOMATIC CONTROL, and Annual Review in Controls .

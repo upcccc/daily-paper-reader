@@ -1,0 +1,3608 @@
+Title: Denoising the US Census: Succinct Block Hierarchical Regression
+
+URL Source: https://arxiv.org/pdf/2603.10099v1
+
+Published Time: Thu, 12 Mar 2026 00:07:28 GMT
+
+Number of Pages: 36
+
+Markdown Content:
+# Denoising the US Census: Succinct Block Hierarchical Regression 
+
+## Badih Ghazi, Pritish Kamath, Ravi Kumar, Pasin Manurangsi, Adam Sealfon Google Research March 12, 2026 
+
+Abstract 
+
+The US Census Bureau Disclosure Avoidance System (DAS) balances confidentiality and utility re-quirements for the decennial US Census (Abowd et al. 2022). The DAS was used in the 2020 Census to produce demographic datasets critically used for legislative apportionment and redistricting, federal and state funding allocation, municipal and infrastructure planning, and scientific research. At the heart of DAS is TopDown , a heuristic post-processing method that combines billions of private noisy measure-ments across six geographic levels in order to produce new estimates that are consistent, more accurate, and satisfy certain structural constraints on the data. In this work, we introduce BlueDown , a new post-processing method that produces more accurate, consistent estimates while satisfying the same privacy guarantees and structural constraints. We obtain especially large accuracy improvements for aggregates at the county and tract levels on evaluation metrics proposed by the US Census Bureau. From a technical perspective, we develop a new algorithm for generalized least-squares regression that leverages the hierarchical structure of the measurements and that is statistically optimal among linear unbiased estimators. This reduces the computational dependence on the number of geographic regions measured from matrix multiplication time, which would be infeasible for census-scale data, to linear time. We further improve the efficiency of our algorithm using succinct linear-algebraic operations that exploit symmetries in the structure of the measurements and constraints. We believe our hierarchical regression and succinct operations to be of independent interest. 
+
+# 1 Introduction 
+
+Data from the decennial United States Census is widely used not only to determine the apportionment of congressional seats under U.S. Public Law 94–171 [US 75] but also to inform the allocation of over $1.5 trillion in annual federal funding [Rea20], for municipal and infrastructure planning [Nat25], and for research in disciplines such as sociology, public health, political science, and economics (e.g., [KCW +05, BDGH21, ABJ +24]). A central requirement of the census, as mandated by Title 13 of the U.S. Code, is that individual responses must remain confidential [US 24a, US 12]. Historically, confidentiality was achieved using heuristic data-swapping techniques. However, simulated reconstruction attacks after the 2010 Census revealed that this approach was seriously flawed and exposed the data of between 50 and 180 million individuals, depending on what additional information was available to the attacker [Abo21, AAA +25]. This privacy failure led to the adoption of a mathematically rigorous disclosure avoidance framework based on Differential Privacy (DP) [DMNS06] for the 2020 Census [Abo18]. DP balances accuracy and privacy demands, enabling the publication of approximate aggregate statistics while safeguarding individual confidentiality. While DP provides provable, robust privacy guarantees, the requisite noise addition inherently degrades statistical utility. To navigate this privacy-utility tradeoff, the U.S. Census Bureau developed the TopDown 
+
+Algorithm for use in the 2020 Disclosure Avoidance System (DAS) [AAC +22]. TopDown is a sophisticated, heuristic procedure that takes over 10 billion noisy estimates generated in the first phase of the DAS and processes them hierarchically in geographic batches. It uses a massive series of constrained optimization problems to restore required invariants and produce a consistent Microdata Detail File (MDF), while also improving the accuracy of the underlying measurements. The MDF is aggregated to generate the Redis-tricting Data Summary (RDS) File and is also used in the generation of the Demographics and Housing Characteristics (DHC) File, two of the principal data products of the decennial census. 1
+
+> arXiv:2603.10099v1 [cs.LG] 10 Mar 2026
+
+## 1.1 Our Contributions 
+
+We propose a novel post-processing method, the BlueDown Algorithm (Algorithm 7), that attains greater statistical efficiency than TopDown while satisfying the same structural constraints. We first exploit the hierarchical structure of the problem to compute the generalized least-squares regression estimator for the full collection of input estimates (Algorithm 3). This yields the best linear unbiased estimator (BLUE) for all estimates (Theorem 8.1). In particular, unlike TopDown , we ensure that the information from all input measurements are combined optimally to produce each output estimate. Our final BlueDown algorithm results from a heuristic modification to this procedure, similar to TopDown , to enforce all inequality and integrality constraints. A key highlight of our algorithm is that we make these computations highly efficient by exploiting the symmetries of the measurement operations and constraints by operating over a certain succinct representation of matrices ( §9). Through extensive experiments on the 2020 Census data, we demonstrate that BlueDown ’s theoretical guarantees translate directly into significant empirical accuracy gains. The BlueDown algorithm generates estimates with substantially lower error than TopDown , achieving 8–50% accuracy improvements across evaluation metrics on county and tract-level data and smaller but consistent improvements at the other geographic levels. We expect that our more accurate algorithm should provide similar utility gains in the applications and downstream tasks that rely on census data. 
+
+## 1.2 Related Work 
+
+We describe a formalization of the Census DAS in § 2 and § 6. For a more in-depth description of the Census DAS and the TopDown algorithm, see [AAC +22]. This algorithm has been the state of the art for postprocessing of census redistricting data. The block hierarchical estimation problem characterizing the structure of the census measurements can be viewed as a generalization of tree-structured queries studied in [HRMS10, CPS +12, DGK +23]. Algorithms developed in these works share a similar structure with our Algorithm 3, a component of BlueDown . However, additional challenges are raised in our setting since the census measurements are only partially or block 
+
+hierarchical. Our algorithm additionally supports “per-node” equality constraints, which arise only in the block-hierarchical setting. More closely related is the recent work of [CMZ25], which develops an algorithm similar to our Algorithm 3 subroutine for computing the least-squares optimal estimator of block hierarchical estimates. The algorithm of [CMZ25] is equivalent to the special case of Algorithm 3 applied in the absence of equality constraints, in the sense that both compute the unique best linear unbiased estimator. However, Algorithm 3 also optimally incorporates linear equality constraints, and furthermore we show how to implement it more efficiently leveraging symmetries of measurement operations ( §9). Each of these algorithms—including ours—belongs to the class of DP matrix mechanisms (also known as factorization mechanisms ) [LMH +15, NTZ16], where one applies a linear transformation to the data, adds independent noise to the transformed data, and finally applies another linear transformation on this noisy transformed data to arrive at the answers to the queries. Matrix mechanisms enjoy strong guarantees: When the transformations are selected carefully, they can achieve asymptotically minimal errors among all DP mechanisms assuming the number of data points is sufficiently large [NTZ16, ENU20]. Optimizing for these linear transformation (a.k.a. “factorization”) can be formulated as a semi-definite program (see, e.g., [MNT18]), but solving such a program is impractical for large matrices. While attempts have been made to make the general matrix mechanism more efficient [MMHM23], it remains infeasible at the scale of the US Census matrix. Our work can thus be seen as implicitly obtaining the second linear transformation and applying it, for the US Census workload, without explicitly materializing the full transformation matrix. In a recent work, [SSW25] demonstrated that the privacy guarantees provided by the Census DAS are better than originally reported, using improved privacy accounting analysis. Because our work uses the same noisy measurements as the Census DAS, our privacy guarantees are identical, and thus, can also benefit from this improved analysis. 22 The US Census Setting Census returns  
+
+> Census Edited File (CEF)
+> Noisy Measurement File (NMF)
+> Microdata Detail File (MDF)
+> Redistricting data summary file (P.L. 94-171)
+> compilation, processing
+> noise addition
+> denoising algorithm tabulation
+> Confidential
+
+Figure 1: The flow of data through the US Census Disclosure Avoidance System. 
+
+Data Pipeline. A simplified overview of the processing pipeline of the Census Disclosure Avoidance System (DAS) is outlined in Figure 1. The raw census returns are compiled, de-duplicated, imputed, and tabulated to generate the Census Edited File (CEF) , which is the most authoritative set of census aggregates but is sensitive and confidential. To achieve differential privacy (DP), discrete Gaussian noise (Definition 5.3) is added to the CEF data to generate the Noisy Measurement File (NMF) , which is publicly released but must be processed further for usability. A post-processing denoising algorithm (either TopDown or our proposed 
+
+BlueDown ) ingests the NMF, final tabulation geographic definitions, policy-mandated invariants, and expert-defined edit constraints and structural zeros as its inputs. The algorithm’s primary output is a Microdata Detail File (MDF) , containing one record for each person and housing unit, which is subsequently aggregated to produce the 2020 Census Redistricting Data (P.L. 94-171) Summary File. 
+
+Geocodes and Demographics. Each person in the raw census data is associated to a demographic bucket and to a leaf in the tree of geographies known as the geocode tree. We describe these next. 
+
+• The geocode tree T has six levels: Country , State , County , Tract , Block Group , and Block , where the leaves L correspond to the different Blocks .1 See Figure 2 for an illustration of one path in the tree. 37 of the 50 states in the US are accounted in two ways, one spine for American Indian and Alaska Native (AIAN) population, and one for non-AIAN population—and with inclusion of Washington D.C., this leads to a total of 88 “states” at depth one in the tree. The number of non-empty blocks in the 2020 hierarchy was 5,892,698. 
+
+• The demographic buckets B are specified by the following: 
+
+▷ Household or Group Quarters Type with 8 types, (1) household, (2) correctional facilities for adults, (3) juvenile facilities, (4) nursing facilities/skilled-nursing facilities, (5) other institutional facilities, (6) college/university student housing, (7) military quarters, (8) other noninstitutional facilities; These 8 types are categorized into three groups: individual quarters {1}; institutional group quar-ters {2, 3, 4, 5}; and non-institutional group quarters {6, 7, 8}.
+
+▷ Hispanic/Latino origin with 2 types: Hispanic/Latino; not Hispanic/Latino, 
+
+▷ Voting Age , with 2 types: age 17 or younger on April 1; 2020, age 18 or older on April 1, 2020, 
+
+▷ Census Race with 63 types, consisting of every combination of (1) Black/African American, (2) Amer-ican Indian/Native Alaskan, (3) Asian, (4) Native Hawaiian/Pacific Islander, (5) White, and (6) some other race, except “none of the above.” In total, |B| = 8 ·2·2·63 = 2016, and we denote a bucket b ∈ B as a tuple ( b1, b 2, b 3, b 4) ∈ [8] ×[2] ×[2] ×[63]. 
+
+> 1In some cases, particularly in the AIAN spine, some block groups (or even tracts or counties) may contain only a single block, so the tree can be simplified by omitting single child nodes that correspond to an identical geography as the parent. Such block groups should then be treated as leaves in the tree. For notational simplicity our discussion describes all leaves as at the block level, but our algorithm works equally well if some leaves are at higher levels.
+
+3Country US 88                 
+
+> State NY
+> (AIAN)
+> NY
+> (non-AIAN) IL KY
+> County 165 167 169 171
+> Tract 001400 001500 001600
+> Block Group 123
+> Block 1000 1001 1002
+
+Figure 2: Illustration of the geocode tree in the US Census. For each node u ∈ T and each bucket b ∈ B , we use x⋆u,b ≥ 0 to denote the true count of the people living in the location represented by the node u, and belonging to the demographic bucket b, according to the CEF. We use x⋆u ∈ ZB≥0 to denote the |B| -dimensional vector of counts associated to all the demographic buckets for node u, and x⋆ ∈ ZT ×B ≥0 to denote the combined vector across all nodes and demographic buckets. 
+
+Input Measurements. For each node u in the geocode tree, we observe noisy measurements over various aggregate queries over combinations of demographic types. Each query result is observed with the addition of discrete Gaussian noise [CKS20]; the scale of the noise is different for different queries and different levels, as per the privacy budget allocated across the queries according to the specification described in [AAC +22] and in the NMF dataset itself. We denote such noisy measurements as yu ← Wux⋆u + ξu where Wu is the “workload matrix” for node u, and ξu is the added noise with covariance Σ u.
+
+• Workload matrix Wu. Each per-node workload Wu is a collection of different types of linear queries applied to x⋆u for the node u ∈ T . Each workload matrix Wu ∈ R2603 ×2016 has 2603 queries in total with the different query types described in Table 1. Due to presence of the DETAILED query, which corresponds to an identity submatrix, it is immediate that the matrix Wu has full (column) rank. 
+
+• Covariance matrix Σu. Each per-node noise covariance matrix Σ u ∈ R2603 ×2603 is diagonal. The specific values in Σ u depend on the node u, and the query type, i.e., for each node u, all queries described in a single row of Table 1 are measured with the same noise scale; see [AAC +22, Tables 4, 6] for details. 2
+
+A notable property is that for each query type, the noise scale is symmetric in the value of b4. In particular in Table 1, either there are queries that aggregate over all values of b4, or there are individual queries for each b4, all of which are measured with the same noise level. By contrast, such a symmetry does     
+
+> 2For the most part, the noise scale for a particular type of query depends on the “level” of uin T, e.g., State, County, etc. There are a few exceptions where a node with only one child is collapsed into a single node with smaller measurement variance. Our algorithm does not rely on any assumptions about the structure of the privacy budgeting across measurements and levels, except that the workload matrix must be full rank, i.e., the DETAILED query must have positive privacy budget.
+
+4Query Type Count Family of Queries Description of Query TOTAL 1 P 
+
+> b1,b 2,b 3,b 4
+
+x⋆u,b Total population. 
+
+CENRACE 63 P 
+
+> b1,b 2,b 3
+
+x⋆u,b for b4 ∈ [63] Population counts for each OMB-designated race category. 
+
+HISPANIC 2 P 
+
+> b1,b 3,b 4
+
+x⋆u,b for b2 ∈ [2] Population counts for each value of Hispanic/Latino origin. 
+
+VOTINGAGE 2 P 
+
+> b1,b 2,b 4
+
+x⋆u,b for b3 ∈ [2] Population counts for two age groups (17 or younger, 18 or older). 
+
+HHINSTLEVELS 3 P
+
+> b1∈C
+
+P 
+
+> b2,b 3,b 4
+
+x⋆u,b 
+
+for C ∈ {{ 1}, {2.. 5}, {6.. 8}} 
+
+Population counts per category of household. C sets correspond to in-dividual quarters {1}, institutional group quarters {2, 3, 4, 5}, and non-institutional group quarters {6, 7, 8}.
+
+HHGQ 8 P 
+
+> b2,b 3,b 4
+
+x⋆u,b for b1 ∈ [8] Population counts by each type of household / group quarters. 
+
+HISPANIC 
+
+× CENRACE 
+
+126 P 
+
+> b1,b 3
+
+x⋆u,b 
+
+for ( b2, b 4) ∈ [2] × [63] Population counts for each value of Hispanic/Latino origin and race. 
+
+VOTINGAGE 
+
+× CENRACE 
+
+126 P 
+
+> b1,b 2
+
+x⋆u,b 
+
+for ( b3, b 4) ∈ [2] × [63] Population counts for each value of voting age and race. 
+
+VOTINGAGE 
+
+× HISPANIC 
+
+4 P 
+
+> b1,b 4
+
+x⋆u,b 
+
+for ( b2, b 3) ∈ [2] × [2] Population counts for each value of Hispanic/Latino origin and voting age. 
+
+VOTINGAGE 
+
+× HISPANIC 
+
+× CENRACE 
+
+252 P 
+
+> b1
+
+x⋆u,b 
+
+for ( b2, b 3, b 4) ∈ [2] × [2] × [63] Population counts for each value of voting age, Hispanic/Latino origin and race. 
+
+DETAILED 2016 x⋆u,b 
+
+for b ∈ [8] × [2] × [2] × [63] Population counts for each individual bucket. Table 1: Queries in each per-node workload Wu, totaling 2603 queries. not hold for b1 due to presence of the HHINSTLEVELS query type. We critically leverage this symmetry for b4 by working with a “succinct representation” of covariance matrices (Definition 9.1), represented using two 32 × 32 dimensional matrices, making matrix operations considerably more efficient. We discuss this in more detail in §9. 
+
+Invariants and Constraints. To ensure the complete accuracy of electoral apportionment, the statewide total populations are reported exactly, bypassing the DP mechanism. Additionally, the total number of housing units and occupied group quarters facilities of each type is released for every block, as well as certain combinations of demographics that are deemed impossible. The implied equality and inequality constraints are then assumed to hold on the collected data and enforced on the output, as described below. 
+
+• Equality Constraints. For each geographic region with zero households or occupied group quarters of a particular type, the number of individuals in that type of housing is constrained to be zero. The number of individuals below the age of 18 in the group quarters type “Nursing facilities / skilled nursing facilities” is always constrained to be zero. The total number of individuals residing in each state (across both the AIAN and the non-AIAN spine) is constrained to be equal to the released enumerated count for that state, and similarly for the US as a whole [US 23b]. 5• Inequality Constraints. Every occupied group quarters facility must contain at least 1 individual, and every housing unit and occupied group quarters facility must contain at most 99,999 individuals. The number of households and occupied group quarters of each type in each geographic region is publicly released, implying upper and lower bounds on the total number of individuals in each household or group quarters type for each region [US 23b]. Finally, all counts are required to be non-negative. 
+
+# 3 Overview of BlueDown 
+
+Given the noisy measurements over various aggregate queries at each node u, the goal is the following: 
+
+Obtain consistent low-variance estimates ˆxu ∈ ZB≥0 satisfying all invariants and constraints. 
+
+Here, “consistent” means that the sum of estimated counts in all blocks below u agrees with ˆ xu for each query. At a high level, if we ignore the inequality, equality, and integrality constraints, then the problem is as follows: given W x ⋆ + η where W is the combined workload matrix across all nodes and η is the discrete Gaussian noise added for privacy, find an estimate ˆ x of x⋆.As stated, this is a generalized linear regression problem, but with additional considerations. The first complication is that, as mentioned above, we have linear equality constraints in the form of per-node equality constraints, the statewide total constraints, and consistency with respect to the tree of geocodes. However, this “equality-constrained” linear regression problem can still be solved using standard techniques (described in §5.1), yielding a so-called best linear unbiased estimator (BLUE) . The resulting method, unfortunately, is not computationally efficient for the census problem, since even explicitly materializing the matrix W
+
+is already infeasible at Census scale. Fortunately, the workload matrix W and constraints have a block-hierarchical structure (formalized in §6.2) that we exploit to achieve an efficient algorithm whose running time scales linearly with the size of the tree. To do so, we develop efficient primitives that can optimally combine two independent BLUEs related by equality constraints (described in §7.1); the resulting estimator is the BLUE of the combined constrained linear regression. Using this primitive, we develop an efficient algorithm (Algorithm 3 in §8) for obtaining the BLUE under the block-hierarchical structure of W , in two passes over the geocode tree. The bottom-up pass recursively combines the estimates for a node with the estimators of its children, thereby computing the BLUE for each node with respect to the set of measurements corresponding to itself and its tree descendants. In the top-down pass, we combine the estimator for each node with estimators for its parents and siblings. This gives us the final BLUE for the equality-constrained generalized linear regression problem. This formulation of the algorithm is still not efficient enough at the scale of the US Census. This is due to the fact that the covariance matrices at each node are quite large (2016 × 2016 dimensional). In 
+
+§9, we exploit symmetries of these matrices and show how to represent and perform operations over these matrices succinctly using a pair of 32 ×32 dimensional matrices. This yields a nearly 2000-fold reduction in the representation size of the covariance matrices, and an even larger improvement in the time needed to compute matrix inverses and products, which are the operations that dominate the performance of Algorithm 3. Using this succinct matrix representation, the modified Algorithm 3 is highly performant but does not yet satisfy the full suite of constraints required in the Census setting. Our final BlueDown algorithm (Algorithm 7) applies a heuristic modification to the top-down pass of Algorithm 3 to accommodate the inequality and integrality constraints. This modified top-down pass can be viewed as a generalization of the US Census 
+
+TopDown algorithm to non-diagonal covariance matrices. The incorporation of these constraints yields a dataset that fully conforms to all Census data requirements. Moreover, while satisfying inequality constraints inherently results in a biased estimator, the incorporation of these constraints substantially improves error on many queries since the constraints are derived from known structural properties of the Census data. 
+
+# 4 Experimental Results 
+
+## 4.1 Setup 
+
+We evaluate the performance of our algorithm on data from the 2020 US Census. While we can run our algorithm on the released 2020 Noisy Measurement File (NMF), the ground-truth Census Edited File (CEF) 6is confidential and so we cannot directly compute the accuracy of the resulting measurements. 3 Instead, following an approach proposed by the Census Bureau [AHP +25], we sample new Noisy Measurement Files using the same protocol, noise distribution, and privacy budgets used by the US Census to generate the pro-duction NMF but using the public 2020 Microdata Detail File (MDF) as the input instead of the confidential CEF. We use these datasets to compute accuracy metrics for both our BlueDown algorithm and the Census 
+
+TopDown algorithm, comparing the estimates after noise addition and each postprocessing algorithm to the input values from the MDF. Evaluations performed by the US Census [AAC +22, US 23a] confirm that the MDF estimates are close approximations for the confidential CEF values, so this is an extremely close proxy for evaluating how our algorithm would perform in production settings. Indeed, this exact approach was used by the Census Bureau to obtain confidence intervals for the performance of TopDown , and the Bureau released 50 replicate microdata files generated by running TopDown on NMFs generated in the same way from the public MDF and following the same probability distribution [US 24b]. Using the MDF as ground truth, we independently sample 10 noisy measurement files NMF 1, . . . , NMF 10 .On each of these NMFs, we run our algorithm ( BlueDown , Algorithm 7) and an implementation of the 2020 Census TopDown algorithm [AAC +22]. For each of these postprocessed datasets BlueDown 1, . . . , BlueDown 10 ,
+
+TopDown 1, . . . , TopDown 10 , we compute error metrics on each of the two outputs by computing the ℓ1-distance of partial aggregates of the estimates to the corresponding aggregates of the MDF. Each partial aggregate is a statistical marginal query that computes the histogram of the number of individuals with each possible feature value for some subset of the features B (Housing type, voting age, Hispanic or non-Hispanic, race) at some level of the tree (country, state, county, tract, block group, or block). Some examples of partial aggregates are the queries that make up the NMF, as described in Table 1. For each partial aggregate at some level of the tree, we compute the mean error across all geocodes at that level. Representing a partial aggregate as a matrix Q, this is given by the expression 
+
+err Qℓ (x) = 1Γℓ
+
+X
+
+> g∈Γℓ
+
+∥Qx ⋆g − Qx g ∥,
+
+where Γ ℓ denotes the set of all geocodes at level ℓ of the tree, x⋆g is the vector of MDF counts for geocode 
+
+g, and xg is a vector of estimates for geocode g produced by either of the postprocessing algorithms. In order to display the errors of estimates of different scales in the same figure, we normalize each error value by dividing it by the median error for that query for the 10 baseline replicates TopDown 1, . . . , TopDown 10 .Errors reported in tables in §A are raw ℓ1-errors without normalization. 
+
+## 4.2 Evaluation 
+
+The normalized errors for a selection of partial aggregates across the 10 runs of each algorithm are summarized in Figures 3 and 4. Since these errors are normalized by the median error for the 10 runs of TopDown , in each plot the points corresponding to TopDown are centered at 1 .0, while the values of the points corresponding to 
+
+BlueDown give the improvement over the average error of TopDown . Additional results and the un-normalized accuracy values are included in §A. Figure 3 shows errors of the ten executions of each algorithm for six partial aggregates at each of four levels of the tree. These queries are: (i) the total count for geocodes at that level, 4 (ii) the counts for each of the eight housing types, (iii) the counts for the below-18 and over-18 populations, (iv) the Hispanic/non-Hispanic counts, (v) the counts for each of the 63 race categories, (vi) the counts for each of the 126 combinations of Hispanic or non-Hispanic and race, and (vii) the counts for each of the |B| = 2016 combinations of all four features. We present the accuracy improvement of each of these queries for each of the middle four levels of the tree: State, County, Tract, and Block Group. We observe improvements of varying magnitudes across all queries and levels, with the largest error reductions of 8–45% found at the county and tract levels. The error values are more stable at lower levels of the tree, presumably due to the statistical concentration effects of averaging the sampled errors at a larger number of tree nodes.  
+
+> 3For the linear postprocessing algorithm described in Algorithm 3, we obtain an analytic expression for the variance of the subgaussian error distribution and can bound the error without access to ground truth, but for our full algorithm the error distribution cannot be computed without access to the ground truth. For both algorithms, computing the empirical realized errors requires access to the ground truth.
+> 4Note that statewide totals are invariant under both algorithms, so we omit the total query at the state level.
+
+7housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+detailed 
+
+state queries 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+1.1 
+
+1.2 
+
+> normalized error
+
+total 
+
+housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+detailed 
+
+county queries 
+
+0.65 
+
+0.70 
+
+0.75 
+
+0.80 
+
+0.85 
+
+0.90 
+
+0.95 
+
+1.00 
+
+> normalized error
+
+BlueDown 
+
+TopDown total 
+
+housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+detailed 
+
+tract queries 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+> normalized error
+
+total 
+
+housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+detailed 
+
+block group queries 
+
+0.93 
+
+0.94 
+
+0.95 
+
+0.96 
+
+0.97 
+
+0.98 
+
+0.99 
+
+1.00 
+
+> normalized error
+
+total 
+
+housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+v. age x hisp. x race      
+
+> 0100 200 300 400 500
+
+Error distributions for county queries 
+
+detailed total 
+
+housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+v. age x hisp. x race         
+
+> 025 50 75 100 125 150 175 200
+
+Error distributions for tract queries 
+
+detailed Figure 3: Average accuracy improvements for our algorithm for queries aggregating by state, county, tract, and block group, and error distributions of queries across each geographic unit at the county and tract levels. 8The final two panels of Figure 3 show a ridgeline plot of the error distributions with KDE smoothing for each of these queries 5 across all 10 runs, where the distribution is over all geocodes at the county and tract levels, respectively. Figure 4 shows the improvements for 15 additional queries at the county and tract levels and 8 additional queries at the block group and block levels. The county and tract level queries are among those evaluated in the US Census release of detailed summary metrics for the TopDown algorithm [US 23a]. The two upper plots show the normalized errors for the ten executions of each algorithm on seven race queries, consisting of the counts for each single-race category and for the combination of all other race categories. The four lower plots show the relative errors for the counts for each of the seven categories of group quarters. Many of these queries exhibit even larger accuracy improvements, with error reductions of 25–35% for most county-level race queries and 30–60% for most group quarters queries at both the county and tract levels. At the block group and block levels, we see only a small improvement for the household query (“HH”) but large improvements for the seven group quarters queries, which overall incur much lower error due to greater sparsity. The large utility improvements for the housing type queries are likely due in part to the BlueDown 
+
+algorithm’s bottom-up incorporation of zero constraints for blocks without group quarters facilities, resulting in a larger effective privacy budget for such queries. Figure 5 shows the mean discrepancy (i.e., bias) for the total population query across geographic units grouped in bins by population size, across the 10 runs of each algorithm. Both TopDown and BlueDown typ-ically exhibit positive bias for small geographic units and negative bias for large geographic units. However, compared to TopDown , BlueDown exhibits much lower bias in both small and large population bins at both county and tract level. As shown in Figure 9 in §A, we observe a much smaller reduction in bias at the block group and block levels. Since both algorithms constrain the total population at the state and country levels, both incur no error and no bias for the total population query at those levels. 
+
+## 4.3 Summary and Theoretical Outlook 
+
+As shown in the previous sections, our BlueDown algorithm successfully addresses the privacy-utility tradeoff inherent in the US Census DAS. By obtaining estimates with substantially lower error than TopDown —accuracy improvements of 8–60% for various queries on county and tract-level data— BlueDown has proven to be a highly effective, statistically and computationally efficient post-processing method for the census setting. However, the empirical success of BlueDown is based on a mathematical foundation that extends far beyond the specific constraints, demographic buckets, and geocode trees of census data. As we mentioned in §3, the core component of BlueDown is a statistically optimal algorithm for block-hierarchical regression. To understand how this algorithm achieves this guarantee while also satisfying computational efficiency, we now introduce a general theoretical framework we employ in the design and analysis of the algorithm. 
+
+# 5 Technical Preliminaries 
+
+Let 1d denote the all-ones (column) vector of dimension d; when the dimension is clear from context, we will sometimes omit d.
+
+Definition 5.1 (Matrix Pseudoinverse) . For a matrix A ∈ Rm×n, its (Moore–Penrose) pseudoinverse is denoted A† ∈ Rn×m and is the unique matrix satisfying the following conditions: (i) AA †A = A, (ii) 
+
+A†AA † = A†, (iii) ( AA †)⊤ = AA †, and (iv) ( A†A)⊤ = A†A.If A is square and invertible, then A† = A−1, the usual matrix inverse. 
+
+Kronecker Algebra. For any two matrices A ∈ Rm1×n1 and B ∈ Rm2×n2 , let A ⊗ B ∈ Rm1m2×n1n2
+
+denote the Kronecker product given by the block matrix 
+
+A ⊗ B =
+
+
+
+A1,1B . . . A1,n 1 B
+
+... . . . ...
+
+Am1,1B . . . Am1,n 1 B
+
+ ,
+
+> 5as well as an additional query for each of the 252 combinations of voting age, Hispanic or non-Hispanic, and race
+
+9White alone 
+
+> Black alone
+> AIAN alone
+> Asian alone
+> NHPI alone
+> SOR alone
+> Two or more races
+
+race queries, county 
+
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> normalized error White alone
+> Black alone
+> AIAN alone
+> Asian alone
+> NHPI alone
+> SOR alone
+> Two or more races
+
+race queries, tract        
+
+> 0.825
+> 0.850
+> 0.875
+> 0.900
+> 0.925
+> 0.950
+> 0.975
+> 1.000
+> normalized error
+> BlueDown
+> TopDown HH CF JF NF OI SH MQ ON
+
+housing type queries, county 
+
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> 1.1
+> normalized error
+
+HH CF JF NF OI SH MQ ON 
+
+housing type queries, tract 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+> normalized error
+
+HH CF JF NF OI SH MQ ON 
+
+housing type queries, block group 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+> normalized error
+
+HH CF JF NF OI SH MQ ON 
+
+housing type queries, block 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+> normalized error
+
+Figure 4: Average accuracy improvements for race and group quarters type queries. For race categories, AIAN=American Indian and Alaska Native, NHPI=Native Hawaiian and Pacific Islander, SOR=Some Other Race. For group quarters categories, HH=Household, CF=Correctional facilities for adults, JF=Juvenile facilities, NF=Nursing facilities/Skilled-nursing facilities, OI=Other institutional facilities, SH=College/University student housing, MQ=Military quarters, ON=Other noninstitutional facilities. 10 <5000 <10000 <50000 <100000 100000     
+
+> size of county
+> 0.4
+> 0.3
+> 0.2
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> bias <500 <1000 <5000 <10000 10000
+> size of tract
+> 0.50
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> bias
+> BlueDown
+> TopDown
+
+Figure 5: Mean error (bias) for total population of each population bin at county and tract levels, for each replicate run. Population bins are mutually exclusive. or more explicitly, ( A ⊗ B)i,j = Ai1,j 1 · Bi2,j 2 , where i = m2(i1 − 1) + i2 and j = n2(j1 − 1) + j2.It is often possible to operate on Kronecker product matrices in terms of their individual components without having to materialize the full product matrix. We next state some identities that we repeatedly use. 
+
+Fact 5.2 (Kronecker Algebra) .
+
+• (A ⊗ B)( C ⊗ D) = AC ⊗ BD (whenever the matrix dimensions make sense, namely when the number of columns of A equals the number of rows of C, and likewise for B and D). 
+
+• (A ⊗ B)† = A† ⊗ B†; in particular A ⊗ B is invertible if and only if A and B are invertible. 
+
+• (A ⊗ B) · vec (Z) = vec (AZB ⊤), for A ∈ Rm1×n1 , B ∈ Rm2×n2 and Z ∈ Rn1×n2 . Here, vec (·) flattens a matrix into a vector using row-major ordering. This identity is sometimes known as “Roth’s Column Lemma” or the “vec trick” [Rot34]. 
+
+Discrete Gaussian Distribution. The discrete Gaussian distribution is the discrete analog of the con-tinuous Gaussian distribution, defined over integers. 
+
+Definition 5.3 (Discrete Gaussian Distribution; see, e.g., [CKS20]) . Let μ ∈ R be the mean and σ be a parameter controlling the standard deviation. The discrete Gaussian distribution over Z, with parameters 
+
+μ, σ 2, is the probability distribution given by Pr[ X = x] ∝ exp 
+
+
+
+− (x−μ)2
+
+> 2σ2
+
+
+
+, for x ∈ Z.
+
+## 5.1 Constrained Generalized Linear Regression 
+
+The main optimization problem we work with (discussed formally in §6) can be described as a constrained generalized linear regression problem with various constraints of equality, inequality, and integrality. Before describing in detail our main problem, we discuss relevant background on the classical topic of generalized linear regression both with and without equality constraints, which serves as the foundation of our work. 
+
+Generalized Linear Regression ( GLR W, Σ). The generalized linear regression problem GLR W, Σ, param-eterized by a workload matrix W ∈ Rm×n and a noise covariance Σ ∈ Rm×m, is the problem of estimating an unknown vector x⋆ ∈ Rn given observation y ∼ W x ⋆ + η, where η is drawn from a distribution with zero mean and covariance Σ; for convenience, we let GLR W, Σ(x⋆) denote the distribution of y ∈ Rm. Note that while the most common setting considers Gaussian noise, in our setting we will instead be using noise drawn 11 from a discrete Gaussian distribution. The special case of Σ = σ2I is often referred to as (ordinary) linear regression. For any GLR W, Σ problem, we will always assume that W has full column rank (i.e. rank n) and that Σ is positive definite. We study estimators ˆx : Rm → Rn of x⋆ under GLR W, Σ; while ˆ x is technically a function, we will interchangeably use it to denote the random variable ˆ x(y) for y ∼ GLR W, Σ(x⋆). For any estimator ˆx, we can associate a covariance ˆΣ := Ey [(ˆ x − E ˆx)(ˆ x − E ˆx)⊤] ∈ Rn×n.
+
+Definition 5.4 (BLUE) . The Best Linear Unbiased Estimator (BLUE) for x⋆ under GLR W, Σ, denoted ˆxBLUE , is an estimator that satisfies the following conditions (where ˆΣBLUE denotes the covariance of ˆ xBLUE ): 1. Linearity : ˆ xBLUE (y) is a linear function of y, i.e., ˆ xBLUE (y) = Ay for some A ∈ Rn×m.2. Unbiasedness : Its expected value Ey∼GLR W, Σ(x⋆)[ˆ xBLUE (y)] equals the true parameter x⋆.3. Minimum Variance : For any linear unbiased estimator ˆ x with covariance ˆΣ, the difference of covariance matrices ˆΣ − ˆΣBLUE is positive semi-definite. Given an estimator ˆ x for x⋆, we can derive an estimator for any linear projection of x⋆. For linear map 
+
+L : Rn → Rq , Lˆx is an estimator for Lx ⋆ with covariance L ˆΣL⊤. If ˆ xBLUE is the BLUE for GLR W, Σ, then for any linear unbiased estimator ˆ x with covariance ˆΣ, it follows that L ˆΣL⊤ − L ˆΣBLUE L⊤ is also positive semi-definite. We will therefore refer to ˆ z : Rm → Rq given by ˆ z(y) = LˆxBLUE (y) as the best linear unbiased estimator for Lx ⋆ under GLR W, Σ.The Gauss–Markov theorem precisely characterizes the BLUE for GLR W, Σ as the minimizer of the gen-eralized least squares ( GLS ) objective. 
+
+Lemma 5.5 (Gauss–Markov Theorem) . The BLUE for x⋆ under GLR W, Σ, and its covariance satisfy: 
+
+ˆxGLS = argmin 
+
+> x
+
+(y − W x )⊤Σ−1(y − W x ) = (W ⊤Σ−1W )−1W ⊤Σ−1y, (1) ˆΣGLS = (W ⊤Σ−1W )−1. (2) In the special case of Σ = σ2I, ˆ xGLS is known as the Ordinary Least Squares (OLS) estimator. 
+
+Equality Constrained Generalized Linear Regression ( ECGLR R,r W, Σ). The equality constrained gen-eralized least squares regression problem, denoted ECGLR R,r W, Σ and parameterized by a workload matrix 
+
+W ∈ Rm×n, a noise covariance Σ ∈ Rm×m, and equality constraints encoded by R ∈ Rq×n and r ∈ Rq , is an extension of GLR W, Σ where we are provided additional information that Rx ⋆ = r, which allows us to have an estimator ˆ x with reduced variance. We assume that R has full row rank (this is without loss of generality by removing redundant equalities) and, as with GLR W, Σ, that W has full column rank and Σ is positive definite. The notion of a BLUE for x⋆ under ECGLR R,r W, Σ is modified as follows: 
+
+• we allow the estimator to be affine , namely ˆ x = Ay + b for some A ∈ Rn×m and b ∈ Rn, and 
+
+• the condition E[ˆ xBLUE ] = x⋆ is required to hold only for x⋆ satisfying Rx ⋆ = r.The BLUE estimator for x⋆ under ECGLR R,r W, Σ is then the one with minimum variance among all such estimators. Even though we are considering affine estimators, we still refer to it as the best linear unbiased estimator (BLUE). As in the case of GLR R,r W, Σ, we can extend the notion of BLUE under ECGLR R,r W, Σ to Lx ⋆
+
+for any linear map L : Rn → Rq .
+
+Lemma 5.6. The BLUE for x⋆ under ECGLR R,r W, Σ and its covariance (as returned by Algorithm 1) satisfy: 
+
+ˆxECGLS = ˆxGLS − ˆΣGLS R⊤(R ˆΣGLS R⊤)−1(RˆxGLS − r) = ˆxGLS − P (RˆxGLS − r), (3) ˆΣECGLS = ˆΣGLS − ˆΣGLS R⊤(R ˆΣGLS R⊤)−1R ˆΣGLS = ˆΣGLS − P R ˆΣGLS , (4) 
+
+where ˆxGLS and ˆΣGLS are as defined in (1, 2) and P := ˆΣGLS R⊤(R ˆΣGLS R⊤)−1. In particular, ˆxECGLS is the minimizer of (y − W x )Σ −1(y − W x ) subject to Rx = r.
+
+12 Algorithm 1 ECGLS R,r W, Σ (Equality Constraint Generalized Least Squares) 
+
+Input: y ∼ W x ⋆ + η for η that has zero-mean and covariance Σ, and x⋆ satisfies Rx ⋆ = r.
+
+Output: (ˆ x; ˆΣ) : the best linear unbiased estimate for x⋆, its covariance, and the nullspace of the covariance. ˆxGLS ← (W ⊤Σ−1W )−1W ⊤Σ−1y and ˆΣGLS ← (W ⊤Σ−1W )−1 (see Lemma 5.5) 
+
+L ← ˆΣGLS R⊤(R ˆΣGLS R⊤)−1
+
+ˆx ← ˆxGLS − L(RˆxGLS − r) and ˆΣ ← (I − LR ) ˆΣGLS (see Lemma 5.6) 
+
+return (ˆ x; ˆΣ) Although both equality constraints and general covariance matrices are well studied in the literature, we could not find a reference for this exact theorem. Nevertheless, it is straightforward to derive from the BLUE for equality constrained ordinary linear regression (Σ = σ2I), which is more standard. 
+
+Lemma 5.7 (BLUE for ECGLR R,r W, Σ with Σ = I (e.g., [Ame85])) . The BLUE for x⋆ under ECGLR R,r W,I and its corresponding covariance satisfy: 
+
+ˆxECOLS = ˆxOLS − ˆΣOLS R⊤(R ˆΣ−1
+
+> OLS
+
+R⊤)−1(RˆxOLS − r) = ˆxOLS − P (RˆxOLS − r), (5) ˆΣECOLS = ˆΣOLS − ˆΣOLS R⊤(R ˆΣOLS R⊤)−1 ˆΣOLS = ˆΣOLS − P R ˆΣOLS , (6) 
+
+where ˆxOLS and ˆΣOLS are as defined in (1, 2) for the case Σ = I, and P := ˆΣOLS R⊤(R ˆΣOLS R⊤)−1. In particular, ˆxECGLS is the minimizer of ∥y − W x ∥22 subject to Rx = r.Proof. The expression for ˆ xECOLS is standard (e.g. see [Ame85]). To derive the expression for ˆΣECOLS we observe that the variance of ˆ xECOLS is: ˆΣECOLS = (I − P R ) ˆΣOLS (I − R⊤P ⊤) = ˆΣOLS − P R ˆΣOLS − ˆΣOLS R⊤P ⊤ + P R ˆΣOLS R⊤P ⊤
+
+Now, observe that the third term ˆΣOLS R⊤P ⊤ = ˆΣOLS R⊤(R ˆΣOLS R⊤)−1R ˆΣOLS = P R ˆΣOLS , and the last term is P R ˆΣOLS R⊤P ⊤ = P R ˆΣOLS R⊤(R ˆΣOLS R⊤)−1R ˆΣOLS = P R ˆΣOLS .Thus, we obtain ˆΣECOLS = ˆΣOLS − P R ˆΣOLS as desired. 
+
+Proof of Lemma 5.6. In ECGLR R,r W, Σ, our goal is to estimate x⋆ given observations y ∼ W x ⋆ + η for η which has zero mean and covariance Σ and Rx ⋆ = r holds. Since Σ is full rank, we can reparameterize the observations as y′ = Σ −1/2y. This transforms the problem into an equality constrained ordinary linear regression problem in which we observe y′ ∼ Σ−1/2W x ⋆ + η′,where η′ has zero mean and variance I.The lemma is immediate by substituting W ← Σ−1/2W and y ← Σ−1/2y in Lemma 5.7, paired with the observation that there is no loss of information when multiplying observations by Σ −1/2. Namely any affine estimator ˆ x ← Ay + b can be written as ˆ x ← AΣ1/2y′ + b, where y′ = Σ −1/2y, i.e., ˆ x is also an estimator for 
+
+ECGLS R,r W ′,I with observations y′. From Lemma 5.7, we have that ˆ xECGLS , which we have defined as ˆ xECOLS 
+
+for the problem ECGLS R,r W ′,I , has minimum covariance, and hence ˆΣ − ˆΣECGLS is positive semi-definite. 
+
+Derivation via Lagrange Multipliers. An alternate way to derive the expression for ˆ xECGLS is using the method of Lagrange multipliers—this view will be helpful in our proofs. Namely, we want to minimize (y−W x )⊤Σ−1(y−W x ) subject to Rx = r. (Note that here we are starting with the constrained minimization problem and deriving the expression for the estimator, whereas Lemma 5.6 also shows that this minimizer is the BLUE, which follows from the Gauss–Markov Theorem. So this derivation alone does not suffice to prove Lemma 5.6.) Abstractly, consider the constrained minimization problem: min x∈Rn f (x) subject to g(x) = 0. Suppose that the objective f : Rn → R is convex and differentiable and the constraint function g : Rn → Rp is affine ,i.e., g(x) = Rx − r = 0 for some matrix R and vector r. The Lagrange function L : Rn × Rp → R is obtained by introducing the vector of Lagrange multipliers λ ∈ Rp as L(x, λ ) := f (x) + λ⊤g(x). The following lemma provides a necessary and sufficient condition under which x is the optimal solution for the above problem. 13 Lemma 5.8 (e.g., Section 5.5.3 in [BV14]) . For convex f : Rn → R and affine g : Rn → Rp, x is the minimizer of f (x) subject to g(x) = 0 if and only if 
+
+∇xL(x, λ ) = ∇f (x) + λ⊤∇g(x) = 0 and g(x) = 0 .
+
+For ECGLR R,r W, Σ, we have from Lemma 5.8 that the optimal solution for f (x) = 12 (y − W x )⊤Σ−1(y − W x )and g(x) = Rx − r is precisely ˆ x that satisfies: 
+
+W ⊤Σ−1W x − W ⊤Σ−1y + R⊤λ = 0 and Rx = r, 
+
+which can alternatively be written as, 
+
+W ⊤Σ−1W R⊤
+
+R 0
+
+  xλ
+
+
+
+=
+
+W ⊤Σ−1yr
+
+
+
+=⇒
+
+xλ
+
+
+
+=
+
+W ⊤Σ−1W R⊤
+
+R 0
+
+−1 W ⊤Σ−1yr
+
+
+
+.
+
+The expression for ˆ xECGLS immediately follows from the following proposition, which can be proved by a simple application of the Schur’s complement method (ref. [HJ13]). 
+
+Proposition 5.9. For W that has full column rank, Σ that is positive definite, it holds that: 
+
+W ⊤Σ−1W R⊤
+
+R 0
+
+−1
+
+=
+
+ ˆΣ−1 
+
+> GLS
+
++ ˆΣ−1
+
+> GLS
+
+R⊤S−1R ˆΣ−1 
+
+> GLS
+
+− ˆΣ−1
+
+> GLS
+
+R⊤S−1
+
+−S−1R ˆΣ−1 
+
+> GLS
+
+S−1
+
+
+
+,
+
+where ˆΣGLS = W ⊤Σ−1W and S = −R ˆΣ−1
+
+> GLS
+
+R⊤, where S is invertible because we assume that R has full row rank. Note that the top left entry is precisely ˆΣECGLS (as defined in Lemma 5.6). 
+
+# 6 Formal Problem Specification 
+
+In this section, we build the formal notation we will use for expressing the optimization problem. 
+
+## 6.1 Abstract Problem 
+
+At the highest level of abstraction, we have a constrained linear regression problem. Recall that the ground truth Census data is represented as a non-negative, integer-valued vector x⋆ ∈ ZN
+
+> ≥0
+
+. We observe y ∼ W x ⋆ +η
+
+where, 
+
+• W ∈ RM ×N is a workload matrix ,
+
+• y ∈ RM is the observation vector ,
+
+• η is noise that has zero mean and covariance Σ ∈ RM ×M .Additionally, some prior information regarding x⋆ is available, in the form of Deq equality and Die inequality constraints. 
+
+• Rx ⋆ = r encodes the equality constraints, where R ∈ RDeq ×N and r ∈ RDeq , and 
+
+• Gx ⋆ ≤ g encodes the inequality constraints, where G ∈ RDie ×N and g ∈ RDie .Motivated by the notion of BLUE for equality constrained generalized linear regression, we consider the following mixed integer linear program optimizing over x ∈ ZN 
+
+> ≥0
+
+as our desired objective, argmin 
+
+> x∈ZN
+> ≥0
+
+∥W x − y∥2Σ−1 subject to Rx = r (equality constraints), 
+
+Gx ≤ g (inequality constraints), where ∥v∥2Σ−1 := v⊤Σ−1v denotes the squared Mahalanobis norm for any v ∈ RM .While integer programming is NP-hard in general [Kar72], we approach it two phases as follows: 14 • We first describe an efficient procedure that solves argmin x∈Rn ∥W x − y∥2Σ−1 subject to Rx = r, thereby obtaining the best linear unbiased estimate (BLUE) for the ECGLR R,r W, Σ problem (Lemma 5.6), optimizing over x ∈ RN instead of x ∈ ZN 
+
+> ≥0
+
+and ignoring the inequality constraints Gx ≤ g.
+
+• We modify our procedure in various places in order to incorporate the inequality constraints and to constrain the solution to be non-negative and integral. While this phase is heuristic in nature, we leverage structural properties of the optimization problem in its design. A critical challenge is that the dimensions M and N are very large (e.g., N ≥ 11 , 879 , 679 , 168), making it computationally infeasible to apply the expressions in Lemma 5.6 directly. Thus, it becomes necessary to leverage certain natural structural properties of our specific problem to design an efficient algorithm. Note that our full algorithm does not directly invoke the algorithm described in the first phase that solves the ECGLR R,r W, Σ problem. Instead, we use the ECGLR R,r W, Σ algorithm as a motivational stepping stone to the final algorithm. Nevertheless, we believe that our ECGLR R,r W, Σ algorithm is of independent interest for solving equality constrained linear regression problems with “block-hierarchical” structure. We next describe these structural properties. 
+
+## 6.2 Block Hierarchical Optimization Problem 
+
+We consider workload matrices W , covariance matricies Σ and constraint matrices R and G that collectively respect what we refer to as block hierarchical structure . This structure is represented in terms of a tree T
+
+with root rt . Let L denote the set of leaves in T . Let B denote a set of buckets corresponding to combinations of other feature values. Each datapoint (i.e. person) in the dataset takes the form ( v, b ) for v ∈ L and b ∈ B .The input x⋆ ∈ ZN 
+
+> ≥0
+
+is a vector indexed by ( u, b ) ∈ T × B , where x⋆ 
+
+> (u,b )
+
+equals the total number of datapoints (v, b ) where v is any descendent of u. For ease of notation, for any node u ∈ T , let xu ∈ R|B| denote the vector ( x(u,b ))b∈B .
+
+Structure of W . The workload matrix is a block diagonal matrix specified by the per-node workload matrices ( Wu)u∈T , where Wu ∈ Rmu×|B| . Namely, 
+
+W =
+
+
+
+Wu1 0 · · · 00 Wu2 · · · 0... ... . . . ...0 · · · 0 Wu|T | 
+
+ ∈ RM ×|T ×B| , where M = X
+
+> u∈T
+
+mu.
+
+Structure of Σ. The covariance matrix is defined in terms of per-node covariances (Σ u)u∈T where each Σu ∈ Rmu×mu , and the covariance matrix Σ is again a block-diagonal matrix Σ =
+
+
+
+Σu1 0 · · · 00 Σu2 · · · 0... ... . . . ...0 · · · 0 Σu|T | 
+
+ ∈ RM ×M .
+
+Together, we can view the measurement vector y ∼ GLR W, Σ(x⋆) as a collection of independent measurements 
+
+yu ∼ GLR Wu,Σu (x⋆u), for each u ∈ T .
+
+Structure of ( R, r ). There are three families of equality constraints: 
+
+• Consistency Constraints: These enforce that x⋆ 
+
+> (u,b )
+
+= P 
+
+> v∈child( u)
+
+x⋆ 
+
+> (v,b )
+
+for all non-leaf nodes u ∈ T and buckets b ∈ B , where child( u) is the set of children of u.
+
+• Per-node Constraints: Additionally, we have per-node equality constraints that enforce Rux⋆u = ru.15 • Statewide and US total constraints: For each individual state and for the US as a whole, these enforce that the total number of individuals equals the released enumerated population for that state or for the US total. Whenever the workload W , covariance Σ and equality constraints ( R, r ) satisfy the block hierarchical structure 
+
+as described above with respect to a tree T , we refer to the corresponding ECGLR R,r W, Σ problem as T -ECGLR R,r W, Σ
+
+to emphasize this structure. As alluded to earlier, we provide an efficient algorithm to obtain the BLUE for x⋆ under T -ECGLR R,r W, Σ. We then provide heuristics to modify this procedure to handle the additional constraints that our estimate must be integral and non-negative, and must also satisfy certain inequality constraints as described below. 
+
+Structure of ( G, g ). The inequality constraints also appear in the form of “per-node inequality con-straints”, namely, as a set of constraints of the form Gux⋆u ≤ g.
+
+Additional Symmetries. There is additional structure in the per-node workload matrices Wu and the corresponding covariances Σ u, which allows us to operate over a certain “compressed” representation of Σ u.We defer the discussion of this aspect to §9. 
+
+Remark 6.1. We note that our formalism has certain redundancies. An equivalent formalization to ours would be to define variables x⋆ 
+
+> (v,b )
+
+only for leaf nodes v, and replace x⋆ 
+
+> (u,b )
+
+with P 
+
+> v∈descendants( u)
+
+x⋆v,b , ad-ditionally eliminating the consistency constraints. However, for purposes of our algorithm, it will be more convenient to work with the representation described above. 
+
+# 7 Some Structured ECGLR Problems 
+
+In this section we discuss two types of structured ECGLR problems which we will use en route to the algorithm for computing the BLUE for the block hierarchical T -ECGLR R,r W, Σ problem. 
+
+## 7.1 Factorized-ECGLR 
+
+We develop the concept of a Factorized-ECGLR , and establish a crucial lemma. Before defining this concept in full generality, we discuss a simple motivating example. Consider a ground truth vector x⋆ := [ s⋆, z ⋆ 
+
+> 1
+
+, . . . , z ⋆t ]⊤ ∈ Rt+1 , subject to the constraint that s∗ = P 
+
+> i
+
+z⋆i (a simple tree of depth 2), where we observe two independent measurements, y1 = w1s⋆ + η1 and y2 = W2z⋆ + η2 (where 
+
+z⋆ := [ z⋆ 
+
+> 1
+
+, . . . , z ⋆t ]⊤). Using y1, we have a BLUE ˆ s for s⋆, and using y2, we have a BLUE ˆ z for z⋆, which in turn provides an estimator for s⋆ via P 
+
+> i
+
+ˆzi. We would like to combine these two independent estimators into a single estimator for s⋆ given all measurements together. Furthermore, we would like to also handle a more general case, where there may be additional equality constraints imposed on s⋆ or z⋆.In more generality, consider a ECGLR R,r W, Σ problem, with a special factorized structure. In this setting, we assume that the ground truth vector x⋆, the workload W , noise covariance Σ and equality constraints ( R, r )have the following form: 
+
+x⋆ := 
+
+x⋆
+
+> 1
+
+x⋆
+
+> 2
+
+
+
+, W =
+
+W1 00 W2
+
+
+
+, Σ = 
+
+Σ1 00 Σ2
+
+
+
+, R =
+
+
+
+R1 00 R2
+
+L1 −L2
+
+ , r =
+
+
+
+r1
+
+r2
+
+0
+
+ (7) Note that x⋆ 
+
+> 1
+
+and x⋆ 
+
+> 2
+
+can have different dimensions. When W , Σ, R and r have this structure, we will refer to ECGLR R,r W, Σ problem as F-ECGLR R,r W, Σ to emphasize this structure. Informally speaking, the observation vector y ∼ W x ⋆ + η can be factorized as y =
+
+y1
+
+y2
+
+
+
+, where y1
+
+and y2 are essentially observations from the two independent ECGLR R1,r 1 
+
+> W1,Σ1
+
+and ECGLR R2,r 2 
+
+> W2,Σ2
+
+problems, up to L1x1 = L2x2, which are certain consistency constraints on x1 and x2. We visualize this structure in Figure 6. 16 ECGLR R1,r 1
+
+> W1,Σ1
+
+R1x1 = r1 x1
+
+W1x1 + η1 ∼ y1
+
+ECGLR R2,r 2
+
+> W2,Σ2
+
+R2x2 = r2x2
+
+y2 ∼ W2x2 + η2
+
+L1x1 = L2x2
+
+Figure 6: Visualization of the Factorized-ECGLR problem (Lemma 7.1). 
+
+Algorithm 2 CombineEstimators 
+
+Input: (ˆ z1, ˆΩ1), (ˆ z2, ˆΩ2)
+
+Output: (ˆ z; ˆΩ) 
+
+A ← ˆΩ2( ˆΩ1 + ˆΩ2)†
+
+B ← I − A
+
+ˆz ← Aˆz1 + B ˆz2
+
+ˆΩ ← A ˆΩ1A⊤ + B ˆΩ2B⊤ # equivalently, B ˆΩ2
+
+return (ˆ z, ˆΩ) Unlike for standard ECGLR , we will focus on directly obtaining an estimator ˆ z that is the BLUE for L1x⋆
+
+> 1
+
+(equivalently L2x⋆
+
+> 2
+
+) under F-ECGLR R,r W, Σ, rather than explicitly computing an estimator for ( x⋆
+
+> 1
+
+, x ⋆
+
+> 2
+
+). Given the BLUE ˆ x1 for x⋆ 
+
+> 1
+
+under ECGLR R1,r 1 
+
+> W1,Σ1
+
+with covariance ˆΣ1, we know that ˆ z1 := L1 ˆx1 is the BLUE for L1x⋆ 
+
+> 1
+
+under ECGLR R1,r 1 
+
+> W1,Σ1
+
+, with covariance ˆΩ1 := L1 ˆΣ1L⊤ 
+
+> 1
+
+. We can define ˆ x2, ˆΩ2 analogously. The following lemma obtains the best linear unbiased estimator for L1x⋆ 
+
+> 1
+
+(which equals L2x⋆
+
+> 2
+
+) for the entire F-ECGLR R,r W, Σ problem, by combining the individual best linear unbiased estimators L1 ˆx1 and L2 ˆx2.
+
+Lemma 7.1. Consider F-ECGLR R,r W, Σ with structure as defined in (7) . Let ˆz1 be the BLUE for L1x⋆ 
+
+> 1
+
+under 
+
+ECGLR R1,r 1 
+
+> W1,Σ1
+
+with covariance ˆΩ1, and ˆz2, ˆΩ2 be defined analogously, and assume that ˆz1 − ˆz2 ∈ range (Ω 1 +Ω2).6 Then ˆz as defined below (and also as returned by Algorithm 2) is the BLUE for L1x⋆ 
+
+> 1
+
+(equivalently, 
+
+L2x⋆
+
+> 2
+
+) under F-ECGLR R,r W, Σ, where A := ˆΩ2( ˆΩ1 + ˆΩ2)† and B = I − A:
+
+ˆz := Aˆz1 + B ˆz2,
+
+and the covariance of ˆz is ˆΩ := A ˆΩ1A⊤ + B ˆΩ2B⊤ = B ˆΩ2.
+
+Proof. The BLUE ˆ x′ for x⋆ under F-ECGLR R,r W, Σ can be obtained via the method of Lagrange multipliers (see Lemma 5.8). Namely, we define L(x, λ ) as 
+
+L(x, λ ) := 12 (y − W x )⊤Σ−1(y − W x ) + λ⊤(Rx − r)= 12 (y1 − W1x1)⊤Σ−11 (y1 − W1x1) + 12 (y2 − W2x2)⊤Σ−12 (y2 − W2x2)+ λ⊤ 
+
+> 1
+
+(R1x1 − r1) + λ⊤ 
+
+> 2
+
+(R2x2 − r2) + μ⊤(L1x1 − L2x2) where λ =: 
+
+λ1
+
+λ2
+
+μ
+
+             
+
+> 6For any Ω ∈Rd×d, let range (Ω) := {y∈Rd:y= Ω xfor some x∈Rd}.
+
+17 From Lemma 5.8, we have that the minimizer ˆ x′ can be obtained by setting ∇xL(x, λ ) = 0, namely, 
+
+W ⊤ 
+
+> 1
+
+Σ−11 (W1 ˆx′ 
+
+> 1
+
+− y1) + R⊤ 
+
+> 1
+
+λ1 + L⊤ 
+
+> 1
+
+μ = 0 ,W ⊤ 
+
+> 2
+
+Σ−12 (W2 ˆx′ 
+
+> 2
+
+− y2) + R⊤ 
+
+> 2
+
+λ2 − L⊤ 
+
+> 2
+
+μ = 0 ,
+
+along with the constraints R1 ˆx′ 
+
+> 1
+
+= r1, R2 ˆx′ 
+
+> 2
+
+= r2 and L1 ˆx′ 
+
+> 1
+
+= L2 ˆx′
+
+> 2
+
+. On the other hand, the optimal solutions ˆx1, ˆx2 for the two independent problems ECGLR R1,r 1 
+
+> W1,Σ1
+
+and ECGLR R2,r 2 
+
+> W2,Σ2
+
+respectively satisfy the equations 
+
+W ⊤ 
+
+> 1
+
+Σ−11 (W1 ˆx1 − y1) + R⊤ 
+
+> 1
+
+ν1 = 0 
+
+W ⊤ 
+
+> 2
+
+Σ−12 (W2 ˆx2 − y2) + R⊤ 
+
+> 2
+
+ν2 = 0 ,
+
+along with the first two sets of constraints R1 ˆx1 = r1, R2 ˆx2 = r2. Note that the values of the Lagrange multipliers ν1, ν 2 may be different from λ1, λ 2.Let δ1 = ˆ x′ 
+
+> 1
+
+− ˆx1 and δ2 = ˆ x′ 
+
+> 2
+
+− ˆx2 be the difference vectors between the two solutions. Subtracting corresponding equations, we obtain the following identities on δ1, δ 2.
+
+W ⊤ 
+
+> 1
+
+Σ−11 W1δ1 + R⊤ 
+
+> 1
+
+(λ1 − ν1) + L⊤ 
+
+> 1
+
+μ = 0 
+
+W ⊤ 
+
+> 2
+
+Σ−12 W2δ2 + R⊤ 
+
+> 2
+
+(λ2 − ν2) − L⊤ 
+
+> 2
+
+μ = 0 .
+
+Since R1 ˆx1 = R1 ˆx′ 
+
+> 1
+
+= r1 and R2 ˆx2 = R2 ˆx′ 
+
+> 2
+
+= r2, we additionally have that R1δ1 = 0 and R2δ2 = 0. The equations for δ1 can be written as 
+
+W ⊤ 
+
+> 1
+
+Σ−11 W1 R⊤
+
+> 1
+
+R1 0
+
+  δ1
+
+λ1 − ν1
+
+
+
+=
+
+−L⊤ 
+
+> 1
+
+μ
+
+0
+
+
+
+=⇒
+
+ δ1
+
+λ1 − ν1
+
+
+
+=
+
+W ⊤ 
+
+> 1
+
+Σ−11 W1 R⊤
+
+> 1
+
+R1 0
+
+−1 −L⊤ 
+
+> 1
+
+μ
+
+0
+
+
+
+.
+
+From Proposition 5.9, we get that δ1 = − ˆΣ1L⊤ 
+
+> 1
+
+μ, where we use that the top left sub-matrix of the matrix inverse is precisely ˆΣ1. By an identical argument, we have that δ2 = ˆΣ2L⊤ 
+
+> 2
+
+μ. Multiplying the expressions by L1 and L2 and replacing δ1, δ 2 by their definitions, we have 
+
+L1(ˆ x′ 
+
+> 1
+
+− ˆx1) = −L1 ˆΣ1L⊤ 
+
+> 1
+
+μ = − ˆΩ1μL2(ˆ x′ 
+
+> 2
+
+− ˆx2) = L2 ˆΣ2L⊤ 
+
+> 2
+
+μ = ˆΩ2μ. 
+
+Let ˆ z1 = L1 ˆx1, ˆ z2 = L2 ˆx2, and ˆ z = L1 ˆx′ 
+
+> 1
+
+= L2 ˆx′
+
+> 2
+
+. Then the equations become ˆz − ˆz1 = − ˆΩ1μ
+
+ˆz − ˆz2 = ˆΩ2μ. 
+
+Thus, we get ˆ z1−ˆz2 = ( ˆΩ1+ ˆΩ2)μ (here we would run into a contradiction if ˆ z1−ˆz2 were not in range ( ˆΩ1+ ˆΩ2)). Thus, we have that μ = ( ˆΩ1 + ˆΩ2)†(ˆ z1 − ˆz2) + w for some w in the nullspace of ˆΩ1 + ˆΩ2. Hence, we get for 
+
+A = ˆΩ2( ˆΩ1 + ˆΩ2)† and B = I − A that ˆz = ˆz2 + ˆΩ2( ˆΩ1 + ˆΩ2)†(ˆ z1 − ˆz2) + ˆΩ2w
+
+= Aˆz1 + B ˆz2
+
+where we use that ˆΩ2w = 0 because w is in the nullspace of ˆΩ1 + ˆΩ2, and hence also in the nullspace of ˆΩ2.Finally, to derive the expression for ˆΩ, we invoke the independence of ˆ z1 and ˆ z2 and observe that ˆΩ = A ˆΩ1A⊤ + ( I − A) ˆΩ2(I − A)⊤
+
+= ˆΩ2 − A ˆΩ2 − ˆΩ2A⊤ + A( ˆΩ1 + ˆΩ2)A⊤
+
+= ˆΩ2 − ˆΩ2( ˆΩ1 + ˆΩ2)† ˆΩ2
+
+= (I − ˆΩ2( ˆΩ1 + ˆΩ2)†) ˆΩ2
+
+= B ˆΩ2
+
+18 v T ⇓
+
+> v
+
+T ↓
+
+> v
+
+T ⇑
+
+> v
+
+T ↑
+
+> v
+
+v
+
+Figure 7: Subgraphs used in Theorem 8.1 to prove optimality of Algorithm 3; figure adapted from [DGK +23]. 
+
+## 7.2 Product-ECGLR 
+
+In this section we develop the simple concept of a Product-ECGLR problem, which is an ECGLR R,r W, Σ problem with a special product structure described by a collection of k independent ECGLR problems. Namely, we assume that the ground truth vector x⋆, the workload W , noise covariance Σ and equality constraints ( R, r )have the following form: 
+
+x⋆ := 
+
+
+
+x⋆
+
+> 1
+
+...
+
+x⋆k
+
+ , W =
+
+
+
+W1 . . . 0... . . . ...0 . . . Wk
+
+ , Σ = 
+
+
+
+Σ1 . . . 0... . . . ...0 . . . Σk
+
+ , R =
+
+
+
+R1 . . . 0... . . . ...0 . . . Rk
+
+ , r =
+
+
+
+r1
+
+...
+
+rk
+
+ (8) Note that x⋆i ’s can have different dimensions. When W , Σ, R and r have this structure, we will refer to 
+
+ECGLR R,r W, Σ problem as P-ECGLR R,r W, Σ to emphasize this structure. 
+
+Lemma 7.2. Consider P-ECGLR R,r W, Σ with structure as defined in (8) . Let ˆxi be the BLUE for x⋆i under 
+
+ECGLR Ri,r i 
+
+> Wi,Σi
+
+with covariance ˆΣi for each i. Then, ˆx is the BLUE for x⋆ under P-ECGLR R,r W, Σ with covariance 
+
+ˆΣ as defined below: 
+
+ˆx =
+
+
+
+ˆx1
+
+...
+
+ˆxk
+
+ and ˆΣ = 
+
+
+
+ˆΣ1 . . . 0
+
+... . . . ...
+
+0 . . . ˆΣk
+
+
+
+As a corollary, for any linear map L : x 7 → L1x1 + . . . + Lkxk, the BLUE ˆz for Lx ⋆ under P-ECGLR R,r W, Σ is given as Pki=1 Li ˆxi and has covariance ˆΣL := Pki=1 Li ˆΣ−1 
+
+> i
+
+L⊤ 
+
+> i
+
+.Proof. This proof is immediate by observing that ˆ x is given as: argmin 
+
+> x
+
+(y − W x )⊤Σ−1(y − W x ) subject to Rx = r
+
+which essentially breaks down as independent optimization problems. argmin 
+
+> xk
+
+X
+
+> i=1
+
+(yi − Wixi)⊤Σ−1 
+
+> i
+
+(yi − Wixi) subject to Rixi = ri for each i. 
+
+# 8 Optimal block hierarchical post-processing algorithm 
+
+In this section, we present an algorithm and show that it computes the best linear unbiased estimator ˆ x
+
+for x⋆ under T -ECGLR R,r W, Σ, or equivalently that the output ˆ xv is the BLUE for x⋆v under T -ECGLR R,r W, Σ for all v ∈ T . At a high level, this algorithm computes the BLUE for x⋆v under sub-problems of T -ECGLR R,r W, Σ
+
+that involve measurements and constraints on a subset of all variables in x⋆. These solutions are then recursively combined using Lemma 7.1 to obtain the BLUE for x⋆v under increasingly larger sub-problems of 
+
+T -ECGLR R,r W, Σ, until we cover all the variables in x⋆. To simplify the presentation of the algorithm, consider the following subsets of T defined for any v ∈ T and visualized in Figure 7: 19 Algorithm 3 T -ECGLS R,r W, Σ
+
+Params: Tree T with root rt , and parameters Wv , Σ v , Rv , rv for each v ∈ T .
+
+Input: (yv )v∈T : measurements yv ∼ GLR Wv ,Σv (x⋆v ). 
+
+Output: (ˆ xv ; bΣv )v∈T : post-processed estimates and covariances for all v.
+
+# Per-node processing 
+
+for each node v ∈ T do 
+
+▷ (ˆ zv , ˆΩv ) ← ECGLS Rv ,r v  
+
+> Wv,Σv
+
+(yv ) (Algorithm 1) 
+
+# Bottom-up pass 
+
+for leaf v ∈ T do 
+
+▷ (ˆ z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+) ← (ˆ zv , ˆΩv )
+
+for each internal node v from largest to smallest depth do 
+
+▷ (ˆ z↑ 
+
+> v
+
+, ˆΩ↑ 
+
+> v
+
+) ←
+
+P 
+
+> u∈child( v)
+
+ˆz⇑ 
+
+> u
+
+, P 
+
+> u∈child( v)
+
+ˆΩ⇑
+
+> u
+
+
+
+▷ (ˆ z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+) ← CombineEstimators ((ˆ zv , ˆΩv ), (ˆ z↑ 
+
+> v
+
+, ˆΩ↑ 
+
+> v
+
+)) (Algorithm 2) 
+
+# Top-down pass 
+
+for root rt do 
+
+▷ (ˆ xrt , bΣrt ) ← (ˆ z⇑
+
+> rt
+
+, ˆΩ⇑
+
+> rt
+
+)
+
+▷ (ˆ z⇓
+
+> rt
+
+, ˆΩ⇓
+
+> rt
+
+) ← (ˆ zrt , ˆΩrt )
+
+for each non-root node v from smallest to largest depth do 
+
+▷ p ← parent( v)
+
+▷ (ˆ z↓ 
+
+> v
+
+, ˆΩ↓ 
+
+> v
+
+) ← ˆz⇓ 
+
+> p
+
+− P
+
+> u∈child( p)∖{v}
+
+ˆz⇑ 
+
+> u
+
+, ˆΩ⇓ 
+
+> p
+
++ P
+
+> u∈child( p)∖{v}
+
+ˆΩ⇑
+
+> u
+
+!
+
+# equivalently, (ˆ z⇓ 
+
+> p
+
+− ˆz↑ 
+
+> p
+
++ ˆ z⇑ 
+
+> v
+
+, ˆΩ⇓ 
+
+> p
+
++ ˆΩ↑ 
+
+> p
+
+− ˆΩ⇑ 
+
+> v
+
+)
+
+▷ (ˆ z⇓ 
+
+> v
+
+, ˆΩ⇓ 
+
+> v
+
+) ← CombineEstimators ((ˆ zv , ˆΩv ), (ˆ z↓ 
+
+> v
+
+, ˆΩ↓ 
+
+> v
+
+)) (Algorithm 2) 
+
+▷ (ˆ xv , bΣv ) ← CombineEstimators ((ˆ z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+), (ˆ z↓ 
+
+> v
+
+, ˆΩ↓ 
+
+> v
+
+)) (Algorithm 2) 
+
+return (ˆ xv ; bΣv )v∈T 
+
+• T ↑ 
+
+> v
+
+is the set of all nodes in the tree that are descendants of v, not including v.
+
+• T ⇑ 
+
+> v
+
+is the set of all nodes in the tree that are descendants of v, including v.
+
+• T ↓ 
+
+> v
+
+= T ∖ T ⇑ 
+
+> v
+
+is the set of all nodes that are not v or descendants of v.
+
+• T ⇓ 
+
+> v
+
+= T ∖ T ↑ 
+
+> v
+
+= T ↓ 
+
+> v
+
+∪ { v} is the set of all nodes that are not strict descendants of v.Corresponding to any subset S ⊆ T , let ECGLR S be a sub-problem defined over the subset of all variables 
+
+x⋆S := ( x⋆
+
+> (u,b )
+
+)(u,b )∈S×B that involve 
+
+• measurements yu ∼ GLR Wu,Σu (x⋆u) for u ∈ S, subject to 
+
+• all per-node equality constraints Ruxu = ru for u ∈ S, and 
+
+• all consistency equality constraints x⋆ 
+
+> (u,b )
+
+= P 
+
+> v∈child( u)
+
+x⋆ 
+
+> (v,b )
+
+such that {u} ∪ child( u) ⊆ S.For further convenience, let ECGLR v denote ECGLR {v}, ECGLR ↑ 
+
+> v
+
+denote ECGLR T ↑ 
+
+> v
+
+, and analogously define 
+
+ECGLR ⇑ 
+
+> v
+
+, ECGLR ↓ 
+
+> v
+
+and ECGLR ⇓ 
+
+> v
+
+, and finally, let ECGLR T denote the full T -ECGLR R,r W, Σ problem. 
+
+Theorem 8.1. The value ˆxv returned by Algorithm 3 is the BLUE for x⋆v under T -ECGLR R,r W, Σ for all v ∈ T ,and its covariance is bΣv .
+
+Note that we explicitly compute only the covariance of the measurements corresponding to each individual node, and not the covariances between different nodes. 20 Proof. This theorem follows by a repeated applications of Lemmas 7.1 and 7.2. In particular, we prove the following claims: (C1) ˆ zv is the BLUE for x⋆v under ECGLR v , with covariance ˆΩv .(C2) ˆ z⇑ 
+
+> v
+
+is the BLUE for x⋆v under ECGLR ⇑ 
+
+> v
+
+, with covariance ˆΩ⇑ 
+
+> v
+
+.(C3) ˆ z⇓ 
+
+> v
+
+is the BLUE for x⋆v under ECGLR ⇓ 
+
+> v
+
+, with covariance ˆΩ⇓ 
+
+> v
+
+.(C4) ˆ xv is the BLUE for x⋆v under ECGLR T , with covariance bΣv .The last step is precisely the final statement we desire. We now prove each of these claims. 
+
+(C1) ˆ zv is the BLUE for x⋆v under ECGLR v with covariance ˆ Ωv . Immediate from Lemma 5.6. 
+
+(C2) ˆ z⇑ 
+
+> v
+
+is the BLUE for x⋆v under ECGLR ⇑ 
+
+> v
+
+with covariance ˆ Ω⇑ 
+
+> v
+
+. We prove this by induction from bottom to top. 
+
+Base Case: For a leaf v, (C2) is equivalent to (C1) above, since ˆ z⇑ 
+
+> v
+
+= ˆ zv and ECGLR ⇑ 
+
+> v
+
+is same as ECGLR v .
+
+Inductive Step: For any non-leaf node v, assume that (C2) holds for all u ∈ child( v). In this case, ECGLR ⇑ 
+
+> v
+
+precisely has the form of a factorized-ECGLR problem (see (7)), corresponding to the sub-problems of ECGLR v and ECGLR ↑ 
+
+> v
+
+with additional consistency constraints of x⋆v = P 
+
+> u∈child( v)
+
+x⋆u.Furthermore, ECGLR ↑ 
+
+> v
+
+precisely has the form of a product-ECGLR (see (8)) with components of ECGLR ⇑ 
+
+> u
+
+for all u ∈ child( v). From Lemma 7.2, we have that the BLUE for P 
+
+> u∈child( v)
+
+x⋆u under ECGLR ↑ 
+
+> v
+
+is given as P 
+
+> u∈child( v)
+
+z⇑ 
+
+> u
+
+=: ˆ z↑
+
+> v
+
+with covariance P 
+
+> u∈child( v)
+
+ˆΩ⇑ 
+
+> u
+
+=: ˆΩ↑ 
+
+> v
+
+(where we use the inductive hypothesis that z⇑ 
+
+> u
+
+is the BLUE for x⋆u
+
+under ECGLR ⇑ 
+
+> u
+
+). We have from (C1) above that ˆ zv is the BLUE for x⋆v under ECGLR v with covariance ˆΩv .Putting this together using Lemma 7.1, we conclude that the BLUE z⇑ 
+
+> v
+
+for x⋆v (equivalently P 
+
+> u∈child( v)
+
+x⋆u)under ECGLR ⇑ 
+
+> v
+
+is precisely z⇑ 
+
+> v
+
+given as CombineEstimators ((ˆ zv ; ˆΩv ), (ˆ z↑ 
+
+> v
+
+, ˆΩ↑ 
+
+> v
+
+)) with covariance ˆΩ⇑ 
+
+> v
+
+.
+
+(C3) ˆ z⇓ 
+
+> v
+
+is the BLUE for x⋆v under ECGLR ⇓ 
+
+> v
+
+with covariance ˆ Ω⇓ 
+
+> v
+
+. We again apply induction, this time from top to bottom. 
+
+Base Case: For root rt , (C3) is equivalent to (C1) above, since ˆ z⇓ 
+
+> rt
+
+= ˆ zrt and ECGLR ⇓ 
+
+> rt
+
+is same as ECGLR rt .
+
+Inductive Step: For any non-root node v, assume that (C3) holds for its parent p. We have already established that (C2) holds for all nodes. In this case, ECGLR ⇓ 
+
+> v
+
+precisely has the form of a factorized-ECGLR problem (see (7)), corresponding to the sub-problems of ECGLR v and ECGLR ↓ 
+
+> v
+
+with additional consistency constraints of x⋆v = x⋆p −P 
+
+> u∈child( p)∖{v}
+
+x⋆u.Furthermore, ECGLR ↓ 
+
+> v
+
+precisely has the form of a product-ECGLR (see (8)) with components of ECGLR ⇓ 
+
+> p
+
+and 
+
+ECGLR ⇑ 
+
+> u
+
+for all u ∈ child( p) ∖ {v}.From Lemma 7.2, we have that the BLUE for x⋆p − P 
+
+> u∈child( p)∖{v}
+
+x⋆u under ECGLR ↓ 
+
+> v
+
+is given as z⇓ 
+
+> p
+
+−
+
+P 
+
+> u∈child( p)∖{v}
+
+z⇑ 
+
+> u
+
+=: ˆ z↓ 
+
+> v
+
+with covariance ˆΩ⇓ 
+
+> p
+
++ P 
+
+> u∈child( p)∖{v}
+
+ˆΩ⇑ 
+
+> u
+
+=: ˆΩ↓ 
+
+> v
+
+, where we use the inductive hy-pothesis that z⇓ 
+
+> p
+
+is the BLUE for x⋆p for ECGLR ⇓ 
+
+> p
+
+and that z⇑ 
+
+> u
+
+is the BLUE for x⋆u under ECGLR ⇑ 
+
+> u
+
+from (C2). We have from (C1) above that ˆ zv is the BLUE for x⋆v under ECGLR v with covariance ˆΩv with Nv = N( ˆΩv ). Putting this together using Lemma 7.1, we conclude that the BLUE z⇓ 
+
+> v
+
+for x⋆v (equivalently x⋆p −
+
+P 
+
+> u∈child( p)∖{v}
+
+x⋆u) under ECGLR ⇓ 
+
+> v
+
+is precisely z⇓ 
+
+> v
+
+given as CombineEstimators ((ˆ zv ; ˆΩv ), (ˆ z↓ 
+
+> v
+
+, ˆΩ↓ 
+
+> v
+
+)) with co-variance ˆΩ⇓ 
+
+> v
+
+.21 (C4) ˆ xv is the BLUE for x⋆v under ECGLR T with covariance bΣv . We build on the previous claims. The case of root node rt follows from (C2), since ˆ xrt = z⇑
+
+> rt
+
+, bΣrt = ˆΩ⇑ 
+
+> rt
+
+and ECGLR T is same as ECGLR ⇑
+
+> rt
+
+.The case of leaf nodes v follows from (C3), since ˆ xv = z⇓ 
+
+> v
+
+, bΣv = ˆΩ⇓ 
+
+> v
+
+and ECGLR T is same as ECGLR ⇓ 
+
+> v
+
+.Finally, for any intermediate node v, we observe that ECGLR T precisely has the form of a factorized-ECGLR 
+
+problem (see (7)), corresponding to the sub-problems of ECGLR ⇑ 
+
+> v
+
+and ECGLR ↓ 
+
+> v
+
+with additional consistency constraints of x⋆v = x⋆p − P 
+
+> u∈child( p)∖{v}
+
+x⋆u.As already argued in the proof of (C3), the BLUE for x⋆p − P 
+
+> u∈child( p)∖{v}
+
+x⋆u under ECGLR ↓ 
+
+> v
+
+is given as 
+
+z⇓ 
+
+> p
+
+− P 
+
+> u∈child( p)∖{v}
+
+z⇑ 
+
+> u
+
+=: ˆ z↓ 
+
+> v
+
+with covariance ˆΩ⇓ 
+
+> p
+
++ P 
+
+> u∈child( p)∖{v}
+
+ˆΩ⇑ 
+
+> u
+
+=: ˆΩ↓ 
+
+> v
+
+.From (C2), the BLUE for x⋆v under ECGLR ⇑ 
+
+> v
+
+is given as z⇑ 
+
+> v
+
+with covariance ˆΩ⇑ 
+
+> v
+
+. Putting this together using Lemma 7.1, we conclude that the BLUE ˆ xv for x⋆v (equivalently x⋆p −P 
+
+> u∈child( p)∖{v}
+
+x⋆u) under ECGLR T
+
+is precisely ˆ xv given as CombineEstimators ((ˆ z⇑ 
+
+> v
+
+; ˆΩ⇑ 
+
+> v
+
+), (ˆ z↓ 
+
+> v
+
+, ˆΩ↓ 
+
+> v
+
+)) with covariance bΣv .
+
+Remark 8.2. The covariance bΣ of the BLUE ˆ x of T -ECGLR R,r W, Σ can be dense, whereas as mentioned above, (bΣv )v∈T returned by Algorithm 3 is only the “block-diagonal” portion of bΣ. While we do not compute the full bΣ, computing only the block diagonal portion is crucial for efficiency and suffices for our final BlueDown 
+
+algorithm, as we describe in §10. 
+
+Computational Complexity of Algorithm 3. The number of computational operations performed in Algorithm 3 scales as O(|T | · poly (|B| )). (For the sake of simplicity of notation, we assume that the number of measurements “per node” is O(|B| ).) The poly accounts for operations such as matrix multiplications and matrix inversion. The main thing to note is that number of computational operations scales linearly in the size of the tree. By contrast, a naive implementation of the expressions in Lemma 5.6 would have required 
+
+O(poly (|T | · |B| )) operations, which is intractable for large trees |T | .Furthermore, Algorithm 3 is local and massively parallelizable , since the computations are essentially performed on a per-node basis, each requiring only O(k · poly (|B| )) memory where k is the maximum degree of a node. While the linear dependence in |T | is highly efficient, the poly (|B| ) dependence can still be prohibitive. For instance, in the US Census setting, each per-node workload matrix has size 2603 × 2016. Maintaining and performing operations on covariance matrices of dimension 2016 × 2016, while feasible in terms of memory limits on typical machines, is still a substantial overhead since we must do so for every node in T .However, as we have mentioned, there are substantial symmetries in the structure of the workload, noise covariance matrices and constraints. In §9, we show how to leverage this to significantly reduce the number of computational operations performed. As an illustration, instead of maintaining dense per-node covariances of dimensions 2016 × 2016, we show that it suffices to maintain a pair of matrices of dimension 32 × 32 per node, resulting in a nearly 2000-fold reduction in the representation size and a significantly larger reduction in the number of operations performed. 
+
+# 9 Exploiting symmetries in per-node workload matrices 
+
+Going back to the T -ECGLR R,r W, Σ problem, as described in §6.2, recall that Wu ∈ Rmu×|B| and Σ u ∈ Rmu×mu .We observe that the linear queries performed in Table 1 satisfy certain symmetries that make it possible to perform the operations in Algorithm 3 much more efficiently. We write the set of buckets B as a product set Ba × B s, where each bucket b ∈ B is written as a pair (ba, b s) where we will refer to ba as the asymmetric feature and bs as the symmetric feature . In the setting of Table 1, Ba = [8] × [2] × [2] is the combination of Household or Group Quarters type, Hispanic/Latino origin and Voting age, and Bs = [63] is the Census Race. Now, we assume that each type of query in Wu
+
+has one of the following forms: 
+
+• [individual] a linear query P 
+
+> ba∈B a
+
+wba xu, (ba,b s) for each value of the symmetric feature bs ∈ B s, or 22 • [aggregate] P 
+
+> ba∈B a
+
+wba
+
+P 
+
+> bs∈B s
+
+xu, (ba,b s).and all queries of the same type are measured with the same noise scale. We assume a similar structure for the equality constraints. Formally, the per-node workload matrix, covariance matrix and equality constraints have the following structure: 
+
+W =
+
+W1 ⊗ IBs
+
+W2 ⊗ 1⊤Bs
+
+
+
+, Σ = 
+
+Σ1 ⊗ IBs 00 Σ2
+
+
+
+, R =
+
+R1 ⊗ IBs
+
+R2 ⊗ 1⊤Bs
+
+
+
+, r =
+
+r1
+
+r2
+
+
+
+(9) where W1 ∈ Rm1×|B a|, W2 ∈ Rm2×|B a|, Σ 1 ∈ Rm1×m1 , Σ 2 ∈ Rm2×m2 , R1 ∈ Re1×|B a|, R2 ∈ Re2×|B a|,
+
+r1 ∈ Re1|B s|, r2 ∈ Re2 . Submatrix W1 corresponds to queries such as CENRACE, HISPANIC × CENRACE and DETAILED in Table 1 that slice the symmetric feature bs since tensoring by IBs coresponds to the operation of considering each possible value of the symmetric feature separately, and W2 corresponds to queries such as TOTAL and VOTINGAGE that aggregate over the symmetric feature since tensoring by 
+
+1Bs corresponds to summing the estimates for all bs ∈ B s. The measurements y can be written as 
+
+y =
+
+y1
+
+y2
+
+
+
+where y1 = ( W1 ⊗ IBs )x⋆ + η1 and y2 = ( W2 ⊗ 1⊤Bs )x⋆ + η2
+
+correspond to the individual and aggregate measurements respectively as described above, for independent noises η1 and η2 with covariances Σ 1 ⊗ IBs and Σ 2 respectively. These symmetries allow us to perform Algorithm 3 without having to explicitly materialize, or perform matrix operations over, covariance matrices that have size |B| × |B| , but instead deal with covariances represented in terms of a pair of matrices of size |B a| × |B a|. In particular, in this section we describe how to perform all the operations in Algorithm 3 in terms of these succinctly represented matrices. In the Census instantiation |B| = 2016 and |B a| = 32, so this yields an efficiency improvement on the order of a factor of 10 5 for matrix operations like multiplication and inversion assuming a na¨ ıve cubic time implementation. Let d := |B s|, and let I denote the d × d identity matrix and J denote the d × d all-ones matrix. Let 
+
+P0 = I − 1 
+
+> d
+
+J and P1 = 1 
+
+> d
+
+J; P1 is a linear operator that projects a vector in Rd on the all-ones vector, and 
+
+P0 is a linear operator also known as the Centering Matrix that projects a vector in Rd on the orthogonal complement of the all-ones vector. A key property is that P 20 = P0, P 21 = P1 and P0P1 = P1P0 = 0. 
+
+Definition 9.1 (Succinct Matrices) . A matrix M ∈ Rmd ×kd is said to be a succinct matrix if M = A ⊗ P0 +
+
+B ⊗ P1, for A, B ∈ Rm×k.We show how to efficiently implement Algorithm 3 by showing how to efficiently implement ECGLS R,r W, Σ
+
+(Algorithm 1) and CombineEstimators (Algorithm 2) operations efficiently, when W , Σ, R and r satisfy the structure in Equation (9). In particular, we will show that all the covariances ˆΩv , ˆΩ↑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+, etc. are all succinct matrices. 
+
+## 9.1 Algebra of Succinct Matrices 
+
+We observe that various operations that we need to perform on succinct matrices can be performed efficiently without having to ever materialize the full matrix. If M = A ⊗ P0 + B ⊗ P1 ∈ Rkd ×md is a succinct matrix, then for any vector y ∈ Rmd , we can compute 
+
+M y without materializing M . This is because it is possible to compute each of ( A ⊗ P0)y and ( B ⊗ P1)y
+
+without materializing the Kronecker products via the “vec trick” (Fact 5.2). If M1, M 2 ∈ Rkd ×kd are succinct matrices, then M1M2 is a succinct matrix which can be computed efficiently; namely if M1 = A1 ⊗ P0 + B1 ⊗ P1 and M2 = A2 ⊗ P0 + B2 ⊗ P1, then M1M2 = ( A1A2) ⊗ P0 +(B1B2) ⊗ P1.If M ∈ Rkd ×kd is a succinct matrix, then M † is also a succinct matrix that can computed efficiently, as shown by the following lemma. 
+
+Lemma 9.2. If M = A ⊗ P0 + B ⊗ P1 ∈ Rkd ×kd , then M † = A† ⊗ P0 + B† ⊗ P1. In particular, we have that M is invertible if and only if both A and B are invertible. 
+
+23 Proof. Let M ′ = A† ⊗ P0 + B† ⊗ P1. We verify all the properties of pseudoinverse as defined in Definition 5.1. 
+
+M M ′ = (A ⊗ P0 + B ⊗ P1)( A† ⊗ P0 + B† ⊗ P1)= AA † ⊗ P 20 + BB † ⊗ P 21
+
+= AA † ⊗ P0 + BB † ⊗ P1
+
+so 
+
+M M ′M = AA †A ⊗ P0 + BB †B ⊗ P1 = A ⊗ P0 + B ⊗ P1 = M
+
+and 
+
+M ′M M ′ = A†AA † ⊗ P0 + B†BB † ⊗ P1 = A† ⊗ P0 + B† ⊗ P1 = M ′.
+
+Moreover, (M M ′)∗ = ( AA † ⊗ P0 + BB † ⊗ P1)∗ = ( AA †)∗ ⊗ P ∗ 
+
+> 0
+
++ ( BB †)∗ ⊗ P ∗ 
+
+> 1
+
+= M M ′,
+
+so M M ′ is Hermitian. By an identical calculation M ′M is also Hermitian, hence we get that M † = M ′.
+
+## 9.2 Efficient implementation of ECGLS 
+
+To simulate Algorithm 1, we will show how to compute ˆΣGLS , ˆ xGLS , ˆΣECGLS and ˆ xECGLS efficiently, and in particular that ˆΣGLS and ˆΣECGLS are succinct matrices, which will be crucial for later operations. 
+
+Computing ˆ ΣGLS . We have ˆΣGLS = ( W ⊤Σ−1W )−1. Under the structure in (9), we have Σ−1 =
+
+Σ−11 ⊗ I 00 Σ−12
+
+
+
+Thus, we have ˆΣGLS = (W ⊤Σ−1W )−1
+
+=  (W ⊤ 
+
+> 1
+
+Σ−11 W1) ⊗ I + ( W ⊤ 
+
+> 2
+
+Σ−1W2) ⊗ J−1
+
+=  (W ⊤ 
+
+> 1
+
+Σ−11 W1) ⊗ (P0 + P1) + ( W ⊤ 
+
+> 2
+
+Σ−1W2) ⊗ (dP 1)−1
+
+= A ⊗ P0 + B ⊗ P1
+
+where A := ( W ⊤ 
+
+> 1
+
+Σ−11 W1)−1 and B := (( W ⊤ 
+
+> 1
+
+Σ−11 W1) + d(W ⊤ 
+
+> 2
+
+Σ−1W2)) −1. Thus, we have established that ˆΣGLS is a succinct matrix, and its components can be computed efficiently. 
+
+Computing ˆ xGLS . Recall ˆ xGLS = ( W ⊤Σ−1W )−1W ⊤Σ−1y = ˆΣGLS W ⊤Σ−1y. We have already shown that ˆΣGLS is a succinct matrix. We can efficiently compute W ⊤Σ−1y under (9) as follows: 
+
+W ⊤Σ−1y = ( W1Σ−11 ⊗ I)y1 + ( W2Σ−12 ⊗ 1d×1)y2
+
+Note that each term on the RHS can be computed efficiently without materializing the Kronecker products via the vec trick (Fact 5.2). Having computed x′ := W ⊤Σ−1y, we can again efficiently compute ˆ xGLS = ˆΣGLS x′
+
+via the vec trick. 
+
+Computing ˆΣECGLS and ˆxECGLS . Recall that ˆΣECGLS = ( Ikd ×kd − LR ) ˆΣGLS and ˆ xECGLS = ( Ikd ×kd −
+
+LR )ˆ xGLS − Lr , where L = ˆΣGLS R⊤(R ˆΣGLS R⊤)−1 (see Lemma 5.6). We have already shown that ˆΣGLS is a succinct matrix, so let ˆΣGLS = A ⊗ P0 + B ⊗ P1. We show the following lemma. 24 Lemma 9.3. Under the structure of (9) , let ˆΣGLS = A ⊗ P0 + B ⊗ P1. For ˜R =
+
+R1
+
+R2
+
+
+
+let 
+
+LA := AR ⊤ 
+
+> 1
+
+(R1AR ⊤ 
+
+> 1
+
+)−1 (10) 
+
+LB := B ˜R⊤( ˜RB ˜R⊤)−1 =: LB, 1 LB, 2
+
+ (11) ˜A := AR ⊤ 
+
+> 1
+
+(R1AR ⊤ 
+
+> 1
+
+)−1R1 = LAR1 (12) ˜B := B ˜R⊤( ˜RB ˜R⊤)−1 ˜R = LB ˜R (13) 
+
+where, LB has shape |B a| × (e1 + e2), and we define the blocks LB, 1 and LB, 2 to be of shape |B a| × e1 and 
+
+|B a| × e2 respectively. Then, it holds that, 
+
+L = ˆΣGLS R⊤(R ˆΣGLS R⊤)−1 = LA ⊗ P0 + LB, 1 ⊗ P1 1 
+
+> d
+
+LB, 2 ⊗ 1d×1
+
+ (14) 
+
+LR = ˆΣGLS R⊤(R ˆΣGLS R⊤)−1R = ˜A ⊗ P0 + ˜B ⊗ P1 (15) The proof of this lemma is technical, so we defer it to §9.4. Using this lemma, it is easy to see that ˆΣECGLS 
+
+and ˆ xECGLS can be computed efficiently and that ˆΣECGLS is a succinct matrix—this is because ( I − LR ) is a succinct matrix, so it is efficient to compute ( I − LR ) ˆΣGLS and ( I − LR )ˆ xGLS , and furthermore, Lr =(LA ⊗ P0 + LB, 1 ⊗ P1)r1 + 1 
+
+> d
+
+(LB, 2 ⊗ 1d×1)r2 can be computed efficiently using the vec trick (Fact 5.2). 
+
+## 9.3 Efficient implementation of CombineEstimators 
+
+Let ˆΩ1 := A1 ⊗ P0 + B1 ⊗ P1 and ˆΩ2 := A2 ⊗ P0 + B2 ⊗ P1. CombineEstimators involves computing the following quantities, which we show how to compute efficiently: 
+
+• A ← ˆΩ2( ˆΩ1 + ˆΩ2)†. We use multiplication and inverse algebra of succinct matrices (Lemma 9.2) to observe that 
+
+A = (A2(A1 + A2)†) ⊗ P0 + ( B2(B1 + B2)†) ⊗ P1
+
+• B = I − A = ( I − A2(A1 + A2)†) ⊗ P0 + ( I − B2(B1 + B2)†) ⊗ P1.
+
+• ˆz = Aˆz1 + B ˆz2 can be computed efficiently using the vec trick (Fact 5.2). 
+
+• ˆΩ = B ˆΩ2 can be computed efficiently as the multiplication of two succinct matrices. 
+
+## 9.4 Proof of Lemma 9.3 
+
+The following lemma serves as a crucial step towards Lemma 9.3. 
+
+Lemma 9.4. Let F, G 00 ∈ Rm×m, G 01 ∈ Rn×m, G 10 ∈ Rm×n, G 11 ∈ Rn×n with F and G (as defined below) being non-singular. Let 
+
+G := 
+
+G00 G01 
+
+G10 G11 
+
+
+
+and H := 
+
+H00 H01 
+
+H10 H11 
+
+
+
+:= G−1 then, for 
+
+M =
+
+F ⊗ P0 + G00 ⊗ P1 G01 ⊗ 1d×1
+
+G10 ⊗ 11×d d · G11 
+
+
+
+it holds that M −1 =
+
+F −1 ⊗ P0 + H00 ⊗ P1 1 
+
+> d
+
+H01 ⊗ 1d×11 
+
+> d
+
+H10 ⊗ 11×d 1 
+
+> d
+
+H11 
+
+
+
+.
+
+Proof. We verify that M M −1 = I for the claimed M −1. First note that GH = I, which is equivalent to 
+
+G00 H00 + G01 H10 = I G00 H01 + G01 H11 = 0 
+
+G10 H00 + G11 H10 = 0 G10 H01 + G11 H11 = I
+
+25 Using the above and properties of P0 and P1 (namely, P01d×1 = 0, P11d×1 = 1d×1 and 1 
+
+> d
+
+1d×111×d = P1), we get the following 
+
+M M −1
+
+=
+
+ F ⊗ P0 00 0
+
+
+
++
+
+ G00 ⊗ P1 G01 ⊗ 1d×1
+
+G10 ⊗ 11×d d · G11 
+
+  F −1 ⊗ P0 00 0
+
+
+
++
+
+ H00 ⊗ P1 1 
+
+> d
+
+H01 ⊗ 1d×11 
+
+> d
+
+H10 ⊗ 11×d 1 
+
+> d
+
+H11 
+
+ 
+
+=
+
+I ⊗ P0 00 0
+
+
+
++
+
+ G00 ⊗ P1 G01 ⊗ 1d×1
+
+G10 ⊗ 11×d d · G11 
+
+  H00 ⊗ P1 1 
+
+> d
+
+H01 ⊗ 1d×11 
+
+> d
+
+H10 ⊗ 11×d 1 
+
+> d
+
+H11 
+
+
+
+=
+
+I ⊗ P0 00 0
+
+
+
++
+
+ (G00 H00 + G01 H10 ) ⊗ P1 1 
+
+> d
+
+(G00 H01 + G01 H11 ) ⊗ 1d×1
+
+(G10 H00 + G11 H10 ) ⊗ 11×d G10 H01 + G11 H11 
+
+
+
+=
+
+I ⊗ P0 + I ⊗ P1 00 I
+
+
+
+= I . 
+
+Proof of Lemma 9.3. Recall that, we have the following structure: 
+
+R =
+
+ R1 ⊗ IR2 ⊗ 11×d
+
+
+
+and ˆΣGLS = A ⊗ P0 + B ⊗ P1
+
+We expand R ˆΣGLS R⊤ as follows. 
+
+R ˆΣGLS R⊤ =
+
+ R1 ⊗ IR2 ⊗ 11×d
+
+
+
+(A ⊗ P0 + B ⊗ P1) R⊤ 
+
+> 1
+
+⊗ I R⊤ 
+
+> 2
+
+⊗ 1d×1
+
+
+
+=
+
+R1AR ⊤ 
+
+> 1
+
+⊗ P0 + R1BR ⊤ 
+
+> 1
+
+⊗ P1 R1BR ⊤ 
+
+> 2
+
+⊗ 1d×1
+
+R2BR ⊤ 
+
+> 1
+
+⊗ 11×d d · R2BR ⊤
+
+> 2
+
+
+
+Thus, R ˆΣGLS R⊤ has precisely the structure required in Lemma 9.4 for 
+
+F = R1AR ⊤ 
+
+> 1
+
+and G =
+
+R1BR ⊤ 
+
+> 1
+
+R1BR ⊤
+
+> 2
+
+R2BR ⊤ 
+
+> 1
+
+R2BR ⊤
+
+> 2
+
+
+
+= ˜RB ˜R⊤ where ˜R := 
+
+R1
+
+R2
+
+
+
+Note that F and G are invertible assuming R1 and 
+
+R1
+
+R2
+
+
+
+are both full rank, which can be assumed without loss of generality. Thus, applying Lemma 9.4, we get (R ˆΣGLS R⊤)−1 =
+
+(R1AR ⊤ 
+
+> 1
+
+)−1 ⊗ P0 + H00 ⊗ P1 1 
+
+> d
+
+H01 ⊗ 1d×11 
+
+> d
+
+H10 ⊗ 11×d 1 
+
+> d
+
+H11 
+
+
+
+where 
+
+H00 H01 
+
+H10 H11 
+
+
+
+= ( ˜RB ˜R⊤)−1
+
+Next, we get that 
+
+R⊤(R ˆΣGLS R⊤)−1
+
+= R⊤ 
+
+> 1
+
+⊗ I R⊤ 
+
+> 2
+
+⊗ 1d×1
+
+ (R1AR ⊤ 
+
+> 1
+
+)−1 ⊗ P0 + H00 ⊗ P1 1 
+
+> d
+
+H01 ⊗ 1d×11 
+
+> d
+
+H10 ⊗ 11×d 1 
+
+> d
+
+H11 
+
+
+
+= R⊤ 
+
+> 1
+
+(R1AR ⊤ 
+
+> 1
+
+)−1 ⊗ P0 0 + (R⊤ 
+
+> 1
+
+H00 + R⊤ 
+
+> 2
+
+H10 ) ⊗ P1 1 
+
+> d
+
+(R⊤ 
+
+> 1
+
+H01 + R⊤ 
+
+> 2
+
+H11 ) ⊗ 1d×1
+
+
+
+Thus, we get 
+
+L := ˆΣGLS R⊤(R ˆΣGLS R⊤)−1
+
+= (A ⊗ P0 + B ⊗ P1) R⊤ 
+
+> 1
+
+(R1AR ⊤ 
+
+> 1
+
+)−1 ⊗ P0 0
+
++ ( A ⊗ P0 + B ⊗ P1) (R⊤ 
+
+> 1
+
+H00 + R⊤ 
+
+> 2
+
+H10 ) ⊗ P1 1 
+
+> d
+
+(R⊤ 
+
+> 1
+
+H01 + R⊤ 
+
+> 2
+
+H11 ) ⊗ 1d×1
+
+
+
+= AR ⊤ 
+
+> 1
+
+(R1AR ⊤ 
+
+> 1
+
+)−1 ⊗ P0 0 + B(R⊤ 
+
+> 1
+
+H00 + R⊤ 
+
+> 2
+
+H10 ) ⊗ P1 1 
+
+> d
+
+B(R⊤ 
+
+> 1
+
+H01 + R⊤ 
+
+> 2
+
+H11 ) ⊗ 1d×1
+
+
+
+= LA ⊗ P0 + LB, 1 ⊗ P1 1 
+
+> d
+
+LB, 2 ⊗ 1d×1
+
+
+
+26 where LA := AR ⊤ 
+
+> 1
+
+(R1AR ⊤ 
+
+> 1
+
+)−1 and LB = LB, 1 LB, 2
+
+ := B ˜R⊤( ˜RB ˜R⊤)−1. Finally, it is now immediate to see that 
+
+LR := ˆΣGLS R⊤(R ˆΣGLS R⊤)−1R
+
+= LA ⊗ P0 + LB, 1 ⊗ P1 1 
+
+> d
+
+LB, 2 ⊗ 1d×1
+
+  R1 ⊗ IR2 ⊗ 11×d
+
+
+
+= ˜A ⊗ P0 + ˜B ⊗ P1
+
+where ˜A = LAR1 = AR ⊤ 
+
+> 1
+
+(R1AR ⊤ 
+
+> 1
+
+)−1R1 and ˜B = LB ˜R = B ˜R⊤( ˜RB ˜R⊤)−1 ˜R.
+
+# 10 Handling Inequality & Integrality Constraints 
+
+As discussed earlier Algorithm 3 provides the BLUE for x⋆. However, that algorithm only takes into account the NMF estimates and equality constraints. In order to also account for the inequality and integrality constraints, we step outside the realm of best linear unbiased estimators , and provide a heuristic modification to Algorithm 3 using mixed integer programming (using Gurobi [Gur26] or another solver) on the final top-down pass. We refer to our algorithm as BlueDown (Algorithm 7); our naming follows the Census TopDown algorithm, which also uses Gurobi for mixed integer programming [AAC +22]. In particular, in BlueDown uses the same per-node processing and bottom-up pass phases as the linear estimator (Algorithm 3). These phases provide us with estimates ˆ zv , z ↑ 
+
+> v
+
+, z ⇑ 
+
+> v
+
+for each node v, as well as their corresponding covariances ˆΩv , ˆΩ↑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+. We replace the top-down pass phase with a sequence of mixed-integer programming problems that can be solved using Gurobi. If there are no inequality or integrality constraints, the resulting quadratic programming problems are equivalent to Algorithm 3, but this is no longer the case when these additional constraints are included. In the top-down pass in Algorithm 3, the estimator ˆ xv is constructed as a function of the estimator ˆ z⇓
+
+> p
+
+for the parent of v and ˆ z⇑ 
+
+> u
+
+for all children of p. While in Algorithm 3 we compute ˆ xv directly for each individual child v of p using invocations of CombineEstimators , this is equivalent to performing the following joint optimization using the final postprocessed parent estimate ˆ xp:(ˆ xv )v∈child( p) ← argmin    
+
+> xv∈R|B| :v∈child( p)
+
+X
+
+> v∈child( p)
+
+(xv − z⇑ 
+
+> v
+
+)⊤( ˆΩ⇑ 
+
+> v
+
+)†(xv − z⇑ 
+
+> v
+
+) (16) subject to: Rv xv = ru for all v ∈ child( p),
+
+P 
+
+> v∈child( p)
+
+xv = ˆ xp
+
+Since pseudoinverse is often numerically unstable to compute, we replace ( ˆΩ⇑ 
+
+> v
+
+)† by ( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )−1
+
+for any constant α > 0, where we can assume without loss of generality that ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv is invertible. Invertibility holds because any equality constraint on xv that is collectively implied by the equality constraints on xu for all descendants u of v can be assumed to be included in Rv xv = rv , and so all the eigenvectors of ˆΩ⇑
+
+> v
+
+with zero eigenvalues are in the rowspan of Rv . This does not change the solution, since we are constraining 
+
+xv in the directions in which the objective does not impose any penalty. 
+
+## 10.1 Multi-Phase Least Square Estimator and Rounder 
+
+Our approach is to modify the joint optimization objective (16) to incorporate the inequality and integrality constraints (and use a mixed integer program solver). While in principle it is possible to incorporate all the constraints directly into the above program, the Census TopDown Algorithm instead takes a multi-pass 
+
+approach, where they consider a sequence of optimization problems. Each successive optimization problem computes a partial solution taking into account only part of the objective or only some of the constraints, which is refined in subsequent problems to obtain the full estimator (ˆ xu)u∈child( p). We follow essentially the same approach, with the key difference being that we use our bottom-up estimates ˆ z⇑ 
+
+> v
+
+as the starting point, instead of the raw estimates ˆ zv . Since the bottom-up estimates ˆ z⇑ 
+
+> v
+
+are not independent (whereas the raw estimates ˆ zv are independent), this requires extending the approach of [AAC +22] to work with non-diagonal 27 Algorithm 4 LeastSquaresEstimator Q,B 
+
+Params: Projection operator Q ∈ Rq×N , a set of child nodes S ⊂ T , and a consistency operator B ∈ Rb×N
+
+(optional). 
+
+Input: Parent node estimate ˆ xp (optional), current estimates and covariances (ˆ zv , ˆΩv ) for all v ∈ S,associated equality and inequality constraints CS = ( Rv , r v , G v , g v )v∈S , and consistency estimates zB ∈
+
+(RN )|S| (optional). 
+
+Output: Estimators (˜ zv )v∈child( p)
+
+Let Pv = ( Q( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )Q⊤)−1 for each v ∈ child( p), where α > 0 is a stability parameter. 
+
+return (˜ zv )v∈child( p), obtained via solving the following quadratic program with linear constraints: (˜ zv )v∈child( p) ← argmin    
+
+> zv∈R|B| ≥0:v∈child( p)
+
+X
+
+> v∈child( p)
+
+(Q(zv − ˆzv )) ⊤Pv (Q(zv − ˆzv )) (17) subject to: zv ≥ 0,
+
+Rv zv = rv ,
+
+Gv zv ≤ gv ,
+
+P 
+
+> v∈child( p)
+
+zv = ˆ xp (if ˆ xp is provided), 
+
+Bz v = Bz B (if B, z B are provided) covariance matrices. This extension raises additional computational challenges that we address below. The modified least-squares estimator and rounder are described in Algorithms 4 and 5, and the multi-pass routine that may invoke each multiple times is described in Algorithm 6. While the algorithm can be flexibly configured with any set of increasingly granular refined solutions, 7
+
+our experiments use the same configuration as the 2020 US Census [AAC +22] and use either one or two passes for both the least-squares and the rounder routines at each level of the tree. The total pass uses the all-ones vector projection operator 1⊤ 
+
+> N
+
+and minimizes the error of the total count for each child geocode. The full pass uses the identity projection operator IN and minimizes the overall error of the full estimate and covariance matrix. This is analogous to the second pass used in the 2020 Census [AAC +22], which considered all input queries, but allows generalization to non-diagonal covariance matrices. Again matching the production setting used for the 2020 Census [AAC +22], we use a single full pass Q = ( IN ) for the US (root) and Block (leaf) levels, and two ( total and full ) passes Q = ( 1⊤ 
+
+> N
+
+, I N ) for all other levels of the tree (State, County, Tract, and Block Group). 
+
+Remark 10.1. We note that the TopDown algorithm included a slack term τ in the multi-pass least-squares estimation step to ensure the feasibility of future solutions [AAC +22]. We find that this slack term is unnecessary in the production version of the algorithm, and so we omit it. 
+
+## 10.2 Efficient Operations Leveraging Succinct Matrices 
+
+Two optimizations substantially improve the time required to solve the least-squares optimization problems: using variable substitutions to reduce the number of terms in the objective function, and leveraging succinct matrices to compute matrix products more efficiently. The time it takes to run a single iteration of an iterative solver such as Gurobi is generally proportional to the complexity of the objective function. Adirect encoding of the optimization problem in Algorithm 4 even in the special case Q = IN (i.e. the full 
+
+pass) would have 4 N 2 monomial objective terms for each child node, which would incur a large slowdown compared to the simpler optimization problem used in the the 2020 Census, whose objective function size 
+
+> 7To avoid introducing additional notation, Algorithm 6 implicitly assumes that the least squares phase and rounder phase use the same passes and projection operators, which is the case in the configuration we use. One can easily modify the algorithm to allow different sets of projection operators in the two phases.
+
+28 Algorithm 5 Rounder Q,B 
+
+Params: Projection operator Q ∈ Rq×N , a set of child nodes S ⊂ T , and a consistency operator B ∈ Rb×N
+
+(optional). 
+
+Input: Parent node estimate ˆ xp (optional), current estimates ˆ zv for all v ∈ S, associated equality and inequality constraints CS = ( Rv , r v , G v , g v )v∈S , and consistency estimates zB ∈ (RN )|S| (optional). 
+
+Output: Estimators (˜ zv )v∈child( p)
+
+return (˜ zv )v∈child( p) ← ⌊ ˆzv ⌋ + yv , obtained via solving the following integer linear program: (yv )v∈child( p) ← argmin    
+
+> yv∈{ 0,1}|B| :v∈child( p)
+
+X
+
+> v∈child( p)
+
+1⊤|Q(ˆ zv − ˆz′ 
+
+> v
+
+)| (18) subject to: ˆz′ 
+
+> v
+
+= ( ⌊ˆzv ⌋ + yv ), 
+
+Rv ˆz′ 
+
+> v
+
+= rv ,
+
+Gv ˆz′ 
+
+> v
+
+≤ gv ,
+
+P 
+
+> v∈child( p)
+
+ˆz′ 
+
+> v
+
+= ˆ xp (if ˆ xp is provided), 
+
+B ˆz′ 
+
+> v
+
+= Bz B (if B, z B are provided) is a small multiple of N rather than N 2. However, using auxiliary variables we can encode the objective function of Algorithm 4 in an alternate form so that it also has roughly N objective terms, yielding an end-to-end algorithm with very similar runtime to the 2020 Census TDA. We first illustrate with the full pass of Algorithm 4, where Q = IN . In this case the least-squares objective terms for a single child node v are ( zv − ˆzv )⊤Pv (zv − ˆzv ), where Pv = ( Q( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )Q⊤)−1 =( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )−1. Define auxiliary variables yv = Pv (zv − ˆzv ). Using these N extra variables, the objective terms can now be written as ( zv − ˆzv )⊤yv , i.e. using only 2 N objective terms at the cost of N additional linear equality constraints. With general Q ∈ Rq×N the objective terms for a single child node v are (Q(zv − ˆzv )) ⊤Pv (Q(zv − ˆzv )). We can similarly define 2 q auxiliary variables yv = Pv Q(zv − ˆzv ) and wv =
+
+Q(zv − ˆzv ) and write the objective terms as w⊤ 
+
+> v
+
+yv , i.e. using only q objective terms at the cost of 2 q additional linear constraints. Further efficiency improvements can be obtained leveraging the succinct matrix structure of ˆΩ⇑, Q and 
+
+R. Recall from §9 that ˆΩ⇑ 
+
+> v
+
+is of the form ˆΩ⇑ 
+
+> v
+
+= A0 ⊗ P0 + A1 ⊗ P1 and Rv is of the form 
+
+Rv =
+
+R1 ⊗ IBs
+
+R2 ⊗ 1⊤Bs
+
+
+
+for some A0, A 1 ∈ R|B a|×|B a| and R1 ∈ Re1×|B a|, R 2 ∈ Re2×|B a|, where P0 = IBs − 1 
+
+> d
+
+JBs and P1 = 1 
+
+> d
+
+JBs . Then 
+
+R⊤ 
+
+> v
+
+Rv = R⊤ 
+
+> 1
+
+R1 ⊗ IBs + R⊤ 
+
+> 2
+
+R2 ⊗ JBs , so ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv is also a succinct matrix of the form C0 ⊗ P0 + C1 ⊗ P1
+
+for C0, C 1 ∈ R|B a|×|B a| given by 
+
+C0 = A0 + αR ⊤ 
+
+> 1
+
+R1
+
+C1 = A1 + αR ⊤ 
+
+> 1
+
+R1 + dαR ⊤ 
+
+> 2
+
+R2.
+
+For Q = 1⊤ 
+
+> N
+
+= 1⊤Ba ⊗ 1⊤Bs as in the total pass, Q( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )Q⊤ is simply the sum of the entries of the matrix C0 ⊗ P0 + C1 ⊗ P1, so its inverse is the scalar 
+
+Pv = ( Q( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )Q⊤)−1 = ( 1⊤Ba C01Ba ⊗ 1⊤Bs P01Bs + 1⊤Ba C11Ba ⊗ 1⊤Bs P11Bs )−1
+
+= ( |B s| · 1⊤Ba C11Ba )−1.
+
+Similarly, if Q = IN = IBa ⊗ IBs as in the full pass, then Pv = ( Q( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )Q⊤)−1 is simply (C0 ⊗ P0 + C1 ⊗ P1)−1 = C−10 ⊗ P0 + C−11 ⊗ P1, as shown in §9.1. Consequently, for Q ∈ { 1⊤ 
+
+> N
+
+, I N } as in the 29 Algorithm 6 MultiPass Q
+
+Params: Projection operators Q = ( Q1, . . . , Q ℓ), where Q1 ∈ Rq1×d, Q2 ∈ Rq2×d, . . . , Qℓ ∈ Rqℓ×d.
+
+Input: Parent node estimate ˆ xp (optional), a set of child nodes S ⊂ T , estimators and covariances (ˆ z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+) for all v ∈ S, and associated equality and inequality constraints CS = ( Rv , r v , G v , g v )v∈S .
+
+Output: Estimators (˜ zv )v∈child( p)
+
+B, ˜z(0) ← ∅ , ∅
+
+for j = 1 , . . . , ℓ do 
+
+(˜ z(j) 
+
+> v
+
+)v∈S ← LeastSquaresEstimator Qj ,S,B (ˆ xp, (ˆ z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+)v∈S , CS , (˜ z(j−1)  
+
+> v
+
+)v∈S )
+
+B ←
+
+ BQj
+
+
+
+˜zLS ← ˜z(ℓ)
+
+B, ˜z(0) ← ∅ , ∅
+
+for j = 1 , . . . , ℓ do 
+
+(˜ z(j) 
+
+> v
+
+)v∈S ← Rounder Qj ,S,B (ˆ xp, (˜ zLS  
+
+> v
+
+)v∈S , CS , (˜ z(j−1)  
+
+> v
+
+)v∈S )
+
+B ←
+
+ BQj
+
+
+
+return ˜z(ℓ)
+
+total and full passes, we can compute Pv efficiently in the succinct representation without expanding the Kronecker products. 8
+
+We describe our final end-to-end algorithm in Algorithm 7. 
+
+> 8
+
+More generally, if Q is of the same form as R, i.e. if Q =
+
+Q1 ⊗ IBs
+
+Q2 ⊗ 1⊤Bs
+
+
+
+for some Q1 ∈ Rq1×|B a|, Q 2 ∈ Rq2×|B a|, then we can use Lemma 9.4 to invert Q( ˆΩ⇑ 
+
+> v
+
++ αR ⊤ 
+
+> v
+
+Rv )Q⊤ efficiently. 
+
+30 Algorithm 7 BlueDown T ,Q
+
+Params: Tree T with root rt ; projection operators Qq = ( Q(q)1 , . . . , Q qℓq ) for each level q of T ; and parameters Wv , Σ v , Rv , rv , G v , g v for each v ∈ T .
+
+Input: (yv )v∈T : measurements yv ∼ GLR Wv ,Σv (x⋆v ). 
+
+Output: (ˆ xv )v∈T : post-processed estimates for all v.
+
+# Per-node processing 
+
+for each node v ∈ T do 
+
+▷ (ˆ zv , ˆΩv ) ← ECGLS Rv ,r v  
+
+> Wv,Σv
+
+(yv ) (Algorithm 1) 
+
+# Bottom-up pass 
+
+for leaf v ∈ T do 
+
+▷ (ˆ z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+) ← (ˆ zv , ˆΩv )
+
+for each internal node v from largest to smallest depth do 
+
+▷ (ˆ z↑ 
+
+> v
+
+, ˆΩ↑ 
+
+> v
+
+) ←
+
+P 
+
+> u∈child( v)
+
+ˆz⇑ 
+
+> u
+
+, P 
+
+> u∈child( v)
+
+ˆΩ⇑
+
+> u
+
+
+
+▷ (ˆ z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+) ← CombineEstimators ((ˆ zv , ˆΩv ), (ˆ z↑ 
+
+> v
+
+, ˆΩ↑ 
+
+> v
+
+)) (Algorithm 2) 
+
+# Top-down pass 
+
+for root rt do 
+
+▷ Crt ← (Rrt , r r t, G rt , g rt )
+
+▷ ˆxrt ← MultiPass Q0 (∅, {rt }, (z⇑
+
+> rt
+
+, ˆΩ⇑
+
+> rt
+
+), Crt )
+
+for each internal node p from smallest to largest depth do 
+
+▷ q ← depth( p) + 1 
+
+▷ C ← (Rv , r v , G v , g v )v∈child( p)
+
+▷ (ˆ xv )v∈child( p) ← MultiPass Qq (ˆ xp, child( p), (z⇑ 
+
+> v
+
+, ˆΩ⇑ 
+
+> v
+
+)v∈child( p), C)
+
+return (ˆ x)v∈T 
+
+31 References 
+
+[AAA +25] John M. Abowd, Tamara Adams, Robert Ashmead, David Darais, Sourya Dey, Simson Garfinkel, Nathan Goldschlag, Michael B. Hawes, Daniel Kifer, Philip Leclerc, Ethan Lew, Scott Moore, Rolando A. Rodr´ ıguez, Ramy N. Tadros, and Lars Vilhuber. A simulated recon-struction and reidentification attack on the 2010 U.S. Census. Harvard Data Science Review ,7(3), 2025. [AAC +22] John M. Abowd, Robert Ashmead, Ryan Cumings-Menon, Simson L. Garfinkel, Micah Heineck, Christine Heiss, Robert Johns, Daniel Kifer, Philip Leclerc, Ashwin Machanavajjhala, Brett Moran, William Sexton, Matthew Spence, and Pavel Zhuravlev. The 2020 census disclosure avoidance system TopDown algorithm. arXiv , 2204.08986, 2022. [ABJ +24] Ran Abramitzky, Leah Boustan, Elisa J´ acome, Santiago P´ erez, and Juan David Torres. Law-abiding immigrants: The incarceration gap between immigrants and the US-born, 1870–2020. 
+
+American Economic Review: Insights , 6(4):453–471, 2024. [Abo18] John M. Abowd. The U.S. Census Bureau adopts differential privacy. In KDD , page 2867, 2018. [Abo21] John M. Abowd. Declaration of John M. Abowd. Filed in State of Alabama v. Department of Commerce , Case No. 3:21-cv-00211-RAH-ECM-KCN, Document 41-1 (M.D. Alabama April 13, 2021), April 2021. [AHP +25] Robert Ashmead, Michael B. Hawes, Mary Pritts, Pavel Zhuravlev, and Sallie Ann Keller. An approximate Monte Carlo simulation method for estimating uncertainty and constructing confidence intervals for 2020 census statistics. arXiv , 2503.19714, 2025. [Ame85] T. Amemiya. Advanced Econometrics . Harvard University Press, 1985. [BDGH21] Amariah Becker, Moon Duchin, Dara Gold, and Sam Hirsch. Computational redistricting and the voting rights act. Election Law Journal: Rules, Politics, and Policy , 20(4):407–441, 2021. [BV14] Stephen P. Boyd and Lieven Vandenberghe. Convex Optimization . Cambridge University Press, 2014. [CKS20] Cl´ ement L. Canonne, Gautam Kamath, and Thomas Steinke. The discrete Gaussian for differ-ential privacy. In NIPS , 2020. [CMZ25] Ryan Cumings-Menon and Pavel Zhuravlev. Least squares estimation for hierarchical data. 
+
+arXiv , 2404.13164, 2025. [CPS +12] Graham Cormode, Cecilia Procopiuc, Divesh Srivastava, Entong Shen, and Ting Yu. Differen-tially private spatial decompositions. In ICDE , pages 20–31, 2012. [DGK +23] Matthew Dawson, Badih Ghazi, Pritish Kamath, Kapil Kumar, Ravi Kumar, Bo Luan, Pasin Manurangsi, Nishanth Mundru, Harikesh Nair, Adam Sealfon, and Shengyu Zhu. Optimizing hierarchical queries for the attribution reporting API. In AdKDD , 2023. [DMNS06] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam D. Smith. Calibrating noise to sensitivity in private data analysis. In TCC , pages 265–284, 2006. [ENU20] Alexander Edmonds, Aleksandar Nikolov, and Jonathan R. Ullman. The power of factorization mechanisms in local and central differential privacy. In STOC , pages 425–438, 2020. [Gur26] Gurobi Optimization, LLC. Gurobi Optimizer Reference Manual, 2026. [HJ13] Roger A. Horn and Charles R. Johnson. Matrix Analysis . Cambridge University Press, 2013. [HRMS10] Michael Hay, Vibhor Rastogi, Gerome Miklau, and Dan Suciu. Boosting the accuracy of differentially-private histograms through consistency. In VLDB , pages 1021–1032, 2010. 32 [Kar72] Richard M. Karp. Reducibility among combinatorial problems. In Proc. Symp. Complexity of Computer Computations , The IBM Research Symposia Series, pages 85–103, 1972. [KCW +05] Nancy Krieger, Jarvis T Chen, Pamela D Waterman, David H Rehkopf, and SV Subramanian. Painting a truer picture of US socioeconomic and racial/ethnic health inequalities: the public health disparities geocoding project. American J Public Health , 95(2):312–323, 2005. [LMH +15] Chao Li, Gerome Miklau, Michael Hay, Andrew McGregor, and Vibhor Rastogi. The matrix mechanism: optimizing linear counting queries under differential privacy. VLDB J. , 24(6):757– 781, 2015. [MMHM23] Ryan McKenna, Gerome Miklau, Michael Hay, and Ashwin Machanavajjhala. Optimizing error of high-dimensional statistical queries under differential privacy. J. Priv. Confidentiality , 13(1), 2023. [MNT18] Jiˇ r´ ı Matouˇ sek, Aleksandar Nikolov, and Kunal Talwar. Factorization norms and hereditary discrepancy. International Mathematics Research Notices , 2020(3):751–780, 03 2018. [Nat25] National Academies of Sciences, Engineering, and Medicine. Census Data Field Guide for Transportation Applications . The National Academies Press, 2025. [NTZ16] Aleksandar Nikolov, Kunal Talwar, and Li Zhang. The geometry of differential privacy: The small database and approximate cases. SIAM J. Comput. , 45(2):575–616, 2016. [Rea20] Andrew Reamer. Counting for dollars 2020: The role of the decennial census in the geographic distribution of federal funds. Res. Rep., GW Inst. Public Policy, George Washington Univ. Washington, DC , 2020. [Rot34] W. E. Roth. On direct product matrices. Bull. Amer. Math. Soc. , 40(6):461–468, 1934. [SSW25] Buxin Su, Weijie J. Su, and Chendi Wang. The 2020 US decennial census is more private than you (might) think. PNAS , 122(45), 2025. [US 75] US Congress. Public law 94-171 (89 Stat. 1023). 94th Congress, 1975. Mandates the provision of small-area census data for the purpose of legislative redistricting. [US 12] US Code. 13 U.S.C. §§ 8–9. Title 13, U.S. Code, Sections 8 and 9, 2012. Establishes the legal mandate for respondent confidentiality. [US 23a] US Census Bureau. 2020 Census Disclosure Avoidance System Detailed Summary Metrics, May 2023. [US 23b] US Census Bureau. Disclosure avoidance and the 2020 census: How the TopDown algorithm works. 2020 Census Briefs C2020BR-04, U.S. Department of Commerce, U.S. Census Bureau, March 2023. [US 24a] US Census Bureau. 2020 disclosure avoidance system: Frequently asked ques-tions. https://www.census.gov/programs-surveys/decennial-census/decade/ 2020/planning-management/process/disclosure-avoidance/2020-das-updates/ 2020-das-faqs.html , 2024. Accessed: January 9, 2026. [US 24b] US Census Bureau. Estimating confidence intervals for 2020 census statistics using approx-imate monte carlo simulation (2020 census production run). https://registry.opendata. aws/census-2020-amc-mdf-replicates/ , 2024. 33 A Supplemental results 
+
+See Tables 2 and 3 and Figures 8 to 10. Geographic level Query BlueDown error TopDown error US Total 0 ± 0 0 ± 0State Total 0 ± 0 0 ± 0County Total 1.58 ± 0.02 1.75 ± 0.02 Tract Total 1.53 ± 0.00 1.92 ± 0.00 Block group Total 13.68 ± 0.02 13.76 ± 0.02 Block Total 3.55 ± 0.00 3.56 ± 0.00 US Housing type 261.60 ± 49.39 271.20 ± 63.91 State Housing type 103.40 ± 4.06 109.26 ± 2.93 County Housing type 25.47 ± 0.15 36.35 ± 0.21 Tract Housing type 4.81 ± 0.01 8.49 ± 0.01 Block group Housing type 14.79 ± 0.02 15.68 ± 0.02 Block Housing type 3.60 ± 0.00 3.63 ± 0.00 US Voting age 49.80 ± 36.96 45.20 ± 30.18 State Voting age 26.13 ± 3.77 28.02 ± 3.82 County Voting age 18.94 ± 0.22 20.89 ± 0.27 Tract Voting age 12.42 ± 0.03 16.17 ± 0.06 Block group Voting age 19.93 ± 0.02 20.54 ± 0.01 Block Voting age 4.85 ± 0.00 4.86 ± 0.00 US Hispanic 48.00 ± 29.43 46.00 ± 30.25 State Hispanic 26.01 ± 2.15 27.65 ± 2.43 County Hispanic 17.22 ± 0.30 21.44 ± 0.38 Tract Hispanic 7.32 ± 0.02 8.50 ± 0.03 Block group Hispanic 18.71 ± 0.02 18.93 ± 0.02 Block Hispanic 4.57 ± 0.00 4.58 ± 0.00 Table 2: Mean absolute error in total, housing type, voting age, and Hispanic queries averaged across geographic units by geographic level, and the standard deviation of these average error values across the ten replicate runs. The state and US total populations are invariant under both algorithms and have zero error. 34 Geographic level Query BlueDown error TopDown error US Race 644.00 ± 69.09 647.40 ± 62.58 State Race 397.44 ± 5.32 420.31 ± 5.37 County Race 123.19 ± 0.30 152.81 ± 0.34 Tract Race 35.66 ± 0.02 40.90 ± 0.02 Block group Race 47.19 ± 0.02 48.35 ± 0.02 Block Race 7.83 ± 0.00 7.86 ± 0.00 US Hispanic x race 918.80 ± 57.79 922.60 ± 53.21 State Hispanic x race 575.77 ± 7.58 609.42 ± 9.06 County Hispanic x race 159.96 ± 0.23 199.99 ± 0.35 Tract Hispanic x race 44.35 ± 0.02 51.08 ± 0.02 Block group Hispanic x race 57.53 ± 0.02 59.02 ± 0.02 Block Hispanic x race 8.73 ± 0.00 8.77 ± 0.00 US V x H x R 1346.80 ± 67.47 1349.80 ± 64.54 State V x H x R 829.50 ± 6.50 871.41 ± 8.94 County V x H x R 222.60 ± 0.24 260.94 ± 0.29 Tract V x H x R 78.76 ± 0.03 100.73 ± 0.03 Block group V x H x R 78.12 ± 0.03 82.31 ± 0.03 Block V x H x R 10.41 ± 0.00 10.47 ± 0.00 US Detailed 3248.60 ± 102.51 3290.40 ± 107.07 State Detailed 1465.02 ± 8.53 1583.16 ± 9.28 County Detailed 275.85 ± 0.23 335.15 ± 0.20 Tract Detailed 83.89 ± 0.03 110.75 ± 0.04 Block group Detailed 80.14 ± 0.03 85.59 ± 0.03 Block Detailed 10.45 ± 0.00 10.53 ± 0.00 Table 3: Mean absolute error in race, Hispanic x race, voting age x Hispanic x race, and detailed (i.e. housing type x voting age x Hispanic x race) queries averaged across geographic units by geographic level, and the standard deviation of these average error values across the ten replicate runs. 35 housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+detailed 
+
+US queries 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+> normalized error
+
+total 
+
+housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+detailed 
+
+block queries 
+
+0.988 
+
+0.990 
+
+0.992 
+
+0.994 
+
+0.996 
+
+0.998 
+
+1.000 
+
+> normalized error
+
+BlueDown 
+
+TopDown Figure 8: Average accuracy improvements for our algorithm for queries aggregating over the entire US and by block. <50 <100 <500 <1000 <5000 5000 
+
+size of block group 
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+> bias
+
+0 <10 <50 <100 <500 500 
+
+size of block 
+
+14 
+
+12 
+
+10 
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+> bias
+
+BlueDown 
+
+TopDown 
+
+Figure 9: Mean error (bias) for total population of each population bin at block group and block levels, for each replicate run. Population bins are mutually exclusive. housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+v. age x hisp. x race      
+
+> 0500 1000 1500 2000 2500
+
+Error distributions for state queries 
+
+detailed total 
+
+> BlueDown
+> TopDown
+
+housing type 
+
+voting age 
+
+hispanic 
+
+race 
+
+hispanic x race 
+
+v. age x hisp. x race         
+
+> 020 40 60 80 100 120 140 160
+
+Error distributions for block group queries 
+
+detailed 
+
+Figure 10: Error distributions of queries across each geographic unit at the state and block group levels. 36

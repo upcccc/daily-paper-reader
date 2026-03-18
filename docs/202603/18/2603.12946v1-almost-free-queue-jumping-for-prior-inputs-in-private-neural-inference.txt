@@ -1,0 +1,1278 @@
+Title: Almost-Free Queue Jumping for Prior Inputs in Private Neural Inference
+
+URL Source: https://arxiv.org/pdf/2603.12946v1
+
+Published Time: Mon, 16 Mar 2026 00:57:15 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+> 1
+
+# Almost-Free Queue Jumping for Prior Inputs in Private Neural Inference 
+
+Qiao Zhang, Minghui Xu,Tingchuang Zhang, and Xiuzhen Cheng, Fellow, IEEE 
+
+✦
+
+Abstract —Privacy-Preserving Machine Learning as a Service (PP-MLaaS) enables secure neural network inference by integrating cryp-tographic primitives such as homomorphic encryption (HE) and multi-party computation (MPC), protecting both client data and server models. Recent mixed-primitive frameworks have significantly improved infer-ence efficiency, yet they process batched inputs sequentially, offering little flexibility for prioritizing urgent requests. Na¨ ıve queue jumping introduces considerable computational and communication overhead, increasing non-negligible latency for in-queue inputs. We initiate the study of privacy-preserving queue jumping in batched inference and propose PrivQJ, a novel framework that enables effi-cient priority handling without degrading overall system performance. PrivQJ exploits shared computation across inputs via in-processing slot recycling, allowing prior inputs to be piggybacked onto ongoing batch computation with almost no additional cryptographic cost. Both theoretical analysis and experimental results demonstrate over an order-of-magnitude reduction in overhead compared to state-of-the-art PP-MLaaS systems. 
+
+Index Terms —Machine Learning as a Service, Neural Model, Private Inference, Homomorphic Encryption, Multi-Party Computation. 
+
+1 INTRODUCTION 
+
+# AS Machine Learning (ML) models become widely adopted in numerous applications and model training is always data-hungry and hardware-demanding, the end users or clients opt to send their inputs to a resource-abundant server that possesses high-performance models to obtain accurate prediction in a cost-efficient manner. However, concerns for data privacy make it challenging to deploy such a service in practice and the privacy concerns mainly lie in two folds: (1) The clients need to send input to the cloud server but they prefer to prevent any other parties including cloud server from obtaining her private input and model output, and there are also regulations to prohibit clients from disclosing data such as the GDPR [1] for busi-ness information and the HIPPA [2] for medical records, and (2) The server is reluctant to make its model parameters public since they could be intellectual property [3]. Privacy-Preserving Machine Learning as a Service (PP-MLaaS) aims to achieve data protection throughout the interaction between client and server. Specifically, as an 
+
+Q. Zhang, M. Xu, T. Zhang , and X. Cheng are with the School of Com-puter Science and Technology, Shandong University, Qingdao 266237, China (e-mail:qiao.zhang@sdu.edu.cn; mhxu@sdu.edu.cn; tczhang@mail.sdu.edu.cn; xzcheng@sdu.edu.cn). 
+
+ML model contains a stack of linear and non-linear func-tions, PP-MLaaS intends to specifically integrate crypto primitives, e.g., Multi-Party Computation (MPC) [4] and Homomorphic Encryption (HE) [5], to sequentially compute each function of the neural model, with encrypted input from the client and proprietary model parameters from the server. Such integration guarantees that (1) the client finally receives the model output with its input blind to the server while (2) the server’s model parameters remain hidden to the client beyond model output. While PP-MLaaS provides a promising way to align MLaaS with data protection, the key challenge is how to efficiently integrate cryptographic primitives into neural network computations. Without ad-dressing this, there could be extremely high computational complexity or lower prediction accuracy, resulting from either large circuit sizes or function approximations. To make PP-MLaaS more practical, a series of elegant works have been proposed to accelerate such process [6]– [16]. Remarkably, there has been a dramatic enhancement in inference efficiency, with exponential improvements from early frameworks like CryptoNets [6] to more advanced systems such as CrypTFlow2 [10] and Cheetah [13]. At a conceptual level, these privacy-preserving frameworks bolster computational efficiency by strategically optimiz-ing appropriate cryptographic techniques to execute linear functions (e.g., dot product and convolution) and nonlin-ear functions (e.g., ReLU) within neural networks. Major cryptographic primitives that are frequently utilized in these frameworks include HE [5], [17], [18], and MPC techniques like Oblivious Transfer (OT) [19], Secret Sharing (SS) [20], and Garbled Circuits (GC) [21], [22]. Most notably, the mixed-primitive frameworks that leverage HE for linear calculations while integrating MPC for nonlinear operations have been particularly effective in enhancing efficiency of PP-MLaaS [7], [8], [10], [13], [14], and this paper advances the optimization of efficiency in mixed-primitive mode. 
+
+State-Of-The-Art. In mainstream PP-MLaaS frameworks including mixed-primitive ones, the same procedure is per-formed for different inputs to compute each function in a neural model. Given a queue of private inputs at the client, a common way to complete PP-MLaaS for the whole inputs is to form a set of input batches and all inputs in each batch are first encrypted and sent from the client to the server, and then both parties involve in computing the function output and obtaining their respective output shares of the first function in neural model. Since one neural model is 
+
+> This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible.
+> arXiv:2603.12946v1 [cs.CR] 13 Mar 2026 2shares of nonlinear function
+> ...
+> ...
+
+(b) Computation for a hard queue jumping in mainstream works. 
+
+(c) Computation for an almost -free queue jumping in this work. 
+
+(a) Computation for batched inputs in mainstream works.                                                     
+
+> shares of nonlinear function
+> shares of nonlinear function
+> ...
+> ...
+> //compute linear function e.g., convolution
+> for m1ciphertext of n1original in -queue inputs :
+> do HE Add, HE Mult, ( HE Rot ), ( HE Extr ), ( HE Subs )
+> //share linear output
+> secretly share m3ciphertext of n1original in -queue inputs
+> //compute nonlinear function e.g., ReLU
+> OT -based comparison, ( OT -based multiplexing )
+> //compute linear function e.g., convolution
+> for m1+m2ciphertext of n1original in -queue inputs and n2prior inputs :
+> do HE Add, HE Mult, ( HE Rot ), ( HE Extr ), ( HE Subs )
+> //share linear output
+> secretly share m3+m4ciphertext of n1original in -queue inputs and n2prior inputs
+> //compute nonlinear function e.g., ReLU
+> OT -based comparison, ( OT -based multiplexing )
+> shares of nonlinear function
+> ...
+> shares of nonlinear function
+> ...
+> //compute linear function e.g., convolution
+> for m1ciphertext of n1original in -queue inputs and n2prior inputs :
+> do less HE Add, less HE Mult, ( HE Rot ), ( HE Extr ), ( HE Subs )
+> //share linear output
+> secretly share m3ciphertext of n1original in -queue inputs and n2prior inputs
+> //compute nonlinear function e.g., ReLU
+> OT -based comparison with fewer communication rounds ,(OT -based multiplex. )
+> shares of nonlinear function
+
+Fig. 1. Comparison of processing logic for batched inputs. 
+
+composed of a stack of linear and nonlinear functions, the above output shares at both parties serve as the input for the second function, and the process of input share feeding, share-based computation, and output share generation is sequentially applied to every function until the client finally obtains model outputs for all inputs in one batch. In this way, the PP-MLaaS for all inputs in a queue is performed batch by batch as illustrated in Figure 1(a), and the batch is either in individual style where the ciphertext for each input is independent from that of others [7]–[10], [13], [14] or in group style where one ciphertext could be associated with multiple inputs [6], [16]. On the other hand, the newly-coming inputs in the queue could be prior or urgent such that waiting in order is undesired or even intolerable. For example, an emergent patient in a local hospital’s diagnosis list needs to get the output in advance from the central hospital that has a high-performance medical neural model. In such case, queue jumping is unavoidable. When it happens, there involves a hard queue jumping to foremost batch as shown in Figure 1(b) and the waiting cost added for original in-queue inputs which now follow after the queue-jumping ones is either proportional to the complexity of computing individual input [10], [13], [14] if the number of inputs in foremost batch is temporarily increased to include queue-jumping inputs, or equivalent to the overhead of computing an entire batch [6], [16] if the batch size is fixed and at least one original in-queue input in foremost batch needs to be dropped out to the subsequent batch. In both cases, the added waiting cost is non-negligible, ranging from hours to even days [14], [16], which provides limited flexibility to the private inference system in case of emergency and degraded efficiency to those affected in-queue inputs. 
+
+Key Observations. Table 1 further demonstrates con-crete complexity added to original in-queue inputs that are forced to follow after the prior inputs when applying a hard queue jumping based on mainstream works for batched-input inference. Specifically, the main overhead originates from additional HE computation, such as massive HE Ad-dition (Add), Multiplication (Mult), Extraction (Extr), and expensive HE Rotation (Rot) for linear function, as well as the extra ciphertext needed to carry computed result for prior inputs, and we observe that the invocation of such non-trivial computation and communication is due to the repeated processing logic for different inputs , which has to form totally new ciphertext to perform corresponding computation for new input like the prior ones. Different from the relatively independent treatment to each input, we explore the possibility to jointly utilize shared computation of all inputs in a small batch, with the goal of enabling more efficient queue jumping that does not hurt the efficiency for original in-queue inputs, especially those that follow after the prior ones. We begin the exploration by seeking any computation and communication redundancy towards the inputs in a batch, and the data layout in ciphertext for each input is therefore investigated since a ciphertext includes a number of slots to confidentially carry equal amount of plaintext values and any slots that do not directly involve in the computation for corresponding in-queue input might be utilized to enable the computation for prior input in a Single-Instruction-Multiple-Data (SIMD) manner. However, given the data packing process in mainstream works, it is challenging to make effective utilization of any peripheral slots from one input to simultaneously perform computa-tion for another input. This is because the number of slots that are available for meaningful HE operations, after data packing process based on mainstream works, is either zero [6], [7], [13] or lower than the minimum that is needed to do similar computation for prior input, e.g., one channel [8]–[10] or at least an entire input [14], [16]. 
+
+Overall Methodology. While it seems impossible to break such limitation to make use of those available slots, we shift to view the queue jumping problem in batched-input inference as a jigsaw puzzle where computation for each in-queue input is able to output a disjoint and unique piece of result for prior input and the joint computation among in-queue inputs in a size-optimal batch correctly produces the complete result for prior inputs. In this way, computation for in-queue inputs in the batch is able to establish compatible correlation with prior inputs, which provides us opportunity to perform a more efficient queue jumping through SIMD. As such, we propose PrivQJ, a privacy-preserving queue jumping framework that features with an in-processing slot recycling among in-queue inputs in a batch, which limits the introduction of any crypto cost needed for prior inputs. As shown in Figure 1(c), PrivQJ is capable of piggybacking the computation for prior input within the computing process for minimum in-queue 3
+
+TABLE 1 Waiting cost added to original in-queue inputs which now follow after queue-jumping inputs namely the prior ones. The complexity comparison is for computing adjacent nonlinear ReLU function and linear convolution (Conv) function, which are the main functions in standard neural networks. Conv takes as input a 3-dimension matrix with size Ci × Hi × Wi. Co and fh are the number and the size of filters, respectively. Ho and Wo are the height and width of each 2-dimension convolution output. The output of ReLU acts as the input of Conv, with input data x in size Ci × Hi × Wi.
+
+rd is the number of involved communication rounds. f ′ 
+
+> r
+
+(x) and Mx (x) are the derivative of ReLU for x and the multiplexing to obtain ReLU output based on shares of f ′ 
+
+> r
+
+(x) and x, respectively. The communication cost in all schemes excludes common overhead for computing f ′ 
+
+> r
+
+(x).                                                                                                       
+
+> Schemes Computation Cost for HE Operations Communication Cost # Rot # Extr # Mult (# Add) # Dec # Ciphertexts # Run-time Round CryptoNets [6] ∗0-O(CiCoHoWo(fh)2)O(CoHoWo)O(CiHiWi+CoHoWo)1 + rd {f′
+> r(x),Mx (x)}
+> MiniONN [7] 0-O(CiCoHoWo(fh)2)O(CiCoHoWo
+> (fh)2/N )
+> O(( CiCoHoWo
+> (fh)2)/N )0.5 + rd {f′
+> r(x),Mx (x)}
+> GAZELLE [8] O(CiHiWi(fh)2
+> +CiCoHiWi)-O(CiCoHiWi(fh)2)O(CoHoWo/N )O(( CiHiWi+CoHoWo)/N )1 + rd {f′
+> r(x),Mx (x)}
+> DELPHI [9] O(CiHiWi(fh)2
+> +CiCoHiWi)-O(CiCoHiWi(fh)2)O(CoHoWo/N )O(( CiHiWi+CoHoWo)/N )0.5 + rd {f′
+> r(x),Mx (x)}
+> CrypTFlow2 [10] O(CiHiWi(fh)2
+> +Co)-O(CiCoHiWi(fh)2)O(CoHoWo/N )O(( CiHiWi+CoHoWo)/N )1 + rd {f′
+> r(x),Mx (x)}
+> Cheetah [13] 0O(CoHoWo)O(CiCoHiWi)O(CoHoWo)O(CiHiWi/N
+> +CoHoWo)1 + rd {f′
+> r(x),Mx (x)}
+> FIT [14] 00O(CiCoHoWo(fh)2)O(CiHiWi/N
+> +Co)
+> O(CiCoHoWo
+> (fh)2/N +Co)1 + rd {f′
+> r(x)}
+> NEXUS [16] ∗00O(CiCo(fh)2)O(Co)O(CiCo(fh)2/N
+> +Co)1 + rd {f′
+> r(x),Mx (x)}
+> PrivQJ (this work) 000000.5
+> ∗Tailored for mixed-primitive inference.
+
+inputs, which achieves an almost-free computation for prior input without any expensive HE Rot or additional HE enablers such as HE Extr and HE Substitution (Subs) [16], and with fewer communication rounds. In a nutshell, the 
+
+contributions of this work are summarized as follows.  
+
+> •
+
+We initiate the problem of privacy-preserving queue jumping in batched-input inference and propose our solution called PrivQJ, which tackles non-trivial waiting cost added to the in-queue inputs.  
+
+> •
+
+PrivQJ is able to fully utilize the shared computation ability within a batch, which largely reduces the extra waiting cost as shown in Table 1. Notably, PrivQJ eliminates any HE cost needed for prior inputs.  
+
+> •
+
+Quantitative complexity justifies the efficiency ad-vantages of PrivQJ and experimental results further confirm over 10 times cost reduction with moderate batch size, and the source code is available here .
+
+Road Map . The rest of the paper is organized as follows. In Section 2, we introduce threat model, neural network, and the crypto primitives that are adopted in this work. Section 3 describes the concrete design of PrivQJ, and analyzes the corresponding complexity and security. The evaluation re-sults are elaborated in Section 4. Section 5 gives an overview of PP-MLaaS frameworks and Section 6 concludes the paper. 
+
+2 PRELIMINARIES 
+
+This section first describes the threat model of PrivQJ and then introduces the basic components in the neural model. Finally we present the adopted crypto primitives. For ease of understanding, we highlight the notations 
+
+that are commonly used in the rest of this paper: Given 
+
+u1, u 2 ∈ R and j ∈ N, [j] is denoted as the integer set 
+
+{1, . . . , j } while [u1, u 2] = {u|u1 ≤ u ≤ u2}. ⌈·⌉ and ⌊·⌋ 
+
+are the ceiling function and flooring function, respectively. The random sampling of an element r from a distribu-tion D is denoted as r ←$ D. Given a prime p ∈ N,
+
+Zp = Z∩[−⌊ p/ 2⌋, ⌊p/ 2⌋] for p > 2 while Z2 = {0, 1}. Mean-while, +, −, and × are element-wise addition, element-wise subtraction, and element-wise multiplication, respectively, in either ciphertext domain or plaintext domain depending on whether any ciphertext is involved or not. Meanwhile, we denote a and a as the S-encrypted HE ciphertext and 
+
+C-encrypted HE ciphertext whose corresponding decryption return the plaintext vector a ∈ ZNp where N is the number of slots in one ciphertext. Furthermore, all values thereafter are respectively scaled to Zp such that the computation is performed within prime moduli p.
+
+2.1 Threat Model 
+
+This work considers a classic 2-party privacy-preserving MLaaS scenario where the client C sends the encrypted input to the cloud server S that has a well-trained neural model. The subsequent computation is conducted from the first function to the last one of the neural model, according to specifically-designed privacy-preserving protocol until C
+
+finally obtains the model output, with it’s input blind to S
+
+and S’s model parameters hidden to C.Meanwhile, PrivQJ assumes the semi-honest adversary model that is adopted among state-of-the-art PP-MLaaS frameworks [7], [10], [13], [14], [16]. Concretely, both C and 
+
+S follow the protocol while each of them tries to obtain extra knowledge based on the received information. We prove in Section 3.6 that PrivQJ is secure against semi-honest adversaries. 
+
+2.2 Neural Network 
+
+As for the neural model at server, we considers the long-standing Convolutional Neural Networks (CNNs) which have been applied in various data-sensitive scenarios such as the C-Lung-RADS system for diagnosis of pulmonary nodules [23] and the Sybil framework for prediction of lung cancer [24]. Specifically, a CNN contains a stack of linear functions and non-linear functions and an input is 4
+
+sequentially computed from the first function to the last one, and the output of a function serves as the input of next function. Meanwhile, similar computation is applied for a batch of inputs from the first function to the last one. 
+
+Linear functions . Convolution fc(x): Given the ker-nel k in a neural model as k = (k1|k2| · · · | kCo ) ∈
+
+ZCo×Ci×Hf ×Wf 
+
+> p
+
+where kj ∈ ZCi×Hf ×Wf 
+
+> p
+
+with j ∈ [Co]
+
+is the j-th filters, and an input as x ∈ ZCi×Hi×Wi 
+
+> p
+
+, fc(x)
+
+outputs Co channels, each of which is with size Ho-by-Wo
+
+and is obtained by gradually moving one of Co filters over 
+
+x with stride s ∈ N+. Specifically, an element in j-th output channel is the sum of all CiHf Wf values in kj , each of which is scaled by the value from x that locates at the same position within filter window of kj , and the next element in j-th output channel is obtained by first moving kj over 
+
+x with stride s and then performing similar computation between kj and those values from x that are within the filter window. Here Ho and Wo are the height and width of output channel, respectively. Hi (or Hf ) is the height of each input channel (or each filter) while Wi (or Wf ) is the corresponding width. 
+
+Dot Product fd(x): Given the model weight w with size 
+
+no ×ni and an input x with length ni, fd(x) outputs a vector with length no where the j-th element ( j ∈ [no]) is the sum of all multiplied values from element-wise multiplication between x and j-th row of w. Here ni and no are the length of input vector and the length of output vector, respectively. 
+
+MeanPooling fmn (x): Given the input x ∈ ZCi×Hi×Wi 
+
+> p
+
+,
+
+fmn (x) outputs Ci channels each of which is in size 
+
+l Hi
+
+> sn
+
+m
+
+×
+
+l Wi
+
+> sn
+
+m
+
+, and each element in j-th output channel ( j ∈ [Ci])is obtained by summing and averaging components from j-th input channel xj ∈ ZHi×Wi 
+
+> p
+
+within the sn-by-sn pooling window where sn ∈ N+.
+
+Batch Normalization fbn (x): Given the input x ∈
+
+ZCi×Hi×Wi 
+
+> p
+
+, the output of fbn (x) is with the same size as 
+
+x, and the j-th output channel ( j ∈ [Ci]) is obtained by first multiplying the j-th input channel xj ∈ ZHi×Wi 
+
+> p
+
+with a scaling factor and then adding a shifting value to that multiplied channel. 
+
+Non-linear functions . ReLU fr(x): Given input x ∈
+
+ZCi×Hi×Wi 
+
+> p
+
+, the output of fr(x) is with the same size as 
+
+x, and an element in j-th output channel ( j ∈ [Ci]) turns out to be the maximum between zero and the value from 
+
+xj ∈ ZHi×Wi 
+
+> p
+
+at the same position. fr(x) is alternatively expressed as the element-wise multiplication between x
+
+and the derivative of ReLU f ′ 
+
+> r
+
+(x) ∈ ZCi×Hi×Wi 
+
+> 2
+
+where an element is 1 if and only if the value from x at the same position is positive. 
+
+MaxPooling fmx (x): Given the input x ∈ ZCi×Hi×Wi 
+
+> p
+
+,
+
+fmx (x) outputs Ci channels each of which is with size l Hi
+
+> sm
+
+m
+
+×
+
+l Wi
+
+> sm
+
+m
+
+, and each element in j-th output channel (j ∈ [Ci]) is obtained by selecting the maximum component from j-th input channel xj ∈ ZHi×Wi 
+
+> p
+
+within the sm-by-sm
+
+pooling window where sm ∈ N+.
+
+Remarks : Given a queue of private inputs at C and the CNN model at S, there could be prior inputs that need to securely obtain model output in advance. A hard queue jumping could lead to non-trivial waiting cost added to the in-line inputs that now follow after the prior ones. As such, an efficient solution for 2-party privacy-preserving neural inference with more resilience to emergent inputs helps to facilitate more stable inference implementation with stringent privacy regulation. 
+
+2.3 Crypto Primitives 
+
+Homomorphic Encryption (HE) : HE enables linear op-erations (such as addition and multiplication) over ci-phertext without decryption, which is especially suitable for privacy-preserving computation of linear functions [4]. PrivQJ adopts the widely-used BFV scheme [5] as its HE backend to compute the linear functions in neural models. Specifically, given a plaintext vector a ∈ ZNp , the HE encryp-tion operation transforms a into one ciphertext and the HE decryption operation turns the ciphertext back to original plaintext a. Here one element in a is mapped into one slot in the ciphertext and recall that N is the number of slots in one ciphertext. We use two HE operations besides the HE encryption and decryption, namely HE Addition (HE Add) and HE constant Multiplication (HE cMult). HE Add enables addi-tion between the HE ciphertext of a and the HE ciphertext of b ∈ ZNp (or just plaintext b), and the added ciphertext is the encryption of a vector that is the element-wise sum of a
+
+and b. HE cMult performs multiplication between plaintext 
+
+a and the HE ciphertext of b, and the multiplied ciphertext is the encryption of a vector that is the element-wise multi-plication of a and b. Recall that a and a are respectively the S-encrypted ciphertext and C-encrypted ciphertext whose corresponding decryption return the plaintext vector a.
+
+Oblivious Transfer (OT) : In the OT protocol, the sender has multiple messages and the receiver holds selection bits. At the end of the protocol, the receiver obtains the message whose index corresponds to the exact selection bits, without knowing any information about other messages, and the sender does not know which message the receiver has chosen in the meantime. 
+
+Additive Secret Sharing (ASS) : ASS enables a party to share its secret x ∈ Z∗ 
+
+> p
+
+by first masking x with randomness 
+
+x0 = r←$ Z∗ 
+
+> p
+
+and then sending the noised piece x1 = x − r
+
+mod p to the other party. The secret is recovered by sum-ming up x1 with the randomness x0 as x = x0 + x1 mod 
+
+p.
+
+Remarks : The PP-MLaaS frameworks with mixed prim-itives, where HE is adopted to compute linear functions and OT is applied to calculate non-linear functions, have demonstrated particular effectiveness to boost inference ef-ficiency. Given a queue of private inputs, a practical way to finish privacy-preserving inference for them is to perform computation batch by batch. Under such case, it would cause an un-negligible issue that a long waiting time is added to original in-queue inputs which now follow after inserted prior inputs when the queue jumping happens. To tackle this problem, this work enables a full utilization of available slots among all ciphertext of foremost input batch such that all HE computation for prior inputs is piggy-backed in the computation for original in-queue inputs in that batch, effectively reducing the added cost within fewer communication rounds in case of emergent queue jumping. 5client  server                                                
+
+> ෞ𝒓 0
+> 𝒉 1,𝒙 1×(𝟏 −𝟐 ×𝒉 1)
+> offline
+> OT -based 𝑓 r′(𝒙 )𝒙 1,𝒉 1𝒙 0
+> 𝒉 0
+> 𝒕
+> (𝒙 1×𝒉 1+𝒕 )∗𝒌 −ሶ𝒙 1
+> online
+> Computation for all original in -queue inputs in a batch
+> Online computation for prior inputs in the same batch
+> ∗𝒌 −ሷ𝒙 1ෞ𝒓 0
+> Form new 𝒙 1for next function
+> Form new 𝒙 0of original inputs for next function
+> ෞ𝒓 0∗𝒌 −ሷ𝒙 1for prior inputs
+> (𝒙 1×𝒉 1+𝒕 )∗𝒌 −ሶ𝒙 1
+> Form new 𝒙 0of prior inputs for next function
+> 𝒙 1,𝒉 1for prior inputs
+> 𝒕 for prior inputs
+> ሶ
+> 𝒙 1for prior inputs
+> In-processing slot recycling
+> In-processing slot recycling
+> Fig. 2. Computation for two adjacent functions in a batch.
+
+3 PRIVACY -P RESERVING QUEUE JUMPING 
+
+3.1 Overview of PrivQJ 
+
+Figure 2 illustrates how PrivQJ embeds the computation for high-priority (prior) inputs into the batched secure inference workflow, without disrupting the computation process for original in-queue inputs in the same batch. Generally speak-ing, PrivQJ features with an in-processing slot recycling strategy within the computation for two adjacent nonlinear-linear functions, without any extra HE cost for prior inputs and with only one half communication round in addition, i.e., 0.5 round. Specifically, PrivQJ is mainly composed of two parts. The first part is for original in-queue inputs where the com-putation includes a pre-processing offline and a running-time online. As for the offline, the server S and the client C
+
+respectively send pre-generated ciphertext to each other to make preparation for the online, and the online involves an OT-based partial computation for non-linear function and a one-round computation for linear function. Such working flow for two adjacent functions puts most computation load to input-independent offline, eliminates steps that are indispensable to obtain output of individual function, re-duces the overall offline-online cost, and makes the input-dependent online more efficient compared with other works that optimize each single function. To reduce the non-trivial waiting cost that is added by the hard queue jumping for prior inputs, instead of directly discarding the peripheral slots [7]–[10], [13], [14], [16] or having to additionally in-troduce considerable cipherext to compute for original in-queue inputs that are dropped-out to a new batch [6], PrivQJ shifts to view any available slots in intermediate ciphertext, at both offline and online, as unique pieces of jigsaw puzzle and devises a compact slot recycling computation within already created ciphertext for the batch such that the system derives all intermediate values for the prior inputs with minimal additional operations, e.g., invoking no extra HE operations. After the online computation for original in-queue in-puts in the batch, PrivQJ simultaneously finishes the prepa-ration to compute for prior inputs and a uni-directional communication from S to C is followed to form shares for the next function. This slot-recycling mechanism enables PrivQJ to achieve online queue jumping at near-zero extra cost while preserving the integrity and efficiency of the original batched computation. In the following, the offline-online computation for orig-inal in-queue inputs in the batch is first introduced, which is tailored from [14] with less computation cost. Then, concrete mechanism to recycle all slots in ciphertext of original in-queue inputs and the way to determine minimal batch size are described in detail. For ease of understanding, we recall that a and a are respectively the S-encrypted ciphertext 
+
+and C-encrypted ciphertext whose corresponding decryption return the plaintext vector a.
+
+3.2 Tailored Computation for In-queue Inputs 
+
+We start with the computation for adjacent ReLU-Convolution functions fcfr(x), which is the main function block in standard neural networks such as AlexNet [25], VGG [26] and ResNet [27]. Specifically, 
+
+fcfr(x) = fr(x) ∗ k = {f ′ 
+
+> r
+
+(x) × x} ∗ k mod p (1) 
+
+= {(h0 + h1 − 2 × h0 × h1) × (x0 + x1)} ∗ k mod p
+
+(2) 
+
+= {x0 × h0 − r0 + x1 × h1 + x0 × (1 − 2 × h0) × h1
+
+| {z }
+
+> 1
+
+⃝
+
++
+
+x1 × (1 − 2 × h1) × h0
+
+| {z }
+
+> 2
+
+⃝} ∗ k + r0 ∗ k mod p (3) where 
+
+
+
+h0, h1 ∈ ZCi×Hi×Wi 
+
+> 2
+
+and h0 ⊕ h1 = f ′ 
+
+> r
+
+(x), ⊕ : XOR 
+
+r0, x0, x1 ∈ ZCi×Hi×Wi 
+
+> p
+
+and x0 + x1 mod p = x
+
+∀x ∈ Zp, we have f ′ 
+
+> r
+
+(x) is x if x > 0 and else is 0 
+
+k ∈ ZCo×Ci×Hf ×Wf
+
+> p
+
+Here fcfr(x) is decomposed into the sum of two con-volutions and the kernel k is held by the server, and the variables with subscript 1 and subscript 0 are the corresponding shares from server and from client, respectively . Meanwhile, the client-generated randomness r0 is introduced in Eq. (3) such that the server is able to compute the first convolution in plaintext without exposing any information. More con-cretely, given the capability of S to pre-generate h1 and x1,the first convolution in Eq. (3) is realized by the following two steps: Step 1: The client computes three terms at online accord-ing to Eq. (3) as: (1) plaintext (x0 ×h0 −r0) based on freshly-obtained x0 and h0, (2) encrypted term 1⃝ given available S-6
+
+encrypted ciphertext h1 , and (3) encrypted term 2⃝ given available S-encrypted ciphertext x1 × (1 − 2 × h1) ;Step 2: The client adds up above three terms and sends the summed ciphertext t to the server as 
+
+t = {x0 × h0 − r0 + x0 × (1 − 2 × h0) × h1
+
+| {z }
+
+> 1
+
+⃝
+
++
+
+x1 × (1 − 2 × h1) × h0
+
+| {z }
+
+> 2
+
+⃝}. (4) Upon receiving t , the server performs ciphertext decryp-tion, adds the decrypted plaintext t with (x1 × h1), and obtains the first convolution in Eq. (3), which we name as 
+
+y = {(x1 × h1) + t} ∗ k.
+
+In a nutshell, Eq. (3) now turns into 
+
+{x0 × h0 − r0 + x1 × h1 + x0 × (1 − 2 × h0) × h1
+
+| {z }
+
+> 1
+
+⃝
+
++
+
+x1 × (1 − 2 × h1) × h0
+
+| {z }
+
+> 2
+
+⃝} ∗ k + r0 ∗ k (5) 
+
+= {(x1 × h1) + t } ∗ k + r0 ∗ k (6) and S first sends h1 and x1 × (1 − 2 × h1) to the client at offline. As for the online, the client and the server first involve in the OT-based protocol, e.g., [10], to get their respective shares for f ′ 
+
+> r
+
+(x) namely h0 and h1. Here h1 has been already pre-generated by S. After that, the first convo-lution in Eq. (3) is obtained by S based on aforementioned Step 1 and Step 2. As for the second convolution in Eq. (3) namely r0 ∗ k,it is completed offline since both r0 and k are input-independent. Specifically, C first transforms r0 in to matrix 
+
+cr0 ∈ ZHf Wf Ci×HoWo 
+
+> p
+
+based on the im2col [28] which turns convolution computation into matrix-matrix multiplication. Then C encrypts cr0 into cr0 and sends it to S. Upon receiv-ing cr0 , S is able to compute convolution between cr0
+
+and k via only HE constant Mult (cMult) and HE Add, and more details are described in Section 3.4. After that, S masks the convolution result with randomness ¨x1 ∈ ZCo×Ho×Wo 
+
+> p
+
+.As such the masked convolution is finally sent back to C
+
+which decrypts the ciphertext and obtains (r0 ∗ k − ¨x1). In this way, C and S share r0 ∗ k by C holding (r0 ∗ k − ¨x1)
+
+and S holding ¨x1.To summarize the complete process for each in-queue input in the batch, Eq. (3) now turns into 
+
+{x0 × h0 − r0 + x1 × h1 + x0 × (1 − 2 × h0) × h1
+
+| {z }
+
+> 1
+
+⃝
+
++
+
+x1 × (1 − 2 × h1) × h0
+
+| {z }
+
+> 2
+
+⃝} ∗ k + cr0 ∗ k (7) 
+
+= {(x1 × h1) + t } ∗ k + cr0 ∗ k (8) and there thus involves an offline-online interaction be-tween the client and the server. As for offline, the client and the server independently transmit pre-computed ciphertext in Eq. (7): First, the server-encrypted ciphertext, h1 and x1 × (1 − 2 × h1) , are sent to C; Second, the client-encrypted ciphertext, cr0 , is sent to 
+
+S and ( cr0 ∗k − ¨x1) is then locally computed and sent back to C to get plaintext share (r0 ∗ k − ¨x1).As for online, S and C first get their respective shares for f ′ 
+
+> r
+
+(x) (namely h0 and h1) via OT-based protocol such as [10]. Then, S obtains the first convolution in Eq. (3), i.e., 
+
+y, according to the description for Eq. (5). Here, we reduce the number of convolution from two in [14], which are (x1 ×
+
+h1) ∗ k at offline and t ∗ k at online, to only one by directly combining plaintext t with (x1 ×h1) at negligible overhead. After that, S shares y with C by sending to C plaintext (y −
+
+˙x1) while holding ˙x1 ∈ ZCo×Ho×Wo 
+
+> p
+
+for itself. Till now, the client forms its online share of fcfr(x) = y + r0 ∗ k as 
+
+(r0 ∗ k − ¨x1 + y − ˙x1) = fcfr(x) − (¨x1 + ˙x1)
+
+which serves as the new x0 for next function. Meanwhile, the server has formed its corresponding share, (¨x1 + ˙x1), at offline since ¨x1 and ˙x1 are input-independent, and it serves as the new x1 for next function. To reduce the added waiting cost caused by a hard queue jumping, PrivQJ explores a jigsaw-style computation within a batch such that any available slots in the intermediate ciphertext of in-queue inputs are recycled to produce unique pieces of output for prior inputs. Since the intermediate ciphertext mainly associate with t at online and cr0 at offline, as shown in Eq. (8), we describe below how PrivQJ fully utilizes the peripheral slots and minimizes the batch size to enbale an efficient queue jumping for prior inputs. 
+
+3.3 Full Slot Recycling in Cipher of t
+
+Recall from Eq.(4) that the cipher of t, t , is drived from 
+
+h1 and x1 × (1 − 2 × h1) , and the HE computation that associates with h1 and x1 × (1 − 2 × h1) works com-pletely in an element-wise manner. Thus the values in h1
+
+and {x1 × (1 − 2 × h1)} are tightly-packed and encrypted by S into h1 and x1 × (1 − 2 × h1) , respectively. Here, one ciphertext slot is filled with one element from h1 or 
+
+{x1 × (1 − 2 × h1)}, and there are thus ⌈ CiHiWi 
+
+> N
+
+⌉ ciphertext to encrypt h1 or {x1 × (1 − 2 × h1)}.Given that we always have CiHiWi%N̸ = 0 , it leaves the tail slots in last ciphertext of h1 and {x1 × (1 − 2 × h1)}
+
+idle. For example, there are 7168 idle slots in the last cipher-text under the general setting of N = 8192 when encrypting one of the main blocks in ResNet, with 256 input channels each of which is in size 14 × 14 [27]. This indicates a utiliza-tion rate around 12% for that tail ciphertext. Those idle slots lead to a waste of computation and communication since all slots in a ciphertext are involved in each HE operation or ciphertext transmission. While that low utilization rate seems unavoidable, we find that encrypting h1 and {x1 ×(1−2×h1)} for least mul-tiple in-queue inputs enables an almost-free computation for 7…with  CiHiWi values  with  CiHiWi values  with  CiHiWi values                
+
+> 1st prior input 2nd prior input Ƹ𝑠 /𝑔 (Ƹ𝑠 ,𝐶 𝑖 𝐻 𝑖 𝑊 𝑖 )-th prior input
+> Ƹ
+> 𝑠 values in 1 st in -queue input
+
+# … … … … …       
+
+> Ƹ
+> 𝑠 values in 𝐶 𝑖 𝐻 𝑖 𝑊 𝑖 /𝑔 (Ƹ𝑠 ,𝐶 𝑖 𝐻 𝑖 𝑊 𝑖 )-th in -queue input
+
+# …with  CiHiWi values  with  CiHiWi values  with  CiHiWi values                
+
+> 1st prior input 2nd prior input Ƹ𝑠 /𝑔 (Ƹ𝑠 ,𝐶 𝑖 𝐻 𝑖 𝑊 𝑖 )-th prior input
+> Ƹ
+> 𝑠 values in 1 st in -queue input
+
+# … … … … …         
+
+> Ƹ
+> 𝑠 values in 𝐶 𝑖 𝐻 𝑖 𝑊 𝑖 /𝑔 (Ƹ𝑠 ,𝐶 𝑖 𝐻 𝑖 𝑊 𝑖 )-th in -queue input
+> 𝒉 1𝒉 1
+
+# …
+
+# …𝒙 1 × (𝟏 − 𝟐 × 𝒉 1) 𝒙 1 × (𝟏 − 𝟐 × 𝒉 1)          
+
+> Fig. 3. Tail packing of h1and {x1×(1−2×h1)}.
+
+prior inputs . Such computation is realized by fully filling idle slots in all tail ciphertext of h1 and x1 × (1 − 2 × h1) of in-queue inputs such that elements in all filled slots exactly form h1 and {x1 × (1 − 2 × h1)} for multiple prior inputs. Specifically, let bs = ( ⌈ CiHiWi 
+
+> N
+
+⌉N − CiHiWi) be the num-ber of idle slots in the tail ciphertext. Then, the client is able to additionally obtain t for bs/g (bs, C iHiWi) prior inputs after normally computing the t for CiHiWi/g (bs, C iHiWi)
+
+in-queue inputs. Here g(x, y ) is the greatest common divi-sor between x and y, and the underlying logic is to fill the last ciphertext of h1 and {x1 × (1 − 2 × h1)} for 
+
+CiHiWi/g (bs, C iHiWi) in-queue inputs with bs values from the h1 and {x1 × (1 − 2 × h1)} for bs/g (bs, C iHiWi) prior inputs. We call such correlated data assignment as chained batching where the encryption of h1 and {x1 ×(1−2×h1)}
+
+for CiHiWi/g (bs, C iHiWi) in-queue inputs subsequently enables free computation of t for bs/g (bs, C iHiWi) prior inputs, and the optimal batch size for a prior input is then determined as CiHiWi/bs.Figure 3 shows the concrete data assignment for orig-inal in-queue inputs and emergent prior inputs. Specifi-cally, given the offline-received and slot-recycled h1 and 
+
+x1 × (1 − 2 × h1) for each in-queue input at the client, the online process works as follows. First, C feeds the freshly-obtained x0 and S feeds the pre-generated x1 and h1 to get involved in OT-based f ′ 
+
+> r
+
+(x), e.g., [10]. After that C obtains 
+
+h0 namely the share for f ′ 
+
+> r
+
+(x). Next, C computes t accord-ing to Eq. (4) by HE cMult and HE Add. Then, t is sent to 
+
+S which decrypts t into t, gets (x1 × h1 + t), and obtains the first convolution in Eq. (8) namely y = ( x1 × h1 + t) ∗ k.Note that there are bs values, which are from the h1
+
+for prior inputs, in the tail ciphertext of h1 for each in-queue input, and it also works for the tail ciphertext of 
+
+x1 × (1 − 2 × h1) for each in-queue input. As such, there are bs values, which are from t of prior inputs, in the S-decrypted plaintext t ∈ ZCi×Hi×Wi+bsp of each in-queue input, and the convolution (x1 × h1 + t) ∗ k is performed by S between kernel k and the first CiHiWi values from that plaintext t. At the same time, the last bs values from the same t are left aside to form a complete t for a prior input and the complete t is then convolved with kernel k to get the corresponding y. Quantitatively, the complete t for one prior input is obtained after computing for ⌈CiHiWi/bs⌉
+
+in-queue inputs. 
+
+3.4 Full Slot Recycling in Cipher of br0
+
+Recall that the convolution between r0 at C and k at S is first converted into the matrix-matrix multiplication between transformed r0, cr0 ∈ ZHf Wf Ci×HoWo 
+
+> p
+
+, and flattened k,
+
+bk ∈ ZCo×Hf Wf Ci 
+
+> p
+
+, according to im2col [28], and the j-th row 
+
+(j ∈ [Co]) in output of the matrix-matrix multiplication, 
+
+bk · cr0, is viewed as the sum of all Hf Wf Ci rows in cr0,with j1-th row (j1 ∈ [Hf Wf Ci]) scaled by the value at 
+
+j1-th column in j-th row of bk. Then, that matrix-matrix multiplication is realized at offline by encrypting cr0 at C and performing only HE cMult and Add at S, as exemplified in Figure 4. Since cr0 actually includes multiple ciphertext each of which packs multiple rows from cr0 and each row of cr0 is with length HoWo, it leaves idle slots in the tail of each ciphertext when N %HoWo ≫ 1, and such case always happens in neural models such as ResNet [27]. Therefore, we propose to fully fill each ciphertext of cr0 for the in-queue input with values that are chosen in row wise from 
+
+cr0 of prior inputs. In this way, the convolution for cr0 of each in-queue input remains its efficiency while part of the corresponding computation for prior inputs is performed simultaneously without any extra cost, and the complete convolution for each cr0 of the prior input is obtained after normal computation for multiple in-queue inputs. In the following, we introduce the way to obtain the least number of in-queue inputs. Quantitatively, recall that cr0 is in size Hf Wf Ci × HoWo
+
+and the convolution, r0 ∗ k, outputs Co channels such that the j-th channel (j ∈ [Co]) is obtained by first weighting the i-th row (i ∈ [Hf Wf Ci]) of cr0 with the i-th value in the 
+
+j-th row of bk, and then summing the Hf Wf Ci weighted rows. On the basis, ⌊ NHoWo ⌋ rows from cr0 are packed in one ciphertext and n = ⌈(Hf Wf Ci/⌊ NHoWo ⌋)⌉ ciphertext is formed at C to encrypt a complete cr0.Given ˜s = N %HoWo idle slots in each of n ciphertext, n
+
+rows from cr0 of prior inputs, with each row in length ˜s, are respectively packed at the tail of n ciphertext for in-queue inputs, and we thus need ⌈(Hf Wf Ci/n )⌉ in-queue inputs to pack ˜s columns from cr0 of one prior input. As such en-crypting cr0 for ⌈(Hf Wf Ci/n )⌉HoWo/g (˜ s, H oWo) in-queue inputs enables the exact encryption of cr0 for ˜s/g (˜ s, H oWo)
+
+prior inputs, and it makes the computation of r0 ∗k for those prior inputs in an almost-free manner. In other words, each ciphertext of cr0 for in-queue inputs simultaneously packs values from cr0 of prior inputs, and Figure 5 shows the data assignment in detail. We recall Figure 4 to give a more concrete description for the full slot recycling in cipher of br0. Specifically, it demonstrates an example to compute r0 ∗ k for three inputs including a batch of two in-queue inputs and one emergent prior input. The three convolution is first converted into three dot product. Here each cr0 is in transposed form and is obtained according to im2col, and we assume that each ciphertext contains six slots. Then, one row from cr0 of in-queue input along with two values from one row of cr0 for 8r11  r12      
+
+> r21 r22
+> r11 r12
+> r21 r22
+> r11 r12
+> r21 r22
+
+## ∗                                                                                                      
+
+> k11 k12 k13
+> k21 k22 k23
+> k31 k32 k33
+> 0000r11 r12 0r21 r22
+> 000r11 r12 0r21 r22 0
+> 0r11 r12 0r21 r22 000
+> r11 r12 0r21 r22 0000
+> 0000r11 r12 0r21 r22
+> 000r11 r12 0r21 r22 0
+> 0r11 r12 0r21 r22 000
+> r11 r12 0r21 r22 0000
+> 0000r11 r12 0r21 r22
+> 000r11 r12 0r21 r22 0
+> 0r11 r12 0r21 r22 000
+> r11 r12 0r21 r22 0000
+
+# ∙ 0 0 0 r11  0 0 0 0 r12  0 0 0                
+
+> r12 0r22 0r12 0
+> 0r21 000r21 r22 000r22 0
+
+𝒓 0 of 1 st in -queue input       
+
+> 𝒓 0of 2 nd in -queue input
+> 𝒓 0of prior input
+
+𝟏 𝐂𝐨𝐧𝐯𝐨𝐥𝐮𝐭𝐢𝐨𝐧 
+
+> 𝒌
+> im2col
+> im2col
+> im2col
+
+𝟐 𝐃𝐨𝐭 𝐩𝐫𝐨𝐝𝐮𝐜𝐭 
+
+> ෡𝒌
+
+𝟑 𝐇𝐄 𝐜𝐨𝐦𝐩𝐮𝐭𝐚𝐭𝐢𝐨𝐧 𝐰𝐢𝐭𝐡 𝐬𝐥𝐨𝐭 𝐫𝐞 𝐜𝐲𝐜𝐥𝐢𝐧𝐠              
+
+> k31 k31 k31 k31 k31 k31
+> ×
+> k11 k12 k13 k21 k22 k23 k31 k32 k33
+> ෞ𝒓 𝟎 T
+> ෞ𝒓 𝟎 T
+
+ෞ𝒓 𝟎 T               
+
+> 00r11 r12 00
+> k11 k11 k11 k11 k11 k11
+> 0r11 0r21 0r11
+
+k12  k12  k12  k12  k12  k12 
+
+r11  r12  r21  r22  r11  r12                                      
+
+> r21 r22 00r21 r22
+> k21 k21 k21 k21 k21 k21
+> ×
+> ×
+> k13 k13 k13 k13 k13 k13
+> k22 k22 k22 k22 k22 k22 k23 k23 k23 k23 k23 k23
+> k32 k32 k32 k32 k32 k32 k33 k33 k33 k33 k33 k33
+> ×
+> ×
+> ×
+> ×
+> ×
+> ×
+
++
+
+> +
+> +
+
++                                                                                              
+
+> +
+> +
+> +
+> +
+> +
+> 000r11 0r11 00r12 0r12 0
+> r12 0r22 0r22 0
+> 0r21 0000r22 00000
+> k31 k31 k31 k31 k31 k31
+> ×
+> 00r11 r12 r11 r12
+> k11 k11 k11 k11 k11 k11
+> 0r11 0r21 0r21
+> k12 k12 k12 k12 k12 k12
+> r11 r12 r21 r22 r21 r22
+> r21 r22 0000
+> k21 k21 k21 k21 k21 k21
+> ×
+> ×
+> k13 k13 k13 k13 k13 k13
+> k22 k22 k22 k22 k22 k22 k23 k23 k23 k23 k23 k23
+> k32 k32 k32 k32 k32 k32 k33 k33 k33 k33 k33 k33
+> ×
+> ×
+> ×
+> ×
+> ×
+> ×
+
++
+
+> +
+> +
+
++
+
+> +
+> +
+> +
+> +
+> +
+
+𝟒 𝐎𝐮𝐭𝐩𝐮𝐭 𝐫𝐞𝐜𝐨𝐯 ery 
+
+> r11 k22
+> +
+
+r12 k23 
+
+> +
+> r21 k32
+> +
+> r22 k33
+> r11 k21
+> +
+
+r12 k22 
+
+> +
+> r21 k31
+> +
+> r22 k32
+> r11 k12
+> +
+
+r12 k13 
+
+> +
+> r21 k22
+> +
+> r22 k23
+> r11 k11
+> +
+
+r12 k12 
+
+> +
+> r21 k21
+> +
+> r22 k22
+> r11 k22
+> +
+
+r12 k23 
+
+> +
+> r21 k32
+> +
+> r22 k33
+> r11 k21
+> +
+
+r12 k22 
+
+> +
+> r21 k31
+> +
+> r22 k32
+
+r11 k22 
+
+> +
+> r12 k23
+> +
+> r21 k32
+> +
+> r22 k33
+
+r11 k21 
+
+> +
+> r12 k22
+> +
+> r21 k31
+> +
+> r22 k32
+
+r11 k12 
+
+> +
+> r12 k13
+> +
+> r21 k22
+> +
+> r22 k23
+
+r11 k11 
+
+> +
+> r12 k12
+> +
+> r21 k21
+> +
+> r22 k22
+
+r11 k12 
+
+> +
+> r12 k13
+> +
+> r21 k22
+> +
+> r22 k23
+
+r11 k11 
+
+> +
+> r12 k12
+> +
+> r21 k21
+> +
+> r22 k22
+> r11 k22 +
+> r12 k23 +
+> r21 k32 +
+> r22 k33
+> r11 k21 +
+> r12 k22 +
+> r21 k31 +
+> r22 k32
+> r11 k12 +
+> r12 k13 +
+> r21 k22 +
+> r22 k23
+> r11 k11 +
+> r12 k12 +
+> r21 k21 +
+> r22 k22
+
+Fig. 4. Relationship among convolution, dot product, and HE computation with slot recycling. 𝐻 𝑓 𝑊 𝑓 𝐶 𝑖 
+
+𝐻 𝑜 𝑊 𝑜 
+
+ෞ𝒓 0 of 1 st prior input 
+
+# …
+
+ෞ𝒓 0 of ǁ 𝑠 /𝑔 ( ǁ 𝑠 , 𝐻 𝑜 𝑊 𝑜 )-th prior input 
+
+𝐻 𝑜 𝑊 𝑜 
+
+> 𝐻 𝑓 𝑊 𝑓 𝐶 𝑖
+
+# …
+
+> …
+
+# …
+
+> …
+
+ǁ
+
+𝑠 
+
+ǁ
+
+𝑠 
+
+ǁ
+
+𝑠 values in 1 st ciphertext of 1 st in -queue input 
+
+> …
+
+ǁ
+
+𝑠 values in n-th ciphertext of 1 st in -queue input 
+
+> …
+
+ǁ
+
+𝑠 values in 1 st cipher of 𝐻 𝑓 𝑊 𝑓 𝐶 𝑖  
+
+> 𝑛
+
+𝐻 𝑜 𝑊 𝑜 /𝑔 ( ǁ 𝑠 , 𝐻 𝑜 𝑊 𝑜 )-th in -queue input 
+
+Fig. 5. Tail packing in cipher of cr0 for in-queue inputs. 
+
+the prior input are packed and encrypted in one ciphertext to form cr0 for in-queue inputs. Here the encryption for cr0 is performed by C, and the corresponding encryption for prior input is completely shared within the encryption for in-queue inputs without any other overhead. Upon receiving cr0 , S performs HE cMult between the plaintext kernel and cr0 , and sums up the multiplied ciphertext by HE Add. In this way, one added ciphertext corresponds to one of Co output channels, and 
+
+Co added ciphertext is obtained for each in-queue input and is masked with randomness to send back to C. Then, 
+
+C decrypts masked ciphertext to get it’s share of r0 ∗ k for all three inputs, while the randomness for masking forms the share at S. Note that such process is completed at offline 
+
+and r0 ∗ k for each prior input is obtained after computing for ⌈(Hf Wf Ci/n )⌉HoWo/˜s in-queue inputs. 
+
+3.5 Putting All Together to Build PrivQJ 
+
+Let’s now systematize the overall computation of PrivQJ which enables a much more efficient queue jumping. As illustrated in Figure 2, there are two phases namely offline and online. The offline involves two one-way transmissions respectively from the server and the client. More concretely, 
+
+S encrypts h1 and {x1 × (1 − 2 × h1)} with slot recycling shown in Figure 3, while C encrypts cr0 with slot recycling shown in Figure 5 and then interacts with S to share r0 ∗ k.Here, a pair of values, i.e., the number of in-queue inputs in a batch and the one of prior inputs, are determined during the encryption at S and C, respectively. Meanwhile, the resultant two pairs of values do not need to be the same since they could work independently at offline to form a pool of ciphertext and shares for the online queue jumping. At online, S and C first collaborate to compute h0, i.e., 
+
+C’s share of f ′
+
+r (x), via OT-based protocol using pregenerated 
+
+x1 and h1 at S and freshly-obtained x0 at C. Here x1, h1, x0,and h0 are formed in a slot-recycled manner, with CiHiWi
+
+elements for one in-queue input and bs values for the prior input. After C obtains h0, t is computed according to Eq. (4) and is then sent to S. S decrypts t into t, and divides the whole t into two parts: One with CiHiWi
+
+elements for an in-queue input, and the other with bs values for prior input. Next, S computes (x1 × h1 + t) ∗ k namely 
+
+y based on the t for in-queue input, and y is masked with pre-generated randomness ˙x1 as (y − ˙x1) and is then sent back to the client. Till now, C forms a new x0 as its share for next function based on (y − ˙x1) and offline-received share for r0 ∗ k, while S forms its new x1 at offline based on pre-generated masks for r0 ∗ k and y.At the same time, once S collects all values of t for prior inputs, corresponding y namely (x1 × h1 + t) ∗ k
+
+is computed. Then S masks y with randomness for prior inputs, ˙x1, and (y − ˙x1) is sent to C to similarly form the input shares of next function. Note that the online involves 
+
+bs/g (bs, C iHiWi) prior inputs and CiHiWi/g (bs, C iHiWi) in-queue inputs. Since a neural model has multiple blocks of fcfr(x), one strategy to select the number of in-queue inputs, i.e., the batch size, for the model is the largest batch size for a prior input among all blocks namely the largest 
+
+CiHiWi/bs, and that number could be further optimized by decreasing Ci, Hi, and Wi through input segmentation. Furthermore, a neural model contains other functions than fcfr(x) and some model adjustments are applied to make full use of proposed module, and more details are 9                                                                                     
+
+> TABLE 2 Quantitative comparison of waiting cost added to in-queue inputs that follow rightly after the prior inputs.
+> Frameworks Offline Computation Online Computation # Enc # cMult # Dec # Add Mx # Rot # Enc # cMult # Dec # Add # Extr CrypTFlow2 [10] ----✓≥(f2
+> h−1) CiCn +Co−Co Cn CiCn f2
+> hCiCo Cn Co Cn Ci+CoC if2
+> hCn -Cheetah [13] ----✓-CiHiWiNCoC iHiWiNCoHoWoCoHoWoCoHoWo
+> FIT [14] f2
+> hCiCn f2
+> hCiCo Cn Cof2
+> hCiCo Cn ✗--2CiCn CiCn 2CiCn -NEXUS [16] ∗Cof2
+> hCiCo-(f2
+> hCi−1) Co✓---Co2Co-
+> PrivQJ (this work) ----✗------
+> Cn=⌊NCiHiWi⌋.∗Tailored for mixed-primitive inference.
+
+explained in Appendix. 
+
+3.6 Complexity and Security 
+
+In this section, we analyze the complexity and security of proposed PrivQJ, aiming to provide quantitative results to verify the efficiency of proposed queue jumping as well as the privacy preservation throughout the whole process. In general, the efficiency includes the complexity for both in-queue input and prior one, and the privacy preservation is based on concrete security proof. 
+
+Complexity . The complexity of PrivQJ focuses on the added waiting cost to the in-queue inputs which are forced to follow after the prior one when the queue jumping happens, and Table 2 demonstrates concrete numbers of each crypto operations. Here, the computation is for fcfr(x)
+
+and the unique complexity advantages of PrivQJ lie in two folds. First, the computation for each in-queue input is tailored from FIT framework with less computation cost, as analyzed in Section 3.2. Since FIT remains competitive in both offline and online computation as illustrated in Table 2, the efficiency for in-queue inputs is guaranteed. Second, the efficiency for computing each prior input is almost-free without introducing any extra HE cost. Such ultralight computation is realized by our in-processing slot recycling that fully embeds computation for prior inputs into the computing process for in-queue inputs. 
+
+Security. We rely on ideal/real-world paradigm [29] to prove the security of PrivQJ, and the details are explained in Appendix. 
+
+4 EVALUATION 
+
+We implement PrivQJ based on code from CrypTFlow2 [10] and the traffic control command in Linux is utilized to simulate different networking conditions, and our code is available here . Specifically, the Local Area Network (LAN) is with bandwidth about 3 gigabit per second (3Gbps) and ping time about 0.8ms, and the Wide Area Networks (WANs) are configured in four settings with WAN 1 in 100 megabit per second (100Mbps) bandwidth and 40ms ping time, WAN 2 in 100Mbps and 80ms ping time, WAN 3 in 200Mbps and 40ms ping time, and WAN 4 in 200Mbps and 80ms ping time. These settings are inline with state-of-the-art systems [15], [16] and the machine is with Intel(R) Core TM i9-14900KF ×32 CPU and 128GB of RAM, and all tests run with one thread. In the following, we first evaluate performance of queue jumping when computing basic blocks in popular CNNs for ImageNet dataset [30], with concrete discussion on the offline and online efficiency among different approaches, i.e., CrypTFlow2 [10], Cheetah [13], and FIT [14]. Then, the efficiency of PrivQJ to compute in-queue inputs is compared with others to demonstrate the competitive performance for normal computation. Finally, we apply PrivQJ into well-known neural models such as ResNet [27], VGG [26] and AlexNet [25] to show its advantages over state-of-the-art works. 
+
+4.1 Added Cost When Computing Basic Blocks 
+
+Table 3 demonstrates the overall waiting cost, including the offline and online overhead, added to in-queue input that follows after the prior one when computing basic blocks in the neural networks. Specifically, PrivQJ shows its unique advantage that it just adds little cost to the in-queue input, with cost reduction from one to two orders of magnitudes, in both communication and computation time. The fundamental reason lies in the proposed in-processing computation that embeds most cost for prior input into the computation for in-queue inputs within in a batch, leading to an almost-free process for the prior input. In contrast, other works need to run another new computation for prior input, which results in the non-trivial cost added to the subsequent in-queue inputs. Note that the added time cost when applying PrivQJ is always small in various networking settings as the communication volume is light and we further merge the transmission of the final sharing for prior input into the one for the last in-queue input in the batch namely we merge the final sharing for in-queue inputs and the final one for prior input in Figure 2, effectively mitigating the variation of added time in different round-trip settings. Since the offline is input-independent and the online cost is more critical, we then evaluate the added cost at running time namely the online stage, and Table 4 shows the corresponding comparison. Key takeaway is that PrivQJ keeps its advantage in adding little cost to in-queue input even though the FIT framework [14] features with much more efficient running-time performance especially in LAN, where PrivQJ still reduces the added cost by 4 to 21 times compared with FIT. Furthermore, while cheetah [13] is with more efficient HE and OT backends and always has lower cost compared with CrypTFlow2 [10] and FIT, the proposed PrivQJ is capable of further reducing the added cost by an order of magnitude, which mainly attributes to the effective elimination of HE cost and other communication overhead for prior input. 10                                                                                                                                                                                             
+
+> TABLE 3 Overall cost added to in-queue input after prior one.
+> Communication cost (comm.) in MiB and time cost in second
+> Hi, C i, f h, C o56,64,3,64 28,128,3,128 14,256,3,256 7,512,3,512 LAN [10] comm. 228.1 115.8 59.1 32.1 speedup 152 ×152 ×155 ×168 ×
+> time 22.1 20.6 20.2 39.6 speedup 315 ×343 ×404 ×792 ×
+> [13] ∗
+> comm. 14.1 9.9 10.8 17.2 speedup 9×13 ×28 ×90 ×
+> time 1.4 1.2 1.2 1.77 speedup 20 ×20 ×24 ×35 ×
+> [14] comm. 295.9 154.7 102.4 99.9 speedup 197 ×203 ×269 ×525 ×
+> time 15.5 11.8 11.1 11 speedup 221 ×196 ×222 ×220 ×
+> PrivQJ  comm. 1.5 0.76 0.38 0.19 time 0.07 0.06 0.05 0.05 WAN 1
+> [10] time 41.7 30.7 25.5 42.9 speedup 595 ×495 ×500 ×875 ×
+> [13] ∗time 2.9 2.4 2.5 3.7 speedup 41 ×38 ×49 ×75 ×
+> [14] time 40.7 25.3 20.5 20.1 speedup 581 ×408 ×401 ×410 ×
+> PrivQJ
+> time 0.07 0.062 0.051 0.049 WAN 2
+> [10] time 44.7 32.9 27.3 44.1 speedup 629 ×514 ×455 ×900 ×
+> [13] ∗time 3.9 2.9 33.9 speedup 54 ×45 ×57 ×79 ×
+> [14] time 44.6 28.1 22.3 21.8 speedup 628 ×439 ×428 ×444 ×
+> PrivQJ
+> time 0.071 0.064 0.052 0.049 WAN 3
+> [10] time 32.8 26.6 23.5 41.8 speedup 449 ×350 ×385 ×853 ×
+> [13] ∗time 32.3 2.1 2.9 speedup 41 ×30 ×34 ×59 ×
+> [14] time 29.2 19.7 16.4 16.3 speedup 400 ×259 ×268 ×332 ×
+> PrivQJ
+> time 0.073 0.076 0.061 0.049 WAN 4
+> [10] time 35.8 28.9 25 43.1 speedup 464 ×370 ×446 ×862 ×
+> [13] ∗time 2.8 2.6 2.6 3.4 speedup 36 ×33 ×46 ×68 ×
+> [14] time 32.9 21.8 18.4 18 speedup 427 ×279 ×328 ×360 ×
+> PrivQJ
+> time 0.077 0.078 0.056 0.05
+> ∗with more efficient HE and OT backends.
+
+4.2 Performance for Each In-queue Input 
+
+While PrivQJ features with much smaller cost added to subsequent in-queue inputs when the queue jumping hap-pens, the efficiency for each in-queue input is also important since degrading the efficiency for in-queue inputs is equiv-alent with non-trivial waiting cost added to subsequent in-queue inputs. Therefore, Table 5 compares the performance, including the offline plus online namely the overall cost and the running-time namely the online cost, of the in-queue input among different systems. Specifically, as for the overall cost in Table 5(a), PrivQJ has similar or slightly better time efficiency compared with FIT [14] which is more efficient than CrypTFlow2 [10]. As for the communication cost, PrivQJ shows comparable overhead to FIT [14]. While the overall communication cost of each in-queue input in PrivQJ is relatively larger, a further look at the online performance in Table 5(b) indicates less cost than CrypTFlow2 [10] and comparable cost to FIT [14], and PrivQJ takes less online time in LAN compared to other systems. Moreover, cheetah [13] needs less online commu-nication volume mainly due to it optimizes the OT mod-ule over CrypTFlow2, and the online communication and computation cost of PrivQJ is able to be further reduced to the similar level of cheetah by replacing the OT module for comparison with the one from cheetah, and by using 11 
+
+TABLE 4 Online cost added to in-queue input after prior one. 
+
+Communication cost (comm.) in MiB and time cost in second  
+
+> Hi, C i, f h, C o
+
+56,64,3,64 28,128,3,128 14,256,3,256 7,512,3,512 LAN [10] comm. 228.1 115.8 59.1 32.1 speedup 152 × 152 × 155 × 168 ×
+
+time 22.1 20.6 20.2 39.6 speedup 315 × 343 × 404 × 792 ×
+
+[13] ∗
+
+comm. 14.1 9.9 10.8 17.2 speedup 9× 13 × 28 × 90 ×
+
+time 1.4 1.2 1.2 1.77 speedup 20 × 20 × 24 × 35 ×
+
+[14] comm. 203.4 103.2 52.6 26.9 speedup 135 × 135 × 138 × 141 ×
+
+time 1.5 0.8 0.4 0.2 speedup 21 × 13 × 8× 4×
+
+> PrivQJ
+
+comm. 1.5 0.76 0.38 0.19 time 0.07 0.06 0.05 0.05 WAN 1
+
+[10] time 41.7 30.7 25.5 42.9 speedup 595 × 495 × 500 × 875 ×
+
+[13] ∗ time 2.9 2.4 2.5 3.7 speedup 41 × 38 × 49 × 75 ×
+
+[14] time 19.1 10.1 5.5 3.1 speedup 272 × 162 × 107 × 63 ×
+
+> PrivQJ
+
+time 0.07 0.062 0.051 0.049 WAN 2
+
+[10] time 44.7 32.9 27.3 44.1 speedup 629 × 514 × 455 × 900 ×
+
+[13] ∗ time 3.9 2.9 3 3.9 speedup 54 × 45 × 57 × 79 ×
+
+[14] time 21.9 12.1 6.8 4.1 speedup 308 × 189 × 130 × 83 ×
+
+> PrivQJ
+
+time 0.071 0.064 0.052 0.049 WAN 3
+
+[10] time 32.8 26.6 23.5 41.8 speedup 449 × 350 × 385 × 853 ×
+
+[13] ∗ time 3 2.3 2.1 2.9 speedup 41 × 30 × 34 × 59 ×
+
+[14] time 11 6.2 3.5 2.2 speedup 150 × 81 × 57 × 44 ×
+
+> PrivQJ
+
+time 0.073 0.076 0.061 0.049 WAN 4
+
+[10] time 35.8 28.9 25 43.1 speedup 464 × 370 × 446 × 862 ×
+
+[13] ∗ time 2.8 2.6 2.6 3.4 speedup 36 × 33 × 46 × 68 ×
+
+[14] time 13.9 8 4.8 3.2 speedup 180 × 102 × 85 × 64 ×
+
+> PrivQJ
+
+time 0.077 0.078 0.056 0.05  
+
+> ∗
+
+with more efficient HE and OT backends. 
+
+the faster HE backend of cheetah. The quantitative reasons lie in two folds. First, PrivQJ only needs the OT-based computation for derivative of ReLU, without the following OT-based multiplexing that is required in cheetah. Second, PrivQJ is able to utilize every slot in the ciphertext to encrypt the input and only share plaintext to form final shares while the sharing in cheetah is in ciphertext with more communication cost. Therefore, both the running-time com-putation and communication overhead of PrivQJ is similar with cheetah when shifting backends from CrypTFlow2 to cheetah. 
+
+4.3 Efficiency When Plugged In Neural Models 
+
+We further evaluate the performance of PrivQJ in neural model and Table 6 shows the concrete comparison when ap-plying different system for the queue jumping. Concretely, for neural models such as AlexNet and ResNet which left idle slots in most of the ciphertext, the added waiting cost is very small. Meanwhile, the cost increases when there is no idle slot in the ciphertext as a new set of ciphertext for prior input is needed. For example, there is no idle slot in the server-encrypted ciphertext in some blocks of VGG, i.e., the ciphertext for h1 and {x1 × (1 − 2 × h1)} in Figure 2, which forces PrivQJ to invoke a totally new run at online and the 12 
+
+TABLE 5 Efficiency for individual in-queue input. 
+
+(a) Overall cost , communication cost (comm.) in MiB and time cost in second 
+
+Hi, C i, f h, C o 56,64,3,64 28,128,3,128 14,256,3,256 7,512,3,512 LAN [10] comm. 228.1 115.8 59.1 32.1 time 22.1 20.6 20.2 39.6 [13] ∗ comm. 14.1 9.9 10.8 17.2 
+
+time 1.4 1.2 1.2 1.77 
+
+[14] comm. 295.9 154.7 102.4 99.9 time 15.5 11.8 11.1 11 
+
+> PrivQJ
+
+comm. 299.4 159.3 108.3 104.7 time 15.3 11.7 11.2 11 WAN 1
+
+[10] time 41.7 30.7 25.5 42.9 [13] ∗ time 2.9 2.4 2.5 3.7 
+
+[14] time 40.7 25.3 20.5 20.1 
+
+> PrivQJ
+
+time 40.5 25.5 20.7 20.3 WAN 2
+
+[10] time 44.7 32.9 27.3 44.1 [13] ∗ time 3.9 2.9 3 3.9 
+
+[14] time 44.6 28.1 22.3 21.8 
+
+> PrivQJ
+
+time 43.6 27.3 22.2 21.8 WAN 3
+
+[10] time 32.8 26.6 23.5 41.8 [13] ∗ time 3 2.3 2.1 2.9 
+
+[14] time 29.2 19.7 16.4 16.3 
+
+> PrivQJ
+
+time 28.5 19 16.3 16 WAN 4
+
+[10] time 35.8 28.9 25 43.1 [13] ∗ time 2.8 2.6 2.6 3.4 
+
+[14] time 32.9 21.8 18.4 18 
+
+> PrivQJ
+
+time 31.7 20.7 17.8 17.5 
+
+(b) Online cost , communication cost (comm.) in MiB and time cost in second 
+
+> LAN
+
+[10] comm. 228.1 115.8 59.1 32.1 time 22.1 20.6 20.2 39.6 [13] ∗ comm. 14.1 9.9 10.8 17.2 
+
+time 1.4 1.2 1.2 1.77 [14] comm. 203.4 103.2 52.6 26.9 time 1.5 0.8 0.4 0.2 PrivQJ  comm. 206.9 107.8 58.6 31.7 time 1.4 0.7 0.4 0.2 
+
+> WAN 1
+
+[10] time 41.7 30.7 25.5 42.9 [13] ∗ time 2.9 2.4 2.5 3.7 [14] time 19.1 10.1 5.5 3.1 PrivQJ 
+
+time 18.9 10 5.7 3.3 WAN 2
+
+[10] time 44.7 32.9 27.3 44.1 [13] ∗ time 3.9 2.9 3 3.9 
+
+[14] time 21.9 12.1 6.8 4.1 
+
+> PrivQJ
+
+time 21.2 11.5 6.7 4.1 WAN 3
+
+[10] time 32.8 26.6 23.5 41.8 [13] ∗ time 3 2.3 2.1 2.9 [14] time 11 6.2 3.5 2.2 
+
+> PrivQJ
+
+time 10.6 5.6 3.3 1.9 
+
+> WAN 4
+
+[10] time 35.8 28.9 25 43.1 [13] ∗ time 2.8 2.6 2.6 3.4 [14] time 13.9 8 4.8 3.2 
+
+> PrivQJ
+
+time 12.9 7 4.3 2.6  
+
+> ∗
+
+with more efficient HE and OT backends. 13 
+
+TABLE 6 Added cost to in-queue input for neural models.                                                                                                          
+
+> (a) Overall cost , communication cost (comm.) in MiB and time cost in second
+> Neural Models AlexNet [25] VGG [26] ResNet [27] LAN [10] comm. 659 7567 1740 speedup 260 ×2.9 ×153 ×
+> time 189 1326 410 speedup 439 ×51 ×410 ×
+> [14] comm. 528 4318 2611 speedup 208 ×1.6 ×230 ×
+> time 89 796 197 speedup 207 ×31 ×197 ×
+> PrivQJ  comm. 2.5 2557 11.3 time 0.4 25.6 1WAN 1
+> [10] time 246 1953 563 speedup 569 ×8.1 ×563 ×
+> [14] time 136 1160 426 speedup 315 ×4.8 ×426 ×
+> PrivQJ
+> time 0.4 238 1
+> (b) Online cost , communication cost (comm.) in MiB and time cost in second
+> LAN
+> [10] comm. 659 7567 1740 speedup 260 ×3.1 ×153 ×
+> time 189 1326 410 speedup 439 ×54 ×410 ×
+> [14] comm. 249 2844 1544 speedup 98 ×1.18 ×136 ×
+> time 2.3 28.4 11.6 speedup 5.2 ×1.17 ×11 ×
+> PrivQJ  comm. 2.5 2410 11.3 time 0.4 24 1WAN 1
+> [10] time 246 1954 563 speedup 569 ×8.7 ×563 ×
+> [14] time 25.7 268 151 speedup 59 ×1.19 ×151 ×
+> PrivQJ
+> time 0.4 224 1
+
+time becomes longer when the bandwidth decreases. On the other hand, most computation sizes in neural models always left slots in the ciphertext for cr0, which helps to mitigate a large part of computation for prior input because the major time cost comes from the HE computation among ciphertext for cr0 and it makes PrivQJ remain much more efficient regarding the overall cost. We then investigate the performance of in-queue input in PrivQJ to make sure the efficiency of original input remains advantageous. As shown in Table 7, PrivQJ always has better time overhead for in-queue inputs and competitive communication cost compared with FIT. Finally, we analyze the needed batch size for the prior input to have a more comprehensive exploration to PrivQJ, and Table 8 demonstrates the distribution in major blocks. Specifically, the batch size (b-size) indicates the number of in-queue inputs in a batch to achieve almost-free com-putation for prior input, and the b-size for online is the number of in-queue inputs for a full slot recycling in cipher of t as described in Section 3.3 while the b-size for offline is the number of in-queue inputs for a full slot recycling in cipher of cr0 as described in Section 3.4. As shown in Table 8, the maximum batch size is moderate for online computation, e.g., 102, and b-size = 1 indicates no idle slots in associated cipher and a new run is needed at online. Meanwhile, the offline needs more in-queue inputs which is generally tolerable since it is input-independent. Moreover, 
+
+TABLE 7 Efficiency of in-queue input for neural models.                                                                          
+
+> (a) Overall cost , communication cost (comm.) in MiB and time cost in second
+> Neural Models AlexNet [25] VGG [26] ResNet [27] LAN [10] comm. 659 7567 1740 time 189 1326 410 [14] comm. 528 4318 2611
+> time 89 796 197
+> PrivQJ  comm. 526 4331 2686 time 83.3 730.6 196.8
+> WAN 1
+> [10] time 246 1953 563 [14] time 136 1160 426 PrivQJ
+> time 128 1092 428
+> (b) Online cost , communication cost (comm.) in MiB and time cost in second
+> LAN
+> [10] comm. 659 7567 1740 time 189 1326 410 [14] comm. 249 2844 1544
+> time 2.3 28.4 11.6
+> PrivQJ  comm. 256 2857 1620 time 2.1 27 10.8
+> WAN 1
+> [10] time 246 1954 563 [14] time 25.7 268 151 PrivQJ
+> time 24.7 262.5 151.6
+
+TABLE 8 Distribution of batch size (b-size) in major blocks. 
+
+Hi, C i, f h, C o b-size at online b-size at offline 56,64,3,64 49 428,128,3,128 17 30 14,256,3,256 7 82 7,512,3,512 4 990 112,64,3,128 1 456,128,3,256 1 456,256,3,256 1 428,256,3,512 49 30 28,512,3,512 1 30 14,512,3,512 17 82 27,96,5,256 19 130 13,256,3,384 8 144 13,384,3,384 102 144 13,384,3,256 102 144 
+
+appropriate division of the input helps to adjust the sizes to have smaller b-sizes at both offline and online. 
+
+5 RELATED WORKS 
+
+PP-MLaaS has attracted significant attention in recent decade, with solutions generally falling into two categories. The first class follows an offline-online paradigm , where com-putationally expensive cryptographic operations are per-formed in a pre-processing phase before the client submits inputs, and lightweight operations dominate during online inference, leading to significant latency reduction. Represen-tative protocols, such as MiniONN [7], DELPHI [9] and FIT [14], combine HE with MPC techniques to allow much lower online cost. The second class avoids pre-processing and instead op-erates in a purely online setting , where all cryptographic computation is executed at query time. While it removes the need for cost-intensive offline, the computation and communication cost at inference remains relatively high. 14 
+
+CryptoNets [6] is the pioneering work that shows the feasi-bility of HE in PP-MLaaS. After that, a series of landmark systems have been proposed for better efficiency, such as HE-MPC-based frameworks SecureML [31], GAZELLE [8], CrypTFlow2 [10] and Cheetah [13], HE-based frameworks E2DM [32] and LOHEN [33], Garbled Circuit (GC)-based frameworks DeepSecure [34] and XONN [35], and their variants such as SIRNN [36] and SecFloat [37]. Our work PrivQJ lies in the offline-online category, with much lower cost when the queue jumping happens. A further distinction arises between 2-party and 3-party 
+
+privacy-preserving inference. In 3-party protocols, an addi-tional non-colluding server is introduced to assist in secret sharing, which helps to reduce the overall cryptographic overhead. While these approaches, such as ABY3 [38], ABY2.0 [39] and SHAFT [40], demonstrate excellent effi-ciency gain, they require stronger trust for more entities. By contrast, our work operates in a 2-party setting between the client and the server, without reliance on third party. This makes it easier to deploy in real-world applications where involving additional service providers may be impractical or undesirable, while still enjoys competitive efficiency ben-efits. Finally, PrivQJ targets on private inference for CNNs while the community has devoted increasing attention to privacy-preserving inference for large language models (LLMs) , which addresses efficiency challenges with much-larger model sizes. While these approaches, such as BOLT [15], Bumble-Bee [41], and NEXUS [16], are important for the growing field of natural language processing, there is no study about privacy-preserving queue jumping in both CNNs and LLMs models and they all need non-trivial efforts to investigate associated problems. By focusing on CNNs in an offline-online scheme under a 2-party setting, our work provides a starting exploration for privacy-preserving queue jumping in private inference and exploring the problem in LLMs forms another line of works that are worth investigation. 
+
+6 CONCLUSION 
+
+In this paper, we have initiated the study of privacy-preserving queue jumping in batched inference and propose PrivQJ, a novel framework that enables efficient priority handling without degrading overall system performance. PrivQJ exploits shared computation across inputs via in-processing slot recycling, allowing prior inputs to be piggy-backed onto ongoing batch computation with almost no ad-ditional cryptographic cost. Both theoretical analysis and ex-perimental results have demonstrated noticeable reduction in overhead compared to state-of-the-art PP-MLaaS systems. While PrivQJ deals with convolutional neural networks in this paper, adapting it to other types of models forms our next-step direction. 
+
+ACKNOWLEDGMENT 
+
+The abstract is first generated using ChatGPT and is then manually verified and tailored for correct and concise de-scription. 
+
+REFERENCES 
+
+[1] R. N. Zaeem and K. S. Barber, “The effect of the gdpr on privacy policies: Recent progress and future promise,” ACM Transactions on Management Information Systems (TMIS) , vol. 12, no. 1, pp. 1–20, 2020. [2] R. B. Ness, J. P. Committee et al. , “Influence of the hipaa privacy rule on health research,” Jama , vol. 298, no. 18, pp. 2164–2170, 2007. [3] W. Zeng, T. Xu, Y. Chen, Y. Zhou, M. Zhang, J. Tan, C. Hong, and M. Li, “Towards efficient privacy-preserving machine learning: A systematic review from protocol, model, and system perspectives,” Cryptology ePrint Archive, Paper 2025/1365, 2025. [Online]. Available: https://eprint.iacr.org/2025/1365 [4] D. Demmler, T. Schneider, and M. Zohner, “ABY-a framework for efficient mixed-protocol secure two-party computation.” in NDSS ,2015. [5] J. Fan and F. Vercauteren, “Somewhat practical fully homomorphic encryption.” IACR Cryptol. ePrint Arch. , vol. 2012, pp. 1–19, 2012. [6] R. Gilad-Bachrach, N. Dowlin, K. Laine, K. E. Lauter, M. Naehrig, and J. Wernsing, “Cryptonets: Applying neural networks to en-crypted data with high throughput and accuracy,” in Proceedings of the 33nd International Conference on Machine Learning, ICML 2016, New York City, NY, USA, June 19-24 , 2016, pp. 201–210. [7] J. Liu, M. Juuti, Y. Lu, and N. Asokan, “Oblivious neural network predictions via minionn transformations,” in Proceedings of the 2017 ACM SIGSAC Conference on Computer and Communications Security ,2017, pp. 619–631. [8] C. Juvekar, V. Vaikuntanathan, and A. Chandrakasan, “GAZELLE: A low latency framework for secure neural network inference,” in 
+
+27th USENIX Security Symposium (USENIX Security 18) , 2018, pp. 1651–1669. [9] P. Mishra, R. Lehmkuhl, A. Srinivasan, W. Zheng, and R. A. Popa, “DELPHI: A cryptographic inference service for neural networks,” in 29th USENIX Security Symposium (USENIX Security 20) , 2020, pp. 2505–2522. [10] D. Rathee, M. Rathee, N. Kumar, N. Chandran, D. Gupta, A. Ras-togi, and R. Sharma, “CrypTFlow2: Practical 2-party secure in-ference,” in Proceedings of the 2020 ACM SIGSAC Conference on Computer and Communications Security , 2020, pp. 325–342. [11] Q. Zhang, C. Xin, and H. Wu, “GALA: Greedy computation for linear algebra in privacy-preserved neural networks,” in ISOC Network and Distributed System Security Symposium , 2021. [12] S. U. Hussain, M. Javaheripi, M. Samragh, and F. Koushanfar, “Coinn: Crypto/ml codesign for oblivious inference via neural networks,” in Proceedings of the 2021 ACM SIGSAC Conference on Computer and Communications Security , 2021, pp. 3266–3281. [13] Z. Huang, W.-j. Lu, C. Hong, and J. Ding, “Cheetah: Lean and fast secure two-party deep neural network inference,” in 31th USENIX Security Symposium (USENIX Security 22) , 2022. [14] Q. Zhang, T. Xiang, X. Chunsheng, and W. Hongyi, “From indi-vidual computation to allied optimization: Remodeling privacy-preserving neural inference with function input tuning,” in 2024 IEEE Symposium on Security and Privacy (SP) , 2024, pp. 104–104. [15] Q. Pang, J. Zhu, H. M ¨ ollering, W. Zheng, and T. Schneider, “Bolt: Privacy-preserving, accurate and efficient inference for transform-ers,” in 2024 IEEE Symposium on Security and Privacy (SP) , 2024, pp. 133–133. [16] J. Zhang, X. Yang, L. He, K. Chen, W. jie Lu, Y. Wang, X. Hou, J. Liu, K. Ren, and X. Yang, “Secure transformer inference made non-interactive,” Cryptology ePrint Archive, Paper 2024/136, 2024. [Online]. Available: https://eprint.iacr.org/2024/136 [17] Z. Brakerski, “Fully homomorphic encryption without modulus switching from classical gapsvp,” in Annual Cryptology Conference .Springer, 2012, pp. 868–886. [18] J. H. Cheon, A. Kim, M. Kim, and Y. Song, “Homomorphic encryption for arithmetic of approximate numbers,” in Interna-tional Conference on the Theory and Application of Cryptology and Information Security . Springer, 2017, pp. 409–437. [19] G. Brassard, C. Cr´ epeau, and J.-M. Robert, “All-or-nothing dis-closure of secrets,” in Conference on the Theory and Application of Cryptographic Techniques . Springer, 1986, pp. 234–238. [20] A. Shamir, “How to share a secret,” Communications of the ACM ,vol. 22, no. 11, pp. 612–613, 1979. [21] M. Bellare, V. T. Hoang, and P. Rogaway, “Foundations of garbled circuits,” in Proceedings of the 2012 ACM conference on Computer and communications security , 2012, pp. 784–796. 15 
+
+[22] A. C.-C. Yao, “How to generate and exchange secrets,” in 27th Annual Symposium on Foundations of Computer Science (sfcs 1986) .IEEE, 1986, pp. 162–167. [23] C. Wang, J. Shao, Y. He, J. Wu, X. Liu, L. Yang, Y. Wei, X. S. Zhou, Y. Zhan, F. Shi, D. Shen, and W. Li, “Data-driven risk stratification and precision management of pulmonary nodules detected on chest computed tomography,” NATURE MEDICINE ,vol. 30, no. 11, pp. 3184–3195, NOV 2024. [24] P. G. G. Mikhael, J. Wohlwend, A. Yala, L. Karstens, J. Xiang, A. K. K. Takigami, P. P. P. Bourgouin, P. Y. Chan, S. Mrah, and W. Amayri, “Sybil: A validated deep learning model to predict future lung cancer risk from a single low-dose chest computed tomography,” Journal of clinical oncology : , no. 12, p. 41, 2023. [25] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classifica-tion with deep convolutional neural networks,” Advances in neural information processing systems , vol. 25, pp. 1097–1105, 2012. [26] K. Simonyan and A. Zisserman, “Very deep convolutional networks for large-scale image recognition,” arXiv preprint arXiv:1409.1556 , 2014. [27] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 770–778. [28] Y. Jia, E. Shelhamer, J. Donahue, S. Karayev, J. Long, R. Girshick, S. Guadarrama, and T. Darrell, “Caffe: Convolutional architecture for fast feature embedding,” in Proceedings of the 22nd ACM inter-national conference on Multimedia , 2014, pp. 675–678. [29] Y. Lindell, “How to simulate it - a tutorial on the simulation proof technique,” Cryptology ePrint Archive, Report 2016/046 , 2016. [30] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and F.-F. Li, “Imagenet: A large-scale hierarchical image database,” in Proceedings of the IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR 2009), 20-25 June 2009, Miami, Florida, USA ,2009, pp. 248–255. [31] P. Mohassel and Y. Zhang, “SecureML: A system for scalable privacy-preserving machine learning,” in 2017 IEEE Symposium on Security and Privacy (SP) . IEEE, 2017, pp. 19–38. [32] X. Jiang, M. Kim, K. Lauter, and Y. Song, “Secure outsourced matrix computation and application to neural networks,” in Pro-ceedings of the 2018 ACM SIGSAC conference on computer and com-munications security , 2018, pp. 1209–1222. [33] K. Nam, Y. Joo, D. Lee, S. Ha, H. Oh, H. Moon, and Y. Paek, “Lo-hen: Layer-wise optimizations for neural network inferences over encrypted data with high performance or accuracy,” Cryptology ePrint Archive , 2025. [34] B. D. Rouhani, M. S. Riazi, and F. Koushanfar, “Deepsecure: Scalable provably-secure deep learning,” in Proceedings of the 55th Annual Design Automation Conference , 2018, pp. 1–6. [35] M. S. Riazi, M. Samragh, H. Chen, K. Laine, K. Lauter, and F. Koushanfar, “XONN: Xnor-based oblivious deep neural net-work inference,” in 28th USENIX Security Symposium (USENIX Security 19) , 2019, pp. 1501–1518. [36] D. Rathee, M. Rathee, R. K. K. Goli, D. Gupta, R. Sharma, N. Chandran, and A. Rastogi, “Sirnn: A math library for secure rnn inference,” in 42nd IEEE Symposium on Security and Privacy (IEEE S&P 2021) . IEEE, February 2021. [37] D. Rathee, A. Bhattacharya, R. Sharma, D. Gupta, N. Chandran, and A. Rastogi, “Secfloat: Accurate floating-point meets secure 2-party computation,” in 43rd IEEE Symposium on Security and Privacy, SP 2022, San Francisco, CA, USA, May 22-26, 2022 . IEEE, 2022, pp. 576–595. [38] P. Mohassel and P. Rindal, “ABY 3: A mixed protocol framework for machine learning,” in Proceedings of the 2018 ACM SIGSAC Conference on Computer and Communications Security , 2018, pp. 35– 52. [39] A. Patra, T. Schneider, A. Suresh, and H. Yalame, “ABY2.0: Im-proved mixed-protocol secure two-party computation,” in 30th USENIX Security Symposium (USENIX Security 21) , 2021. [40] A. Y. Kei and S. S. Chow, “Shaft: Secure, handy, accurate, and fast transformer inference,” in Network and Distributed System Security Symposium, NDSS , vol. 2025, 2025. [41] W. jie Lu, Z. Huang, Z. Gu, J. Li, J. Liu, C. Hong, K. Ren, T. Wei, and W. Chen, “BumbleBee: Secure two-party inference framework for large transformers,” Cryptology ePrint Archive, Paper 2023/1678, 2023. [Online]. Available: https://eprint.iacr.org/2023/1678

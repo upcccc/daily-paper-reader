@@ -1,0 +1,1353 @@
+Title: Federated Learning and Unlearning for Recommendation with Personalized Data Sharing
+
+URL Source: https://arxiv.org/pdf/2603.11610v1
+
+Published Time: Fri, 13 Mar 2026 00:33:31 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# Federated Learning and Unlearning for Recommendation with Personalized Data Sharing 
+
+Liang Qu 1 Member, IEEE , Jianxin Li 1∗ Senior Member, IEEE , Wei Yuan 2, Shangfei Zheng 3 Member, IEEE ,Lu Chen 4, Chengfei Liu 4 Member, IEEE , and Hongzhi Yin 2 Senior Member, IEEE 
+
+Abstract —Federated recommender systems have emerged as a paradigm for protecting user privacy by keeping interaction data on local devices while coordinating model training through a central server. However, most existing federated recommender systems adopt a one-size-fits-all assumption on user privacy, where all users are required to keep their data strictly local. This setting overlooks users who are willing to share their data with the server in exchange for better recommendation performance. Although several recent studies have explored personalized user data sharing in federated recommender sys-tems, they assume static user privacy preferences and cannot handle user requests to remove previously shared data and its corresponding influence on the trained model. To address this limitation, we propose FedShare, a federated learn–unlearn framework for recommender systems with personalized user data sharing. FedShare not only allows users to control how much interaction data is shared with the server, but also supports data unsharing requests by efficiently removing the influence of the unshared data from the trained model. Specifically, in the learning phase, FedShare leverages shared data to construct a server-side high-order user–item graph and uses contrastive learning to jointly align local and global representations, enabling the model to capture both low-order and high-order collabora-tive signals. In the unlearning phase, we design a contrastive unlearning mechanism that selectively removes representations induced by the unshared data using a small number of historical embedding snapshots, avoiding the need to store large amounts of historical gradient information as required by existing federated recommendation unlearning methods. Extensive experiments on three public datasets demonstrate that FedShare achieves strong recommendation performance in both the learning and unlearn-ing phases, while significantly reducing storage overhead in the unlearning phase compared with state-of-the-art baselines. 
+
+Index Terms —Federated Recommender Systems, Federated recommendation unlearning, Personalized user data sharing 
+
+I. I NTRODUCTION 
+
+Recommender systems [1], [2], [3], [4] have been widely used in many real-world applications to help users find what they may like from massive information. For example, video platforms, such as YouTube [5], recommend videos that users may be interested in based on their watching history. Similarly, e-commerce platforms, such as Amazon [6], suggest products that users may want to buy according to their purchase 
+
+> 1
+
+School of Business and Law, Edith Cowan University, Perth, Australia. 
+
+> 2
+
+School of Electrical Engineering and Computer Science, The University of Queensland, Brisbane, Australia. 
+
+> 3
+
+School of Computer Science and Technology, Zhejiang Sci-Tech Univer-sity, Hangzhou, China. 
+
+> 4
+
+Department of Computing Technologies, Swinburne University of Tech-nology, Hawthorn, VIC 3122, Australia. 
+
+> ∗
+
+Corresponding authors: Jianxin Li (jianxin.li@ecu.edu.au). 
+
+history. Generally, most existing recommender systems rely on collecting user–item interaction data (e.g., watching history and purchase history) on a central server, and these collected data are then used to train recommendation models to learn users’ preferences for providing personalized recommendation services. However, such centralized data collection may raise users’ concerns about data privacy, and may violate data protection regulations, such as the General Data Protection Regulation (GDPR 1). For example, Amazon was fined 746 million euros for GDPR violation 2. Therefore, there exists a dilemma in which recommender systems inevitably need to collect users’ private interaction data for training models and providing personalized recommendation services. Inspired by the success of federated learning [7] in privacy protection, many recent studies have explored integrating fed-erated learning into recommender systems, termed Federated Recommender Systems (FedRSs [8], [9], [10]). Specifically, as shown in Figure 1a, FedRSs strictly keep users’ private data (e.g., user–item interaction data) on their local devices and deploy a local recommendation model for each user. In each training round, the server selects a group of users to participate in federated training. These selected users train their local models using local data and send only the model parameters to the server. The server then aggregates these parameters, instead of the raw data, into a global model using parameter aggregation algorithms (e.g., FedAvg [11]) and redistributes the global model to all users. In this way, FedRSs can capture users’ preferences without sharing private user data. However, most existing FedRSs adopt a one-size-fits-all assumption regarding user privacy preferences, assuming that all users care strongly about data privacy. This assumption may not hold in practice, as it overlooks users who are less sensitive to privacy and are willing to share all or part of their data to obtain better recommendation services. To address this limitation, several studies have explored personalized user data sharing mechanisms (as shown in Figure 1b) for federated recommender systems, which allow users to flexibly control whether and how their interaction data or profile attributes are shared with the server. For example, CDCGNNFed [12] enables users to choose to share all, partial, or no interaction data with the server, allowing the server to directly leverage richer collaborative information and thereby improve recommendation performance. UC-FedRec [13] ex-
+
+> 1
+
+https://gdpr-info.eu/ 
+
+> 2
+
+https://luxtoday.lu/en/business-economic-en/court-in-luxembourg-confirms-amazons-record-fine-746-million-euros-for-gdpr-violation   
+
+> arXiv:2603.11610v1 [cs.IR] 12 Mar 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2Model sharing
+
+(a) Architecture of federated recommender system. “I’ll share only     
+
+> part of my data . Privacy
+> still matters.”
+> “I’m happy to share
+> all my data to improve the
+> model!”
+> “I prefer to keep my
+> data private.
+> No sharing. ”
+> Data sharing Model sharing
+
+(b) Federated recommender systems with personalized user data sharing. Data sharing Unlearning request Model Unlearnin g 
+
+> “I’ll share only
+> part of my data . Privacy
+> still matters.”
+> “I’m happy to share
+> all my data to improve the
+> model!”
+> “I prefer to keep my
+> data private.
+> No sharing. ”
+> “I’ve changed my mind.
+> Please make the model
+> forget my data .”
+
+(c) Federated recommender systems with personalized user data sharing and unlearning support. Fig. 1. Comparison of three federated recommendation architectures: (a) traditional model-sharing, (b) personalized data-sharing without unlearning, and (c) personalized data-sharing with unlearning support. 
+
+tends personalized data sharing to user attribute information, allowing users to selectively share profile attributes with the server. PDC-FRS [14] further introduces a privacy-preserving data contribution mechanism that allows users to share in-teraction data under differential privacy guarantees. Although these methods support personalized user data sharing, they all assume that users’ sharing preferences remain static once data are uploaded. In practice, however, user willingness to share data can be dynamic. As illustrated in Figure 1c, a user may regret sharing data after uploading it, or may share data by mistake. Therefore, it is necessary to support users to withdraw previously shared data and require the server to remove not only the data itself but also its influence on the trained model. This requirement is also aligned with the “Right to be Forgotten” in the GDPR. One natural solution is to retrain federated recommender system models from scratch by removing the data that users request to be forgotten. However, although this solution can completely remove the influence of the data, it is very time-consuming and impractical in real-world federated recom-mender systems. To address this limitation, recent work has begun to explore federated recommendation unlearning tech-niques, which aim to remove the influence of data without fully retraining the models by calibrating historical gradient information. For example, FRU [15] maintains important his-torical gradient information of model updates on each client. After receiving an unlearning request, all remaining clients reconstruct the unlearned models through gradient calibration. Similarly, CUFRU [16] introduces a gradient transfer station, which leverages not only historical gradient information but also newly updated gradients from the remaining clients to improve gradient calibration. However, existing federated rec-ommendation unlearning methods require clients or the server to store historical gradient information, which introduces sig-nificant storage overhead and is especially challenging for resource-limited user devices. In light of these challenges, this paper proposes a Federated Learn–Unlearn Framework for Recommender Systems with Personalized User Data Sharing, named FedShare. Specifi-cally, we introduce a fully personalized data-sharing mech-anism that not only allows users to flexibly control whether their data are shared with the server, but also supports users in submitting unlearning requests to remove the influence of previously shared data from the trained model. To achieve this goal, we introduce contrastive learning and contrastive unlearning to handle personalized data sharing and unlearning requests, respectively. When users choose to share data with the server, we construct a high-order user–item bipartite graph on the server side based on the shared user data. This graph can be regarded as an augmentation of the local first-order user–item subgraphs, which only contain each user and their interacted items. As a result, for each item, its representation is learned from two complementary views: a local view, obtained from local training via standard federated model aggregation techniques (e.g., FedAvg), and a global view, derived from the high-order user–item bipartite graph on the server. Contrastive learning is employed to align local and global item represen-tations, thereby improving recommendation performance. When users submit unlearning requests, the server first removes the data that need to be forgotten, resulting in an JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+updated high-order user–item bipartite graph on the server side. However, it is non-trivial to directly apply existing federated recommendation unlearning techniques to remove the influence of these data, as they typically require storing substantial historical gradient information, which leads to significant storage overhead and poses serious challenges for both resource-limited user devices and the server. To alleviate this challenge, we propose a memory-efficient contrastive unlearning method that only requires the server to maintain few historical item embedding tables. Specifically, after data removal, the remaining users perform standard federated train-ing to obtain updated global embedding tables, which are regarded as new local views. Meanwhile, on the server side, we construct a forgotten user–item bipartite graph based on the data to be forgotten and infer the corresponding item embeddings using the historical embedding tables, yielding forgotten views. In addition, by leveraging the updated high-order user–item bipartite graph constructed from the remaining data, the server derives new global views. The proposed contrastive unlearning strategy is then applied to these views, where new local views are aligned with new global views to preserve performance on the remaining data, while being selectively pushed away from forgotten views that capture the representations induced by the data to be forgotten, thereby ensuring that representations associated with the remaining data are not affected. Overall, the contributions of this paper are summarized as follows:  
+
+> •
+
+To the best of our knowledge, this is the first work to explore fully personalized user data sharing mechanisms in federated recommender systems. It not only allows users to flexibly control the extent to which their data are shared, but also supports users in requesting the model to forget previously shared data.  
+
+> •
+
+We propose a federated learn-unlearn framework for FedRSs, which introduces a dual contrastive learning technique. Compared with existing federated recommen-dation unlearning methods, the proposed framework sig-nificantly reduces storage overhead.  
+
+> •
+
+We conduct extensive experiments on three benchmark datasets to evaluate the proposed method. The results show that FedShare achieves strong learning performance and efficient unlearning ability. The remainder of this paper is organized as follows. Section II reviews related work and identifies the research gap. Section III introduces the preliminaries and formulates the problem. Section IV presents the proposed method. Section V shows the experimental results, and Section VI concludes the paper. II. R ELATED WORK 
+
+In this section, we will first review the related work on federated recommender systems, including the recent studies that explore allowing users to freely control whether to share data with the server. Then, given that this work allows users to submit unlearning requests for data that needs to be forgotten, we will also discuss the related work on federated unlearning, especially studies that address unlearning in federated recom-mender systems. 
+
+A. Federated recommender systems 
+
+To address users’ privacy concerns in recommender sys-tems, recent studies explore integrating federated learning into recommender systems, termed federated recommender systems [17], [18], [19], [20], [21], [22], [23]. Early work mainly focuses on matrix factorization–based federated recom-mender systems [24], [25], [26], [27], [28], [29], which learn user and item embeddings from local user–item interaction matrices. For example, FCF [24] is one of the earliest works that integrates federated learning with matrix factorization, where user embeddings are learned on the client side, while a global item embedding model is maintained and updated on the server side. FedMF [27] further incorporates homo-morphic encryption into the parameter sharing process to enhance privacy protection. FedFast [29] leverages clustering techniques to group users and selects clients from different groups in each communication round, thereby improving the convergence speed of federated training. To better capture the nonlinear relationships between users and items, subsequent studies explore deep neural network–based federated recom-mender systems [30], [31], [32]. For example, FedNCF [32] adopts NeuMF [33] as the base recommendation model, which combines multilayer perceptrons and matrix factorization to more effectively learn latent user–item interactions. PFedRS [30] proposes a personalized federated recommendation model by learning personalized local similarity functions for different users. In addition, some studies model user–item interactions as a bipartite graph and employ graph neural networks as the base recommendation model. For instance, FedGNN [34] introduces a trusted third-party server to construct high-order graphs, enabling GNNs to learn user and item embeddings in a privacy-preserving manner. SemiDFEGL [35] further applies clustering techniques to both users and items to construct high-order local subgraphs, thereby capturing higher-order structural information and improving recommendation perfor-mance. However, although existing federated recommender systems can effectively protect user privacy while providing satisfac-tory recommendation performance, most of them adopt a one-size-fits-all privacy budget assumption, i.e., assuming that all users have equally strong privacy concerns. This assumption ignores users who are willing to share all or part of their data in exchange for better recommendation quality. In recent years, only a limited number of studies have explored federated recommender systems that support personalized user data sharing. For example, CDCGNNFed [12] and UC-FedRec [13] are two pioneering works that allow users to freely share user–item interaction data and attribute data, respectively. Furthermore, PDC-FRS [14] introduces a privacy-preserving mechanism that enables users to share data with differential privacy guarantees. Despite these advances, existing methods only support data sharing and overlook users’ dynamic privacy preferences, such as scenarios where users later regret their decisions and request the server to delete or even unlearn the influence of previously shared data. To fill this gap, this work aims to support fully personalized user data sharing, which not only allows flexible data sharing but also enables unlearning JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4
+
+requests in federated recommender systems. 
+
+B. Federated recommendation unlearning 
+
+To remove the influence of data that needs to be forgotten from a trained model, the most straightforward solution is to retrain the model from scratch after removing the target data. However, this solution is clearly time-consuming and imprac-tical in real-world applications. To address this issue, recent studies explore removing the influence of forgotten data with-out retraining the model from scratch, giving rise to machine unlearning [36], [37], [38], [39], including unlearning methods for recommendation tasks [40], [41]. Typical methods include fine-tuning–based methods [42], which update the model using the remaining data; gradient ascent–based methods [43], which perform inverse learning on the data to be forgotten; and data synthesis–based methods [44], which modify the labels of the forgotten data and then fine-tune the model. However, these methods are generally not applicable to federated learning settings, as the data to be removed cannot be directly ac-cessed due to privacy concerns. To address this challenge, several studies explore federated recommendation unlearning [45] by leveraging clients’ historical gradient information to reconstruct the model after unlearning requests are issued. For example, FRU [15] maintains historical local gradients at each client and introduces an importance sampling strategy to selectively retain important gradients, thereby reducing storage costs and enabling model reconstruction via gradient calibration after unlearning requests. Similarly, CUFRU [16] introduces a gradient transfer station that leverages not only historical gradients but also newly updated gradients from the remaining clients to improve gradient calibration. In addition, CFRU [46] proposes a gradient sampling strategy to further reduce storage costs. Furthermore, Aegis [47] adopts a post-training method to perform attribute unlearning in federated recommender systems. Despite their effectiveness, existing federated recommenda-tion unlearning methods either require clients or the server to store a large amount of historical gradient information, leading to significant storage overhead. This issue is partic-ularly challenging for resource-constrained client devices. To address this limitation, we explore memory-efficient federated recommendation unlearning, which does not require storing historical gradients on clients and only maintains a small number of historical parameters on the server. III. P RELIMINARIES 
+
+In this section, we first introduce the typical pipeline of federated recommender systems. Then, we formally define the personalized user data sharing problem in federated recom-mender systems. The commonly used symbols are summarized in Table I. 
+
+A. Federated Recommender Systems 
+
+Let U be the set of users/clients 3 and I the set of items. In the context of federated recommender systems, each user                                       
+
+> 3We interchangeably use the terms “user” and “client” based on context, and assume each user corresponds to a single client device. TABLE I SUMMARY OF NOTATIONS .
+> Notation Description
+> USet of users (clients)
+> ISet of items
+> IuItems interacted by user u
+> Ilocal
+> uInteractions kept local by user u
+> Ishare
+> uInteractions shared with the server by user u
+> Iunlearn
+> uShared interactions requested to be unlearned
+> DuLocal interaction dataset of user u
+> DsServer-side dataset constructed from shared interactions
+> dEmbedding dimension
+> uuUser embedding of user u
+> viItem embedding of item i
+> VuLocal item embedding table on client u
+> VsGlobal item embedding table on the server
+> θuLocal non-embedding model parameters
+> θsGlobal non-embedding model parameters
+> ΘuLocal model parameters of user u
+> ΘsGlobal model parameters on the server
+> ˜ΘsGlobal model parameters after unlearning
+> Θ⋆sIdeal retrained global model parameters
+> g(·,·)User–item scoring (similarity) function
+> ˆyu,i Predicted preference score of user ufor item ilu(·)Local loss function of user u
+> Agg( ·)Aggregation function in federated training
+> Fun (·)Unlearning function on the global model
+
+u ∈ U holds a private local interaction dataset Du defined as 
+
+Du = { i ∈ I u }, (1) where Iu ⊆ I denotes the set of items that user u has interacted with. Typically, Du is strictly retained on the user side due to privacy concerns. In addition, each client u ∈ U maintains a local rec-ommender model fu(·). Because recommender systems are typically embedding-based and represent users and items as 
+
+d-dimensional vectors, the local model on client u generally consists of three types of parameters: (i) a user embedding 
+
+uu ∈ Rd, which is usually kept locally due to privacy concerns; (ii) a local item embedding table Vu ∈ R|I|× d; and (iii) model parameters θu that are independent of embeddings (e.g., the weights of neural network layers). For convenience, we denote the complete set of local model parameters on client u as Θu = {uu, Vu, θu}. Correspondingly, the server maintains a global model parameterized by Θs = {Vs, θs},which includes the global item embedding table Vs ∈ R|I|× d
+
+and global model parameters θs.A typical federated training process proceeds in rounds. At the beginning of round t, the server selects a subset of clients U(t) ⊆ U and broadcasts the current global parameters 
+
+Θ(t−1)  
+
+> s
+
+= {V(t−1)  
+
+> s
+
+, θ(t−1)  
+
+> s
+
+} to all selected clients: 
+
+V(t) 
+
+> u
+
+← V(t−1)  
+
+> s
+
+, θ(t) 
+
+> u
+
+← θ(t−1)  
+
+> s
+
+, ∀u ∈ U (t). (2) Note that the user embedding uu is kept locally and is not uploaded to the server. Each selected client u then performs local training using its private data Du. Given a user embedding uu and an item embedding vi, the predicted preference score between user u and item i is computed as ˆyu,i = g(uu, vi), where JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+g(·, ·) denotes a similarity or scoring function. Let lu(Θ u; Du)
+
+denote the local loss on client u. Client u can update its local parameters as follows: 
+
+Θ(t) 
+
+> u
+
+← Θ(t) 
+
+> u
+
+− η∇Θu lu
+
+
+
+Θ(t) 
+
+> u
+
+; Du
+
+
+
+, (3) where η is the learning rate. After local training, each client sends only the updated item embedding table V(t) 
+
+> u
+
+and model parameters θ(t) 
+
+> u
+
+to the server, without sharing the raw interac-tion data. The server aggregates the received updates to obtain the new global parameters using an aggregation function Agg( ·):
+
+Θ(t) 
+
+> s
+
+= Agg 
+
+
+
+{Θ(t) 
+
+> u
+
+| u ∈ U (t)}
+
+
+
+. (4) Overall, the goal of federated recommender systems is to minimize the sum of local objectives: 
+
+min 
+
+> {Θu}
+
+X
+
+> u∈U
+
+lu(Θ u; Du) . (5) 
+
+B. Federated recommender systems with personalized user data sharing 
+
+The above traditional federated recommender systems as-sume that all user interaction data remain strictly local and are never shared with the server. However, users may have different privacy preferences in practice, and some users may be willing to share all or part of their interaction data in exchange for improved recommendation performance. This motivates the study of federated recommender systems with 
+
+personalized user data sharing , where users can flexibly control which data to keep local, which data to share with the server, and which shared data should later be removed, together with removing their influence on the trained model. Formally, for each user u ∈ U , to model personalized data-sharing preferences, the local interaction dataset is defined as 
+
+Du =  Ilocal  
+
+> u
+
+, Ishare  
+
+> u
+
+, Iunlearn 
+
+> u
+
+, (6) where Ilocal  
+
+> u
+
+denotes interactions that are kept strictly local and never shared with the server, Ishare  
+
+> u
+
+denotes interac-tions that users are willing to share with the server, and 
+
+Iunlearn  
+
+> u
+
+⊆ I share  
+
+> u
+
+denotes shared interactions whose influence the user later requests to be removed. Correspondingly, the server can constructs a server-side dataset based on all shared interactions, defined as 
+
+Ds = [
+
+> u∈U
+
+Ishare  
+
+> u
+
+(7) Under this setting, the system still aims to generate per-sonalized top-k recommendation lists for users based on the learned user and item embeddings, while learning from the available interaction data Ilocal  
+
+> u
+
+∪ I share  
+
+> u
+
+.When unlearning requests are issued, the server-side dataset becomes Ds \ S 
+
+> u∈U
+
+Iunlearn  
+
+> u
+
+. Accordingly, the trained model needs to be updated to remove the influence of Iunlearn  
+
+> u
+
+.Formally, we define an unlearning function Fun (·) that oper-ates on the current global model parameters. After unlearning, the updated global model is given by 
+
+˜Θs = Fun 
+
+ Θs, {I unlearn  
+
+> u
+
+}u∈U 
+
+ , (8) where ˜Θs denotes the global model parameters after unlearn-ing. The goal of unlearning is to ensure that the updated global model ˜Θs is consistent with an ideal retrained global model 
+
+Θ⋆s , which is obtained by retraining the federated recom-mender system from scratch using the remaining interaction data Ilocal  
+
+> u
+
+∪ (Ishare  
+
+> u
+
+\ I unlearn  
+
+> u
+
+) for all users u ∈ U . That is, 
+
+˜Θs ≈ Θ⋆s . (9) IV. F ED SHARE 
+
+In this section, we delve into the details of the proposed 
+
+FedShare framework. As illustrated in Fig. 2 and Fig. 3, the overall framework consists of two main phases: a learn-ing phase based on personalized user data sharing, and an 
+
+unlearning phase that removes the influence of data users request to forget. (1) Learning phase. The learning phase starts with personalized data sharing, where users can freely choose to share all, part, or none of their interaction data with the server. Based on the data shared by users, the server constructs a server-side high-order user-item bipartite graph. To better exploit the rich relational information contained in this graph, the server derives a global view of item embeddings from the high-order graph, while clients obtain a local view 
+
+of item embeddings through local training and federated aggregation. FedShare then employs contrastive learning to refine item embeddings by aligning the local and global views, thereby improving the quality of learned representations. (2) Unlearning phase. When users submit unlearning requests, the server first removes the corresponding interactions from the server-side high-order user–item graph. After graph update, we introduce a contrastive unlearning technique to efficiently remove the influence of the unlearned data. Specifically, new local views obtained from federated training on the remaining users are encouraged to align with new global views derived from the updated server-side graph, while being pushed away from forgotten views that are constructed based on the removed data. In this way, FedShare selectively removes the impact of unlearned data while preserving model performance on the remaining data. 
+
+A. Data Sharing 
+
+Traditional federated recommender systems adopt a one-size-fits-all privacy setting, where all users are required to keep their interaction data strictly local. While this design provides strong privacy protection, it overlooks users who are willing to share all or part of their interaction data with the server in exchange for improved recommendation performance, leading to unnecessary performance degradation. From a graph perspective, this limitation arises because each client is limited to a user-centric first-order user–item graph. Specifically, for each user u, the local interaction data can be represented as a first-order bipartite graph 
+
+Gu = ( {u} ∪ I u, Eu), (10) where Eu = {(u, i ) | i ∈ I u} denotes interactions between user u and the items they have interacted with. As illus-trated in Fig. 2, such strictly local graphs prevent the server JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6u1
+
+v1
+
+u2
+
+u3
+
+v2
+
+v3
+
+v2
+
+v3
+
+v4
+
+v3
+
+v4
+
+Fully shares 
+
+Partially shares 
+
+No sharing 
+
+v1 v2 v3u1
+
+v2 v3u2
+
+u1
+
+v1
+
+v2
+
+v3
+
+u2
+
+Server-side graph construction 
+
+Shared high-order user-item graph 
+
+> User embedding Item embedding table
+> Local training
+> User embedding Item embedding table
+> User embedding Item embedding table
+
+Parameter upload 
+
+FedAvg 
+
+> Local view Global view
+
+Positive pair 
+
+Data sharing phase 
+
+Learning phase 
+
+v1
+
+Negative pair 
+
+> Contrastive learning
+
+Local first-order user-item graph 
+
+> Fig. 2. The learning phase of FedShare, where users share interaction data according to personalized preferences to construct a server-side high-order user–item graph, and contrastive learning is applied to align local and global item representations.
+
+from directly exploiting high-order collaborative signals across users [35], which are commonly leveraged in centralized recommender systems [48]. To address this limitation, we introduce a personalized user data sharing mechanism for federated recommender systems, which allows each user to flexibly control how much interac-tion data is shared with the server. Under personalized data sharing, we define Ishare  
+
+> u
+
+⊆ I u as the subset of interactions that user u chooses to share with the server. This definition naturally covers different user preferences: when Ishare  
+
+> u
+
+= Iu,user u fully shares all interaction data; when Ishare  
+
+> u
+
+is a non-empty proper subset of Iu, user u partially shares interaction data; and when Ishare  
+
+> u
+
+= ∅, no data are shared with the server, which reduces to the conventional federated recommender setting. Based on the interactions shared by users, the server con-structs a server-side dataset Ds = S 
+
+> u∈U
+
+Ishare  
+
+> u
+
+, which can be viewed as a shared high-order user–item bipartite graph 
+
+Gs = ( Ushare ∪ D s, Es), (11) where Ushare = {u | I share 
+
+> u
+
+̸ = ∅} denotes the set of users who share data, and Es = {(u, i ) | i ∈ I share  
+
+> u
+
+}. This server-side graph allows the server to directly leverage collaborative information across users that is unavailable in traditional federated recommender systems. 
+
+B. Federated learning phase 
+
+After the server constructs the high-order user–item graph 
+
+Gs based on the shared interaction data, FedShare proceeds 
+
+Algorithm 1 Learning Phase of FedShare 
+
+Require: High-order server-side graph Gs; initial global pa-rameters Θ(0)  
+
+> s
+
+= {V(0)  
+
+> s
+
+, θ(0)  
+
+> s
+
+}; total rounds T 
+
+> 1:
+
+for t = 1 , 2, . . . , T do  
+
+> 2:
+
+Server samples a client subset U(t) ⊆ U  
+
+> 3:
+
+Server broadcasts {V(t−1)  
+
+> s
+
+, θ(t−1)  
+
+> s
+
+} to all u ∈ U (t) 
+
+> 4:
+
+for all u ∈ U (t) in parallel do  
+
+> 5:
+
+Initialize V(t) 
+
+> u
+
+← V(t−1)  
+
+> s
+
+, θ(t) 
+
+> u
+
+← θ(t−1)  
+
+> s
+> 6:
+
+Infer local embedding using Eq. (13) and Eq. (14)  
+
+> 7:
+
+Optimize local model with BPR in Eq. (15)  
+
+> 8:
+
+Upload V(t) 
+
+> u
+
+to the server  
+
+> 9:
+
+end for  
+
+> 10:
+
+Aggregate client updates via Eq. (16)  
+
+> 11:
+
+Infer item embeddings on Gs via Eq. (13) and Eq. (14)  
+
+> 12:
+
+Update V(t) 
+
+> s
+
+via Eq. (18)  
+
+> 13:
+
+end for 
+
+with federated training as follows. The overall training proce-dure is summarized in Algorithm 1. 
+
+1) Client Selection: At communication round t, the server randomly selects a subset of clients, denoted as U(t) ⊆ U ,to participate in the current round of federated training. The server then distributes the global model parameters obtained from the previous round to the selected clients as initialization for local training. Specifically, the global item embedding table and model parameters are assigned as 
+
+V(t) 
+
+> u
+
+← V(t−1)  
+
+> s
+
+, θ(t) 
+
+> u
+
+← θ(t−1)  
+
+> s
+
+, ∀u ∈ U (t). (12) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+These parameters serve as the initialization for subsequent local model training on each selected client. 
+
+2) Local Training: After receiving the global model pa-rameters, each selected client u ∈ U (t) performs local training based on its private interaction data Du. It is worth noting that local training is performed only on the remaining interactions after data sharing, which effectively reduces the training overhead for users who choose to share part of their data with the server. Inspired by the success of graph-based recommender sys-tems [49], we adopt LGC [48] as the backbone model for local training. LGC models the recommender system as a user–item bipartite graph, where users and items are treated as distinct nodes and embeddings are updated by propagating information from neighboring nodes. Formally, for client u,the local interaction data can be represented as a user-centric first-order user–item bipartite graph consisting of the user u
+
+and the items Iu they have interacted with. Following LGC, the embedding propagation at layer l + 1 is defined as 
+
+u(l+1)  
+
+> u
+
+= X 
+
+> i∈N (u)
+
+1
+
+p|N (u)|p|N (i)| v(l) 
+
+> i
+
+,
+
+v(l+1)  
+
+> i
+
+= X 
+
+> u′∈N (i)
+
+1
+
+p|N (i)|p|N (u′)| u(l) 
+
+> u′
+
+.
+
+(13) where N (u) and N (i) denote the sets of neighboring items and users, respectively, and u(l) 
+
+> u
+
+and v(l) 
+
+> i
+
+are the user and item embeddings at layer l.After L propagation layers, LGC adopts a layer combination strategy to obtain the final user and item representations. Specifically, the final embeddings are computed as 
+
+uu =
+
+> L
+
+X
+
+> l=0
+
+αlu(l) 
+
+> u
+
+, vi =
+
+> L
+
+X
+
+> l=0
+
+αlv(l) 
+
+> i
+
+, (14) where αl denotes the importance weight of the l-th propaga-tion layer. In the federated setting, each client only maintains a user-centric first-order ego graph. As a result, for client u, we have N (u) = Iu, and for each item i ∈ I u, its neighborhood contains only user u, i.e., N (i) = {u} and |N (i)| = 1 . Under this setting, higher-order message passing is not available on the client side. Therefore, we employ a single propagation layer ( L = 1 ) for local embedding inference. For local model optimization, we adopt the widely used Bayesian Personalized Ranking (BPR) loss [50]. For each user 
+
+u, the local training objective is defined as 
+
+L(u)BPR = − X
+
+> i∈I u
+
+X
+
+> j / ∈I u
+
+ln σ(cos( uu, vi) − cos( uu, vj ))+ λ∥Θu∥22,
+
+(15) where σ(·) denotes the sigmoid function and λ controls the strength of ℓ2 regularization. 
+
+3) Global Model Update: After local training, each par-ticipating client uploads its updated model parameters to the server. Specifically, clients only transmit the updated item embedding tables V(t) 
+
+> u
+
+, while user embeddings uu are kept locally due to privacy concerns. Based on the received updates from clients in round t, the server performs model aggregation to obtain a local-view item embedding table. In this work, we adopt the widely used FedAvg [11] as the aggregation function. Specifically, the server updates the global item em-bedding table as 
+
+V(t) 
+
+> s
+
+= X
+
+> u∈U (t)
+
+|D u|
+
+P 
+
+> v∈U (t)
+
+|D v | V(t) 
+
+> u
+
+, (16) where |D u| denotes the number of local interactions held by client u. This aggregation yields a local-view item embedding table that summarizes knowledge learned from local training. While the aggregated item embeddings capture user–item interactions from local views, they cannot fully exploit the high-order collaborative signals embedded in the server-side user–item graph Gs constructed from shared data. To better leverage such high-order structural information, we further refine the item embeddings using contrastive learning on Gs.Specifically, for each item i in the server-side graph Gs, we construct two complementary views. On the one hand, its 
+
+local view representation vlocal  
+
+> i
+
+is directly retrieved from the aggregated item embedding table V(t) 
+
+> s
+
+. On the other hand, its 
+
+global view representation vglobal  
+
+> i
+
+is obtained by performing LGC-based embedding propagation on Gs, following Eq. (13) and the layer combination in Eq. (14). Based on these two views, we treat (vlocal  
+
+> i
+
+, vglobal  
+
+> i
+
+) as a positive pair for item i, while embeddings of other items within the same batch are used as negative samples. Following SimCLR [51], we adopt the InfoNCE loss [52] for contrastive learning: 
+
+LCL = − X
+
+> i∈I s
+
+log exp 
+
+
+
+cos( vlocal  
+
+> i
+
+, vglobal  
+
+> i
+
+)/τ 
+
+P 
+
+> j∈I s
+
+exp 
+
+
+
+cos( vlocal  
+
+> i
+
+, vglobal  
+
+> j
+
+)/τ 
+
+ , (17) where Is denotes the set of items in Gs and τ is the temperature parameter. In addition to contrastive learning, we further optimize the server-side model using the BPR loss on Gs to directly capture high-order collaborative signals. Overall, the final server-side loss function is defined as 
+
+L = LBPR + λ1LCL + λ∥Vs∥22, (18) where λ1 and λ control the strengths of contrastive learning and regularization, respectively. 
+
+C. Data Unsharing 
+
+In practical systems, users’ privacy preferences may change over time. A user who previously shared interaction data with the server may later request that part or all of the shared data be removed, which we refer to as forgotten data . We term this operation data unsharing , which requires not only removing the corresponding data from the server, but also removing their influence on the trained model. Formally, for each user u, we define Iunlearn  
+
+> u
+
+⊆ I share  
+
+> u
+
+as the set of shared interactions that the user requests to unshare. Once unsharing requests are issued, the server removes these interactions from the server-side dataset. Accordingly, the server-side dataset and graph are updated as 
+
+Ds ← D s \ [
+
+> u∈U
+
+Iunlearn  
+
+> u
+
+, (19) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8u1   
+
+> v1
+> u2
+> u3
+> v2
+> v3
+> v2
+> v3
+> v4
+> v3
+> v4
+> Fully shares
+> Unlearning request
+> No sharing
+> v1v2v3u1
+> v2v3u2
+> User embedding Item embedding table
+> Local training
+> User embedding Item embedding table
+> Parameter upload
+
+Data unsharing phase 
+
+Unlearning phase     
+
+> u1
+> v1
+> v2
+> v3
+> u2
+> v2
+> v3
+> u2
+> u1
+> v1
+> v2
+> v3
+> Old shared graph Forgotten graph Updated shared user-item graph
+> Graph update
+> New global view New local view
+> FedAvg
+> Forgotten view
+> Negative pair Positive pair
+> Contrastive unlearning
+> Fig. 3. The unlearning phase of FedShare, where unlearning requests update the shared user–item graph and contrastive unlearning removes the influence of forgotten data.
+
+and 
+
+Gs ← G s \ (u, i ) | i ∈ I unlearn  
+
+> u
+
+, , u ∈ U , (20) respectively. It is important to note that data unsharing only affects interactions that were previously shared with the server. All interactions in Ilocal  
+
+> u
+
+remain strictly on the client side and are never exposed to the server throughout the training or unlearning process. 
+
+D. Federated Unlearning Phase 
+
+After data unsharing, the server updates the shared dataset and graph by removing the requested interactions, i.e., Ds ←Ds\S 
+
+> u∈U
+
+Iunlearn  
+
+> u
+
+and Gs ← G s\{ (u, i ) | i ∈ I unlearn  
+
+> u
+
+}. How-ever, simply removing edges from Gs does not remove their influence from the trained model, since the current parameters already encode historical updates. A straightforward solution is full retraining from scratch, but it is time-consuming and impractical. Therefore, the federated unlearning phase aims to efficient update the global model to remove the influence of 
+
+Iunlearn  
+
+> u
+
+while preserving performance on the remaining data. Formally, given the current global parameters Θs and unlearning requests {I unlearn  
+
+> u
+
+}u∈U , the unlearning procedure produces updated global parameters 
+
+˜Θs = Fun 
+
+ Θs, {I unlearn  
+
+> u
+
+}u∈U 
+
+ , (21) where the goal is to make ˜Θs consistent with an ideal retrained model Θ⋆s learned on the remaining data, i.e., 
+
+˜Θs ≈ Θ⋆s . (22) In the following, we describe how FedShare realizes Fun (·)
+
+via a contrastive unlearning strategy with three following steps. 
+
+1) New local View from Remaining-Data Federated Train-ing: A key requirement of unlearning is to avoid degrading recommendation performance on the remaining data. To this end, we first perform standard federated training using only the remaining client-side interactions. This step produces updated item embeddings that capture the data distribution after unsharing, serving as a new local view . Specifically, this step follows the same federated local training pipeline described in Section IV-B2. At each communication round, the server randomly selects a subset of clients to participate in local training. Each selected client performs local training on its remaining interactions and uploads the updated item embedding table to the server. The server then aggregates the received updates using FedAvg, as defined in Eq. (16), to obtain the new local-view item embedding table. 
+
+2) Forgotten Views from Historical Embeddings and Forgot-ten Graph: Directly pushing item embeddings away from all historical representations may severely damage the knowledge learned from remaining data. Therefore, effective unlearning should be selective , i.e., removing the influence of unshared interactions while preserving representations supported by the remaining data. To this end, we explicitly construct forgotten views that capture the embedding components induced by the unshared interactions Iunlearn  
+
+> u
+
+.A straightforward solution would be to store and manipulate historical gradients or optimization trajectories associated with the forgotten data. However, such designs typically incur substantial storage overhead, requiring either clients (e.g., FRU [15]) or the server (e.g., CUFRU [16]) to maintain a large amount of historical gradient information. In contrast, FedShare adopts a lightweight alternative that only stores a small number of historical global item embedding tables on JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9
+
+the server, which is sufficient to recover the representation space induced by the forgotten interactions. Formally, the server maintains a set of historical global item embedding tables from previous training rounds, denoted as 
+
+{V(t−m) 
+
+> s
+
+}Mm=1 , where M is a small constant. Based on the unshared interactions, we construct a forgotten graph 
+
+Gf = ( Uf ∪ I f , Ef ), Ef = {(u, i ) | i ∈ I unlearn  
+
+> u
+
+}, (23) where If = S 
+
+> u∈U
+
+Iunlearn  
+
+> u
+
+denotes the set of items involved in the unshared interactions. We then perform LGC-based embedding inference on Gf
+
+using each historical embedding table V(t−m) 
+
+> s
+
+as initialization. Specifically, by applying Eq. (13) and Eq. (14), we obtain a corresponding forgotten-view embedding table V(t−m)f for each historical snapshot. As a result, each item i ∈ I f is associated with a set of forgotten views 
+
+V(t) 
+
+> i, f
+
+=
+
+n
+
+v(t−m) 
+
+> i, f
+
+m = 1 , . . . , M 
+
+o
+
+, (24) which characterize how the forgotten interactions shape the item representations. These forgotten views are later used as negative samples in contrastive unlearning to remove the in-fluence of the unshared data, while preserving representations supported by the remaining data. 
+
+3) New Global Views from the Updated Shared Graph: 
+
+After removing unshared interactions, the updated shared graph Gs encodes high-order collaborative signals from the remaining shared data. To use these signals during unlearning, we infer new global views on the updated Gs.Specifically, we perform LGC propagation on the updated 
+
+Gs using Eq. (13) and Eq. (14), with the new local-view embedding table V(t) 
+
+> s, loc
+
+as initialization, yielding a new global-view item embedding table V(t)
+
+> s, glob
+
+. We denote the global-view embedding of item i as v(t)
+
+> i, glob
+
+.
+
+4) Contrastive Unlearning: After data unsharing, each item can be associated with up to three different representations that capture its semantics from complementary perspectives. Specifically, for item i, we consider: (i) a new local view v(t)
+
+> i, loc
+
+,obtained from federated training on the remaining client-side interactions; (ii) a new global view v(t)
+
+> i, glob
+
+, inferred on the updated server-side graph Gs; and (iii) a set of forgotten views V(t) 
+
+> i, f
+
+, inferred from historical embedding tables on the forgotten graph Gf .The goal of unlearning is twofold: on the one hand, item representations should remain consistent with the data retained after unsharing; on the other hand, representations induced by the unshared interactions should be effectively removed. To achieve this, we design a contrastive unlearning objective that simultaneously aligns the new local and new global views, while separating the new local view from the forgotten views. Formally, for each item i, we treat the pair (v(t)
+
+> i, loc
+
+, v(t)
+
+> i, glob
+
+)
+
+as a positive pair. For items involved in unsharing requests, i.e., i ∈ I f , the corresponding forgotten views V(t) 
+
+> i, f
+
+are used as negative samples. For items not appearing in forgotten interactions, no forgotten negatives are applied. 
+
+Algorithm 2 Federated Unlearning Phase of FedShare 
+
+Require: Updated shared graph Gs after unsharing; un-learning requests {I unlearn  
+
+> u
+
+}u∈U ; historical snapshots 
+
+{V(t−m) 
+
+> s
+
+}Mm=1 ; current global parameters Θs = {Vs, θs};unlearning rounds Tun 
+
+Ensure: Unlearned global parameters ˜Θs = { ˜Vs, θs} 
+
+> 1:
+
+Construct forgotten graph Gf using Eq. (23)  
+
+> 2:
+
+for r = 1 , 2, . . . , T un do  
+
+> 3:
+
+Server samples a client subset U(r) ⊆ U  
+
+> 4:
+
+Server broadcasts {Vs, θs} to all u ∈ U (r) 
+
+> 5:
+
+for all u ∈ U (r) in parallel do  
+
+> 6:
+
+Local training on remaining interactions (Sec. IV-B2)  
+
+> 7:
+
+Upload updated item embedding table Vu to server  
+
+> 8:
+
+end for  
+
+> 9:
+
+Obtain new local-view embedding table V(r) 
+
+> s, loc
+
+via FedAvg (Eq. (16))  
+
+> 10:
+
+Infer new global-view embeddings on updated Gs
+
+(Eq. (13), (14)) → V(r) 
+
+> s, glob
+> 11:
+
+for m = 1 , . . . , M do  
+
+> 12:
+
+Infer forgotten-view embeddings on Gf with 
+
+V(t−m) 
+
+> s
+
+(Eq. (13), (14)) → V(t−m)f 
+
+> 13:
+
+end for  
+
+> 14:
+
+Update item embeddings by minimizing contrastive unlearning loss (Eq. (25)) to obtain ˜Vs 
+
+> 15:
+
+Set Vs ← ˜Vs 
+
+> 16:
+
+end for 
+
+Following the InfoNCE formulation, the contrastive un-learning loss is defined as 
+
+LCU = − X
+
+> i∈I s
+
+log exp 
+
+
+
+cos( v(t)
+
+> i, loc
+
+, v(t)
+
+> i, glob
+
+)/τ 
+
+P
+
+> v∈V (t)
+> i, f
+
+exp 
+
+
+
+cos( v(t)
+
+> i, loc
+
+, v)/τ 
+
+ , (25) where τ is the temperature parameter. By minimizing LCU , the model preserves item representa-tions that are supported by the remaining data through positive alignment, while reducing the influence of representations associated with the unshared interactions via item-specific for-gotten negatives. The overall federated unlearning procedure is summarized in Algorithm 2. V. E XPERIMENT 
+
+To comprehensively evaluate the effectiveness of the pro-posed FedShare framework, we design experiments to answer the following research questions:  
+
+> •
+
+RQ1: How does FedShare perform under personalized user data sharing compared with state-of-the-art federated recommender systems?  
+
+> •
+
+RQ2: In the unlearning setting, how does FedShare compare with state-of-the-art federated recommendation unlearning methods?  
+
+> •
+
+RQ3: How do the major components of FedShare affect its performance?  
+
+> •
+
+RQ4: How do different hyperparameter settings affect the performance of FedShare? JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 
+
+A. Dataset 
+
+We compare the proposed FedShare method with baseline methods on three widely used public datasets. (1) MovieLens-1M 4. MovieLens-1M is a movie rating dataset containing about one million user–movie ratings. Following common practice, we convert explicit ratings into implicit feedback, where a user is considered to have interacted with a movie if a rating exists. Users with fewer than 20 interactions are filtered out. (2) Fashion [53]. This dataset consists of user reviews on fashion products from Amazon. All reviews are treated as implicit user–item interactions. Similarly, users with fewer than 20 interactions are removed. (3) Video Game [53]. This dataset contains user reviews on video game products from Amazon. We also convert all reviews into implicit feedback and filter out users with fewer than 10 interactions. For each dataset, we randomly split the interactions into training, validation, and test sets with a ratio of 8:1:1 . During the data sharing phase, users are divided into three groups with a ratio of 1:2:7 , corresponding to fully sharing users, partially sharing users (with a sharing ratio of 0.3), and non-sharing users, respectively. The impact of different user sharing ratios is further analyzed in Section V-E4. In the unlearning phase, we set the unsharing ratio to 0.3, meaning that 30% of the users who previously shared data request to remove their shared interactions and the corresponding influence on the trained model. We also study the effect of different unsharing ratios in Section V-E4. Overall statistics of the three datasets are summarized in Table II.             
+
+> TABLE II STATISTICS OF DATASETS
+> Dataset # Users # Items # Interactions MovieLens-1M 6,040 3,900 1,000,209 Fashion 29,858 40,981 1,027,370 Video Games 15,517 37,077 284,867
+
+B. Baseline 
+
+We compare the proposed FedShare with two categories of state-of-the-art methods: (i) federated recommender systems with personalized user data sharing ( Learning methods ), and (ii) federated recommendation unlearning methods ( Unlearn-ing methods ). 
+
+Learning Methods:  
+
+> •
+
+FedShare-FedAvg. A straightforward baseline under the personalized user data sharing setting. The server is treated as a special client that holds all user-shared interactions, and standard FedAvg is applied to perform federated training.  
+
+> •
+
+CDCGNNFed [12]. Our previous work that addresses incomplete shared data by introducing a graph mending strategy on the server side to predict potentially missing user–item interactions. It further employs client–server collaborative contrastive learning to refine user and item embeddings.  
+
+> 4https://grouplens.org/datasets/movielens/
+> •
+
+PDC-FRS [14]. A federated recommendation framework with a privacy-preserving data contribution mechanism, where differential privacy techniques are used to protect user-shared data while enabling collaborative model train-ing. 
+
+Unlearning Methods:  
+
+> •
+
+Retrain. A full retraining strategy that retrains the model from scratch using only the remaining data after un-learning requests. Although computationally expensive, it serves as the ground-truth reference for evaluating unlearning effectiveness.  
+
+> •
+
+FRU [15]. A federated recommendation unlearning method that maintains important historical gradients on the client side. After unlearning requests are issued, gradient correction is applied to remove the influence of the forgotten data.  
+
+> •
+
+CUFRU [16]. A server-side federated recommendation unlearning method that introduces a gradient transfer station. CUFRU leverages both historical gradients and newly updated gradients from remaining clients to per-form gradient calibration. 
+
+C. Evaluation metrics 
+
+We adopt two commonly used metrics in recommender systems to evaluate recommendation performance, including Hit Ratio (HR@K) and Normalized Discounted Cumulative Gain (NDCG@K). HR@K reflects whether the ground-truth item is successfully recommended within the top-K list, while NDCG@K evaluates the ranking quality by assigning higher importance to relevant items that appear earlier in the recommendation list. 
+
+D. Experimental Setup 
+
+For all methods, we set the embedding dimension to d = 32 
+
+and initialize all embedding tables using the Xavier initializa-tion [54]. For the LGC-based recommender, we use L = 3 
+
+propagation layers on the server-side shared high-order user– item graph. For both the learning and unlearning phases, the temperature parameter τ in contrastive learning and contrastive unlearning is selected from τ ∈ {0.05 , 0.1, 0.2, 0.5, 1.0}
+
+based on validation performance. For the learning phase, the weight of the contrastive learning loss λ1 is tuned from 
+
+{0.1, 0.3, 0.5, 0.7}. For the unlearning phase, the number of historical global embedding tables M is chosen from 
+
+{1, 2, 3, 5, 10 }.
+
+E. Experimental results 1) Recommendation Performance in Learning and Unlearn-ing Phases (RQ1, RQ2): We first evaluate the recommen-dation performance of different methods on the Top-K rec-ommendation task under both the learning phase and the unlearning phase. The results are reported in Table III. From the results, we obtain the following observations. (1)Under the personalized user data sharing setting, methods that ex-plicitly exploit shared interaction data, including PDC-FRS, CDCGNNFed, and FedShare, consistently outperform the JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11 
+
+TABLE III RECOMMENDATION PERFORMANCE COMPARISON UNDER PERSONALIZED DATA SHARING (L EARNING PHASE ) AND FEDERATED UNLEARNING 
+
+(U NLEARNING PHASE ). Phase Method MovieLens-1M Fashion Video Game HR@20 NDCG@20 HR@20 NDCG@20 HR@20 NDCG@20 Learning FedShare-FedAvg 0.4656 0.0642 0.0564 0.0053 0.2533 0.0174 PDC-FRS 0.4662 0.0647 0.0569 0.0057 0.2576 0.0176 CDCGNNFed 0.4685 0.0651 0.0588 0.0069 0.2532 0.0185 FedShare 0.4773 0.0659 0.0607 0.0074 0.2614 0.0198 
+
+Unlearning Retrain 0.4682 0.0651 0.0552 0.0063 0.2534 0.0191 FRU 0.4632 0.0634 0.0531 0.0046 0.2522 0.0163 CUFRU 0.4634 0.0633 0.0526 0.0048 0.2515 0.0159 FedShare 0.4665 0.0647 0.0549 0.0056 0.2526 0.0172 Retrain    
+
+> FRU
+> CUFRU
+> FedShare
+> 0
+> 200
+> 400
+> 600
+> 800
+> 1000
+> 1200
+> Unlearning Time (s)
+> MovieLens-1M
+> Retrain
+> FRU
+> CUFRU
+> FedShare
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> Fashion 2
+> Retrain
+> FRU
+> CUFRU
+> FedShare
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> Video Game
+> Retrain
+> FRU
+> CUFRU
+> FedShare
+> 0
+> 50
+> 100
+> 150
+> 200
+> Storage Overhead (MB)  MovieLens-1M
+> Retrain
+> FRU
+> CUFRU
+> FedShare
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> Fashion 2
+> Retrain
+> FRU
+> CUFRU
+> FedShare
+> 0
+> 50
+> 100
+> 150
+> 200
+> Video Game
+> Retrain FRU CUFRU FedShare
+
+Fig. 4. Comparison of unlearning efficiency and storage overhead of different federated recommendation unlearning methods on three datasets. 
+
+naive baseline that simply treats the server as a special client (i.e., FedShare-FedAvg) in most cases. This demonstrates the necessity of our research motivation: allowing users to share data in a personalized manner enables the server to leverage additional collaborative signals, leading to improved recommendation performance. (2) FedShare achieves the best overall performance in the learning phase across all three datasets. We attribute this improvement to the introduction of contrastive learning, which effectively strengthens item representations by aligning local and global views. This design allows the model to jointly capture low-order collaborative signals from client-side interactions and high-order structural information from the server-side shared graph. (3) In the unlearning phase, FedShare consistently outperforms existing federated recommendation unlearning methods, including FRU and CUFRU, in terms of recommendation accuracy. A possible explanation is that the proposed contrastive unlearning strategy selectively removes representation components induced by the unshared data, while preserving representations supported by the remaining data. As a result, FedShare avoids the performance degradation commonly observed in gradient-calibration-based unlearning methods. (4) Although FedShare does not outperform the retrain-from-scratch oracle in terms of recommendation accuracy, this result is expected. The retrain method completely remove the influence of forgotten data by fully retraining the model on the remaining data. In contrast, FedShare is designed as an efficient unlearning solution that avoids costly full retraining. 
+
+2) Unlearning Efficiency and Storage Overhead (RQ2): 
+
+We further compare different federated recommendation un-learning methods in terms of unlearning efficiency and storage overhead. The experimental results are reported in Fig. 4. From the results, we make the following observations. (1) FedShare achieves competitive unlearning efficiency compared with FRU and CUFRU, and is significantly more efficient than the retrain-from-scratch baseline. This behavior is expected, as retraining requires repeating the entire federated learning process on the remaining data. In contrast, FedShare updates the model through targeted contrastive unlearning, which efficiently removes the influence of unshared data without JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12 
+
+TABLE IV ABLATION STUDY RESULTS OF FED SHARE ON THREE DATASETS .Variant MovieLens-1M Fashion Video Game HR@20 NDCG@20 HR@20 NDCG@20 HR@20 NDCG@20 FedShare (Learing) 0.4773 0.0659 0.0607 0.0074 0.2614 0.0198 w/o CL 0.4702 0.0634 0.0597 0.0072 0.2584 0.0183 w/o BPR 0.4725 0.0638 0.0593 0.0066 0.2576 0.018 FedShare (UnLearing) 0.4665 0.0647 0.0549 0.0056 0.2526 0.0172 w/o forgotten graph 0.4624 0.0613 0.0524 0.0049 0.2513 0.0164 w/o remaining FL 0.4642 0.0635 0.0533 0.0051 0.2519 0.0166 (0.0,0.0,1.0)           
+
+> (0.1,0.2,0.7)
+> (0.3,0.3,0.4)
+> (0.6,0.2,0.2)
+> (0.8,0.1,0.1)
+> User mix (full, partial, none)
+> 0.45
+> 0.46
+> 0.47
+> 0.48
+> HR@20
+> (a) User-type ratio
+> FedShare-FedAvg
+> PDC-FRS
+> CDCGNNFed
+> FedShare
+> 0.1 0.3 0.5 0.7
+> 1
+> 0.470
+> 0.472
+> 0.474
+> 0.476
+> HR@20
+> (b) Contrastive weight
+> FedShare
+> 123510
+> M
+> 0.472
+> 0.473
+> 0.474
+> 0.475
+> 0.476
+> 0.477
+> HR@20
+> (c) Historical snapshots
+> FedShare
+> 0.1 0.3 0.5 0.7
+> 0.463
+> 0.464
+> 0.465
+> 0.466
+> 0.467
+> 0.468
+> HR@20
+> (d) Unsharing ratio
+> Retrain
+> FRU
+> CUFRU
+> FedShare
+
+Fig. 5. Results of hyperparameter analysis on (a) user-type ratio, (b) contrastive weight, (c) number of historical snapshots, and (d) unlearning ratio. 
+
+full retraining. (2) FedShare shows lower storage overhead than FRU and CUFRU across all datasets. This advantage stems from the fact that FedShare does not rely on storing large amounts of historical gradient information for gradient calibration. Instead, it only maintains a small number of historical item embedding tables to construct forgotten views for contrastive unlearning, resulting in significantly reduced storage requirements. 
+
+3) Ablation study (RQ3): To examine the contribution of each component in FedShare, we conduct ablation studies by selectively removing key modules in the learning and unlearning phases. In the learning phase, we consider w/o CL , which removes the contrastive learning module and relies only on FedAvg aggregation, and w/o BPR , which excludes the BPR loss during server-side refinement and optimizes the model using contrastive learning alone. In the unlearning phase, we evaluate w/o forgotten graph , where forgotten views are constructed solely from historical embedding snapshots without using the forgotten graph, and w/o remaining FL ,which skips federated training on the remaining data and directly reuses the previous local views. We report the ablation study results in Table IV. We can observe that: (1) Removing the contrastive learning module in the learning phase leads to a significant performance drop, which confirms the necessity of aligning local and global views via contrastive learning to enhance representation quality. (2) Excluding the BPR loss during global refinement also degrades performance. This is expected, since the shared interactions are not involved in local training; without the BPR objective, the model lacks direct supervision to capture high-order collaborative signals from the shared graph. (3) In the unlearning phase, removing the forgotten graph leads to a performance drop. This shows that explicitly modeling the forgotten interactions is important; without this information, the model may remove too much information and negatively affect representations learned from the remaining data. (4) Using only historical local views without re-running federated training on the remaining clients further reduces performance, as the resulting representations fail to accurately reflect the updated data distribution after data unsharing. 
+
+4) Hyper-parameter Analysis (RQ4): We further analyze the sensitivity of FedShare to several key hyper-parameters. All hyper-parameter studies are conducted on MovieLens-1M dataset, while keeping all other settings fixed. We evaluate the performance using HR@20. Specifically, we investigate: (i) the ratio of different user types (fully-sharing, partially-sharing, and non-sharing users), (ii) the contrastive learning weight λ1 in the learning phase, (iii) the number of historical embedding snapshots M used to construct forgotten views, and (iv) the unsharing ratio γ, which controls the scale of unlearning requests. The results are summarized in Fig. 5. We can observe that: (1) As the proportion of users who share data increases, the recommendation performance of all methods consistently improves. This is expected, since more shared interactions enable the server to construct a richer high-order user–item graph, allowing the model to better leverage collaborative signals across users. (2) When the contrastive learning weight is either too small or too large, the model performance drops noticeably. This indicates that an appropriate balance between the BPR supervision and the contrastive objective is necessary; otherwise, the model fails to effectively capture collaborative information. (3) As the number of historical snapshots M increases, the performance improves and gradually stabilizes. This is reasonable because JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 13 
+
+more historical embeddings provide a more complete repre-sentation of the influence induced by forgotten interactions, while excessive snapshots bring diminishing returns. (4) With a larger unlearning ratio, the performance of all methods decreases, as more information is removed from the model. Nevertheless, FedShare consistently outperforms the baseline methods under different unlearning ratios, demonstrating its robustness in handling varying unlearning demands VI. C ONCLUSION 
+
+In this work, we introduce a fully personalized user data sharing framework for federated recommender systems. Dif-ferent from traditional federated recommender systems that adopt a one-size-fits-all data management strategy, our frame-work allows users to flexibly control how much interaction data is shared with the server to improve recommendation performance. More importantly, it also allows users to later request the removal of previously shared data together with its influence on the trained model. This setting fills an important gap in existing federated recommender systems, where person-alized data sharing and data unlearning are rarely considered in a unified manner. To support this framework, we propose a contrastive learning module to better utilize the shared user–item graph during the learning phase, enabling the model to effectively capture both low-order and high-order collabo-rative signals. In addition, we design a contrastive unlearning mechanism that selectively removes the influence of unshared data by leveraging a small number of historical embedding tables, rather than storing large amounts of historical gradient information as required by existing federated recommendation unlearning methods. Extensive experiments on three public datasets demonstrate that FedShare can effectively leverage shared data and achieve better recommendation performance in the learning phase compared with state-of-the-art baselines. In the unlearning phase, our method significantly reduces storage requirements while maintaining competitive recommendation accuracy. Despite its effectiveness, this work has two main limitations. First, when handling data unlearning requests, the proposed framework still requires the participation of remaining users to assist the unlearning process, which may increase client-side communication and computation overhead. In future work, we plan to explore fully server-side unlearning mechanisms to reduce the need for additional client participation. Second, the current framework focuses on users who have previously shared data with the server and later request the removal of their data and its corresponding influence. It does not yet support unlearning requests from users who never shared data but only participated in federated training. Extending the framework to support such users is an important direction for future research. REFERENCES [1] Y. Qu, L. Qu, T. Chen, X. Zhao, J. Li, and H. Yin, “Sparse gradient training for recommender systems,” Data Science and Engineering , pp. 1–18, 2026. [2] J. Long, L. Qu, J. Yu, T. Chen, Q. V. H. Nguyen, and H. Yin, “Harnessing large language models for group poi recommendations,” in 
+
+Proceedings of the 34th ACM International Conference on Information and Knowledge Management , 2025, pp. 1968–1978. [3] Y. Qu, L. Qu, T. Chen, Q. V. H. Nguyen, and H. Yin, “Efficient multimodal streaming recommendation via expandable side mixture-of-experts,” in Proceedings of the 34th ACM International Conference on Information and Knowledge Management , 2025, pp. 2460–2470. [4] Q. Zhang, L. Qu, H. Wen, D. Huang, S.-M. Yiu, N. Q. V. Hung, and H. Yin, “M2rec: Multi-scale mamba for efficient sequential recommen-dation,” arXiv preprint arXiv:2505.04445 , 2025. [5] P. Covington, J. Adams, and E. Sargin, “Deep neural networks for youtube recommendations,” in RecSys , 2016, pp. 191–198. [6] B. Smith and G. Linden, “Two decades of recommender systems at amazon. com,” Ieee internet computing , vol. 21, no. 3, pp. 12–18, 2017. [7] Q. Yang, Y. Liu, Y. Cheng, Y. Kang, T. Chen, and H. Yu, “Federated learning,” Synthesis Lectures on Artificial Intelligence and Machine Learning , vol. 13, no. 3, pp. 1–207, 2019. [8] L. Yang, B. Tan, V. W. Zheng, K. Chen, and Q. Yang, “Federated recommendation systems,” in Federated Learning . Springer, 2020, pp. 225–239. [9] Z. Sun, Y. Xu, Y. Liu, W. He, Y. Jiang, F. Wu, and L. Cui, “A survey on federated recommendation systems,” arXiv preprint arXiv:2301.00767 ,2022. [10] C. Zhang, G. Long, Z. Zhang, Z. Li, H. Zhang, Q. Yang, and B. Yang, “Personalized recommendation models in federated settings: A survey,” 
+
+IEEE Transactions on Knowledge and Data Engineering , 2025. [11] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y Arcas, “Communication-efficient learning of deep networks from decentralized data,” in Artificial intelligence and statistics . PMLR, 2017, pp. 1273– 1282. [12] L. Qu, W. Yuan, R. Zheng, L. Cui, Y. Shi, and H. Yin, “Towards personalized privacy: User-governed data contribution for federated recommendation,” in Proceedings of the ACM Web Conference 2024 ,2024, pp. 3910–3918. [13] Q. Hu and Y. Song, “User consented federated recommender system against personalized attribute inference attack,” in Proceedings of the 17th ACM International Conference on Web Search and Data Mining ,2024, pp. 276–285. [14] C. Yang, W. Yuan, L. Qu, and T. T. Nguyen, “Pdc-frs: Privacy-preserving data contribution for federated recommender system,” in International Conference on Advanced Data Mining and Applications . Springer, 2024, pp. 65–79. [15] W. Yuan, H. Yin, F. Wu, S. Zhang, T. He, and H. Wang, “Federated unlearning for on-device recommendation,” in WWW , 2023, pp. 393– 401. [16] Y. Li, E. Yang, W. Pan, Q. Yang, and Z. Ming, “Cross-user federated recommendation unlearning,” ACM Transactions on Intelligent Systems and Technology , vol. 16, no. 5, pp. 1–24, 2025. [17] W. Ali, K. Umer, X. Zhou, and J. Shao, “Hidattack: An effective and undetectable model poisoning attack to federated recommenders,” IEEE Transactions on Knowledge and Data Engineering , 2024. [18] S. Zhang, W. Yuan, and H. Yin, “Comprehensive privacy analysis on federated recommender system against attribute inference attacks,” IEEE Transactions on Knowledge and Data Engineering , 2023. [19] T. Gu, S. Tan, F. Hao, X. Liu, L. Chang, and Y. Liu, “Gcpa: Gan-based collusive poisoning attack in federated recommender systems,” IEEE Transactions on Knowledge and Data Engineering , 2025. [20] Z. Li, X. Wu, W. Pan, Y. Ding, Z. Wu, S. Tan, Q. Xu, Q. Yang, and Z. Ming, “Fedcore: federated learning for cross-organization rec-ommendation ecosystem,” IEEE Transactions on Knowledge and Data Engineering , vol. 36, no. 8, pp. 3817–3831, 2024. [21] H. Yin, L. Qu, T. Chen, W. Yuan, R. Zheng, J. Long, X. Xia, Y. Shi, and C. Zhang, “On-device recommender systems: A comprehensive survey,” 
+
+Data Science and Engineering , pp. 1–30, 2025. [22] L. Qu, J. Li, W. Yuan, P. Ruan, Y. Shi, and H. Yin, “Proxy model-guided reinforcement learning for client selection in federated recom-mendation,” arXiv preprint arXiv:2508.10401 , 2025. [23] W. Yuan, C. Yang, L. Qu, G. Ye, Q. V. H. Nguyen, and H. Yin, “Robust federated contrastive recommender system against targeted model poisoning attack,” Science China Information Sciences , vol. 68, no. 4, p. 140103, 2025. [24] M. Ammad-Ud-Din, E. Ivannikova, S. A. Khan, W. Oyomno, Q. Fu, K. E. Tan, and A. Flanagan, “Federated collaborative filtering for privacy-preserving personalized recommendation system,” arXiv preprint arXiv:1901.09888 , 2019. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 14 
+
+[25] S. Liu, Y. Ge, S. Xu, Y. Zhang, and A. Marian, “Fairness-aware federated matrix factorization,” in RecSys , 2022, pp. 168–178. [26] V. W. Anelli, Y. Deldjoo, T. Di Noia, A. Ferrara, and F. Narducci, “Fed-erank: User controlled feedback with federated recommender systems,” in ECIR , 2021, pp. 32–47. [27] D. Chai, L. Wang, K. Chen, and Q. Yang, “Secure federated matrix factorization,” IEEE Intelligent Systems , vol. 36, no. 5, pp. 11–20, 2020. [28] G. Lin, F. Liang, W. Pan, and Z. Ming, “Fedrec: Federated recommen-dation with explicit feedback,” IEEE Intelligent Systems , vol. 36, no. 5, pp. 21–30, 2020. [29] K. Muhammad, Q. Wang, D. O’Reilly-Morgan, E. Tragos, B. Smyth, N. Hurley, and et al., “Fedfast: Going beyond average for faster training of federated recommender systems,” in SIGKDD , 2020, p. 1234–1242. [30] C. Zhang, G. Long, T. Zhou, P. Yan, Z. Zhang, C. Zhang, and B. Yang, “Dual personalization on federated recommendation,” arXiv preprint arXiv:2301.08143 , 2023. [31] Y. Lin, P. Ren, Z. Chen, Z. Ren, D. Yu, J. Ma, M. d. Rijke, and X. Cheng, “Meta matrix factorization for federated rating predictions,” in SIGIR ,2020, p. 981–990. [32] V. Perifanis and P. S. Efraimidis, “Federated neural collaborative filter-ing,” Know.-Based Syst. , vol. 242, no. C, 2022. [33] X. He, L. Liao, H. Zhang, L. Nie, X. Hu, and T.-S. Chua, “Neural collaborative filtering,” in WWW , 2017, pp. 173–182. [34] C. Wu, F. Wu, L. Lyu, T. Qi, Y. Huang, and X. Xie, “A federated graph neural network framework for privacy-preserving personalization,” 
+
+Nature Communications , vol. 13, no. 1, p. 3091, 2022. [35] L. Qu, N. Tang, R. Zheng, Q. V. H. Nguyen, Z. Huang, Y. Shi, and H. Yin, “Semi-decentralized federated ego graph learning for recom-mendation,” in WWW , 2023. [36] A. K. Tarun, V. S. Chundawat, M. Mandal, and M. Kankanhalli, “Fast yet effective machine unlearning,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 9, pp. 13 046–13 055, 2023. [37] W. Wang, Z. Tian, C. Zhang, and S. Yu, “Machine unlearning: A comprehensive survey,” arXiv preprint arXiv:2405.07406 , 2024. [38] L. Bourtoule, V. Chandrasekaran, C. A. Choquette-Choo, H. Jia, A. Travers, B. Zhang, D. Lie, and N. Papernot, “Machine unlearning,” in 2021 IEEE symposium on security and privacy (SP) . IEEE, 2021, pp. 141–159. [39] T. T. Nguyen, T. T. Huynh, Z. Ren, P. L. Nguyen, A. W.-C. Liew, H. Yin, and Q. V. H. Nguyen, “A survey of machine unlearning,” ACM Transactions on Intelligent Systems and Technology , vol. 16, no. 5, pp. 1–46, 2025. [40] C. Chen, F. Sun, M. Zhang, and B. Ding, “Recommendation unlearning,” in Proceedings of the ACM web conference 2022 , 2022, pp. 2768–2777. [41] Y. Li, X. Feng, C. Chen, and Q. Yang, “A survey on recommendation unlearning: Fundamentals, taxonomy, evaluation, and open questions,” 
+
+arXiv preprint arXiv:2412.12836 , 2024. [42] S. B. R. Chowdhury, K. Choromanski, A. Sehanobish, A. Dubey, and S. Chaturvedi, “Towards scalable exact machine unlearning using parameter-efficient fine-tuning,” arXiv preprint arXiv:2406.16257 , 2024. [43] Y. Hua, H. Xia, and S. Xu, “Federated unlearning for samples based on adaptive gradient ascent of angles,” in 2024 IEEE 23rd International Conference on Trust, Security and Privacy in Computing and Commu-nications (TrustCom) . IEEE, 2024, pp. 834–841. [44] B. Wang, Y. Qu, L. Gao, C. Li, L. Li, and D. Smith, “Mitigating over-unlearning in machine unlearning with synthetic data augmentation,” in 
+
+International Conference on Algorithms and Architectures for Parallel Processing . Springer, 2024, pp. 300–314. [45] Z. Liu, Y. Jiang, J. Shen, M. Peng, K.-Y. Lam, X. Yuan, and X. Liu, “A survey on federated unlearning: Challenges, methods, and future directions,” ACM Computing Surveys , vol. 57, no. 1, pp. 1–38, 2024. [46] T. T. Huynh, T. B. Nguyen, T. T. Nguyen, P. L. Nguyen, H. Yin, Q. V. H. Nguyen, and T. T. Nguyen, “Certified unlearning for federated recommendation,” ACM Transactions on Information Systems , vol. 43, no. 2, pp. 1–29, 2025. [47] W. Wu, J. Jiang, and C. Hu, “Aegis: Post-training attribute unlearning in federated recommender systems against attribute inference attacks,” in 
+
+Proceedings of the ACM on Web Conference 2025 , 2025, pp. 3783–3793. [48] X. He, K. Deng, X. Wang, Y. Li, Y. Zhang, and M. Wang, “Lightgcn: Simplifying and powering graph convolution network for recommenda-tion,” in SIGIR , 2020, pp. 639–648. [49] S. Wu, F. Sun, W. Zhang, X. Xie, and B. Cui, “Graph neural networks in recommender systems: a survey,” ACM Computing Surveys , vol. 55, no. 5, pp. 1–37, 2022. [50] S. Rendle, C. Freudenthaler, Z. Gantner, and L. Schmidt-Thieme, “Bpr: Bayesian personalized ranking from implicit feedback,” arXiv preprint arXiv:1205.2618 , 2012. [51] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A simple framework for contrastive learning of visual representations,” in International conference on machine learning . PMLR, 2020, pp. 1597–1607. [52] M. Gutmann and A. Hyv¨ arinen, “Noise-contrastive estimation: A new estimation principle for unnormalized statistical models,” in AISTATS ,2010, pp. 297–304. [53] J. Ni, J. Li, and J. McAuley, “Justifying recommendations using distantly-labeled reviews and fine-grained aspects,” in Proceedings of the 2019 conference on empirical methods in natural language pro-cessing and the 9th international joint conference on natural language processing (EMNLP-IJCNLP) , 2019, pp. 188–197. [54] X. Glorot and Y. Bengio, “Understanding the difficulty of training deep feedforward neural networks,” in JMLR , 2010, pp. 249–256.

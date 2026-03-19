@@ -1,0 +1,1166 @@
+Title: Federated Distributional Reinforcement Learning with Distributional Critic Regularization
+
+URL Source: https://arxiv.org/pdf/2603.17820v1
+
+Published Time: Thu, 19 Mar 2026 01:25:35 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Federated Distributional Reinforcement Learning with Distributional Critic Regularization 
+
+David Millard, Cecilia Alm, Rashid Ali, Pengcheng Shi and Ali Baheri 
+
+Abstract — Federated reinforcement learning typically ag-gregates value functions or policies by parameter averaging, which emphasizes expected return and can obscure statistical multimodality and tail behavior that matter in safety-critical settings. We formalize federated distributional reinforcement learning (FedDistRL), where clients parametrize quantile value function critics and federate these networks only. We also propose TR-FedDistRL, which builds a per client, risk-aware Wasserstein barycenter over a temporal buffer. This local barycenter provides a reference region to constrain the param-eter averaged critic, ensuring necessary distributional informa-tion is not averaged out during the federation process. The distributional trust region is implemented as a shrink–squash step around this reference. Under fixed-policy evaluation, the feasibility map is nonexpansive and the update is contractive in a probe-set Wasserstein metric under evaluation. Experiments on a bandit, multi-agent gridworld, and continuous highway environment show reduced mean-smearing, improved safety proxies (catastrophe/accident rate), and lower critic/policy drift versus mean-oriented and non-federated baselines. 
+
+I. INTRODUCTION As deep reinforcement learning (RL) controllers are de-ployed in an increasing range of systems, the need for sample-efficient learning from real-world interaction grows accordingly. In many such application domains (e.g., au-tonomous driving and personal robotics), data is privacy-sensitive and cannot leave the local device, motivating feder-ated reinforcement learning (FRL), where clients learn from local experience while sharing only value-network/policy parameters for federated aggregation. However, comparatively little work in FRL directly tar-gets tail-risk objectives, instead emphasizing expected-return optimization or constraint-based safety formulations [1], [2]. Moreover, under environmental heterogeneity, federated parameter averaging can induce output-space smoothing in learned value estimates, effectively collapsing distinct return distributions toward an “average” behavior that may be mismatched and potentially unsafe for individual clients [3]. Motivated by these issues, we study an actor-critic federated distributional RL (FedDistRL) setting in which the policy network (responsible for mapping states to actions) 
+
+> D. Millard and A. Baheri are with the Dept. of Mechanical Engi-neering, Rochester Institute of Technology, Rochester, NY 14623, USA
+
+djm3622@rit.edu,akbeme@rit.edu                    
+
+> C. Alm is with the Dept. of Psychology and School of Informa-tion, Rochester Institute of Technology, Rochester, NY 14623, USA
+
+coagla@rit.edu  
+
+> R. Ali is with the Department of Engineering Science, University West, Trollh¨ attan 461 30, Sweden,
+
+rashid.ali@hv.se 
+
+> P. Shi is with the Golisano College of Computing and Information Sciences, Rochester Institute of Technology, Rochester, NY 14623, USA
+
+spcast@rit.edu 
+
+is kept local, while the critic (a value function estimator used to evaluate the policy and perform policy improve-ment) uses a risk-augmented advantage surrogate. While this enables risk-aware value sharing (via critic parameter sharing), aggregation-induced smoothing can still attenuate the multimodality and tail structure that motivates distribu-tional value estimates. To mitigate this effect, we propose a distribution-space trust-region mechanism: each client con-structs a local, risk-aware reference via a CVaR-weighted Wasserstein barycenter over a buffer containing recent critic outputs and constrains the next-round critic update to remain close to this reference. This constraint prevents aggregation-induced parameter updates from collapsing locally observed multimodal or heavy-tailed return distributions. Our con-tributions are (i) we identify mean-smearing in parameter aggregation and demonstrate it empirically, (ii) we introduce FedDistRL, federating distributional critics while keeping policies local, (iii) we propose TR-FedDistRL, a barycentric regularization method that biases critic updates toward safety via a CVaR-weighted reference distribution, and (iv) we provide a theoretical stability result for the constrained critic update and demonstrate empirical improvements in safety-related metrics. II. RELATED WORKS 
+
+A. Federated Reinforcement Learning 
+
+Federated learning classically aggregates model updates via iterative averaging to learn from decentralized data under communication constraints [4]. Extending this paradigm to reinforcement learning, federated reinforcement learning is commonly categorized into horizontal and vertical settings depending on whether clients share state–action representa-tions [5]. A central technical obstacle is environment hetero-geneity (distinct transition kernels and reward processes), for which recent work analyzes aggregation-induced optimality gaps and proposes averaging variants such as QAvg/PAvg [6]. Related FRL directions include personalization via dis-tance constraints [7] and offline/ensemble-driven experience sharing [8]. However, the dominant practice in FRL remains mean-oriented: value/policy aggregation is typically designed around expected return, which can obscure multimodality and tail behavior that are critical in safety-sensitive deploy-ments. 
+
+B. Risk-Averse Reinforcement Learning 
+
+Distributional reinforcement learning models the full re-turn law rather than only its expectation [9], with prac-tical function-approximation methods such as quantile re-
+
+> arXiv:2603.17820v1 [cs.LG] 18 Mar 2026
+
+gression and implicit quantile networks [10], [11]. Risk-sensitive objectives based on lower-tail criteria (e.g., CVaR) have a foundational optimization characterization [12] and have been integrated into RL via CVaR-MDP formulations and policy-gradient style methods [13], [14]. Recent work connects CVaR optimization explicitly with distributional RL and highlights subtleties of risk-based action selection under distributional Bellman operators [15]. In safety-critical settings, distributional critics have also been used to enforce risk-aware constraints (e.g., distributional safety critics and trust-region style safe distributional actor-critic methods) [16], [17]. Separately, optimal transport provides geometry-aware aggregation via Wasserstein barycenters [18], [19], which have been used in RL for uncertainty propagation and exploration [20], [21] and have recently appeared in heterogeneous federated RL (as an alternative parameter averaging mechanism) [22]. Our work uses a risk-weighted Wasserstein barycenter to define a local trust region that regularizes the federated critic toward the previous round’s measure of risk. 
+
+C. Trust Regions & Reinforcement Learning 
+
+Trust-region methods stabilize policy-gradient learning by constraining each update to remain close to the current pol-icy, classically via a KL-divergence bound (TRPO) [23]. PPO approximates this principle with clipped (or penalized) surro-gates that provide much of TRPO’s empirical stability with simpler optimization [24]. For safety-constrained learning, CPO extends TRPO-style updates to enforce expected-cost constraints during training [25]. In multi-agent settings, trust-region guaranties are more delicate due to non-stationarity induced by other agents; recent works derive MARL trust-region variants with sequential updates and monotonic-improvement style results [26]. Furthermore, work has also explored replacing KL with Wasserstein-1 trust regions for multi-agent coordination, achieving success in escaping local optima [27]. 
+
+D. Optimal Transport & Reinforcement Learning 
+
+OT has been increasingly used in RL as a geometric tool for comparing and regularizing distributions beyond mean-based objectives [28]. In risk-sensitive RL, OT has been used to formulate risk-aware objectives through distances between visitation distributions and desired risk profiles [29]. OT has also been applied in inverse reinforcement learning to study reward ambiguity through Wasserstein geometry [30]. More recently, Wasserstein-based regularization has been incorpo-rated into actor-critic methods to stabilize value estimation [31], and barycenter-based coordination mechanisms have been proposed for cooperative multi-agent RL [32]. III. PRELIMINARIES & PROBLEM FORMULATION 
+
+A. Distributional Reinforcement Learning 
+
+Distributional reinforcement learning models the return as a random variable rather than its expectation. For a policy 
+
+π, the return distribution is defined as: 
+
+Zπ (s, a) ≜
+
+> ∞
+
+# ∑
+
+> t=0
+
+γt rt (st , at ), (1) where at ∼ π(· | st ) and st+1 ∼ P(· | st , at ). The correspond-ing state–action value function is recovered as Qπ (s, a) = 
+
+E[Zπ (s, a)] . Distributional methods retain the full law 
+
+Zπ (s, a) ∈ P(R). The distributional Bellman evaluation op-erator associated with a fixed policy π is 
+
+(T π Z)( s, a) d
+
+= R(s, a) + γZ(S′, A′), (2) where A′ ∼ π(· | S′), S′ ∼ P(· | s, a). For p ≥ 1, this operator is a γ-contraction in the p-Wasserstein metric and admits a unique fixed point corresponding to Zπ [9]. The distributional control operator is defined by 
+
+(T Z )( s, a) d
+
+= R(s, a) + γZ
+
+
+
+S′, arg max  
+
+> a′
+
+E[Z(S′, a′)] 
+
+
+
+. (3) Unlike its expectation-based counterpart, this operator is not a contraction in Wasserstein distance and may fail to admit a unique fixed point [9]. 
+
+Definition 1 (Empirical-measure lift and induced metric) .
+
+For any x ∈ RK , define the associated empirical measure on R by μx ≜ 1 
+
+> K
+
+∑Kk=1 δxk .For p ≥ 1, define the empirical Wasserstein metric on RK by dK (x, y) ≜ Wp(μx, μy). Given a quantile critic q : S × A → RK , define the induced metric on critics by d(q, q′) ≜ sup (s,a) dK
+
+ q(s, a), q′(s, a).
+
+B. Wasserstein Barycenter 
+
+Optimal Transport (OT) provides a geometric framework for comparing probability distributions based on mass dis-placement [18], [19]. A central object is the Wasserstein barycenter, defined for distributions {μi}Ni=1 and weights {βi}
+
+as 
+
+μ⋆ = arg min 
+
+> μ
+> N
+
+# ∑
+
+> i=1
+
+βi W pp (μ, μi). (4) Unlike Euclidean averaging, Wasserstein barycenters pre-serve geometric structure of distributions, including modes and tails. We consider a CVaR-weighted variant. Given a random variable X ∼ μ, the Conditional Value-at-Risk (CVaR) at level α ∈ (0, 1] is defined as CVaR α (X) = 1
+
+α 
+
+> Zα
+> 0
+
+VaR u(X) du , (5) where VaR u(X) = inf {x : P(X ≤ x) ≥ u}. Using CVaR-induced weights, we define a risk-weighted Wasserstein barycenter as μ⋆ 
+
+> risk
+
+= arg min μ∈P(R) ∑Ni=1 βi W pp (μ, μi), where the weights βi are computed from a lower-tail CVaR statistic of each distribution. Since CVaR α uses this lower tail, distributions with larger tail behavior ( Ri) are up-weighted, biasing the barycenter to preserve risk in the event parameter averaging washes it away. Fig. 1: Each panel shows how aggregation operators combine scalar, multimodal client reward distributions in the bandit setting (i.e., Zπ = rt , γ = 0). Each client is parameterized with QR-DQN models and averaging is computed via Equation 9. 
+
+Left: critic parameter averaging (F ED AVG ) induces an output-space arithmetic averaging effect that can smear modes and attenuate tail mass (mean-smearing). Middle: an unweighted Wasserstein-1 barycenter aggregates in distribution space and better preserves geometric structure (modes/tails) compared with arithmetic averaging. Right: a CVaR-risk-weighted Wasserstein-1 barycenter biases the barycenter toward lower-tail behavior by upweighting clients with larger lower-tail risk (CVaR at level α = 0.1), helping retain tail-relevant mass while still preserving multimodality. 
+
+C. Problem Formulation 
+
+We consider N clients {Fi}Ni=1, each interacting exclusively with a local environment Ei. HFRL assumes an aligned state– action structure with heterogeneous dynamics; for all i̸ = j,
+
+Si = S j = S, Ai = A j = A, Ei̸ = E j, Ei ∈ G , (6) where S and A are shared state and action spaces, and G
+
+is a family of environments. Each Ei is modeled as Mi =
+
+⟨S, A, Pi, Ri, γ⟩, with differing transition kernel Pi, reward distribution Ri, and discount γ ∈ [0, 1). Each client maintains a policy πi(·| s). The distributional return is Zπi 
+
+> i
+
+(s, a) = 
+
+∑∞ 
+
+> t=0
+
+γt Ri(st , at ), with at ∼ πi(·| st ) and st+1 ∼ Pi(·| st , at ). Its evolution satisfies 
+
+(T πi Z)( s, a) d
+
+= Ri(s, a) + γZ(S′, A′). (7) 
+
+Definition 2 (FedDistRL with risk-aware reference) . Now consider a critic-only federated distributional reinforcement learning setting with N heterogeneous clients. Each client Fi
+
+interacts with its local MDP Mi and maintains (i) a local policy πi ∈ Π and (ii) a parameterized distributional critic ˆZθi : S × A → P(R), with 
+
+ZΘ ≜ { ˆZθ : S × A → P(R) | θ ∈ Θ}. (8) At round t, client Fi collects private experience Dti and performs local actor-critic updates, optionally using a risk-augmented advantage surrogate. At the end of each round, only critic parameters are communicated. The server aggre-gates critic parameters via a parameter average (as imple-mented in standard FL) [4], 
+
+θ Z
+
+> srv
+
+(t) = M  θ Z 
+
+> 1
+
+(t), . . . , θ ZN (t); w1, . . . , wN
+
+, (9) 
+
+M : ΘN → Θ, inducing the broadcast critic ˆZθ Z
+
+> srv (t)
+
+. Each client initializes its next-round critic from the broadcast parameters and then optionally applies a client-local regu-larization step relative to a risk-aware reference. Formally, client Fi constructs a risk-aware reference return law ¯Zti ∈
+
+P(R)S ×A from a temporal buffer { ˆZθ Zi (m)}tm=t−B+1 of its recent critic outputs via a map ¯Zti = R  ˆZθ Zi (t−B+1), . . . , ˆZθ Zi (t)
+
+, (10) 
+
+R : Z B 
+
+> Θ
+
+→ P(R)S ×A ,where R emphasizes downside be-havior. The reference ¯ Zti is not communicated to the server; it is used only to define a client-local trust region that constrains the post-aggregation critic update. 
+
+Remark 1. In the formulation outlined in Defintion 2, risk only sensitivity enters through (i) the local policy-improvement surrogate and (ii) the construction of the client-local reference ¯Zti , while the server-side aggregation M
+
+remains mean-oriented. Furthermore, the actor πφ parameters remain untouched, leading to a smaller chance of federation to destabilize the decision making process. IV. METHODOLOGY 
+
+A. Local Updates 
+
+This framework works with policy-gradient methods such as PPO and MAPPO, where the critic influences the policy update exclusively through the advantage estimator. Federat-ing only the distributional critic enables the exchange of risk-sensitive value information across clients without directly influencing the policy representations. Each client optimizes a local clipped policy-gradient ob-jective. For PPO, the actor objective is 
+
+Lactor = Et
+
+h
+
+min 
+
+
+
+rt (θ ) ˆAcomb  
+
+> t
+
+, clip (rt (θ ), 1 − ε, 1 + ε) ˆAcomb 
+
+> t
+
+i 
+
+.
+
+(11) where rt (θ ) = πθ (at |st )/πθold (at |st ) is the importance ratio. We define a downside-risk-sensitive state–action value by applying lower-tail CVaR to the return law: 
+
+Qπ
+
+> mean
+
+(s, a) ≜ E[Zπ (s, a)] , (12) 
+
+Qπ
+
+> cvar
+
+(s, a) ≜ CVaR αcvar (Zπ (s, a)) . (13) where CVaR uses the lower tail (0, α] with small α. Next, we then optimize a surrogate risk-sensitive objective 
+
+Jλ (π) ≜ Es0∼ρ0
+
+
+
+V π
+
+> mean
+
+(s0) + λcvar 
+
+τcvar 
+
+V π
+
+> cvar
+
+(s0)
+
+
+
+, (14) Fig. 2: Case Study 2 client environments for Clients 1–3. Each panel shows one client’s environment with obstacles, hazard zone, agent start/goal locations, and object start/goal locations. The three client environments are arranged for direct side-by-side comparison of environmental heterogeneity. All instantiations use a 10 × 10 grid with 3 agents and 3 objects. 
+
+V π 
+
+> •
+
+(s) ≜ Ea∼π(·| s)[Qπ 
+
+> •
+
+(s, a)] . If risk-sensitivity is not used, this collapses to the standard policy gradient. With a quantile critic ˆZθ (s, a) = {zτk (s, a)}Kk=1, we estimate CVaR by dis-cretizing the tail integral: 
+
+\CVaR αcvar 
+
+  ˆZθ (s, a) ≜
+
+> L
+
+# ∑
+
+> ℓ=1
+
+αℓ zuℓ (s, a), (15) 
+
+uℓ ∈ (0, αcvar ], αℓ ≥ 0, ∑L 
+
+> ℓ=1
+
+αℓ = 1, where uniform weights 
+
+αℓ = 1/L recover the standard CVaR discretization. In par-ticular, given a K-quantile critic with fixed quantile frac-tions τk ≜ (k − 12 )/K, we choose uℓ ∈ { τk : τk ≤ αcvar },
+
+L ≜ max {1, ⌊αcvar K⌋} , and set zuℓ (s, a) to the critic out-put at level uℓ, i.e., zuℓ (s, a) = F−1ˆZθ (s,a)(uℓ) as represented by the corresponding predicted quantile. Uniform weights 
+
+αℓ = 1/L recover the standard Riemann-sum approximation 
+
+\CVaR αcvar ( ˆZθ (s, a)) ≈ 1  
+
+> αcvar
+> Rαcvar
+> 0
+
+F−1ˆZθ (s,a)(u) du . Monotonicity is also enforced by the critic parameterization. The combined advantage estimator is then defined as: ˆAcomb  
+
+> t
+
+= ˆAmean  
+
+> t
+
++ λcvar 
+
+ˆAcvar 
+
+> t
+
+τcvar 
+
+, (16) where ˆ Amean  
+
+> t
+
+is a standard advantage estimator using Qmean 
+
+(e.g., GAE computed from E[ ˆZ]), and ˆ Acvar  
+
+> t
+
+is an advantage estimator computed analogously using Qcvar via (15). The critic is trained using distributional quantile regression with a vector-valued Bellman target Ztgt = rt +γ(1−dt ) Znext , where 
+
+Znext denotes the target quantiles at the next state. The critic loss is the pairwise quantile Huber loss [33]: 
+
+Lcritic = 1
+
+K2
+
+> K
+
+# ∑
+
+> i=1
+> K
+
+# ∑
+
+> j=1
+
+ρκτi
+
+ Ztgt , j − Zi(st ) , (17) At the end of a round, only the parameters of ˆZ are exchanged during federated aggregation. 
+
+B. Aggregation 
+
+At the end of each federated round, all participating clients 
+
+Fi ∈ Fn transmit their current distributional critic parameters to the central server. In this work, aggregation is performed via parameter averaging of the critic networks. Let θ Zi denote the parameters of the distributional critic at client Fi. The aggregated critic is: 
+
+θ Z 
+
+> avg
+
+= ∑
+
+> i∈Fn
+
+wi θ Zi , (18) where the weights wi ≥ 0 satisfy ∑i∈Fn wi = 1. The weights reflect client-specific factors such as compute budget or number of local update steps performed during the round. This aggregation assumes that all participating critics share an identical architecture, which is standard in federated learn-ing. If this assumption does not hold, server-side distillation [34] can be used instead, under a fixed probe set of states to align heterogeneous critics. Following aggregation, all participating clients initialize their critic parameters to θ Z
+
+> avg
+
+before the start of the next round. 
+
+Remark 2. Under environmental heterogeneity, the post-aggregation critic may not reflect the downside (tail) behav-ior relevant to a particular client. In particular, parameter aggregation can smooth or distort tail structure, yielding a critic whose lower-quantile predictions are misaligned with a client’s reality. To mitigate this aggregation-induced risk mismatch, we apply a client-local trust-region regularization step that anchors the next-round critic update to a risk-aware reference constructed from the client’s own recent critic outputs, thereby limiting drift in worst-case (tail) estimates across rounds. 
+
+C. Trust Region 1) Initialization: In addition to standard local up-dates, each client maintains a buffer of its own distri-butional critic outputs across rounds. For client Fi, let 
+
+β (n) 
+
+> i
+
+(s, a) = {βi,m(s, a)}nm=1 denote CVaR-based weights over the buffered laws. From this buffer, client Fi computes a local Wasserstein-1 barycenter 
+
+Zbc ,(n) 
+
+> i
+
+(s, a) ∈ arg min 
+
+> Z∈P(R)
+> n
+
+# ∑
+
+> m=1
+
+βi,m(s, a)W1
+
+
+
+Z, Z(m) 
+
+> i
+
+(s, a)
+
+
+
+,
+
+(19) TABLE I: Results are mean ± standard deviation over 30 random seeds. R ETURN is the average episodic return (higher is better). O UTPUT DRIFT quantifies across-round instability of the distributional critic outputs on a fixed evaluation/probe set (lower means the critic’s predicted return laws change less from round to round and are less perturbed by federation). CATASTROPHE is the evaluation catastrophe rate (fraction of episodes ending in a catastrophic event; lower is better). 
+
+Method Return ↑ Output Drift ↓ Catastrophe ↓
+
+Local 483.09 ± 128.40 113.37 ± 27.94 0.0323 ± 0.0076 FedAvg 554.76 ± 95.51 159.71 ± 18.56 0.0240 ± 0.0054 FedAvg (CVaR) 544.56 ± 74.24 151.51 ± 17.09 0.0203 ± 0.0037 FedAvg (CVaR + TR) 436.21 ± 54.13 98.07 ± 11.77 0.0172 ± 0.0032 
+
+Fig. 3: Bars report the percent change in catastrophe rate for each heterogeneous client relative to the L OCAL baseline (baseline corresponds to 0% by definition), aggregated over 30 random seeds; negative values indicate fewer catastrophes (safer) than L OCAL . Catastrophe rate is the fraction of eval-uation episodes that terminate in a designated catastrophic event (environment-defined unsafe terminal condition). Error bars denote variability across seeds (standard deviation). with βi,m(s, a) ≥ 0 and ∑nm=1 βi,m(s, a) = 1. Given quantile outputs { ˆqi,m,k(s, a)}Kk=1 at levels τk = ( k − 12 )/K, this lower-tail estimate at level α ∈ (0, 1] is \CVaR α
+
+
+
+Z(m) 
+
+> i
+
+(s, a)
+
+
+
+= 
+
+> 1
+> Kα
+
+∑k: τk≤α ˆqi,m,k(s, a), Kα = {k : τk ≤ α}. Next, define a tail-risk score ri,m(s, a) = −\CVaR α
+
+
+
+Z(m) 
+
+> i
+
+(s, a)
+
+
+
+, and convert scores to barycenter weights via 
+
+βi,m(s, a) = exp  λ ri,m(s, a)
+
+∑n 
+
+> ℓ=1
+
+exp  λ ri,ℓ (s, a) , λ > 0. (20) Because returns are scalar, W1 admits a quantile func-tion representation: for any Z with quantile function F−1 
+
+> Z
+
+,
+
+W1(Z, Z′) = R 10 F−1 
+
+> Z
+
+(u) − F−1 
+
+> Z′
+
+(u) du . Thus, for each u ∈
+
+(0, 1), the Wasserstein-1 barycenter quantile is a βi,m(s, a)-weighted median: 
+
+F−1 
+
+> Zbc ,(n)
+> i(s,a)
+
+(u) ∈ arg min 
+
+> q∈R
+> n
+
+# ∑
+
+> m=1
+
+βi,m(s, a) q − F−1 
+
+> Z(m)
+> i(s,a)
+
+(u) . (21) This barycenter is computed locally and acts as the reference distribution. This reference serves as a client-side trust-region that constrains federated updates. 
+
+2) Proximal Update: During round n+1, each client con-strains its local critic toward the reference ¯Z(n) 
+
+> i
+
+computed at the end of round n. Let Ti denote the unconstrained distributional Bellman update. For each quantile k, define an asymmetric tube around ¯Z(n) 
+
+> i,k
+
+with radii δ − 
+
+> k
+
+(downside) and δ + 
+
+> k
+
+(upside), and the operator 
+
+Φk(x; ¯ Z(n) 
+
+> i,k
+
+) = ¯Z(n) 
+
+> i,k
+
++
+
+
+
+δ + 
+
+> k
+
+tanh 
+
+βk
+
+x − ¯Z(n)
+
+> i,k
+
+δ +
+
+> k
+
+ , x ≥ ¯Z(n) 
+
+> i,k
+
+,
+
+δ − 
+
+> k
+
+tanh 
+
+βk
+
+x − ¯Z(n)
+
+> i,k
+
+δ −
+
+> k
+
+ , x < ¯Z(n) 
+
+> i,k
+
+.
+
+(22) The constrained critic update is implemented via a shrink and squash step: ˜Zi,k = ¯Z(n) 
+
+> i,k
+
++ α
+
+
+
+Ti,k(Zi) − ¯Z(n)
+
+> i,k
+
+
+
+, α ∈ (0, 1], (23) 
+
+Z+ 
+
+> i,k
+
+= Φk
+
+  ˜Zi,k; ¯ Z(n)
+
+> i,k
+
+. (24) 
+
+Lemma 1 (Tube squash: anchoring and Lipschitz in d). For each round n, assume the tube squash 
+
+Φ(n)(·; ¯ q) acts coordinatewise and satisfies: (i) anchoring 
+
+Φ(n)( ¯q; ¯ q) = ¯q; and (ii) coordinatewise Lipschitz for all x, y ∈ RK and all k, |(Φ(n)(x; ¯ q)) k − (Φ(n)(y; ¯ q)) k| ≤ 
+
+β (n) 
+
+> k
+
+|xk − yk|. Let β (n) 
+
+> max
+
+≜ max k β (n) 
+
+> k
+
+. Then for all x, y ∈ RK , Wp
+
+ ΨK (Φ(n)(x; ¯ q)) , ΨK (Φ(n)(y; ¯ q))  ≤
+
+β (n) 
+
+> max
+
+Wp
+
+ ΨK (x), ΨK (y). Consequently, under Assumption 1, for any critics q , q′, d  Φ(n)(q; ¯ q), Φ(n)(q′; ¯ q) ≤ β (n) 
+
+> max
+
+d(q, q′).
+
+Lemma 2 (Tube-cap bound in d). Let δ (n) 
+
+> k
+
+≜
+
+max {δ −,(n) 
+
+> k
+
+, δ +,(n) 
+
+> k
+
+} and define ∆(n) 
+
+> tube
+
+≜
+
+ 1 
+
+> K
+
+∑Kk=1(δ (n) 
+
+> k
+
+)p
+
+1/p
+
+.
+
+By construction of the tube squash, |(Φ(n)(x; ¯ q)) k − ¯qk| ≤ δ (n)
+
+> k
+
+for all k and all x ∈ RK . Then for any ¯q ∈ RK ,Wp
+
+ ΨK (Φ(n)(x; ¯ q)) , ΨK ( ¯q) ≤ ∆(n)
+
+> tube
+
+. Equivalently, under Assumption 1, for any critic q and reference ¯q, d Φ(n)(q; ¯ q), ¯q ≤ ∆(n)
+
+> tube
+
+.
+
+V. THEORETICAL RESULTS Next we provide a stability guarantee for the critic-side trust-region step used in our method. The result shows that the trust-region update is a perturbed contraction toward a (moving) reference and that the tube parameters enforce an absolute deviation cap from that reference. We first fix a client Fi. Let q(n) 
+
+> i
+
+(s, a) ∈ RK denote the quantile critic at round n, and let ¯ q(n) 
+
+> i
+
+(s, a) denote a (possibly data-dependent) reference at the same round. Define the tracking error to the moving reference 
+
+en ≜ d q(n) 
+
+> i
+
+, ¯q(n)
+
+> i
+
+ = max  
+
+> (s,a)∈P
+
+W1
+
+ ΨK (q(n) 
+
+> i
+
+)( s, a), ΨK ( ¯q(n) 
+
+> i
+
+)( s, a),
+
+(25) where ΨK (q)( s, a) ≜ 1 
+
+> K
+
+∑Kk=1 δqk(s,a) and P is a fixed finite probe set. Since our critic parameterization enforces mono-tone quantiles by construction, the approximate backup bT π
+
+> i,K
+
+returns a valid quantile vector. Define the shrink step ˜ q(n+1) 
+
+> i
+
+≜
+
+(1 − α) ¯q(n) 
+
+> i
+
++ α  bT πn+1 
+
+> i,K
+
+q(n)
+
+> i
+
+, α ∈ (0, 1], and the ideal trust-region map q(n+1) 
+
+> i,ideal
+
+≜ Φ(n)( ˜q(n+1) 
+
+> i
+
+; ¯ q(n) 
+
+> i
+
+). The realized iterate can deviate from the ideal map due to finite SGD, target-network lag, or implementation details. We model this by a per-round discrepancy ηn ≥ 0: 
+
+d q(n+1) 
+
+> i
+
+, q(n+1)
+
+> i,ideal
+
+ ≤ ηn. (26) We also define (i) a reference residual, (ii) a backup approx-imation/sampling error, and (iii) a reference drift: 
+
+εn ≜ d  ¯q(n) 
+
+> i
+
+, T πn+1 
+
+> i,K
+
+¯q(n)
+
+> i
+
+, (27) 
+
+ξn ≜ d  bT πn+1 
+
+> i,K
+
+q(n) 
+
+> i
+
+, T πn+1 
+
+> i,K
+
+q(n)
+
+> i
+
+, (28) 
+
+rn ≜ d  ¯q(n+1) 
+
+> i
+
+, ¯q(n)
+
+> i
+
+. (29) 
+
+Assumption 1 (Evaluated critic metric) . Assume either 
+
+(S , A ) is finite, or there exists a fixed finite probe set P ⊆
+
+S × A such that every occurrence of d (·, ·) is interpreted as d(q, q′) ≜ max  
+
+> (s,a)∈P
+
+W1
+
+ ΨK (q)( s, a), ΨK (q′)( s, a), (30) 
+
+where ΨK (q)( s, a) ≜ 1 
+
+> K
+
+∑Kk=1 δqk(s,a).
+
+Assumption 2 (Evaluation contraction in d). For each client i and round n, the projected evaluation operator T πn+1 
+
+> i,K
+
+≜
+
+ΠW1 ◦ T πn+1 
+
+> i
+
+is a γ-contraction in the probe-set metric d(q, q′) ≜ max  
+
+> (s,a)∈P
+
+W1
+
+ ΨK (q)( s, a), ΨK (q′)( s, a). (31) 
+
+This is justified by: (a) γ-contraction of T π in the maximal W1 metric for policy evaluation, and (b) nonexpansiveness of the quantile projection ΠW1 in W 1, as established in [10]. 
+
+Theorem 1 (Stability around a moving reference) . Assume Assumption 1 and Assumption 2 holds with parameters γ ∈
+
+[0, 1). Let β (n) 
+
+> max
+
+be the Lipschitz constant from Lemma 1. Then the tracking error e n satisfies en+1 ≤ α β (n)
+
+> max
+
+ γen + εn + ξn
+
+ + rn + ηn. (32) 
+
+Moreover, the tube squash induces a cap around the previous reference (Lemma 2), yielding en+1 ≤ min 
+
+n
+
+α β (n)
+
+> max
+
+ γen +εn +ξn
+
+, ∆(n)
+
+> tube
+
+o
+
++ rn + ηn. (33) 
+
+Proof. By triangle inequality in the metric d,
+
+en+1 = d q(n+1) 
+
+> i
+
+, ¯q(n+1)
+
+> i
+
+ ≤ d q(n+1) 
+
+> i
+
+, q(n+1)
+
+> i,ideal
+
+ (34) 
+
++ d q(n+1) 
+
+> i,ideal
+
+, ¯q(n)
+
+> i
+
+ (35) 
+
++ d  ¯q(n) 
+
+> i
+
+, ¯q(n+1)
+
+> i
+
+. (36) TABLE II: Results are mean ± standard deviation over 30 random seeds. R ETURN is the average episodic return (higher is better). A CCIDENT is the evaluation accident rate (fraction of episodes with at least one collision/accident event; lower is better). Methods mirror Case Study 2. 
+
+Method Return ↑ Accident ↓
+
+Local 23.197 ± 4.830 0.811 ± 0.063 FedAvg 27.797 ± 4.219 0.736 ± 0.068 FedAvg (CVaR) 30.168 ± 3.996 0.678 ± 0.066 FedAvg (CVaR + TR) 31.231 ± 3.943 0.653 ± 0.066 
+
+The first and third terms are bounded by ηn and rn via (26) and (29). For the middle term, apply Lemma 1 (anchoring and β (n)
+
+> max
+
+-Lipschitz in d for fixed ¯ q(n) 
+
+> i
+
+): 
+
+d q(n+1) 
+
+> i,ideal
+
+, ¯q(n)
+
+> i
+
+ = d
+
+
+
+Φ(n)( ˜q(n+1) 
+
+> i
+
+; ¯ q(n) 
+
+> i
+
+), ¯q(n)
+
+> i
+
+
+
+(37) 
+
+≤ β (n) 
+
+> max
+
+d  ˜q(n+1) 
+
+> i
+
+, ¯q(n)
+
+> i
+
+. (38) Then for each (s, a), ˜q(s, a) = ( 1 − α) ¯q(s, a) + α bT q (s, a).Letting μ ˜q ≜ ΨK ( ˜q) and μ ¯q ≜ ΨK ( ¯q), we use the one-dimensional monotone coupling. Under the standard quantile ordering condition, the vectors ˜ q(s, a), ¯ q(s, a), and ( bT q )( s, a)
+
+are nondecreasing in k and represent atoms on a common quantile grid with equal weights. Hence the optimal transport pairs corresponding indices and W1
+
+ μu, μv
+
+ = 1 
+
+> K
+
+∑Kk=1 |uk −
+
+vk|. Applying this with u = ˜q(s, a) and v = ¯q(s, a) and using ˜qk(s, a) − ¯qk(s, a) = α ( bT q )k(s, a) − ¯qk(s, a) yields 
+
+W1
+
+ μ ˜q(s,a), μ ¯q(s,a)
+
+ = α W1
+
+ μ( bT q )( s,a), μ ¯q(s,a)
+
+, (39) and hence, taking the maximum over (s, a) ∈ P,
+
+d  ˜q(n+1) 
+
+> i
+
+, ¯q(n)
+
+> i
+
+ ≤ α d  bT πn+1 
+
+> i,K
+
+q(n) 
+
+> i
+
+, ¯q(n)
+
+> i
+
+. (40) Now add and subtract T πn+1 
+
+> i,K
+
+q(n) 
+
+> i
+
+and T πn+1 
+
+> i,K
+
+¯q(n) 
+
+> i
+
+, use triangle inequality, Assumption 2, and (27)–(28): 
+
+d  bT πn+1 
+
+> i,K
+
+q(n) 
+
+> i
+
+, ¯q(n)
+
+> i
+
+ ≤ d  bT πn+1 
+
+> i,K
+
+q(n) 
+
+> i
+
+, T πn+1 
+
+> i,K
+
+q(n)
+
+> i
+
+ (41) 
+
++ d T πn+1 
+
+> i,K
+
+q(n) 
+
+> i
+
+, T πn+1 
+
+> i,K
+
+¯q(n)
+
+> i
+
+ (42) 
+
++ d T πn+1 
+
+> i,K
+
+¯q(n) 
+
+> i
+
+, ¯q(n)
+
+> i
+
+ (43) 
+
+≤ ξn + γen + εn. (44) Substituting the bounds yields (32). The capped form (33) follows by Lemma 2. 
+
+Corollary 1 (Geometric tracking bound) . Suppose β (n) 
+
+> max
+
+≤ ¯β
+
+for all n and define ρ ≜ α ¯β γ , d n ≜ α ¯β (εn + ξn) + rn + ηn.
+
+If ρ < 1 and d n ≤ ¯d uniformly, then e n ≤ ρne0 + 1−ρn 
+
+> 1−ρ
+
+¯d ≤
+
+ρne0 + ¯d 
+
+> 1−ρ
+
+.
+
+Remark 3. Theorem 1 is a critic-side stability statement 
+
+d(q, q′) = max (s,a)∈P W1(ΨK (q)( s, a), ΨK (q′)( s, a)) . Algo-rithmically, it implies (i) if the defect/perturbation terms are controlled and Φ(n) remains Lipschitz (bounded β (n)
+
+> max
+
+), then the client critic stays close to its moving reference across rounds (Corollary 1), preventing large jumps in Fig. 4: Accident rate across training steps for each heterogeneous client in the highway environment (Case Study 3), comparing L OCAL , F ED AVG , F ED AVG (CV AR), and F ED AVG (CV AR + TR) over 30 random seeds. Shaded regions denote standard deviation across seeds. Lower accident rate indicates safer behavior. F ED AVG (CV AR + TR) consistently achieves the lowest accident rate across clients, demonstrating that the proposed risk-aware trust-region regularization improves safety in a continuous-control setting under environment heterogeneity. evaluated return-law predictions after server aggregation, and (ii) when ¯q(n) 
+
+> i
+
+is constructed to emphasize downside behavior (e.g., a CVaR-weighted barycentric reference over recent rounds), stability in d limits how quickly aggregation-induced smoothing can erode tail-relevant structure, up to the tube radius ∆(n) 
+
+> tube
+
+and drift rn. In our numerical results, the reported drift-based metrics serve as a proxy for this reference-drift effect, and the reduced drift under the trust-region variant is consistent with the predicted stability around a moving anchor. VI. NUMERICAL RESULTS & DISCUSSION 
+
+A. Case Study 1: Bandits 
+
+We first motivate our mean-smearing claims with Case Study 1. This case study isolates the effect by using a bandit experiment with aggregation in return-law space and parameter space. As shown in Fig. 1, FedAvg collapses to an arithmetic averaging effect on the induced empirical return measures, introducing multi-modality unseen in the individ-ual client distributions and weakening tail mass. In contrast, an unweighted Wasserstein barycenter better preserves the underlying geometric structure (modality), while the CVaR-weighted barycenter further inflates the aggregate toward larger estimates of downside behavior while retaining the prior structure. These qualitative behaviors directly motivate our choice to construct a client-local, risk-aware reference from recent critic outputs and to regularize updates via a distributional trust region anchored at that reference. 
+
+B. Case Study 2: Mutliagent Gridworld 
+
+Next, we evaluate a heterogeneous six-client multi-agent sparse-reward gridworld with small probability hazard zones. Three clients are visualized in Figure 2. We report the metric mean ± standard deviation over 30 seeds in Ta-ble I and client-wise safety changes in Fig. 3. Each client environment is a heterogeneous 10 × 10 warehouse with 3 agents and 3 movable objects, static obstacles, a hazard zone with one active hazard cell sampled per episode, a shared agent goal, and an object goal. Rewards are sparse and event-driven, rt ≜ Robj 1{∆Nobj ,t > 0}+Rgoal 1{Gt }, where 
+
+Gt denotes the event that all objects have been delivered and all agents are at their goal at time t. A catastrophe occurs when any agent enters the active hazard cell and a Bernoulli trigger fires with probability phaz . We report the accident rate as E[1{collision }] and output drift on a fixed probe set P of randomly-sampled states as D(r) 
+
+> out
+
+= 
+
+> 1
+> |P|
+
+∑s∈P ∥ fφ (r) (s)− fφ (r−1) (s)∥1. Heterogeneity is introduced client-wise by assigning clients different obstacle layouts, start/goal/object/hazard-zone placements, hazard probability, slip probability, episode horizon, step cost, and catastrophe penalty. Relative to L OCAL , federated aggregation improves mean return by increasing sample efficiency through the federation mechanism; however, federation also increases output drift, measured as the temporal distance between a randomly sampled probe set gathered early in training. Incorporating CVaR reduces the catastrophe rate, and adding the trust-region step (F ED AVG (CV AR + TR)) yields both the lowest drift and the lowest catastrophe rate in Table I. Figure 3 further indicates that these safety gains persist across heterogeneous clients. Overall, the results support the claim that anchoring critic updates to a client-local, risk-aware reference stabilizes return-law estimates across rounds and improves safety metrics under heterogeneity while re-vealing a negative impact on return under sparse rewards. Furthermore, the result of lower return indicates policy over optimization. Given the small probability that entering a hazard zone actually leads to termination, dangerous policies are incentivized to take the risk for more return. 
+
+C. Case Study 3: Highway Environment 
+
+We evaluate a five-client continuous-control highway driv-ing task [35], with safety measured by the accident rate. Heterogeneity is introduced with differing vehicle counts, ve-hicle density, target speeds, and reward-speed ranges across clients. We report the average discounted return J(π) ≜
+
+E∑t≥0 γt rt
+
+, the accident rate E[1{collision }], and a policy-drift proxy given by PPO’s minibatch approximate KL divergence cKL (πθn+1 ∥πθn ). Given that this continuous-state setting does not admit the environment-resampling protocol used in Case Study 2, we use cKL as a coarse drift proxy and still observe consistent reductions under F ED AVG (CV AR + TR). Table II and Figure 3 report mean ± standard deviation over 30 seeds. Consistent with Case Study 2, FED AVG 
+
+(CV AR + TR) dominates the baselines across all evaluation metrics, achieving the highest return while simultaneously reducing policy drift and accident rate. These results indicate that the proposed risk-aware, trust-region-anchored aggrega-tion remains effective in a continuous-control setting, where safety violations correspond to rare but high-impact events, and demonstrate improved robustness without sacrificing performance. Intuitively, this result is expected, as return and safety are more tightly coupled than in Case Study 2. In Case Study 2, safety corresponds to a fixed hazardous region within the gridworld that the agent must learn to avoid. In contrast, in this setting, vehicles are dynamically moving, which more strongly incentivizes safe behavior and leads to a closer alignment between return and safety. VII. CONCLUSION We introduced federated distributional reinforcement learning (FedDistRL), where clients federate distributional critics while keeping policies local, enabling risk-relevant value sharing under privacy constraints. We identified mean-smearing as a characteristic failure mode of mean-oriented aggregation for distributional critics, which can degrade multimodality and the tail structure that matter for safety. To mitigate this, we proposed TR-FedDistRL, which constructs a client-local risk-aware reference using a CVaR-weighted Wasserstein barycenter over a round buffer and constrains critic updates with a distributional trust region. Across het-erogeneous benchmarks, the proposed regularization reduced drift and improved safety metrics relative to mean-oriented baselines while maintaining competitive return. Future work includes extending theoretical guaranties beyond evaluation to control, improving reference construction under nonsta-tionarity, and integrating heterogeneous critic architectures via distillation or distribution-space aggregation. 
+
+A. Limitations 
+
+This work has several limitations. Our approach builds on parameter averaging, which is an early and widely used federated learning paradigm that is known to be sensitive to client heterogeneity; while the proposed risk-aware trust-region regularization mitigates aggregation-induced drift, it does not fully address the structural limitations of parameter-space aggregation. In addition, the baselines considered are necessarily limited and do not include more recent federated optimization or personalization methods that may further improve robustness under heterogeneity. On the theory side, our analysis is restricted to the stability properties of the critic-side update and does not provide global convergence guaranties for the full actor-critic dynamics. Finally, the empirical evaluation is limited to a small number of envi-ronments and safety metrics, and extending the framework to richer safety constraints or larger-scale deployments remains an open direction. VIII. ACKNOWLEDGMENTS This material is based upon work supported by the Na-tional Science Foundation under Award No. OISE-2420109. Any opinions, findings, conclusions, or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation. IX. CODE AVAILABILITY Our repository is available under the Apache License ver-sion 2.0 at https://github.com/djm3622/fedrl .Configuration files provide hyperparameters utilized for final results. REFERENCES [1] Nikolaos Koursioumpas, Lina Magoula, Nikolaos Petropouleas, Alexandros-Ioannis Thanopoulos, Theodora Panagea, Nancy Alonis-tioti, Miguel Angel Gutierrez-Estevez, and Ramin Khalili. A safe deep reinforcement learning approach for energy efficient federated learning in wireless communication networks. IEEE Transactions on Green Communications and Networking , 8(4):1862–1874, 2024. [2] Xiaozhen Lu, Zhibo Liu, Yuhan Chen, Liang Xiao, Wei Wang, and Qihui Wu. Risk-aware reinforcement learning-based federated learning for iov systems. IEEE Transactions on Mobile Computing ,23(12):14672–14688, 2024. [3] Can Peng, Yuyuan Liu, Yingyu Yang, Pramit Saha, Qianye Yang, and J Alison Noble. Neural collapse-inspired multi-label federated learning under label-distribution skew. arXiv preprint arXiv:2509.12544 , 2025. [4] Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-efficient learning of deep networks from decentralized data. In Artificial intelligence and statistics , pages 1273–1282. PMLR, 2017. [5] Jiaju Qi, Qihao Zhou, Lei Lei, and Kan Zheng. Federated reinforce-ment learning: Techniques, applications, and open challenges. arXiv preprint arXiv:2108.11887 , 2021. [6] Hao Jin, Yang Peng, Wenhao Yang, Shusen Wang, and Zhihua Zhang. Federated reinforcement learning with environment heterogeneity. In                                
+
+> International Conference on Artificial Intelligence and Statistics , pages 18–37. PMLR, 2022. [7] Weicheng Xiong, Quan Liu, Fanzhang Li, Bangjun Wang, and Fei Zhu. Personalized federated reinforcement learning: Balancing per-sonalization and experience sharing via distance constraint. Expert Systems with Applications , 238:122290, 2024. [8] Desik Rengarajan, Nitin Ragothaman, Dileep Kalathil, and Srinivas Shakkottai. Federated ensemble-directed offline reinforcement learn-ing. Advances in Neural Information Processing Systems , 37:6154– 6179, 2024. [9] Marc G Bellemare, Will Dabney, and R´ emi Munos. A distributional perspective on reinforcement learning. In International conference on machine learning , pages 449–458. PMLR, 2017. [10] Will Dabney, Mark Rowland, Marc Bellemare, and R´ emi Munos. Distributional reinforcement learning with quantile regression. In Pro-ceedings of the AAAI conference on artificial intelligence , volume 32, 2018. [11] Will Dabney, Georg Ostrovski, David Silver, and R´ emi Munos. Implicit quantile networks for distributional reinforcement learning. In International conference on machine learning , pages 1096–1105. PMLR, 2018. [12] R Tyrrell Rockafellar, Stanislav Uryasev, et al. Optimization of conditional value-at-risk. Journal of risk , 2:21–42, 2000. [13] Yinlam Chow, Aviv Tamar, Shie Mannor, and Marco Pavone. Risk-sensitive and robust decision-making: a cvar optimization approach. In C. Cortes, N. Lawrence, D. Lee, M. Sugiyama, and R. Garnett, editors,
+> Advances in Neural Information Processing Systems ,volume 28. Curran Associates, Inc., 2015.
+
+[14] Aviv Tamar, Yonatan Glassner, and Shie Mannor. Optimizing the cvar via sampling. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 29, 2015. [15] Shiau Hong Lim and ILYAS MALIK. Distributional reinforcement learning for risk-sensitive policies. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh, editors, Advances in Neural Information Processing Systems , volume 35, pages 30977– 30989. Curran Associates, Inc., 2022. [16] Qisong Yang, Thiago D Sim˜ ao, Simon H Tindemans, and Matthijs TJ Spaan. Safety-constrained reinforcement learning with a distributional safety critic. Machine Learning , 112(3):859–887, 2023. [17] Dohyeong Kim, Kyungjae Lee, and Songhwai Oh. Trust region-based safe distributional reinforcement learning for multiple constraints. 
+
+Advances in neural information processing systems , 36:19908–19939, 2023. [18] C´ edric Villani et al. Optimal transport: old and new , volume 338. Springer, 2008. [19] Martial Agueh and Guillaume Carlier. Barycenters in the wasserstein space. SIAM Journal on Mathematical Analysis , 43(2):904–924, 2011. [20] Alberto Maria Metelli, Amarildo Likmeta, and Marcello Restelli. Propagating uncertainty in reinforcement learning via wasserstein barycenters. Advances in Neural Information Processing Systems , 32, 2019. [21] Amarildo Likmeta, Matteo Sacco, Alberto Maria Metelli, and Marcello Restelli. Wasserstein actor-critic: directed exploration via optimism for continuous-actions control. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 8782–8790, 2023. [22] Luiz Pereira and M Hadi Amini. Heterogeneous federated rein-forcement learning using wasserstein barycenters. arXiv preprint arXiv:2506.15825 , 2025. [23] John Schulman, Sergey Levine, Pieter Abbeel, Michael Jordan, and Philipp Moritz. Trust region policy optimization. In International conference on machine learning , pages 1889–1897. PMLR, 2015. [24] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. [25] Joshua Achiam, David Held, Aviv Tamar, and Pieter Abbeel. Con-strained policy optimization. In International conference on machine learning , pages 22–31. Pmlr, 2017. [26] Jakub Grudzien Kuba, Ruiqing Chen, Muning Wen, Ying Wen, Fanglei Sun, Jun Wang, and Yaodong Yang. Trust region policy optimisation in multi-agent reinforcement learning. arXiv preprint arXiv:2109.11251 ,2021. [27] Chirayu Salgarkar and Ali Baheri. When distance matters: Wasserstein trust regions for multi-agent coordination. 2025. [28] Ali Baheri and Mykel J Kochenderfer. The synergy between optimal transport theory and multi-agent reinforcement learning. arXiv preprint arXiv:2401.10949 , 2024. [29] Ali Baheri. Risk-aware reinforcement learning through optimal trans-port theory. arXiv preprint arXiv:2309.06239 , 2023. [30] Ali Baheri. Understanding reward ambiguity through optimal transport theory in inverse reinforcement learning. arXiv preprint arXiv:2310.12055 , 2023. [31] Ali Baheri, Zahra Sharooei, and Chirayu Salgarkar. WAVE: Wasser-stein adaptive value estimation for actor-critic reinforcement learning. 
+
+Proceedings of Machine Learning Research vol , 283:1–12, 2025. [32] Ali Baheri. Wasserstein-barycenter consensus for cooperative multi-agent reinforcement learning. arXiv preprint arXiv:2506.12497 , 2025. [33] Sanjith Bharatharajan Nair, Dhananjay Yadav, and Naresh Kumar. A significant study on huber loss robust and quantile regression models. 
+
+Adaptive Intelligence: Select Proceedings of InCITe 2024, Volume 1 ,1280:149, 2025. [34] Hyowoon Seo, Jihong Park, Seungeun Oh, Mehdi Bennis, and Seong-Lyun Kim. 16 federated knowledge distillation. Machine Learning and Wireless Communications , 457, 2022. [35] Edouard Leurent. An environment for autonomous driving decision-making. https://github.com/eleurent/highway-env ,2018.

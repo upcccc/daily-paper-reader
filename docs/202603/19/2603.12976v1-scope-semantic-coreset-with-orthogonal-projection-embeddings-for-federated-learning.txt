@@ -1,0 +1,970 @@
+Title: SCOPE: Semantic Coreset with Orthogonal Projection Embeddings for Federated learning
+
+URL Source: https://arxiv.org/pdf/2603.12976v1
+
+Published Time: Mon, 16 Mar 2026 01:00:05 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# SCOPE: Semantic Coreset with Orthogonal Projection Embeddings for Federated learning 
+
+Md Anwar Hossen *1 , Nathan R. Tallent 2, Luanzheng Guo 2, and Ali Jannesary 1
+
+> 1
+
+Iowa State University, Ames, Iowa, USA 
+
+> 2
+
+Pacific Northwest National Laboratory, Richland, WA, USA 
+
+> 1
+
+{manwar, jannesar }@iastate.edu , 2{Nathan.Tallent, lenny.guo }@pnnl.gov 
+
+> *
+
+Corresponding author 
+
+Abstract 
+
+Scientific discovery increasingly requires learning on federated datasets, fed by streams from high-resolution instruments, that have extreme class imbalance. Current ML approaches either require impractical data aggregation or fail due to class imbalance. Existing coreset selection methods rely on local heuristics, making them unaware of the global data landscape and prone to sub-optimal and non-representative pruning. To overcome these challenges, we introduce SCOPE (Semantic Coreset using Orthogonal Projection Embeddings for Federated learning), a coreset framework for federated data that filters anomalies and adaptively prunes redundant data to mitigate long-tail skew. By analyzing the latent space distribution, we score each data point using a representation score that measures the reliability of core class features, a diversity score 
+
+that quantifies the novelty of orthogonal residuals, and a boundary proximity score that indicates similarity to competing classes. Unlike prior methods, SCOPE shares only scalar metrics with a federated server to construct a global consensus, ensuring communication efficiency. Guided by the global consensus, SCOPE dynamically filters local noise and discards redundant samples to counteract global feature skews. Extensive experiments demonstrate that SCOPE yields competitive global accuracy and robust convergence, all while achieving exceptional efficiency with a 128 × to 512 × reduction in uplink bandwidth, a 7 .72 × wall-clock acceleration and reduced FLOP and VRAM footprints for local coreset selection. 
+
+Keywords: Scientific Data, Semantic Coreset, Federated Learning 
+
+# 1 Introduction 
+
+Scientific discovery increasingly relies on training new AI/ML models over ad hoc federations of highly skewed datasets. These virtual federated datasets result from collaborative scientific projects based on high-resolution scientific instruments, each with a unique installation and each customized for distinct purposes and scientific specialization. These instruments continuously generate vast amounts of experimental data, ranging from microscopy images to spectroscopic scans and form a complex and inherently decentralized data ecosystem [10, 14]. Efficiently learning from federated scientific data is essential, yet existing techniques incur prohibitive communication overhead when attempting to centralize or de-skew datasets [19]. Although federated paradigms bypass these costs and preserve institutional privacy, they face significant hurdles due to the specialized nature of sci-entific instruments. These instruments produce datasets with extreme non-IID characteristics and 1
+
+> arXiv:2603.12976v1 [cs.LG] 13 Mar 2026
+
+long-tailed distributions. Such imbalances in data quantity and quality lead to biased global up-dates, where dominant clients frequently overshadow rare but scientifically critical events. Coreset selection and dataset pruning have emerged as promising strategies to mitigate these inefficiencies [18, 22]. By discarding redundant information, these methods drastically reduce communication and computational requirements without sacrificing model accuracy. However, deploying coreset selection in federated environments remains difficult. When clients rely solely on local heuristics to determine representativeness, they often make myopic selections, inadvertently discarding samples that are locally redundant but globally rare. Furthermore, some methods require local training on the entire local dataset to identify importance [8, 7], which is itself computationally costly. Existing state-of-the-art federated methods often rely on impractical assumptions, such as ac-cess to centralized proxy datasets for gradient matching [27], which violates the strict privacy constraints of scientific collaborations. Other approaches prioritize high-loss or high-gradient sam-ples to maximize information gain [28, 23]. Some of the work leverages the global perspective with feature embedding, which is upload-heavy [8]. In scientific imaging, however, these high-loss instances often correspond to sensor noise or artifacts rather than informative edge cases [15, 26]; re-taining them amplifies extreme artifact-induced heterogeneity and destabilizes global convergence. Federated nodes often exhibit label skew and domain shifts [30], local observations alone may not reflect the global data distribution. A global view is therefore necessary to understand the overall structure of the data across nodes. To overcome the dual challenges of long-tailed class distributions and non-IID quality variance in federated data, we introduce the Semantic Coreset Selection (SCOPE) framework. SCOPE shifts clients from isolated local decision-making to globally informed pruning. We then investigate three core research questions: 
+
+RQ1: Training-Free Semantic Quantification. How can we extract data utility metrics at the edge without local training? We introduce a zero-shot geometric orthogonal projection using a vision-language model (VLM). We score each data point through three distinct scalar metrics: a 
+
+representation score measuring the reliability of core class features, a diversity score quantifying the novelty of orthogonal residuals, and a boundary proximity score indicating similarity to negative classes. 
+
+RQ2: Privacy-Preserving Information Sharing. How can we share global distributions without transmitting heavy, privacy-compromising embeddings? We distill local embedding geome-tries into lightweight scalar metrics. By aggregating only their means and variances, the server constructs a mathematically rigorous global consensus with lightweight communication overhead. 
+
+RQ3: Global Long-Tail Preservation. How can clients safely prune data without exacer-bating global class imbalance? We design a globally informed balancing strategy. By referencing the global scalar profile, clients target redundant samples strictly within globally overrepresented groups. This protects rare classes and effectively preserves the long-tailed distribution. In summary, the main contributions of this paper are as follows: 
+
+• SCOPE, a lightweight federated framework for utility-driven coreset selection in skewed fed-erated datasets. 
+
+• A consensus-driven, two-stage local pruning algorithm that filters semantic anomalies and reduces core redundancy while preserving minority tail classes. 
+
+• Theoretical convergence guarantees based on client drift minimization, accompanied by em-pirical validation of robustness across diverse non-IID and long-tailed settings. 
+
+• Exceptional system efficiency, demonstrating a 512 × reduction in uplink bandwidth and a 2(a) A highly skewed federated data distri-bution. 35 40 45 50 55 60 
+
+> Mean Accuracy across Pruning Rates (%)
+> GradND
+> EL2N
+> Random
+> FedCS
+> FedCore
+> SCOPE
+> 46.4
+> 46.7
+> 49.2
+> 51.0
+> 52.9
+> 53.1
+> Full DB (55.63%)
+
+(b) Mean Accuracy Across Pruning Rates on CIFAR-10 with IR = 2 , α = 0 .1. 
+
+Figure 1: (a) A system managing massive data volumes with highly skewed, non-IID, and imbal-anced data distributions across diverse edge nodes. (b) Mean Top-1 accuracy (%) of federated data pruning methods averaged across pruning rates 0 .1, 0.3, 0.5, 0.7, 0.9. Error bars indicate standard deviation across pruning rates and capture pruning-rate sensitivity. Baselines show a wide bar and are highly sensitive to the pruning rate, whereas SCOPE (ours) shows a relatively narrow bar and is more robust and predictable. The dashed line marks training accuracy on full local dataset 7.72 × wall-clock acceleration in coreset selection, alongside reduced FLOPs and peak VRAM requirements, without compromising global model performance. 
+
+# 2 Related Work 
+
+Federated Learning: Federated Learning scalability is addressed by system level communica-tion reduction [16, 1, 3, 2, 11, 33, 17, 29] and model level architecture compression [13, 6, 20, 12]. However, these approaches treat data as a static asset. In high throughput scientific environments, continuous local data growth necessitates data-level efficiency to reduce training samples without degrading global accuracy. Transposing centralized coreset selection to FL presents unique chal-lenges. Proxy reliant methods like GCFL [27] require server-side datasets, violating strict scientific privacy mandates. Local heuristics such as FedCS [8] and others [22] prune via feature density but fail to account for global class imbalances. While FedCore [7] reduces local overhead, it still requires resource intensive model warmup training. 
+
+Coreset Selection and Data Pruning Coreset selection aims to identify a representative subset that approximates the full dataset’s performance. Methods like Forgetting Events [28], GraND [23], and EL2N [23] prioritize samples with high loss or high gradient norms to mine hard sample. Re-cent works expand this scope to include dynamic uncertainty [9], loss-based moving averages, and training progress metrics [24]. While effective for clean benchmarks, prioritizing high-loss samples in scientific data inevitably amplifies sensor artifacts and noise [8]. Furthermore, strictly geometric approaches like Herding [31] or Moderate selection [32] rely on feature space Euclidean distances, 3RS          
+
+> Global Class
+> Center
+> DS
+> Sneg
+> Class Rarity
+> Wc
+> Class Center
+> Sample
+> Count, Kc
+> RS,
+> DS,
+> Sneg
+> (b) Server
+> RS
+> Coreset Samples Pruned Samples
+> Diversity
+> Score (DS)
+> Boundary
+> Proximity
+> Sneg
+> (a) Semantic Orthogonal Projection
+> Image Feature, V i
+> Representation Score (RS)
+> 0.0 0.5 1.0
+> Semantic hardnes(S neg )
+> 1.0
+> 0.5
+> 0.0
+> Anomalies Filtering
+> Decision
+> boundary
+> True Label, Py
+> Representation Score (RS)
+> MobileCLIP (c) (d)
+> 0.0 0.5 1.0
+> 1.0
+> 0.5
+> 0.0
+> Redundancy
+> Filtering
+> Representation Score (RS)
+> Semantic hardnes +
+> Diversity Score
+> Pruning Decision Bounday
+> top redundant
+> (e)
+> Coreset
+> Client Model
+> Training
+
+Figure 2: Overview of the SCOPE framework. (a) Clients extract RS , DS , and Sneg scalars using a zero-shot MobileCLIP-S2 projection and send class-centered representations, (b) the server aggregates these into a Global Profile. Guided by this framework, clients implement a two-stage pruning mechanism: (c) a Consensus Filter to eliminate semantic anomalies, and (d) Dynamic Balancing to discard redundant data by synchronizing local boundary complexity with the global consensus. (e) produces a refined, balanced coreset for accelerated federated training. which often fail to capture the complex semantic utility. 
+
+# 3 Methodology 
+
+3.1 Problem Formulation: Imbalanced and Non-IID Data 
+
+Let the federated system comprise K clients, denoted by C = {C1, . . . , C K }. Client k holds a private dataset Dk = {(xi, y i)}|D k |
+
+i=1 , with the global dataset defined as D = SKk=1 Dk. We tackle two compounding data heterogeneities. First, Global Quantity Non-IID manifests as a long-tailed class distribution where the total sample count, 
+
+Nc =
+
+KX
+
+k=1 
+
+|{ xi ∈ D k | yi = c}|  (1) is severely skewed, satisfying Ncrare ≪ Nccommon , where Ncrare and Nccommon denote the global sample counts of the tail minority and head majority classes respectively. Second, Local Quantity Non-IID dictates extreme label skew across edge clients, mathematically modeled by a Dirichlet distribution Dir( α). 
+
+3.2 SCOPE: System Procedure 
+
+The SCOPE framework, illustrated in Figure 2, functions as a zero shot coreset selector. Clients first project local data into a shared vision language space via MobileCLIP-S2 to extract RS , DS ,and Sneg scalars as described in Section 3.3. Each client computes class centered representations and transmits them to the server for upload efficiency, as validated in Table 6. The server aggregates these metrics into a global class profile. Finally, as detailed in Section 3.5, clients execute a two stage pipeline: a Consensus Filter eliminates semantic anomalies, while Dynamic Balancing synchronizes local boundary complexity with the federated consensus to generate a refined, balanced training coreset. 
+
+3.3 Semantic Metric Design in the Vision–Language Space 
+
+We formulate three data curation questions, designing a geometric metric in the shared vision-language space to mathematically answer each. The designed prompt discussed details in the 4Appendix. 
+
+Representation Score (RS): We first ask: “How perfectly does a sample represent its core class identity?” Answering this ensures the coreset anchors the model with foundational features for baseline accuracy. Let vimg,i and tci be the L2-normalized visual embedding and textual prototype of ground-truth class ci [25]. We quantify this alignment via their inner product: 
+
+RS i = vimg,i · tci (2) A high score confirms a textbook class example. Rather than strictly thresholding this scalar to discard data [5], we establish RS i as the primary semantic anchor required for subsequent metrics. 
+
+Diversity Score (DS) as Residual Novelty: Next, we ask: “Does the sample contain unique structural features beyond its basic class definition?” This ensures the coreset captures visual variance rather than redundant data. We isolate visual information strictly orthogonal to the class prototype. We compute the rejection vector vres,i = vimg,i − RS itci and define the Diversity Score 
+
+DS as its magnitude: 
+
+DS i = || vres,i || 2 (3) Because the input vectors are L2 normalized, this magnitude is geometrically equivalent to 
+
+q
+
+1 − RS 2 
+
+> i
+
+.While deterministically linked to RS i for any individual sample, explicitly extracting DS i translates the linear cosine similarity into a nonlinear Euclidean distance space. Standardizing this indepen-dent magnitude space across the global dataset distribution is crucial for our later redundancy filtering. Ultimately, a high magnitude mathematically guarantees nonredundant variance, while a low score denotes a visual duplicate. 
+
+Boundary Proximity as Decision Boundary Ambiguity: Finally, we ask: “How easily could this sample be confused with a completely different class?” Identifying these edge cases learns precise boundaries. Repurposing out-of-distribution formulations [21], Boundary Proximity Sneg 
+
+measures semantic hardness by calculating maximum similarity to all incorrect textual class pro-totypes tj . Clients do not need a global visual perspective to calculate this metric. Because the predefined global class vocabulary is known, each client utilizes its own local VLM text encoder to independently generate the full set of tj embeddings. Consequently, Sneg remains fully defined even for single-class clients under highly skewed data distributions: 
+
+Sneg,i = max  
+
+> j̸=ci
+
+vimg,i · tj (4) A high score indicates a confusing sample near the decision edge, whereas a low score denotes a safe, unambiguous example. Furthermore, computing these similarities against fixed textual prototypes ensures highly efficient O(N ) scalability. 
+
+3.4 Global Profile in Server 
+
+Global Class Rarity: To quantify class importance, the server computes a rarity weight Wc.With global sample count Nc = PKk=1 nk,c and frequency Fc = Nc/ PMi=1 Ni, a power law function with tunable exponent γ and stability constant ϵ derives the inverse weight: 
+
+Wc ∝ ( 1
+
+Fc + ϵ )γ (5) Because this weight is strictly inversely proportional to global frequency, a low Wc targets common classes for pruning, while a high Wc protects rare classes. 
+
+Global Heterogeneity Profile: To address Quality Non-IID conditions, simple averaging of local 50 10 20 30 40 50 60 70 80 90 
+
+> Class ID
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> Total Samples
+> Coreset
+> Semantic Anomalies
+> Redundancy Pruning
+
+(a) Class-wise Pruning Breakdown 0.15 0.20 0.25 0.30  
+
+> Representation Score (RS)
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> Boundary Proximity (S_neg)
+> Coreset
+> Redundancy Pruning
+> Semantic Anomalies
+> Boundary (RS = S neg)
+> Anomaly Zone
+
+(b) Margin analysis of filtered samples. 
+
+Figure 3: Evaluation of the SCOPE pruning process. (a) The stacked bar chart reveals the distinct roles of the two filters: the Balancing Filter primarily targets redundancy in the majority(head) classes and preserving the tailed classes, while the Consensus Filter removes semantic outliers across the spectrum. (b) Scatter plot of Representation Score (RS) versus Boundary Proximity ( Sneg ). The dashed line marks the decision boundary RS = Sneg . The shaded Anomaly Zone ( Sneg > RS )highlights samples where negative class proximity exceeds true class representation. statistics is mathematically insufficient. The server first computes the sample weighted global mean 
+
+μGlobal m,c for metrics m ∈ { RS, DS, S neg }. To extract true global variance, we apply the Law of Total Variance, rigorously decomposing within client and between client components: 
+
+h
+
+σGlobal m,c 
+
+i2
+
+= 1
+
+NcKX
+
+> k=1
+
+nk,c 
+
+h
+
+σkm,c 
+
+i2
+
++
+
+h
+
+μkm,c − μGlobal m,c 
+
+i2
+
+(6) This single formulation accurately captures global score heterogeneity without transmitting raw client data. 
+
+3.5 Local Coreset Selection 
+
+Each client locally executes a two-stage geometric pipeline for final coreset selection, evaluating local metrics directly against the server aggregated global class consensus μGlobal c to ensure robust filtering across non-IID distributions. Figure 3 shows the pruned sampled and the coreset selection in two stages. 
+
+Semantic and Consensus Anomaly Filter: This initial filter evaluates a critical question: “How much stronger is a sample’s negative contrastive deviation compared to its positive representation?” 
+
+By quantifying this semantic deviation, we can eliminate high-confidence noise and anomalous outliers prior to dataset balancing. Because RS and Sneg are cosine similarities while DS is a vector norm, directly combining them to answer this question introduces heteroscedasticity. To address this, we apply per-class standardization using the server-provided global variance. We compute the Z-score Zm,i for each metric m ∈ { RS, DS, S neg } and clip it to the [0 , 1] range using 3σ bounds: 
+
+Zm,i = mi − μGlobal m,c 
+
+σGlobal m,c 
+
+and ˆZm,i = max 
+
+
+
+0, min(1 , Zm,i + 3 6 )
+
+
+
+(7) 6With the metrics properly standardized, we formulate the Anomaly Score AS i to directly compute our target intuition: 
+
+AS i = ˆZSneg ,i − ˆZRS,i  (8) Samples are sorted in descending order by AS i, and the client prunes the top pl fraction of severe anomalies to form the clean intermediate set D′ 
+
+> k
+
+= Dk \ Sprune noise .
+
+Redundant Sample Pruning: This stage addresses a fundamental question: “Does a specific sample provide novel informational value, or is it a prototypical example duplicating existing fea-tures?” We quantify this with a globally aware Redundancy Score Ri for each uncorrupted sample 
+
+i:
+
+Ri = ˆZRS,i − ˆZSneg ,i − ˆZDS,i  (9) Even though DS i comes directly from RS i as DS i =
+
+q
+
+1 − RS 2 
+
+> i
+
+for L2 normalized vectors, treating it as an independent normalized factor creates a deliberate nonlinear penalty. Standardization separates their natural scales, meaning extreme visual diversity ˆZDS can heavily reduce Ri. Ahighly typical sample with high ˆZRS lacking diversity or confusion gets a high score to mark it as strictly redundant. To decide which classes undergo this pruning, we calculate a Targeting Metric Tc = fc/W c for each local class c. This weights the local frequency fc against the global rarity Wc. A high Tc flags locally abundant and globally common classes. We select these target classes Ctarget with a relative threshold β:
+
+Ctarget =
+
+
+
+c ∈ C k | max[ T ] − Tc
+
+max[ T ] + ϵ ≤ β
+
+
+
+(10) For each class in Ctarget , samples are sorted descending by Ri. Pruning the top pf fraction discards prototypical data points while preserving the diverse, hard-boundary samples crucial for robust generalization. 
+
+Final Coreset Selection: The final optimized coreset Dcoreset is the residual clean data: 
+
+Dcoreset = D′ 
+
+> k
+
+\ Sprune redundant  (11) This minimized and boundary-aligned dataset is subsequently deployed for local federated training. 
+
+# 4 Theoretical Analysis of Convergence 
+
+We analyze the nonconvex convergence of our framework. By mitigating client drift and gradient bias, our zero shot pruning guarantees convergence to a tighter stationary point than training on full noisy datasets. The formal mathematical assumptions and detailed proof sketches are provided in supplementary documents. 
+
+4.1 Theoretical Properties of the Pruning Framework 
+
+For K clients, let the true clean objective be F [w] and the federated coreset objective be ˜F [w]. We establish two core properties driven by our filtering metrics. 
+
+Lemma 1 (Gradient Bias Reduction via Anomaly Pruning) . Given a raw data gradient bias βnoise ,removing the top pl fraction of samples sorted by the Semantic Anomaly Score AS i bounds the residual approximation error ϵ2 ≪ β2
+
+> noise
+
+. By directly targeting semantic contradictions, ∇ ˜Fk[w]
+
+becomes a superior estimator of the clean distribution. 
+
+7Lemma 2 (Client Drift Reduction via Boundary Alignment) . Let the raw and coreset data hetero-geneity be Γ and ˜Γ respectively. Retaining shared boundary samples Sneg while pruning redundant features with Ri, target threshold β, and ratio pf minimizes the Wasserstein distance between client manifolds. This guarantees ˜Γ ≤ λΓ for some decay factor λ ∈ [0 , 1) .
+
+4.2 Main Convergence Result 
+
+Under standard assumptions of L smoothness, bounded stochastic variance, and relative coreset approximation detailed in the Appendix, stationary coreset ensure monotonic convergence. 
+
+Theorem 1 (Nonconvex Convergence Guarantee) . With learning rate ηt = 1 
+
+> L√T
+
+, the expected gradient norm of F [w] after T rounds satisfies: 
+
+1
+
+T
+
+> T
+
+X
+
+> t=1
+
+E
+
+h
+
+∥∇ F [wt]∥2i
+
+≤ O 
+
+ L [F [w0] − F [w∗]] 
+
+√T
+
+
+
++ O
+
+ σ2
+
+K√T
+
+
+
++ O
+
+h˜Γ
+
+i
+
++ O
+
+ ϵ2
+
+1 − ω2
+
+
+
+(12) 
+
+4.3 Discussion of Theoretical Bounds 
+
+Theorem 1 bounds convergence via four terms: 1. Initialization and Noise 1√T : Decays smoothly as T → ∞ due to stationary coreset. 2. Heterogeneity Floor ˜Γ: Lemma 2 ensures boundary preservation aligns manifolds ˜Γ ≪ Γ, allowing deeper descent than FedAvg. Empirically, our results validate this bound, demon-strating that ˜Γ is reduced compared to the raw baseline Γ. 3. Approximation Gap ϵ2: Lemma 1 guarantees this pruning cost is strictly smaller than the raw noise bias ϵ2 ≪ β2
+
+> noise
+
+.
+
+# 5 Experiments and Analysis 
+
+5.1 Experimental Settings 
+
+Datasets and Network Architectures: We evaluate SCOPE with four distinct datasets. For CIFAR-10, we deploy ResNet-18 across a ten-client with full participation. For large-scale CIFAR-100 and Tiny-ImageNet, we deploy ViT-B-16 and ResNet-50 across 100 clients with a 10-client partial participation fraction. We also evaluating the Ultrahigh Carbon Steel Micrograph DataBase (UHCS) dataset [4] with Swin Tiny for 10 clients. To simulate extreme non-IID data skew, we partition samples with a Dirichlet distribution Dir( α). We partition all datasets with the Dirichlet parameter α ∈ { 0.1, 1.0}. Hyperparameter β = 0.5 is used for all experiments, and the details analysis of β is in the supplementary documents. To strictly enforce global long-tailed distributions, we apply an Imbalance Ratio IR ∈ { 2, 5, 10 }. This configuration rigorously tests the framework against severe local label skew and global class rarity. 
+
+5.1.1 Baselines and Hyperparameters: 
+
+We benchmark against the full dataset FedAvg [19] baseline, standard Random selection, and state of the art coreset algorithms: FedCS [8], FedCore [7], EL2N [23], Forgetting Events [28], and Gradient Norm [23]. Crucially, these competitive baselines require training the local model on the entire dataset as a warm-up phase and sending updates to the server to execute the coreset selection 8Table 1: Global model accuracy using ResNet-18 on CIFAR-10. Skewed data is evaluated with imbalance ratios IR = 2 and 10, α denotes the non-IID data distribution.                                                                                         
+
+> IR = 2, pl= 0 .1, α = 0 .1IR = 10, pl= 0 .1, α = 0 .1Methods pf: 0.1 0.3 0.5 0.7 0.9 0.1 0.3 0.5 0.7 0.9 Random 41.69 53.75 52.64 51.20 46.50 44.84 43.46 43.15 24.90 41.91 EL2N 47.27 49.75 47.91 46.27 42.19 37.54 39.18 40.47 40.82 40.58 GradND 48.44 49.17 48.95 45.55 39.83 36.53 32.22 35.42 36.52 15.93 FedCS 53.09 53.17 51.78 49.61 47.39 43.40 42.06 43.42 25.60 42.76 FedCore 55.96 55.93 52.98 51.25 48.22 44.98 42.70 44.34 22.64 42.52
+> SCOPE 56.48 54.43 54.14 51.96 48.33 45.65 44.25 45.04 44.76 42.80
+> Full DB 55.63 55.63 55.63 55.63 55.63 45.07 45.07 45.07 45.07 45.07
+
+Table 2: Global model accuracy using ResNet-50 on Tiny-ImageNet. Skewed data is evaluated with imbalance ratios IR = 2 and 5, while α = 0.1 and 1.0 denotes the non-IID data distribution.                                                                                                   
+
+> IR = 2, pl= 0 .1, α = 1 .0IR = 5, pl= 0 .1, α = 0 .1Methods pf: 0.1 0.3 0.5 0.7 0.9 0.1 0.3 0.5 0.7 0.9 Random 58.42 58.68 57.36 56.70 55.67 54.52 53.08 53.89 53.41 52.50 EL2N 60.33 59.22 59.13 58.36 58.18 54.38 54.44 54.34 53.85 53.12 Forgetting 58.17 58.87 58.15 58.80 56.57 54.63 54.35 54.21 54.06 54.04 GradND 59.74 59.49 58.88 58.61 58.33 54.63 53.65 54.14 53.86 52.58 FedCS 59.79 58.81 58.84 58.32 58.25 54.60 53.58 53.67 53.17 52.57 FedCore 59.34 58.57 58.13 57.64 58.64 54.30 53.20 53.88 52.98 52.42
+> SCOPE 59.23 60.31 59.27 58.87 58.78 54.65 54.35 54.28 54.49 55.38
+> Full DB 59.85 59.85 59.85 59.85 59.85 54.41 54.41 54.41 54.41 54.41
+
+procedure. All models are optimized using Stochastic Gradient Descent with a cosine decay learning rate schedule. The total number of communication rounds T is set to 200 for all experiments. The reported values correspond to the mean top-1 accuracy over the final 10 global rounds, averaged across two different random seeds. All experiments use identical hyperparameters, batch sizes, and computational resources. 
+
+Hardware and Infrastructure Assumptions: We situate operational environment within a high-performance computing ecosystem, entirely relaxing local computational constraints. Each edge node performs training using the MobileCLIP-S2 architecture on a single NVIDIA A100 GPU. 
+
+5.2 Robustness Performance Analysis 
+
+Table 1, Table 2, Table 3, and Table 4 present the top-1 global accuracy across CIFAR-10, Tiny-ImageNet, CIFAR-100, and UHCS under varying pruning rates and heterogeneity settings. 
+
+Robustness and Enhanced Generalization: Table 1 shows feature, gradient, error and forget-ting based baselines degrade severely at high pruning rates, higher pf , as transient training signals become unreliable in skewed non-IID settings. In contrast, SCOPE remains robust through se-mantic profiling. Crucially, SCOPE at pf = 0 .1 achieves 56.48% accuracy, actually outperforming the unpruned Whole Database accuracy of 55.63%. The full dataset inherently contains outliers that destabilize federated aggregation and severe class imbalances that bias the global model. By filtering samples, SCOPE creates a balanced optimization trajectory that generalizes better than a noisy full dataset. 
+
+Scalability to Complex Distributions: The advantage of SCOPE becomes more pronounced on complex datasets. On CIFAR-100 with the ViT-B-16 architecture, as shown in Table 3, SCOPE 9Table 3: Global model accuracy using using ViT-B-16 on CIFAR-100. Skewed data is evaluated with imbalance ratios IR = 2 and 10, while α = 0.1.                                                                                         
+
+> IR = 2, pl= 0 .1, α = 0 .1IR = 10, pl= 0 .1, α = 0 .1Methods pf: 0.1 0.3 0.5 0.7 0.9 0.1 0.3 0.5 0.7 0.9 Forgetting 84.51 84.62 83.76 83.96 83.29 80.55 79.52 80.30 80.14 80.32 EL2N 83.80 82.85 82.56 82.85 82.69 75.93 75.68 76.81 76.15 76.11 GradND 83.80 82.73 82.57 82.76 82.18 75.96 76.29 77.15 76.63 76.32 FedCS 84.56 84.15 84.23 83.91 83.25 80.52 80.80 80.18 80.05 80.14 FedCore 84.40 84.45 84.31 84.52 83.85 79.97 79.92 80.13 79.92 79.76
+> SCOPE 85.10 85.16 84.68 84.78 84.07 80.92 80.80 80.62 80.68 79.78
+> Full DB 85.09 85.09 85.09 85.09 85.09 85.94 85.94 85.94 85.94 85.94
+
+Table 4: Global model accuracy using using Swin-Tiny on UHCS. Skewed data is evaluated with imbalance ratios IR = 2 and 10, while α = 0.1.                                                                                                   
+
+> IR = 2, pl= 0 .1, α = 0 .1IR = 10, pl= 0 .1, α = 0 .1Methods pf: 0.1 0.3 0.5 0.7 0.9 0.1 0.3 0.5 0.7 0.9 Random 88.52 86.34 86.61 87.43 82.24 91.53 91.26 92.08 89.34 83.33 Forgetting 84.43 87.16 86.34 84.43 76.23 91.26 90.16 89.89 85.52 75.96 GradND 82.24 81.42 78.96 77.32 55.74 91.53 88.52 92.08 86.34 83.33 EL2N 85.25 92.90 81.15 89.07 56.01 92.62 89.07 88.52 85.79 84.70 FedCS 86.61 83.61 85.79 83.06 73.22 93.17 91.53 92.08 89.07 80.33 FedCore 83.06 88.52 87.43 88.52 70.49 92.08 92.35 89.07 86.61 71.04
+> SCOPE 95.36 94.81 94.26 88.80 70.49 95.36 94.54 94.81 94.81 92.62
+> Full DB 87.70 87.70 87.70 87.70 87.70 93.99 93.99 93.99 93.99 93.99
+
+achieves approximately 85.10 percent accuracy at low pruning rates pf = 0 .1, surpassing FedCS by nearly 0.55 percent. Similarly, with Tiny-ImageNet dataset in Table 2, SCOPE outperforms all baselines across all pruning rates for the IR = 2 , α = 0 .1 setting, except pf = 0 .1. Notably, at a pruning rate of 0.3, SCOPE achieves 60.31 percent compared to 58.81 percent for GradND. SCOPE creates a balanced optimization trajectory that generalizes better than a noisy full dataset. 
+
+Resilience to Quantity Non-IID: We further evaluate robustness by increasing the dataset skew level using a long-tailed distribution, as measured by the Imbalance Ratio. As shown in Table 2 for Tiny-ImageNet, increasing the imbalance typically degrades performance for standard methods due to the dominance of head classes. However, SCOPE demonstrates remarkable resilience. While FedCore drops to 52.42 percent in the IR=5 setting at a pruning rate of 0.9, SCOPE maintains a competitive accuracy profile, peaking at 55.34 percent. This confirms that the Local Pruning Priority metric effectively counteracts the increased imbalance by aggressively targeting redundant head-class samples, thereby preventing the global model from collapsing into head-class overfitting. 
+
+Zero-Shot Capability on Scientific Data: Although MobileCLIP-S2 is a general-purpose model, its extensive pre-training corpus includes open-access scientific literature, thereby embedding latent semantic representations for specialized domains such as Ultrahigh Carbon Steel Micrograph DataBase (UHCS) micrographs. Crucially, SCOPE relies on the relative geometric structure of this latent space. This structural profiling is highly effective. Table 4 demonstrates that even under severe skew with an imbalance ratio IR = 10 and aggressive pruning at a rate of pf = 0 .9, SCOPE maintains 92.62% accuracy. In contrast, FedCS and GradND degrade significantly to 80.33% and 83.33%, respectively, validating that our relative metric approach robustly captures niche topolog-ical features where traditional gradient or error signals fail. 10 Table 5: Performance and memory profiling during the coreset selection procedure. All experiments were conducted on the CIFAR-100 dataset with an IR = 5. Coreset (Sec) denotes the wall-clock time in seconds for the scoring and the coreset selection.                                                         
+
+> FLOPs (GB) Peak VRAM (MB) Coreset (sec) Model FedCS SCOPE Gain ↑FedCS SCOPE Gain ↑FedCS SCOPE Gain ↑
+> ResNet-18 4.5 11.8 0.38 ×1473 1039 1.42 ×385 285 1.35 ×
+> EffNetV2-M 24.0 11.8 2.03 ×15653 1039 15.07 ×1561 283 5.52 ×
+> ResNet-50 65.6 11.8 5.56 ×5438 1039 5.23 ×587 283 2.07 ×
+> Swin-Tiny 72.0 11.8 6.10 ×6734 1039 6.48 ×982 283 3.47 ×
+> ViT-B-16 280.0 11.8 23.7 ×8208 1039 7.90 ×2186 283 7.72 ×
+
+Table 6: Complexity analysis of total server-side communication load. K denotes the total partic-ipating clients, C the number of classes, and D the feature dimension.        
+
+> Model & Dataset Parameters FedCS SCOPE SCOPE
+> K,C,D
+
+O(K × C × D) O(K × C) Speedup ↑                    
+
+> ResNet-18 & CIFAR-10 10, 10, 512 ∼205 KB ∼1.6 KB ∼128 ×
+> ViT-B-16 & CIFAR-100 100, 100, 768 ∼30.7 MB ∼160 KB ∼192 ×
+> ResNet-50 & Tiny-ImageNet 100, 200, 2048 ∼160.0 MB ∼320 KB ∼512 ×
+> EfficientNetV2 & EuroSAT 10, 10, 1280 ∼512 KB ∼1.6 KB ∼320 ×
+> Swin-Tiny & UHCS 10, 6, 768 ∼184 KB ∼1.0 KB ∼184 ×
+
+5.3 Computational and Communication Cost Analysis 
+
+Table 5 details SCOPE’s efficiency across FLOPs, warmup latency, and peak VRAM. Using a MobileCLIP-S2 establishes a consistent footprint of 11.8 GFLOPs and 1039 MB of VRAM, elimi-nating the severe scaling costs associated with high-performance architectures. Skipping iterative gradient computations accelerates selection by up to 7.72 × for ViT-B-16, preventing data filtering from edge devices. Table 6 demonstrates SCOPE framework’s communication efficiency. The core advantage is an algorithmic shift from O(C × D) in FedCS baselines to O(C). Instead of trans-mitting full feature centroids that scale linearly with the large feature dimension D, our approach distills client data into lightweight class-wise scalars. Consequently, payload sizes depend solely on the class count C. This decouples communication costs from the feature space, enabling the deployment of massive foundation models without bandwidth penalties. Server-side aggregation reflects this same scalability. Our method transmits only scalars and this keeps constrained edge networks highly efficient and prevents bandwidth saturation. 
+
+5.4 Semantic Metric Scorer Backbone Scalability 
+
+Feature Extraction Backbone Scalability: SCOPE’s architecture-agnostic design enables hardware-specific optimization across diverse backbones in Table 7. Remarkably, the edge-optimized MobileCLIP-S2 reduces peak VRAM by 79% and accelerates coreset selection by 7.8 × over ViT-H-14. Despite its small footprint, it maintains strong selection quality, even outperforming larger models on Tiny-ImageNet. This confirms that compact foundation models offer sufficient semantic density for reliable sample selection, making SCOPE ideal for resource-constrained edge environ-ments. 
+
+Architecture-Agnostic Efficacy: A key advantage of the SCOPE framework is its independence from local client model architectures. Unlike gradient and feature embedding based methods that 11 Table 7: Evaluation of various foundation models as scorer backbones. Settings: α = 0 .1, IR=2, and pl = 0 .1. Use pf = 0 .9, for CIFAR-10 and Tiny-ImageNet, and pf = 0 .5 for UHCS. Coreset (Sec): the wall-clock in seconds for the scoring the coreset selection.                                                    
+
+> CIFAR-10 Tiny-ImageNet UHCS Backbone Params (M) Peak VRAM (MB) Coreset (Sec) Acc (%) Coreset (Sec) Acc (%) Coreset (Sec) Acc (%) ViT-H-14 986 4846 841 46.34 2478 58.15 164 92.35 MetaCLIP 428 2716 430 45.32 1167 57.64 64 92.62 ConvNeXtCLIP 179 1817 182 45.87 659 57.90 37 90.98 BiomedCLIP 200 1295 139 45.63 823 57.59 30 92.62 RemoteCLIP 428 2458 398 45.07 1163 58.31 38 93.44 MobileCLIP-S2 99 1038 107 45.10 413 58.25 45 94.54
+
+Table 8: Architecture-Agnostic Generalization. Coreset selected with our MobileCLIP-S2 based SCOPE method effectively train diverse downstream architectures, demonstrating SCOPE’s uni-versal transferability across CNNs and Transformers. Tiny-ImageNet dataset with IR = 5, α = 0 .1, 
+
+pf = 0 .7, pl = 0 .1.                               
+
+> Method ResNet-50 Swin-Tiny ViT-Tiny DeiT-Tiny EfficientNetv2 GradND 53.48 67.19 43.71 41.48 35.20 EL2N 53.35 66.76 44.22 43.79 35.48 FedCS 54.90 66.85 45.05 43.35 36.71 FedCore 55.06 66.47 44.52 45.04 38.69
+> SCOPE 55.68 67.17 45.27 46.48 38.72
+
+Table 9: Ablation study of SCOPE components on CIFAR-10 and Tiny ImageNet. We report Top-1 accuracy % with α = 0 .1. The full SCOPE pipeline demonstrates superior robustness, particularly under aggressive pruning.                                         
+
+> Method CIFAR-10 ( IR = 10) Tiny-ImageNet ( IR = 5)
+> pf= 0 .1pf= 0 .5pf= 0 .9pf= 0 .1pf= 0 .5pf= 0 .9SCOPE 45.65 45.04 42.80 54.65 54.28 55.28 w/o Global Profiling 38.68 31.61 19.04 53.76 50.19 38.36 w/o Anomalies Filter( pl)43.18 41.87 39.79 54.46 54.11 52.25 w/o Redundant Filter( pf)42.61 42.45 42.61 54.07 54.03 54.78
+
+require the selection model to match the training model, our approach leverages universal semantic embeddings to identify high-value samples. Even when the pre-trained VLM is effectively blind to highly specialized domain features, our carefully designed textual prompts extract sufficient structural semantics to bridge this domain gap. To verify this, we evaluate coreset selected with SCOPE across distinct downstream architectures. Baselines used ResNet-50 to select the coreset and train the other models with those samples. As Table 8 shows, SCOPE consistently outperforms baselines, confirming that semantic diversity provides robust properties that improve training for both convolutional and attention-based networks. 
+
+5.5 Ablation Study 
+
+Table 9 details ablation results across pruning rates pf . Removing Global Profiling causes a 23.76% accuracy drop at pf = 0 .9, as skewed local statistics discard rare tail samples. Server aggregation successfully robustifies this consensus. Excluding the Consensus Filter at pf = 0 .1 reduces accuracy 12 by 2.47% because retained noisy outliers exacerbate non IID drift. Omitting the Balancing Filter causes a 3.04% drop, heavily biasing the coreset toward frequent head classes. Together, these modules utilize pl and pf to filter artifacts, preserve distribution equity, and stabilize optimization. 
+
+# 6 Conclusion 
+
+In this work, we introduce SCOPE, a training-free federated data pruning framework that opti-mizes data utility across highly skewed data distributions. By quantifying data through three dis-tinct scalar metrics capturing of representation, diversity, and boundary proximity, our approach effectively decouples data quantity from semantic quality. These metrics are aggregated into a lightweight global profile, enabling clients to distinguish globally long-tail samples from detrimen-tal semantic anomalies without compromising institutional privacy. Extensive experiments demon-strate that SCOPE significantly outperforms existing baselines in computation cost, communication cost and accuracy, particularly under extreme data heterogeneity and long tail distributions. By explicitly leveraging globally informed coreset selection, our framework provides a scalable and robust solution for real-world federated learning deployments. 
+
+# Acknowledgments 
+
+This research is supported by the U.S. Department of Energy (DOE) through the Office of Ad-vanced Scientific Computing Research’s “Orchestration for Distributed & Data-Intensive Scientific Exploration” and the “Decentralized data mesh for autonomous materials synthesis” AT SCALE LDRD at Pacific Northwest National Laboratory, which is operated by Battelle for the DOE under Contract DE-AC05-76RL01830. We also appreciate the support from the Iowa State University Dean’s Emerging Faculty Leaders Award. We also thank the National Center for Supercomputing Applications for providing GPUs through allocation CHE240191 from the Advanced Cyberinfras-tructure Coordination Ecosystem: Services & Support (ACCESS) program. 
+
+# References 
+
+[1] Abrahamyan, L., Chen, Y., Bekoulis, G., Deligiannis, N.: Learned gradient compression for dis-tributed deep learning. IEEE Transactions on Neural Networks and Learning Systems 33 (12), 7330–7344 (2021) [2] Basu, D., Data, D., Karakus, C., Diggavi, S.: Qsparse-local-sgd: Distributed sgd with quan-tization, sparsification and local computations. Advances in Neural Information Processing Systems 32 (2019) [3] Chen, C.Y., Choi, J., Brand, D., Agrawal, A., Zhang, W., Gopalakrishnan, K.: Adacomp: Adaptive residual gradient compression for data-parallel distributed training. In: Proceedings of the AAAI conference on artificial intelligence. vol. 32 (2018) [4] DeCost, B.L., Hecht, M.D., Francis, T., Webler, B.A., Picard, Y.N., Holm, E.A.: Uhcsdb: ul-trahigh carbon steel micrograph database: tools for exploring large heterogeneous microstruc-ture datasets. Integrating Materials and Manufacturing Innovation 6(2), 197–205 (2017) [5] Gadre, S.Y., Ilharco, G., Fang, A., Hayase, J., Smyrnis, G., Nguyen, T., Marten, R., Wortsman, M., Ghosh, D., Zhang, J., et al.: Datacomp: In search of the next generation of multimodal datasets. Advances in Neural Information Processing Systems 36 , 27092–27112 (2023) 13 [6] Gao, S., Li, J., Zhang, Z., Zhang, Y., Cai, W., Huang, H.: Device-wise federated network pruning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 12342–12352 (2024) [7] Guo, H., Gu, H., Wang, X., Chen, B., Lee, E.K., Eilam, T., Chen, D., Nahrstedt, K.: Fedcore: Straggler-free federated learning with distributed coresets. In: ICC 2024-IEEE International Conference on Communications. pp. 280–286. IEEE (2024) [8] Hao, C., Xie, W., Li, D., Qin, H., Ye, H., Fang, L., Li, Y.: Fedcs: Coreset selection for federated learning. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 15434–15443 (2025) [9] He, M., Yang, S., Huang, T., Zhao, B.: Large-scale dataset pruning with dynamic uncertainty. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 7713–7722 (2024) [10] HPCwire: The data management challenges of genesis mission. https://www.hpcwire.com/ 2026/01/15/the-data-management-challenges-of-genesis-mission/ (2026), accessed: 2026-03-01 [11] Huang, X., Liu, Z., Liu, S.Y., Cheng, K.T.: Efficient quantization-aware training with adaptive coreset selection (2023) [12] Jeong, E., Oh, S., Kim, H., Park, J., Bennis, M., Kim, S.L.: Communication-efficient on-device machine learning: Federated distillation and augmentation under non-iid private data. arXiv preprint arXiv:1811.11479 (2018) [13] Jiang, Y., Wang, S., Valls, V., Ko, B.J., Lee, W.H., Leung, K.K., Tassiulas, L.: Model pruning enables efficient federated learning on edge devices. IEEE Transactions on Neural Networks and Learning Systems 34 (12), 10374–10386 (2022) [14] Koutsoubis, N., Yilmaz, Y., Ramachandran, R.P., Schabath, M., Rasool, G.: Privacy pre-serving federated learning in medical imaging with uncertainty estimation. arXiv preprint arXiv:2406.12815 (2024) [15] Laine, R.F., Jacquemet, G., Krull, A.: Imaging in focus: an introduction to denoising bioim-ages in the era of deep learning. The international journal of biochemistry & cell biology 140 ,106077 (2021) [16] Lin, Y., Han, S., Mao, H., Wang, Y., Dally, W.J.: Deep gradient compression: Reducing the communication bandwidth for distributed training. arXiv preprint arXiv:1712.01887 (2017) [17] Ma, J., Tu, A., Chen, Y., Reddi, V.J.: Fedstaleweight: Buffered asynchronous federated learn-ing with fair aggregation via staleness reweighting. arXiv preprint arXiv:2406.02877 (2024) [18] Marion, M., ¨Ust¨ un, A., Pozzobon, L., Wang, A., Fadaee, M., Hooker, S.: When less is more: Investigating data pruning for pretraining llms at scale. arXiv preprint arXiv:2309.04564 (2023) [19] McMahan, B., Moore, E., Ramage, D., Hampson, S., y Arcas, B.A.: Communication-efficient learning of deep networks from decentralized data. In: Artificial intelligence and statistics. pp. 1273–1282. PMLR (2017) 14 [20] Meng, M.H., Teo, S.G., Bai, G., Wang, K., Dong, J.S.: Enhancing federated learning robust-ness using data-agnostic model pruning. In: Pacific-Asia conference on knowledge discovery and data mining. pp. 441–453. Springer (2023) [21] Ming, Y., Cai, Z., Gu, J., Sun, Y., Li, W., Li, Y.: Delving into out-of-distribution detection with vision-language representations. Advances in neural information processing systems 35 ,35087–35102 (2022) [22] Patra, R., Hebbalaguppe, R., Dash, T., Shroff, G., Vig, L.: Calibrating deep neural networks using explicit regularisation and dynamic data pruning. In: Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision. pp. 1541–1549 (2023) [23] Paul, M., Ganguli, S., Dziugaite, G.K.: Deep learning on a data diet: Finding important examples early in training. Advances in neural information processing systems 34 , 20596– 20607 (2021) [24] Qin, Z., Wang, K., Zheng, Z., Gu, J., Peng, X., Xu, Z., Zhou, D., Shang, L., Sun, B., Xie, X., et al.: Infobatch: Lossless training speed up by unbiased dynamic data pruning. arXiv preprint arXiv:2303.04947 (2023) [25] Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al.: Learning transferable visual models from natural language supervision. In: International conference on machine learning. pp. 8748–8763. PMLR (2021) [26] Roth, A., W¨ ustefeld, K., Weichert, F.: A data-centric augmentation approach for disturbed sensor image segmentation. Journal of Imaging 7(10), 206 (2021) [27] Sivasubramanian, D., Nagalapatti, L., Iyer, R., Ramakrishnan, G.: Gradient coreset for fed-erated learning. In: Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision. pp. 2648–2657 (2024) [28] Toneva, M., Sordoni, A., Combes, R.T.d., Trischler, A., Bengio, Y., Gordon, G.J.: An empirical study of example forgetting during deep neural network learning. arXiv preprint arXiv:1812.05159 (2018) [29] Wang, Q., Yang, Q., He, S., Shi, Z., Chen, J.: Asyncfeded: Asynchronous federated learning with euclidean distance based adaptive weight aggregation. arXiv preprint arXiv:2205.13797 (2022) [30] Wang, Z., Huang, W., Chen, T., Shi, Z., Wan, G., Qiao, Y., Yang, B., Wang, J., Li, B., Ye, M.: An empirical study of federated prompt learning for vision language model. In: Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence (IJCAI). pp. 10705–10713 (2025). https://doi.org/10.24963/ijcai.2025/1188 [31] Welling, M.: Herding dynamical weights to learn. In: Proceedings of the 26th annual interna-tional conference on machine learning. pp. 1121–1128 (2009) [32] Xia, X., Liu, J., Yu, J., Shen, X., Han, B., Liu, T.: Moderate coreset: A universal method of data selection for real-world data-efficient deep learning. In: The Eleventh International Conference on Learning Representations (2022) [33] Xie, C., Koyejo, S., Gupta, I.: Asynchronous federated optimization. arXiv preprint arXiv:1903.03934 (2019) 15 Appendix A Theoretical Analysis of Convergence 
+
+A.1 Formal Notation and Assumptions 
+
+For K clients, let Dk be the raw noisy dataset, ˜Dk ⊂ Dk the coreset, and Dclean k the uncorrupted distribution. The true objective is F [w] = PKk=1 pkF clean k [w] while the federated network optimizes ˜F [w] = PKk=1 pk ˜Fk[w]. We make the following standard assumptions for nonconvex federated optimization: 
+
+Assumption 1 (L Smoothness) . Assume L smooth objectives. For any vectors v and w:
+
+F [v] ≤ F [w] + ⟨∇ F [w], v − w⟩ + L
+
+2 ∥v − w∥2 (13) 
+
+Assumption 2 (Bounded Stochastic Variance) . Assume bounded local stochastic gradient variance: 
+
+E
+
+
+
+∇f [w; ξ] − ∇ ˜Fk[w] 2
+
+≤ σ2 (14) 
+
+Assumption 3 (Relative Coreset Approximation) . Coreset gradients track clean gradients with scaling ω ∈ [0 , 1) and residual gap ϵ:
+
+E
+
+
+
+∇ ˜Fk[w] − ∇ F clean k [w] 2
+
+≤ ω2 ∇F clean k [w] 2
+
++ ϵ2 (15) To address the bounds in Theorem 1, we must rigorously prove how our filtering metrics in-stantiate the variables in the convergence limit, rather than simply assuming their success. 
+
+A.2 Formal Proof of Lemma 1: Bias Reduction 
+
+Objective: Prove that pruning via the Semantic Anomaly Score AS i rigorously bounds the coreset approximation error ϵ2 strictly below the raw noise bias β2
+
+> noise
+
+.Let the local dataset Dk of size N be partitioned into clean samples Dclean k and noisy mislabeled samples Dnoise k . The true clean gradient is gclean = 1 
+
+> |Dclean k|
+
+P
+
+> i∈Dclean k
+
+∇Fi[w]. The raw noisy gradient is graw = 1
+
+> N
+
+P 
+
+> i∈Dk
+
+∇Fi[w]. The initial gradient bias introduced by the noisy data is defined as: 
+
+βnoise = ∥graw − gclean ∥ ≤ |Dnoise k |
+
+N max 
+
+> i∈Dnoise k
+
+∥∇ Fi[w] − gclean ∥ (16) In standard cross entropy optimization, the magnitude of a sample gradient ∥∇ Fi[w]∥ is propor-tional to the divergence between the model prediction and the label prototype. Our Semantic Anomaly Score computes this exact divergence geometrically: AS i = ˆZSneg ,i − ˆZRS,i . A high AS i
+
+guarantees the sample aligns strongly with incorrect prototypes and weakly with the assigned label prototype. We can formalize this relationship by assuming the gradient deviation is Lipschitz continuous with respect to the semantic anomaly score: 
+
+∥∇ Fi[w] − gclean ∥ ≤ Lsem AS i + δ (17) 16 where Lsem is a Lipschitz constant mapping the vision language space to the loss gradient space, and δ is an irreducible base variance. Our pruning algorithm sorts all samples in descending order of AS i and removes the top pl
+
+fraction to form the coreset ˜Dk. Let τAS be the score of the marginal pruned sample. For every retained sample j ∈ ˜Dk, we mathematically guarantee AS j ≤ τAS .The coreset gradient is ˜ g = 1  
+
+> |˜Dk|
+
+P  
+
+> j∈˜Dk
+
+∇Fj [w]. We bound the residual coreset approximation error ϵ:
+
+ϵ = ∥˜g − gclean ∥ ≤ max  
+
+> j∈˜Dk
+
+∥∇ Fj [w] − gclean ∥ ≤ Lsem τAS + δ (18) Because the pruning deliberately discards the subset of data where AS i > τ AS , the maximum gradient deviation in the coreset is strictly bounded by the threshold τAS . Consequently, by selecting a sufficient pruning ratio pl such that τAS remains small, we analytically guarantee ϵ2 ≪ β2
+
+> noise
+
+.
+
+A.3 Formal Proof of Lemma 2: Drift Reduction 
+
+Objective: Prove that filtering via Ri bounds the coreset heterogeneity ˜Γ. Client drift is driven by the divergence of local objectives, measured by the heterogeneity met-ric Γ = 1
+
+> K
+
+PKk=1 ∥graw k − gglobal ∥2. In non IID settings, this divergence is proportional to the 1 Wasserstein distance between the local data distribution Pk and the global distribution Pglobal .Our algorithm targets majority classes selected by threshold β and prunes samples with the highest Redundancy Score Ri = ˆZRS,i − ˆZSneg ,i − ˆZDS,i . By heavily penalizing Ri with the diversity metric ˆZDS,i and boundary proximity ˆZSneg ,i , the algorithm mathematically protects the structural support vectors at the edges of the feature space. Pruning high Ri samples exclusively removes mass from the dense geometric center of overrepresented classes. Removing redundant central mass while fixing the support vectors flattens the local label den-sity fc toward the global density Wc. This physically reduces the transport cost to the global distribution: 
+
+W1( ˜Pk, Pglobal ) ≤ W1(Pk, Pglobal ) (19) Because the local gradient distribution matches the geometry of the data distribution, this reduction in Wasserstein distance directly translates to a reduced gradient heterogeneity ˜Γ ≤ λΓ, where 
+
+λ ∈ [0 , 1) scales inversely with the redundancy pruning fraction pf .
+
+# B Prompt design for extracting semantic information 
+
+MobileCLIP-S2 extracts semantic information by embedding class labels into natural-language templates. Rather than using raw tokens, these descriptive sentences mirror CLIP’s pretraining data, giving the text encoder the necessary context to retrieve the correct semantic meaning 17 Prompt templates sent to the CLIP text encoder: 
+
+• "a photo of a {class name }." 
+
+• "a clear image of a {class name }." 
+
+• "a close-up of a {class name }." 
+
+• "a representation of the {class name }." 
+
+• "a good photo of the {class name }." 
+
+Here, {class name } is replaced with the corresponding dataset label when forming the prompt. Each prompted sentence is encoded using the text encoder: 
+
+ztext  
+
+> c,j
+
+= ftext (tj (c)) ∈ Rd. (20) These embeddings are averaged to produce a class-level semantic prototype: 
+
+¯pc = 1
+
+M
+
+> M
+
+X
+
+> j=1
+
+ztext  
+
+> c,j
+
+, pc = ¯pc
+
+∥¯pc∥2
+
+. (21) This prototype represents the semantic concept of class  c in the shared vision–language embedding space. For an input image  xi, the image encoder produces a visual embedding: 
+
+zimg  
+
+> i
+
+= fimg (xi)
+
+∥fimg (xi)∥2
+
+. (22) Semantic similarity between the image and each class prototype is then computed as: 
+
+Si,c = zimg ⊤ 
+
+> i
+
+pc. (23) Since both vectors are normalized, this corresponds to cosine similarity in the shared embed-ding space. Embedding the class label within natural-language prompts aligns it with the vi-sion–language representations learned during CLIP pretraining. As a result, the resulting text prototypes capture meaningful semantic concepts that can be directly compared with image fea-tures. 
+
+# C SCOPE Coreset Selection Pseudocode 
+
+Algorithm 1 details the procedure to select a federated coreset using the SCOPE framework. 
+
+# D Scalability and Robustness Analysis 
+
+D.1 Sensitivity Analysis of the Balancing Threshold ( β)
+
+In the second stage of our local coreset selection, the hyperparameter β ∈ [0 , 1] controls the strict-ness of the Local Pruning Priority (LPP) threshold. Specifically, β determines the inclusion margin relative to the maximum observed LPP, dictating which classes are subjected to aggressive redun-dancy pruning. A lower β restricts pruning to only the most globally dominant classes, while a 18 Algorithm 1 SCOPE: Federated Semantic Coreset Selection  
+
+> 1:
+
+Input: Client datasets {D1, . . . , D K }, global pruning rates pl, p f , hyperparameter β 
+
+> 2:
+
+Output: Optimized local coresets {D1
+
+> coreset
+
+, . . . , D Kcoreset }
+
+Phase 1: Client-Side Semantic Metrics Extraction  
+
+> 3:
+
+for each client k ∈ { 1, . . . , K } in parallel do  
+
+> 4:
+
+for each sample ( xi, y i) ∈ Dk do  
+
+> 5:
+
+Extract visual embedding vimg,i and textual prototype tyi 
+
+> 6:
+
+Representation Score: RS i ← vimg,i · tyi 
+
+> 7:
+
+Diversity Score: DS i ← || vimg,i − RS ityi || 2 
+
+> 8:
+
+Boundary Proximity: Sneg,i ← max j̸ =yi (vimg,i · tj ) 
+
+> 9:
+
+end for  
+
+> 10:
+
+Local class center μkm,c , σ km,c for m ∈ { RS, DS, S neg } and class counts nk,c  
+
+> 11:
+
+Share local profile {nk,c , μ km,c , σ km,c }∀c to the server  
+
+> 12:
+
+end for Phase 2: Global Profile Aggregation  
+
+> 13:
+
+for each class c ∈ { 1, . . . , M } do  
+
+> 14:
+
+Global sample count Nc ← PKk=1 nk,c  
+
+> 15:
+
+Global Class Rarity Weight: Wc ∝ (Nc/ P 
+
+> i
+
+Ni + ϵ)−γ 
+
+> 16:
+
+for each metric m ∈ { RS, DS, S neg } do  
+
+> 17:
+
+Global mean μGlobal m,c  
+
+> 18:
+
+Global variance [ σGlobal m,c ]2 
+
+> 19:
+
+end for  
+
+> 20:
+
+end for  
+
+> 21:
+
+Broadcast Global Policy Ω = {Wc, μ Global m,c , σ Global m,c }∀c,m to all clients 
+
+Phase 3: Client-Side Coreset selection  
+
+> 22:
+
+for each client k ∈ { 1, . . . , K } in parallel do  
+
+> 23:
+
+for each sample xi ∈ Dk do  ▷ Semantic Anomalies Removal  
+
+> 24:
+
+Clipped Z-scores ˆZRS,i and ˆZSneg ,i using Ω  
+
+> 25:
+
+Semantic Anomaly Score: AS i ← ˆZSneg ,i − ˆZRS,i  
+
+> 26:
+
+end for  
+
+> 27:
+
+Prune top pl fraction of samples with highest AS i to form coreset D′ 
+
+> k
+> 28:
+
+Calculate τLP P using Wc and local class frequency c 
+
+> 29:
+
+Identify target majority classes: Ctarget ← { c | LPP k,c exceeds threshold β} 
+
+> 30:
+
+Sprune redundant ← ∅  
+
+> 31:
+
+for each class c ∈ C target do  ▷ Redundancy Samples Removal  
+
+> 32:
+
+for each sample xi ∈ D′ 
+
+> k
+
+where yi = c do  
+
+> 33:
+
+Clipped Z-score ˆZDS,i using Ω  
+
+> 34:
+
+Redundancy Score: Ri ← ˆZRS,i − ˆZSneg ,i − ˆZDS,i  
+
+> 35:
+
+end for  
+
+> 36:
+
+Add top pf fraction of samples with highest Ri to Sprune redundant  
+
+> 37:
+
+end for  
+
+> 38:
+
+Final Coreset Selection:  
+
+> 39:
+
+Dkcoreset ← D′ 
+
+> k
+
+\ Sprune redundant  
+
+> 40:
+
+end for  
+
+> 41:
+
+Return {D1
+
+> coreset
+
+, . . . , D Kcoreset } for Federated Training 19 higher β relaxes this constraint, potentially subjecting minority or borderline classes to redundancy filtering. To rigorously evaluate the robustness of this threshold and determine the optimal configuration, we analyze the overall convergence accuracy of SCOPE across a range of β values {0.1, 0.3, 0.5, 0.7, 0.9}.The experiments were conducted on the Tiny-ImageNet dataset using a ResNet-50 backbone under severe local label skew. We evaluated this across varying pruning severities pf ∈ { 0.1, 0.5, 0.9}
+
+and global data imbalance ratios, with IR = 2 representing moderate imbalance and IR = 10 representing severe imbalance. Table 10: Sensitivity Analysis of the Balancing Threshold ( β) on Overall Accuracy using SCOPE on Tiny-ImageNet with a ResNet-50 model and a Dirichlet distribution of α = 0 .1. The optimal balance between retaining critical samples and discarding redundancy is predominantly achieved at β = 0 .5, particularly in highly constrained environments. Imbalance Ratio (IR) Pruning Rate ( pf ) Target Class Inclusion Margin ( β)0.1 0.3 0.5 0.7 0.9 Moderate (IR = 2) 
+
+pf = 0 .1 57.73 57.80 58.46 56.21 57.63 
+
+pf = 0 .5 56.75 57.00 56.52 57.36 56.48 
+
+pf = 0 .9 57.90 57.80 58.94 55.08 52.59 Severe (IR = 10) 
+
+pf = 0 .1 50.23 50.49 51.44 50.65 52.04 
+
+pf = 0 .5 52.80 52.53 53.78 52.05 50.68 
+
+pf = 0 .9 50.64 50.85 51.44 49.35 48.67 As demonstrated in Table 10 and Figure 4, finding the optimal β is a critical balancing act between effective compression and structural preservation. The analysis reveals several key insights: 
+
+• The Optimal Value ( β = 0 .5): Across the most challenging and aggressive pruning regimes, such as pf = 0 .9 for IR=2 and pf ≥ 0.5 for IR=10, accuracy consistently peaks at β = 0 .5. At this setting, the inclusion margin is perfectly calibrated: it protects minority and moderate-frequency classes from being pruned, while successfully targeting and compressing the heavily redundant centers of the extreme majority classes. 
+
+• Inefficiency of Under-pruning ( β ≤ 0.3): An overly strict margin ( β ≤ 0.3) yields sub-optimal accuracy. In this regime, the algorithm is too conservative. It fails to remove enough mass from the head classes, effectively wasting the limited coreset budget on redundant features rather than diverse boundary samples. 
+
+• Degradation from Over-pruning ( β ≥ 0.7): When the threshold is relaxed to 0.7 or 0.9, we observe a sharp collapse in performance, dropping to 48.67% under severe imbalance and extreme pruning, pf = 0 .9. A high β forces the Balancing Filter to aggressively strip samples from classes that lack true redundancy, inadvertently destroying the geometric support vectors of the tail classes. Hence, these results confirm that β = 0 .5 serves as a robust and optimal default hyperparameter for SCOPE. It ensures that the framework safely maximizes redundancy compression without bleeding into the vulnerable data manifold of minority classes. 20 0.1 0.3 0.5 0.7 0.9                
+
+> Balancing Threshold ( )
+> 53
+> 54
+> 55
+> 56
+> 57
+> 58
+> 59
+> Overall Accuracy (%)
+> Moderate Imbalance (IR = 2)
+> pf= 0.1
+> pf= 0.5
+> pf= 0.9
+> Optimal = 0.5
+> 0.1 0.3 0.5 0.7 0.9
+> Balancing Threshold ( )
+> 49
+> 50
+> 51
+> 52
+> 53
+> 54 Severe Imbalance (IR = 10)
+> pf= 0.1
+> pf= 0.5
+> pf= 0.9
+> Optimal = 0.5
+
+Figure 4: Impact of β across different pruning severities pf . In highly constrained scenarios, such as aggressive pruning pf = 0 .9 or severe imbalance IR=10, SCOPE exhibits a distinct inverted U trajectory, consistently peaking at the balanced threshold of β = 0 .5. 
+
+D.2 Semantic Integrity 
+
+To verify that the Consensus Filter preserves the manifold structure while removing noise, we visualize the feature embeddings of a single client using t-SNE in Figure 5. The visualization reveals two key behaviors. First, samples flagged by the Consensus Filter are located in the sparse regions between class clusters or far from the manifold center. These semantic outliers often confuse the decision boundary during the early stages of aggregation. Pruning them sharpens class separability. Second, samples flagged by the Balancing Filter are densely packed near the cluster centroids. Removing these points reduces dataset size without altering the geometric support of the cluster. This confirms that SCOPE performs density-aware pruning rather than random deletion. 20 10 0 10 20     
+
+> Dimension 1
+> 20
+> 10
+> 0
+> 10
+> 20
+> Dimension 2
+> (a) Full Pruning Process
+> Global Center
+> Pruned (Noise)
+> Pruned (Redundant)
+> 20 10 010 20
+> Dimension 1
+> 20
+> 10
+> 0
+> 10
+> 20
+> Dimension 2
+> (b) Final Coreset
+
+Figure 5: Semantic Integrity for CIFAR-10. (a) The process identifies sparse outliers and dense redundant samples near cluster centroids. (b) The final coreset retains high-quality samples (circles) that preserve the geometric support of Global Class Centers (Stars), sharpening class separability. 21 D.3 Fairness Analysis of Data Distribution 
+
+D.3.1 Mitigating Majority Head Class Biasness 
+
+Global accuracy metrics often obscure critical failures where minority classes are systematically misclassified as majority classes due to imbalanced data distributions. To expose this, we analyze the Tail-to-Head Error Rate, which quantifies the probability that a true tail-class sample is incor-rectly predicted as a head class. As shown in Table 11, gradient-based methods like FedCS exhibit the highest error rate. This confirms that selection strategies relying solely on gradient magnitude inherently favor dominant majority features, causing the model to collapse tail representations into head clusters. SCOPE significantly reduces this error rate by explicitly weighting samples via the Global Rarity Score, forcing the model to respect the distinct decision boundaries of minority classes. Table 11: Comparison of Tail-to-Head Error and Final Flip Rate on CIFAR-10. FedCS shows high error and low plasticity, indicating premature convergence. SCOPE balances lower error with healthy plasticity. Method Tail-to-Head Error Final Flip Rate FedCore 36.53% 0.0250 FedCS 40.37% 0.0143 
+
+SCOPE 35.60% 0.0287 D.3.2 Evaluating the Stability-Plasticity Dilemma 
+
+We further investigate the learning dynamics by tracking the Final Flip Rate and the trends in long-term accuracy. Table 12 reveals the cost of rigidity in baseline methods. While baselines like FedCS and FedCore improve tail accuracy in later rounds, they suffer a significant drop in head accuracy. For instance, FedCS experiences a 2.97% decrease and FedCore a 3.13% decrease in head accuracy. This indicates a zero-sum trade-off where the model forgets majority knowledge to accommodate minority samples. Table 12: Long-Term Performance Trend (Round 100 → 199). Baselines suffer significant drops in Head accuracy to improve the Tail. SCOPE improves the Tail while preserving Head-class accuracy, resulting in the best overall improvement. Method Split R 100 Acc R 199 Acc ∆ (Trend) FedCore Head 69.50% 66.37% -3.13% Tail 39.10% 41.87% +2.77% Overall 49.23% 49.57% +0.34% FedCS Head 70.40% 67.43% -2.97% Tail 35.67% 39.30% +3.63% Overall 46.67% 47.20% +0.53% 
+
+SCOPE 
+
+Head 69.67% 69.17% -0.50% Tail 39.33% 42.30% +2.97% 
+
+Overall 49.48% 50.67% +1.19% 
+
+22 D.4 Dynamic Redundancy Mitigation across Heterogeneous Clients 
+
+As illustrated in Figure 6, the proposed SCOPE framework demonstrates a dynamic, client-aware pruning behavior. The stacked bar chart visualizes the pruning composition across 100 clients. A key observation is the proportional relationship between a client’s initial dataset size and the volume of data pruned. Clients with more initial samples, represented by taller overall bars, exhibit a correspondingly larger proportion of samples removed, particularly during the Step 2 redundancy filtering phase. This targeted reduction of over-represented data ensures that clients with massive, potentially biased local datasets are aggressively down-sampled, thereby contributing to a more balanced and uniform global coreset across the federation. 
+
+Figure 6: Client-wise Pruning Breakdown. Samples are categorized into coreset samples (green), Step 1 semantic anomalies (red), and Step 2 redundant samples (orange). The variability in pruning rates across clients demonstrates that SCOPE adapts to local heterogeneity, preserving more data from clients with high-utility samples while aggressively compressing redundant local shards. 23

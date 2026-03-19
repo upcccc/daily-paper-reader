@@ -6,73 +6,71 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-18
-- 运行时间：2026-03-18 19:52:23 UTC
+- 最新运行日期：2026-03-19
+- 运行时间：2026-03-19 19:57:01 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日深挖联邦学习在医疗 AI 领域的实战表现，重点解析多中心数据下的术后并发症预测模型。
-研究证实了隐私保护技术与二值神经网络在提升分布式学习效率与安全性方面的显著潜力。
-推荐关注如何在保障医疗数据合规的前提下，利用低成本推理技术加速 AI 临床应用。
-- 详情：[/202603/18/README](/202603/18/README)
+今日聚焦联邦学习前沿，深度解析 17 篇论文如何破解极端非独立同分布（Non-IID）与领域偏移
+- 详情：[/202603/19/README](/202603/19/README)
 
 ### 精读区论文标签
-1. [Federated Learning for Privacy-Preserving Medical AI](/202603/18/2603.15901v1-federated-learning-for-privacy-preserving-medical-ai)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：联邦学习中的自适应本地差分隐私机制
-2. [Federated Learning with Multi-Partner OneFlorida+ Consortium Data for Predicting Major Postoperative Complications](/202603/18/2603.16723v1-federated-learning-with-multi-partner-oneflorida-consortium-data-for-predicting-major-postoperative-complications)  
+1. [Domain-Skewed Federated Learning with Feature Decoupling and Calibration](/202603/19/2603.14238v1-domain-skewed-federated-learning-with-feature-decoupling-and-calibration)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：用于多中心数据隐私的联邦学习
-3. [Universal Shuffle Asymptotics, Part III: Dominant-Block Quotient Geometry and Hybrid Gaussian--Compound-Poisson Limits in Finite-Alphabet Shuffle Privacy](/202603/18/2603.13407v1-universal-shuffle-asymptotics-part-iii-dominant-block-quotient-geometry-and-hybrid-gaussian--compound-poisson-limits-in-finite-alphabet-shuffle-privacy)  
+   evidence：允许分布式客户端协作训练的联邦学习
+2. [FederatedFactory: Generative One-Shot Learning for Extremely Non-IID Distributed Scenarios](/202603/19/2603.16370v1-federatedfactory-generative-one-shot-learning-for-extremely-non-iid-distributed-scenarios)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：无需权重聚合的隐私保护联邦学习
+3. [Differential Privacy in Generative AI Agents: Analysis and Optimal Tradeoffs](/202603/19/2603.17902v1-differential-privacy-in-generative-ai-agents-analysis-and-optimal-tradeoffs)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：生成式 AI 智能体中的差分隐私
+4. [Technical Case Study of Privacy-Enhancing Technologies (PETs) for Public Health](/202603/19/2603.13444v1-technical-case-study-of-privacy-enhancing-technologies-pets-for-public-health)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：洗牌隐私机制的渐近性与几何分析
-4. [Computation and Communication Efficient Federated Unlearning via On-server Gradient Conflict Mitigation and Expression](/202603/18/2603.13795v1-computation-and-communication-efficient-federated-unlearning-via-on-server-gradient-conflict-mitigation-and-expression)  
+   evidence：利用差分隐私生成合成数据
+5. [TSDCRF: Balancing Privacy and Multi-Object Tracking via Time-Series CRF and Normalized Control Penalty](/202603/19/2603.13667v1-tsdcrf-balancing-privacy-and-multi-object-tracking-via-time-series-crf-and-normalized-control-penalty)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：用于数据隐私和合规性的联邦遗忘学习
-5. [FedPBS: Proximal-Balanced Scaling Federated Learning Model for Robust Personalized Training for Non-IID Data](/202603/18/2603.13909v1-fedpbs-proximal-balanced-scaling-federated-learning-model-for-robust-personalized-training-for-non-iid-data)  
+   evidence：通过在敏感区域校准高斯噪声实现差分隐私
+6. [Bodhi VLM: Privacy-Alignment Modeling for Hierarchical Visual Representations in Vision Backbones and VLM Encoders via Bottom-Up and Top-Down Feature Search](/202603/19/2603.13728v1-bodhi-vlm-privacy-alignment-modeling-for-hierarchical-visual-representations-in-vision-backbones-and-vlm-encoders-via-bottom-up-and-top-down-feature-search)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：具有本地数据隐私保护的联邦学习
-6. [HO-SFL: Hybrid-Order Split Federated Learning with Backprop-Free Clients and Dimension-Free Aggregation](/202603/18/2603.14773v1-ho-sfl-hybrid-order-split-federated-learning-with-backprop-free-clients-and-dimension-free-aggregation)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：混合阶拆分联邦学习框架
+   evidence：神经表示中的隐私对齐建模与噪声注入
 
 ### 速读区论文标签
-1. [DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy](/202603/18/2603.14994v1-dp-s4s-accurate-and-scalable-select-join-aggregate-query-processing-with-user-level-differential-privacy)  
+1. [Bodhi VLM: Privacy-Alignment Modeling for Hierarchical Visual Representations in Vision Backbones and VLM Encoders via Bottom-Up and Top-Down Feature Search](/202603/19/2603.13728v2-bodhi-vlm-privacy-alignment-modeling-for-hierarchical-visual-representations-in-vision-backbones-and-vlm-encoders-via-bottom-up-and-top-down-feature-search)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：可扩展查询的用户级差分隐私
-2. [Accelerating Byzantine-Robust Distributed Learning with Compressed Communication via Double Momentum and Variance Reduction](/202603/18/2603.15144v1-accelerating-byzantine-robust-distributed-learning-with-compressed-communication-via-double-momentum-and-variance-reduction)  
+   evidence：通过在表示中注入噪声进行隐私保护建模
+2. [Learning Evolving Preferences: A Federated Continual Framework for User-Centric Recommendation](/202603/19/2603.17315v1-learning-evolving-preferences-a-federated-continual-framework-for-user-centric-recommendation)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：拜占庭容错随机分布式学习算法
-3. [Federated Learning of Binary Neural Networks: Enabling Low-Cost Inference](/202603/18/2603.15507v1-federated-learning-of-binary-neural-networks-enabling-low-cost-inference)  
+   evidence：用于隐私保护推荐的联邦框架
+3. [Federated Distributional Reinforcement Learning with Distributional Critic Regularization](/202603/19/2603.17820v1-federated-distributional-reinforcement-learning-with-distributional-critic-regularization)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：二值神经网络的联邦学习框架
-4. [Biased Compression in Gradient Coding for Distributed Learning](/202603/18/2603.16353v1-biased-compression-in-gradient-coding-for-distributed-learning)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：结合梯度编码与压缩的分布式学习方法
-5. [EmbTracker: Traceable Black-box Watermarking for Federated Language Models](/202603/18/2603.12089v1-embtracker-traceable-black-box-watermarking-for-federated-language-models)  
+   evidence：具有参数聚合功能的联邦强化学习
+4. [SCOPE: Semantic Coreset with Orthogonal Projection Embeddings for Federated learning](/202603/19/2603.12976v1-scope-semantic-coreset-with-orthogonal-projection-embeddings-for-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦语言模型的可追溯水印
-6. [CALF: Communication-Aware Learning Framework for Distributed Reinforcement Learning](/202603/18/2603.12543v1-calf-communication-aware-learning-framework-for-distributed-reinforcement-learning)  
+   evidence：联邦学习的核心集框架
+5. [Exact Federated Continual Unlearning for Ridge Heads on Frozen Foundation Models](/202603/19/2603.12977v1-exact-federated-continual-unlearning-for-ridge-heads-on-frozen-foundation-models)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式强化学习的通信感知框架
-7. [CA-HFP: Curvature-Aware Heterogeneous Federated Pruning with Model Reconstruction](/202603/18/2603.12591v1-ca-hfp-curvature-aware-heterogeneous-federated-pruning-with-model-reconstruction)  
+   evidence：针对私有用户生成数据的联邦遗忘学习
+6. [Exact Federated Continual Unlearning for Ridge Heads on Frozen Foundation Models](/202603/19/2603.12977v2-exact-federated-continual-unlearning-for-ridge-heads-on-frozen-foundation-models)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：具有局部SGD步骤和数据异构性的联邦优化
-8. [Almost-Free Queue Jumping for Prior Inputs in Private Neural Inference](/202603/18/2603.12946v1-almost-free-queue-jumping-for-prior-inputs-in-private-neural-inference)  
+   evidence：针对私有用户生成数据的联邦遗忘学习
+7. [Learnability and Privacy Vulnerability are Entangled in a Few Critical Weights](/202603/19/2603.13186v1-learnability-and-privacy-vulnerability-are-entangled-in-a-few-critical-weights)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：神经网络推理的隐私保护机器学习
-9. [SHANG++: Robust Stochastic Acceleration under Multiplicative Noise](/202603/18/2603.09355v1-shang-robust-stochastic-acceleration-under-multiplicative-noise)  
+   evidence：神经网络中的成员隐私保护
+8. [SecDTD: Dynamic Token Drop for Secure Transformers Inference](/202603/19/2603.13670v1-secdtd-dynamic-token-drop-for-secure-transformers-inference)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：针对Transformer隐私问题的安全推理框架
+9. [CFD-HAR: User-controllable Privacy through Conditional Feature Disentanglement](/202603/19/2603.11526v1-cfd-har-user-controllable-privacy-through-conditional-feature-disentanglement)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：优化中噪声环境下的随机加速
-10. [A Short Survey of Averaging Techniques in Stochastic Gradient Methods](/202603/18/2603.09634v1-a-short-survey-of-averaging-techniques-in-stochastic-gradient-methods)  
+   evidence：通过特征解耦实现隐私保护机器学习
+10. [Lower and upper bounds of the convergence rate of gradient methods with composite noise in gradient](/202603/19/2603.12376v1-lower-and-upper-bounds-of-the-convergence-rate-of-gradient-methods-with-composite-noise-in-gradient)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：大规模机器学习的随机梯度方法
-11. [Denoising the US Census: Succinct Block Hierarchical Regression](/202603/18/2603.10099v1-denoising-the-us-census-succinct-block-hierarchical-regression)  
+   evidence：优化中带有噪声的梯度方法的收敛性
+11. [Neural Gate: Mitigating Privacy Risks in LVLMs via Neuron-Level Gradient Gating](/202603/19/2603.12598v1-neural-gate-mitigating-privacy-risks-in-lvlms-via-neuron-level-gradient-gating)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：美国人口普查中隐私噪声测量的后处理方法
+   evidence：通过梯度门控实现隐私保护机器学习
 
 
 <div class="dpr-home-promo-card">

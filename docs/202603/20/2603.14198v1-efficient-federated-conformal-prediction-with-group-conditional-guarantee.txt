@@ -1,0 +1,2330 @@
+Title: Efficient Federated Conformal Prediction with Group-Conditional Guarantee
+
+URL Source: https://arxiv.org/pdf/2603.14198v1
+
+Published Time: Tue, 17 Mar 2026 01:39:37 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Efficient Federated Conformal Prediction with Group-Conditional Guarantee 
+
+Haifeng Wen 1 Osvaldo Simeone 2 Hong Xing 1,3 1IoT Thrust, The Hong Kong University of Science and Technology (Guangzhou), Guangzhou, China 
+
+> 2
+
+Institute for Intelligent Networked Systems (INSI), Northeastern University London, London, UK 
+
+> 3
+
+Department of ECE, The Hong Kong University of Science and Technology , HK SAR 
+
+Abstract 
+
+Deploying trustworthy AI systems requires prin-cipled uncertainty quantification. Conformal pre-diction (CP) is a widely used framework for con-structing prediction sets with distribution-free cov-erage guarantees. In many practical settings, in-cluding healthcare, finance, and mobile sensing, the calibration data required for CP are distributed across multiple clients, each with its own local data distribution. In this federated setting, data can often be partitioned into, potentially overlapping, groups, which may reflect client-specific strata or cross-cutting attributes such as demographic or se-mantic categories. We propose group-conditional 
+
+federated conformal prediction (GC-FCP), a novel protocol that provides group-conditional coverage guarantees. GC-FCP constructs mergeable, group-stratified coresets from local calibration scores, en-abling clients to communicate compact weighted summaries that support efficient aggregation and calibration at the server. Experiments on synthetic and real-world datasets validate the performance of GC-FCP compared to centralized calibration baselines. 
+
+1 INTRODUCTION 
+
+Deploying trustworthy AI systems critically depends on uncertainty quantification to enable reliability control at deployment time. Given a pretrained model, conformal pre-diction (CP) post-processes the model’s outputs to construct prediction sets with finite-sample, distribution-free cover-age guarantees. The calibration of the prediction set is carried out offline by leveraging held-out calibration data [Vovk et al., 2005, Angelopoulos and Bates, 2021, Barber et al., 2021, Simeone and Romano, 2025]. In many practi-cal deployments, however, calibration data are inherently distributed and subject to privacy constraints, so that each client must retain its data on-site, e.g., hospitals, banks, or Internet-of-Things devices [McMahan et al., 2017]. 
+
+Federated conformal prediction (FCP) [Lu et al., 2023] addresses the outlined distributed setting with the goal of preserving marginal coverage with respect to a distribution obtained by mixing local data distributions. Pursuing a sim-ilar marginal coverage guarantee, Humbert et al. [2023] and Humbert et al. [2024] proposed one-shot FCP schemes based on a quantile-of-quantiles estimator. Beyond calibra-tion targeting the mixture distribution, FCP-Pro [Li et al., 2025] and personalized FCP [Min et al., 2025] address the heterogeneity of local data distributions by training ad-ditional models during the calibration process, providing marginal coverage on local distributions or on the distri-bution of a new client. To address robustness, Kang et al. [2024] studied Byzantine clients that may report arbitrary statistics. Considering more general connectivity constraints underlying communications, decentralized calibration via message passing over arbitrary graphs was proposed by [Wen et al., 2025], and distributed remote calibration proto-cols were studied in [Zhu et al., 2025] for wireless sensor networks. The state of the art on federated calibration summarized above did not target group-conditional coverage guaran-tees. In federated settings, data can often be partitioned into, potentially overlapping, groups, which may reflect client-specific strata or cross-cutting attributes such as de-mographic or semantic categories (see Fig. 1). For central-ized settings, Mondrian CP [Vovk et al., 2003] addresses group-conditional coverage over disjoint groups of covari-ates, while CondCP [Gibbs et al., 2025] allows for overlap-ping groups by reframing conditional coverage as simulta-neous coverage over a class of covariate shifts. Kandinsky CP [Bairaktari et al., 2025] extended Mondrian CP and CondCP to groups that depend on both covariates and labels. Other related research directions for centralized scenarios include localized coverage guarantees [Guan, 2023]; learn-ing improved conformity scores to reduce conditional mis-    
+
+> arXiv:2603.14198v1 [cs.LG] 15 Mar 2026 client 1
+> client 2
+> …
+> client 𝐾
+> 𝒟 1
+> 𝒟 2
+> 𝒟 𝐾
+> calibration data
+> server
+> CP
+> calibrated set
+> prediction
+> input
+
+{leopard ,
+
+tiger, cat }                               
+
+> wildlife
+> canines
+> marginal coverage
+> ℙ𝑌 ∈𝒞 𝑋 ∣𝒟 ȁ𝑋 ∈𝐺 ≥1−𝛼
+> group -conditional coverage:
+> conditioned on 𝑋 ∈𝐺 2
+> ℙ𝑌 ∈𝒞 𝑋 ∣𝒟 ≥1−𝛼
+> leopard ∉{tiger, cat}
+> cat ∈{o wl, cat }
+> leopard ∈{leopard,tiger,cat }
+> cat ∈{cat}
+
+Figure 1: Left : In a federated system with heterogeneous clients, each client k holds local calibration data Dk and communicates over a bandwidth-limited channel to a central server. The server aggregates these summaries to perform conformal calibration (CP) and outputs a set-valued predictor C(· | D ). Right : GC-FCP targets group-conditional coverage for potentially overlapping groups G = {G1, G 2, G 3}, ensuring the inequality P(Y ∈ C (X | D ) | X ∈ G) ≥ 1 − α for all groups G ∈ G , whereas methods that only guarantee marginal coverage P(Y ∈ C (X | D )) ≥ 1 − α, such as FCP [Lu et al., 2023], may still under-cover within specific groups. coverage [Xie et al., 2024]; as well as analyses of sample-conditional validity for split conformal methods [Duchi, 2025]. All this prior art on group-conditional CP has focused on centralized settings. To address this knowledge gap, in this paper, we propose a communication- and computation-efficient federated extension of CondCP [Gibbs et al., 2025], namely group-conditional federated conformal prediction (GC-FCP) , which enables efficient server-side prediction-set construction by communicating only compact summaries sketched from group-stratified local calibration scores, while preserving the information needed for group-conditional cal-ibration. Unlike FedCF [Srinivasan et al., 2025], GC-FCP does not treat different groups separately, seeking simulta-neous coverage across all groups. The main contributions are summarized as follows: • We first propose centralized GC-FCP , an extension of CondCP [Gibbs et al., 2025] that achieves group-conditional coverage guarantees under the mixture of the local data distribution. • We develop GC-FCP , an efficient federated protocol that accelerates communication and computation by compressing group-stratified calibration scores into mergeable T-Digest [Dunning and Ertl, 2019] coresets. • We establish group-conditional coverage bounds for GC-FCP, making explicit how the coreset compression level affects the achieved coverage. • We validate the proposed methods on synthetic and real-world benchmarks, demonstrating that GC-FCP attains group-conditional reliability while substantially reducing computational overhead. 
+
+2 PROBLEM SETTING 
+
+As illustrated in Fig. 1, we study a federated calibration setting that follows reference [Lu et al., 2023]. Accord-ingly, we consider a network consisting of K clients that communicate with a central server. In this setup, each client k ∈ { 1, . . . , K } ≜ [K] has access to a local cali-bration dataset Dk = {(Xi,k , Y i,k )}nk 
+
+> i=1
+
+, with data points 
+
+(Xi,k , Y i,k ) drawn i.i.d. from a client-specific distribution 
+
+Pk over X × Y . We define a global calibration dataset as the union D = SKk=1 Dk, with n = PKk=1 nk. As in [Lu et al., 2023], the goal is to calibrate a shared pre-trained model 
+
+f : X 7 → Y through communication with the central server. Calibration is evaluated on test data (Xn+1 , Y n+1 ) drawn from the mixture 
+
+P = 
+
+> K
+
+X
+
+> k=1
+
+πkPk, (1) for some arbitrary and known mixture weights πk ≥ 0 with PKk=1 πk = 1 . In practice, the weights {πk}Kk=1 dictate the relative relevance of the data of each client k for the calibration of model f .Calibration aims at obtaining a set predictor 
+
+C(· | D ) : X → 2Y . (2) using the distributed calibration data via clients-to-server communication. Prior work [Lu et al., 2023] imposed the constraint that the prediction set (2) satisfies the marginal coverage condition 
+
+P(Yn+1 ∈ C (Xn+1 | D )) ≥ 1 − α (3) with respect to the mixture distribution (1) . In contrast, as explained next, we impose a more flexible conditional cov-erage condition based on grouping. Let G ⊆ 2X be a finite collection of groups in the covariate space X and S 
+
+> G∈G
+
+= X . Importantly, the groups are gen-erally overlapping, i.e., there exist groups Gi, G j ∈ G such that Gi
+
+T Gj̸ = ∅ (see Fig. 1). Groups may or may not rep-resent client-specific partitions. In fact, some groups G may correspond to data categories that are more representative of the distribution Pk of a given client k. However, it may also be that groups refer to categories that apply equally across all clients. We consider the set G to be arbitrary and given. Given a target mis-coverage level α ∈ (0 , 1) , calibration aims to construct set prediction C(· | D ) such that, for every group G ∈ G , the following group-conditional coverage requirement holds: 
+
+P (Yn+1 ∈ C (Xn+1 | D ) | Xn+1 ∈ G) ≥ 1 − α, (4) where the probability in (4) is taken over the calibration data in D and the test data (Xn+1 , Y n+1 ). For condition (4) to be meaningful, we assume that all groups G ∈ G 
+
+satisfy the inequality P(Xn+1 ∈ G) > 0 under the mixture distribution (1) . Note that this does not require that the inequality Pk(X ∈ G) > 0 holds for every client k. Rather, it only requires that at least one component with probability 
+
+πk > 0 places positive mass on the group G.If the groups G were disjoint, the conditional coverage re-quirement (4) could be obtained by combining FCP [Lu et al., 2023] and Mondrian CP [Vovk et al., 2003]. Ac-cordingly, one applies the FCP protocol separately for each group G ∈ G . However, ensuring the conditions (4) become difficult when groups overlap, and we address this challenge in this paper. 
+
+3 PRELIMINARIES 
+
+To start, consider, for reference, a centralized split-conformal setting in which a server has access to i.i.d. cal-ibration data {(Xi, Y i)}ni=1 and a test covariate Xn+1 . In this section, we review CondCP [Gibbs et al., 2025], which addresses the problem of satisfying the constraints (4) in such a centralized setting. Let s : X × Y 7 → R be a score function derived from a predictive model f , and define the calibration scores 
+
+Si = s(Xi, Y i) with i = 1 , . . . , n . Furthermore, let ℓα(θ, S )
+
+denote the pinball loss at level 1 − α:
+
+ℓα(θ, S ) = 
+
+(
+
+(1 − α)( S − θ), S ≥ θ, α(θ − S), S < θ. (5) Given the set of groups G (possibly overlapping), define the group-membership map Φ : X → { 0, 1}|G| as 
+
+Φ( x) =  1{x ∈ G} 
+
+> G∈G
+
+∈ { 0, 1}|G| , (6) which encodes membership of element x ∈ X belonging to each group of G as a binary indicator vector (where Table 1: Communication load and computational complex-ity. 
+
+Method Comm. Comp. 
+
+CondCP & Centralized GC-FCP O(n) O  n3/2|G| 2
+
+GC-FCP O(Kδ ) O  δ3/2|G| 2
+
+1{true } = 1 and 1{false } = 0 ). Then, CondCP defines the set of functions 
+
+FG =
+
+n
+
+x 7 → β⊤Φ( x) : β ∈ R|G| o
+
+, (7) which corresponds to arbitrary linear combinations for the group indicators. Specifically, for any input test score S ∈ R,CondCP solves the augmented quantile regression problem: 
+
+ˆgS = arg min 
+
+> g∈F G
+
+(
+
+1
+
+n + 1 
+
+> n
+
+X
+
+> i=1
+
+ℓα
+
+ g(Xi), S i
+
+
+
++ 1
+
+n + 1 ℓα
+
+ g(Xn+1 ), S 
+
+. (8) Note that the solution ˆgS is a function in class (7) . By the properties of the pinball loss, the solution ˆgS repre-sents a covariate ( Xn+1 )-dependent version of the (1 − α)-empirical quantile of the augmented calibration scores 
+
+{Si}ni=1 ∪ { S} [Gibbs et al., 2025]. The prediction set is then defined as the set of all labels y ∈ Y whose score 
+
+s(Xn+1 , y ) is no larger than the corresponding empirical quantile ˆgs(Xn+1 ,y )(Xn+1 ), i.e., 
+
+C(Xn+1 | D )= y ∈ Y : s(Xn+1 , y ) ≤ ˆg s(Xn+1 ,y )(Xn+1 ) . (9) The prediction set (9) is constructed by addressing an equiva-lent formulation of the convex problem (8) via dual methods (see Appendix D for details). Under the assumption of i.i.d. calibration and test data, the set C(Xn+1 | D ) in (9) satisfies group-conditional coverage (4). 
+
+Communication overhead: Solving problem (8) at the server would require collecting all calibration scores and their group-membership features, yielding a communication overhead O(n).
+
+Computational overhead: Solving problem (8) requires computational complexity of order O(n3/2|G| 2) using stan-dard convex problem solvers [Renegar, 1988, Nesterov and Nemirovskii, 1994]. 
+
+4 GROUP-CONDITIONAL FEDERATED CONFORMAL PREDICTION (GC-FCP) 
+
+This section introduces group-conditional federated confor-mal prediction (GC-FCP), a federated calibration procedure designed to achieve group-conditional coverage (4) over a prescribed, generally overlapping, collection of groups G
+
+under any mixture distribution (1) . In GC-FCP, each client computes calibration scores locally and communicates to the server only a compact, group-stratified summary, while the server efficiently constructs the CP set for each test point without accessing raw client-level calibration scores. 
+
+4.1 FEDERATED AUGMENTED QUANTILE REGRESSION 
+
+To start, consider an ideal setting in which the entire cal-ibration dataset D, which includes the datasets Dk from all clients k ∈ [K], is available at the central server. As-sume also no computational limitations at the server. Even in this simplified setup, as explained in the previous section, CondCP would fail to guarantee the conditional coverage requirements (4) , since the data points in dataset D are not i.i.d. with respect to the mixture distribution (1) . We address this challenge in this section by proposing centralized GC-FCP , a centralized calibration scheme that guarantees the desired condition (4). As in Section 3, let s : X × Y 7 → R be a score function derived from the shared predictive model f . We denote the calibration scores at client k as Si,k = s(Xi,k , Y i,k )
+
+with i ∈ { 1, . . . , n k} and k ∈ [K]. Furthermore, given a test point (Xn+1 , Y n+1 ) ∼ P, we denote its score by 
+
+Sn+1 = s(Xn+1 , Y n+1 ).For a test covariate Xn+1 and an input score value S ∈ R,centralized GC-FCP solves the following federated aug-mented quantile regression estimator as a generalization of the CondCP problem (8): 
+
+ˆgS = argmin 
+
+> g∈F G
+> K
+
+X
+
+> k=1
+
+πk
+
+nk + 1 
+
+ nkX
+
+> i=1
+
+ℓα(g(Xi,k ), S i,k )+ ℓα(g(Xn+1 ), S )
+
+
+
+, (10) where the function set FG is defined in (7) . The objective in problem (10) incorporates the scores of all K clients, with each k-th term weighted by the factor πk/(nk + 1) ,thus matching the structure of the target mixture distribution (1) . Using this definition, centralized GC-FCP obtains the prediction set as in (9). 
+
+Theorem 4.1 (Group-conditional coverage for centralized GC-FCP) . For every group G ∈ G , the set (9) with the empirical quantile (10) produced by centralized GC-FCP satisfies the conditional coverage condition (4) .Proof: See Appendix A.1. As summarized in Table 1, the centralized GC-FCP shares the same communication and computational overheads as CondCP. 
+
+4.2 GROUP-CONDITIONAL FEDERATED CONFORMAL PREDICTION 
+
+The previous subsection focused on a centralized version of GC-FCP, which solves problem (10) using the calibra-tion scores pooled from all clients. To mitigate the commu-nication and computational overhead associated with this approach, we now introduce GC-FCP, a novel distributed protocol that replaces the full calibration dataset with small group-stratified coresets. As summarized in Table 1, this protocol reduces the communication load and enables a more efficient server-side optimization (whenever n ≫ δ). GC-FCP starts by applying a coreset construction based on T-Digest [Dunning and Ertl, 2019], which is a sketching algorithm for computing approximations of quantiles, and is elaborated in the sequel. The sketches produced by T-Digest are then used to solve the optimization problem (10) at the central server. While T-Digest was also used by FCP [Lu et al., 2023], GC-FCP must additionally account for the structure of the groups in the set G, producing stratified structures (see Fig. 2). 
+
+4.2.1 T-Digest 
+
+Let {(Ri, w i)}ℓi=1 be weighted real-valued samples with 
+
+Ri ∈ R and weights wi > 0, and define the total weight as W = Pℓi=1 wi. The associated weighted em-pirical cumulative distribution function (CDF) is F (t) = 
+
+> 1
+> W
+
+Pℓi=1 wi 1{Ri ≤ t}, with generalized empirical quan-tile function Q(u) = inf {t : F (t) ≥ u} for u ∈ [0 , 1] .
+
+T-Digest: A T-Digest [Dunning and Ertl, 2019] produces an ordered collection of m < ℓ clusters Rc ⊆ { 1, . . . , ℓ },i.e., if c1 < c 2, Ri ≤ Rj for any i ∈ R c1 and j ∈ R c2 .Cluster Rc is described by a cluster representative ¯Rc and an aggregate weight Wc. Each cluster Rc includes a subset of samples {Ri}ℓi=1 with total weight Wc = P 
+
+> i∈R c
+
+wi,
+
+and the weighted cluster means ¯Rc = 1
+
+> Wc
+
+P 
+
+> i∈R c
+
+wiRi.
+
+In summary, T-Digest returns the weights and the cluster means as 
+
+TD = ( ¯Rc, W c) mc=1 . (11) It is worth noting that T-Digest enforces the ordering ¯R1 ≤
+
+¯R2 ≤ · · · ≤ ¯Rm, producing ordered cluster means. To this end, it orders the original set {Ri}ℓi=1 such that we have R1 ≤ R2 ≤ · · · ≤ Rℓ. Clusters are then constructed greedily as follows. To elaborate, let Vc = Pci=1 Wi with 
+
+V0 = 0 , and define the empirical left and right quantile boundaries of cluster c ∈ { 1, . . . , m } as 
+
+qL 
+
+> c
+
+= Vc−1
+
+W and qR 
+
+> c
+
+= Vc
+
+W . (12) Samples R1, R 2, . . . , R ℓ are aggregated in an increasing order into the current cluster Rc as long as adding the next 𝐴𝐴 1      
+
+> 𝐴𝐴 2
+> 𝐴𝐴 3
+> 𝐴𝐴 4
+> 𝐴𝐴 5
+> 𝐴𝐴 6
+> 𝐴𝐴 7
+
+Figure 2: Illustration of the atom partitions applied by GC-FCP. Given the set of overlapping groups G =
+
+{G1, G 2, G 3}, the resulting 7 non-empty atoms A =
+
+{A1, . . . , A 7} are shown on the right, together with the corresponding group-membership vector (6). sample preserves the constraint 
+
+r qR
+
+> c
+
+ − r qL
+
+> c
+
+ ≤ 1, c = 1 , . . . , m. (13) with scale function 
+
+r(q) = δ
+
+2π arcsin(2 q − 1) . (14) for some parameter δ > 0 that controls the level of compres-sion. Intuitively, the condition (13) enforces finer resolution near the tails of the empirical distribution of the scalars {Ri}ℓi=1 ,while permitting larger clusters near the median. By this construction, the number of retained clusters scales as m =Θ( δ) [Dunning and Ertl, 2019]. From the digest TD = ( ¯Rc, W c) mc=1 , the approximate quantile function for u ∈ [0 , 1] is given by 
+
+bQ(u) = inf {t : bF (t) ≥ u}, (15) where 
+
+bF (t) = 1
+
+W
+
+> m
+
+X
+
+> c=1
+
+Wc 1{ ¯Rc ≤ t}. (16) is an estimate of the empirical CDF F (t). The quality of this estimate will be analyzed in Section 5. 
+
+Merging T-Digests: A key property of T-Digest is that digests can be merged and then re-compressed such that the number of retained clusters remains Θ( δ) [Dunning and Ertl, 2019]. Let TD (j) = {( ¯R(j) 
+
+> c
+
+, W (j) 
+
+> c
+
+)}mj 
+
+> c=1
+
+be digests obtained from disjoint datasets indexed by j = 1 , . . . , J . To merge them, one applies the same procedure discussed above to the pooled samples SJj=1 TD (j). We denote the merged digest as Merge( TD (1) , . . . , TD (J)).
+
+4.2.2 GC-FCP 
+
+In order to address the group-conditional constraint (4) , GC-FCP first stratifies the data at the clients into disjoint atoms 
+
+based on unique group membership patterns. Independent T-Digests are then constructed per atom, and used at the server as coresets to approximate the solution of the quantile regression problem (10). 
+
+Atoms construction: As illustrated in Fig. 2, GC-FCP first partitions the input domain X into a collection A =
+
+{A}A∈A of atoms, which are defined as S 
+
+> A∈A
+
+A = X
+
+and A T A′ = ∅, for any pair A, A ′ ∈ A . The collection 
+
+A corresponds to the smallest-cardinality partition of the set X such that all the sets G can be recovered via union operations on its atoms. Formally, for each subset of groups, 
+
+S ⊆ G , define 
+
+A(S) = \
+
+> G∈S
+
+G
+
+! \ \
+
+> G∈G\S
+
+Gc
+
+ (17) as the intersection of all groups in subset S and the com-plement of all groups not in subset S. The construction 
+
+A = {A(S)}S⊆G yields the collection of atoms [Kallen-berg, 2002]. By construction, each atom A corresponds to all points x ∈X with the same membership vector Φ( x). Accordingly, for any x ∈ A, we can write ΦA = Φ( x). An example is illustrated in Fig. 2. 
+
+Local-score partition and digest: We now partition the set of local scores at client k ∈ [K] into |A| subsets Dk,A , one per atom A as 
+
+Dk,A = {s(X, Y ) : X ∈ A, (X, Y ) ∈ D k} . (18) Each client k ∈ [K], for each atom A, builds a separate digest TD k,A using the scores Dk,A and equal weights w =
+
+πk/(nk + 1) . Following Section 4.2, the resulting digest 
+
+TD k,A consists of a set of means and weights with mk,A =Θ( δ) clusters 
+
+TD k,A =   ¯Sk,A,c , W k,A,c 
+
+ mk,A  
+
+> c=1
+
+, (19) where ¯Sk,A,c = 1
+
+> Wk,A,c
+
+P  
+
+> i∈S k,A,c
+> πk
+> nk+1
+
+Si is the weighted mean of the scores in cluster Sk,A,c , and Wk,A,c =
+
+|S k,A,c | πk  
+
+> nk+1
+
+is the aggregated weight. Next, client k ∈ [K] transmits the digest TD k,A along with all A ∈ A to the server. For each atom A ∈ A , the server merges the received digests {TD k,A }Kk=1 to obtain a global digest 
+
+TD A = Merge  TD 1,A , . . . , TD K,A 
+
+
+
+=   ¯SA,c , W A,c 
+
+ mA 
+
+> c=1
+
+, (20) with mA = Θ( δ) clusters, where Merge( ·) denotes the merge operation on {TD k,A }Kk=1 . As a result, the union over the digests of all atoms yields the final coreset: 
+
+eD =   A, ¯S, W  :   ¯S, W  ∈ TD A, A ∈ A (21) Algorithm 1 GC-FCP 
+
+Input: Clients’ calibration sets {D k}Kk=1 ; groups G; score 
+
+s(·, ·); mis-coverage level α; mixture weights πk; T-Digest compression parameter δ.
+
+▷ Client side (in parallel): 
+
+for device k ∈ { 1, . . . , K } do 
+
+Construct T-Digest TD k,A for each atom A ∈ A using 
+
+Dk,A .Transmit T-Digests {TD k,A }A∈A to the central server. 
+
+end for 
+
+▷ Server side: 
+
+Merge {TD k,A }k∈[K] for each atom A ∈ A via (20). Solve (22) and compute the prediction set (23). 
+
+Output: C(· | eD)
+
+with size | eD| = Θ( |A| δ). Note that each entry (A, ¯S, W ) of the coreset includes the identifier of the atom A, the mean score ¯S, and the corresponding weight W .
+
+Set construction: Given a test score S, GC-FCP solves problem (10) using the coreset eD instead of the original pooled data D, i.e., 
+
+˜β(S) = argmin 
+
+> β∈R|G|
+
+X   
+
+> (A, ¯S,W )∈eD
+
+W ℓ α
+
+ β⊤ΦA, ¯S
+
++
+
+> K
+
+X
+
+> k=1
+
+πk
+
+nk + 1 
+
+!
+
+ℓα
+
+ β⊤Φ( Xn+1 ), S  . (22) Finally, the prediction set is constructed as 
+
+C(Xn+1 | eD)= y ∈ Y : s(Xn+1 , y ) ≤ ˜gs(Xn+1 ,y )(Xn+1 ) . (23) where ˜gS (x) = ˜β(S)⊤Φ( x).The proposed GC-FCP is summarized in Algorithm 1. 
+
+Communication overhead: Solving problem (22) at the server requires collecting all digests {TD k,A }, yielding a to-tal communication load of GC-FCP of order O(Kδ ), instead of the overhead of order O(n) of CondCP and centralized GC-FCP. 
+
+Computational overhead: Solving the dual of prob-lem (22) requires computational complexity of order 
+
+O(| eD| 3/2|G| 2) = O(δ3/2|G| 2) by standard convex problem solvers [Renegar, 1988, Nesterov and Nemirovskii, 1994], instead of the order O(n3/2|G| 2) of CondCP and centralized GC-FCP. 
+
+5 COVERAGE GUARANTEES OF GC-FCP 
+
+The key property of GC-FCP is its ability to provide group-conditional coverage guarantees (4) for the prediction set. Deriving finite-sample group-conditional guarantees for GC-FCP is technically challenging, since one must simultane-ously account for the non-exchangeability of the samples in the coreset and for the approximation error introduced by sketching via the local digest. To this end, we first ana-lyze the quantile estimation accuracy of T-Digest, and then provide a group-conditional coverage bound for GC-FCP. 
+
+5.1 QUANTILE ACCURACY OF T-DIGEST 
+
+We start by deriving a relationship between the compression parameter δ used in the scale function (14) by T-Digest for compression, which dictates the number of clusters m =Θ( δ), and the accuracy of the approximate quantile (15). 
+
+Lemma 5.1 (Uniform bound of T-Digest) . Defining as F (t)
+
+the true CDF of original samples, the CDF estimate (16) 
+
+produced by T-Digest satisfies the uniform accuracy bound 
+
+sup 
+
+> t∈R
+
+F (t) − bF (t) ≤ sin 
+
+ πδ
+
+
+
+≤ πδ . (24) 
+
+Moreover, for all u ∈ [0 , 1] , the quantile estimate 16 satisfies the inequality |F ( bQ(u)) − u| ≤ π/δ. 
+
+Proof. See Appendix B.1. 
+
+5.2 GROUP-CONDITIONAL COVERAGE GUARANTEES OF GC-FCP 
+
+Based on properties of T-Digest presented in Lemma 5.1, we can now prove the group-conditional coverage guarantees of GC-FCP. 
+
+Theorem 5.1 (Group-conditional coverage guarantee for GC-FCP) . For each group G ∈ G, the prediction set 
+
+C(Xn+1 | eD) produced by GC-FCP satisfies the inequality 
+
+P(Yn+1 ∈ C (Xn+1 | eD) | Xn+1 ∈ G) ≥ 1 −α − πδ . (25) 
+
+Proof: See Appendix B.2. While Theorem 5.1 assumes that problems (22) are solved exactly, the next result accounts for suboptimality induced by numerically solving problem (22). An upper bound of the group-conditional coverage of GC-FCP can be found in Appendix C. 
+
+6 EXPERIMENTS 
+
+We evaluate GC-FCP on ( i) a synthetic regression bench-mark [Romano et al., 2019]; ( ii ) CIFAR-10 image classifi-cation [Krizhevsky and Hinton, 2009]; and ( iii ) PathMNIST medical image classification [Yang et al., 2023]. Across all experiments, we compare the proposed scheme, GC-FCP, to the following benchmarks: ( i) vanilla centralized CP , which provides the marginal guarantee (3) ; ( ii ) FedCP 
+
+[Lu et al., 2023], which also satisfies (3) ; ( iii ) centralized CondCP [Gibbs et al., 2025]; and ( iv ) centralized GC-FCP ,which is described in Section 4.1. CondCP and centralized GC-FCP are only evaluated on the small-scale synthetic dataset and CIFAR-10 due to their prohibitive computa-tional complexity (see Table 1). Further comparisons with FedCF [Srinivasan et al., 2025] and personalized FCP [Min et al., 2025] can be found in Appendix E.2. For each group G ∈ G, we estimate group-conditional coverage on a test set T as dcov( G) =1/ |T G| P 
+
+> (x,y )∈T G
+
+1 {y ∈ C (x | D )} , where TG =
+
+{(x, y ) ∈ T : x ∈ G}, and report the empirical coverage dcov( G) for all groups G ∈ G. For classifi-cation, we also report the average prediction set size 
+
+(1 /|T | ) P 
+
+> (x,y )∈T
+
+|C (x | D )|. Computational complexity is evaluated by the average wall-clock time required for each method to construct a prediction set on the same platform. 
+
+6.1 SYNTHETIC REGRESSION 
+
+For the synthetic regression task, we consider K = 4 clients with heterogeneous covariate distributions PX,k given by truncated normal distributions on the interval [0 , 5] with mean μk = 0 .5+ 4( k−1)  
+
+> K−1
+
+and variance σk = 0 .5+0 .1( k−1) .Following [Romano et al., 2020], we generate responses as 
+
+Yk ∼ Pois(sin 2(X) + 0 .1) + 0 .03 Xϵ 1
+
++ 25 1{U < 0.01 }ϵ2 + N (0 , 0.01 k2), (26) with independent variables ϵ1, ϵ 2 ∼ N (0 , 1) and U ∼
+
+Unif([0 , 1]) . We train a centralized linear regression model 
+
+f (·) on a separate training dataset generated in the same way, and use the score s(x, y ) = |y − f (x)|. Groups are given by overlapping intervals G = {[0 , 2] , [1 , 3] , [2 , 4] , [3 , 5] }. The miscoverage level α is set to α = 0 .1. Other parameters are summarized in Table 3 in Appendix E.1. Fig. 3 (a)-(b) visualizes representative prediction sets, while Fig. 3 reports the mis-coverage rate across the four over-lapping interval groups. Centralized CP and FedCP apply a single global threshold and therefore exhibit uneven group-wise miscoverage rates. In particular, some groups are under-covered (mis-coverage above α), reflecting shifts in the conditional score distribution across covariate regions. In contrast, CondCP, centralized GC-FCP, and GC-FCP yield substantially more uniform group-wise mis-coverage near the target level α across all groups (Fig. 3(c)) by adapting the threshold over the covariate space (Fig. 3(b)). 
+
+6.2 CIFAR-10 EXPERIMENTS 
+
+We now adopt a pre-trained ResNet56 model f (·) for the CIFAR-10 image classification task with score function 
+
+s(x, y ) = 1 − [f (x)] y , where y denotes the y-th entry of the softmax result [Sadinle et al., 2019]. We consider 
+
+K = 5 clients with a non-i.i.d. label partition, so that each client holds 10 /K disjoint classes. We set uniform mixture weights πk = 1 /K , and total calibration size n = P 
+
+> k
+
+nk =5000 . Groups are defined by overlapping predicted label classes ˆy(x) = arg max y [f (x)] y : G1 = {x : ˆy(x) ∈{0, 1, 2, 3}} , G 2 = {x : ˆ y(x) ∈ { 2, 3, 4, 5}} , G 3 = {x :ˆy(x) ∈ { 4, 5, 6, 7}} , and G4 = {x : ˆ y(x) ∈ { 6, 7, 8, 9}} .
+
+We set the miscoverage level α = 0 .1 and use a pre-trained ResNet56 to serve the model f (·) to construct the score function s(x, y ) = 1 − [f (x)] y [Sadinle et al., 2019]. The report results represent the average after 50 Monte Carlo simulations, each with 5000 test points. Table 2 reports marginal coverage, group-conditional cover-age (with average set size in brackets), and computational speedup (“Comp. speedup”), with the latter being normal-ized with respect to the complexity of centralized CondCP. Centralized CP and FedCP attain the same marginal cov-erage near 0.9, but their group-conditional coverage varies substantially across groups (e.g., below 0.9 for groups G1
+
+and G2), indicating that marginal calibration does not con-trol errors uniformly across overlapping groups. Central-ized CondCP and centralized GC-FCP achieve near-uniform group-conditional coverage across all groups, matching the intended behavior of augmented quantile calibration under grouping conditions. GC-FCP closely tracks the centralized group-conditional performance while substantially improving computational efficiency. The computational gains are pronounced: depend-ing on δ, GC-FCP yields from 3.96 × to 34 .36 × per-test-point speedup relative to centralized CondCP, illustrating the accuracy–efficiency trade-off governed by the digest com-pression parameter. The value of the compression parameter affects coverage. For instance, with aggressive compression (δ = 25 ), some groups are slightly under-covered (e.g., G2), in a manner consistent with Theorem 5.1. 
+
+6.3 MEDICAL DATASET EXPERIMENTS 
+
+Finally, we evaluate GC-FCP on PathMNIST from MedM-NIST (9 tissue classes) with images resized to 3 × 28 × 28 
+
+[Yang et al., 2023]. We consider K = 5 clients, each hold-ing samples from 2 disjoint classes, except the last client holds 1 class. We train a centralized CNN f (·) on the train-ing split. We randomly shuffle the mixture validation and test data, split it into calibration and conformal test datasets equally, and allocate calibration samples to clients as in the CIFAR-10 experiments. Groups are defined by predicted-label classes: G1 = {x : ˆ y(x) ∈ { 0, 1, 2}} , G 2 = {x :𝐺𝐺 1   
+
+> 𝐺𝐺 2
+> 𝐺𝐺 3
+> 𝐺𝐺 4
+> 𝐺𝐺 1𝐺𝐺 2
+> 𝐺𝐺 3
+> 𝐺𝐺 4
+> (a) (b) (c)
+
+Figure 3: Visualization of prediction sets for the synthetic regression task for (a) centralized CP and FedCP [Lu et al., 2023], as well as for (b) centralized CondCP, centralized GC-FCP, and GC-FCP. (c) Per-group miscoverage rate. Table 2: Coverage, set size, and computational load comparisons on CIFAR-10 [Krizhevsky and Hinton, 2009]. 
+
+Methods Marginal coverage Coverage (set size) Comp. speedup G1 G2 G3 G4
+
+Centralized CP 0.901 0.879 ↓ (0.91) 0.855 ↓ (0.90) 0.906 (0.93) 0.936 (0.95) N/A Centralized CondCP 0.903 0.901 (0.96) 0.901 (0.98) 0.902 (0.94) 0.901 (0.91) 1×
+
+Centralized GC-FCP 0.906 0.903 (0.96) 0.903 (0.99) 0.905 (0.94) 0.905 (0.92) 1.01 ×
+
+FedCP 0.902 0.880 ↓ (0.92) 0.856 ↓ (0.90) 0.906 (0.93) 0.936 (0.95) N/A GC-FCP ( δ = 25 ) 0.911 0.896 ↓ (0.95) 0.887 ↓ (0.96) 0.919 (0.95) 0.931 (0.95) 34.36 ×
+
+GC-FCP ( δ = 250 ) 0.906 0.903 (0.96) 0.902 (0.98) 0.905 (0.94) 0.906 (0.92) 19.73 ×
+
+GC-FCP ( δ = 2500 ) 0.906 0.903 (0.96) 0.903 (0.99) 0.905 (0.94) 0.905 (0.92) 3.96 ×
+
+ˆy(x) ∈ { 1, 2, 3}} , G 3 = {x : ˆ y(x) ∈ { 2, 3, 4}} , G 4 = {x :ˆy(x) ∈ { 3, 4, 5}} , G 5 = {x : ˆ y(x) ∈ { 4, 5, 6, 7, 8}} . Other parameters remain the same as CIFAR-10 experiments. Table 4 in Appendix E.1 shows that Centralized CP and FedCP achieve marginal coverage near 0.9, but can deviate noticeably at the group level (e.g., lower coverage on G3). GC-FCP with moderate compression ( δ = 250 or δ = 2500 )attains group-conditional coverage close to the target for all groups, while maintaining small average set sizes (near one label on average). In contrast, overly aggressive compres-sion ( δ = 25 ) degrades calibration. Overall, these results corroborate that GC-FCP achieves group-conditional relia-bility in heterogeneous federated classification tasks, with accuracy controlled by the digest compression parameter δ.
+
+7 CONCLUSION 
+
+We have introduced Group-Conditional Federated Confor-mal Prediction (GC-FCP) , a principled framework for con-structing prediction sets with group-conditional guarantees in heterogeneous federated settings. GC-FCP leverages T-Digest to compress stratified calibration scores into a small mergeable coreset. Under mild assumptions, we established group-conditional coverage guarantees for GC-FCP, and empirical results on synthetic regression and image clas-sification benchmarks corroborated these findings while demonstrating substantial computational speedups. Future work includes extending the framework to richer conditional structures beyond finite group families, as well as investigating robustness to more complex settings such as decentralized calibration [Wen et al., 2025], adversarial behavior [Kang et al., 2024], and online CP [Angelopoulos et al., 2024, Gasparin and Ramdas, 2024]. 
+
+References 
+
+Anastasios N Angelopoulos and Stephen Bates. A gen-tle introduction to conformal prediction and distribution-free uncertainty quantification. arXiv preprint arXiv:2107.07511 , 2021. Anastasios Nikolas Angelopoulos, Rina Barber, and Stephen Bates. Online conformal prediction with decaying step sizes. In Proceedings of the 41st International Conference on Machine Learning , volume 235, pages 1616–1630, Jul. 2024. Konstantina Bairaktari, Jiayun Wu, and Steven Wu. Kandin-sky conformal prediction: Beyond class- and covariate-conditional coverage. In Proceedings of the 42nd Inter-national Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , pages 2581–2602, 13–19 Jul 2025. Rina Foygel Barber, Emmanuel J. Candès, Aaditya Ram-das, and Ryan J. Tibshirani. Predictive inference with the jackknife+. The Annals of Statistics , 49(1):486–507, 2021. John Duchi. Sample-conditional coverage in split-conformal prediction. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. Ted Dunning and Otmar Ertl. Computing extremely accurate quantiles using t-digests. arXiv preprint arXiv:1902.04023 , 2019. Matteo Gasparin and Aaditya Ramdas. Conformal online model aggregation. arXiv preprint arXiv:2403.15527 ,2024. Isaac Gibbs, John J Cherian, and Emmanuel J Candès. Con-formal prediction with conditional guarantees. Journal of the Royal Statistical Society Series B: Statistical Method-ology , page qkaf008, 2025. Leying Guan. Localized conformal prediction: A gen-eralized inference framework for conformal prediction. 
+
+Biometrika , 110(1):33–50, 2023. Pierre Humbert, Batiste Le Bars, Aurélien Bellet, and Syl-vain Arlot. One-shot federated conformal prediction. In 
+
+Proceedings of the 40th International Conference on Ma-chine Learning , volume 202, pages 14153–14177, Jul. 2023. Pierre Humbert, Batiste Le Bars, Aurélien Bellet, and Syl-vain Arlot. Marginal and training-conditional guaran-tees in one-shot federated conformal prediction. arXiv preprint arXiv:2405.12567 , 2024. Olav Kallenberg. Foundations of Modern Probability .Springer, New York, 2 edition, 2002. Mintong Kang, Zhen Lin, Jimeng Sun, Cao Xiao, and Bo Li. Certifiably Byzantine-robust federated conformal predic-tion. In Proceedings of the 41st International Conference on Machine Learning , volume 235, pages 23022–23057, Jul. 2024. Alex Krizhevsky and Geoffrey Hinton. Learning mul-tiple layers of features from tiny images. Techni-cal report, University of Toronto, Toronto, Canada, 2009. URL https://www.cs.toronto.edu/ ~kriz/learning-features-2009-TR.pdf .Guorui Li, Yanhui Zhang, Ying Wang, and Cong Wang. Fcp-pro: Federated conformal prediction algorithm based on prototype similarity. Pattern Recognition , page 112514, 2025. Charles Lu, Yaodong Yu, Sai Praneeth Karimireddy, Michael Jordan, and Ramesh Raskar. Federated confor-mal predictors for distributed uncertainty quantification. In Proceedings of the 40th International Conference on Machine Learning , volume 202, pages 22942–22964, Jul. 2023. Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-efficient learning of deep networks from decentralized data. In Artificial intelligence and statistics , pages 1273– 1282. PMLR, 2017. Yinjie Min, Chuchen Zhang, Liuhua Peng, and Changliang Zou. Personalized federated conformal prediction with lo-calization. In The Thirty-ninth Annual Conference on Neu-ral Information Processing Systems , 2025. URL https: //openreview.net/forum?id=QQUhGPST45 .Yurii Nesterov and Arkadii Nemirovskii. Interior-Point Polynomial Algorithms in Convex Programming . Society for Industrial and Applied Mathematics (SIAM), Philadel-phia, PA, 1994. doi: 10.1137/1.9781611970791. James Renegar. A polynomial-time algorithm, based on Newton’s method, for linear programming. Mathemat-ical Programming , 40(1):59–93, 1988. doi: 10.1007/ BF01580724. Yaniv Romano, Evan Patterson, and Emmanuel Candès. Conformalized quantile regression. In Advances in Neu-ral Information Processing Systems , volume 32, 2019. Yaniv Romano, Matteo Sesia, and Emmanuel Candes. Clas-sification with valid and adaptive coverage. Advances in Neural Information Processing Systems , 33:3581–3591, 2020. Mauricio Sadinle, Jing Lei, and Larry Wasserman. Least ambiguous set-valued classifiers with bounded error lev-els. Journal of the American Statistical Association , 114 (525):223–234, 2019. Osvaldo Simeone and Yaniv Romano. Uncertainty-aware data-efficient ai: An information-theoretic perspective. 
+
+arXiv preprint arXiv:2512.05267 , 2025. Anutam Srinivasan, Aditya T Vadlamani, Amin Meghrazi, and Srinivasan Parthasarathy. Fedcf: Fair federated con-formal prediction. arXiv preprint arXiv:2509.22907 ,2025. Vladimir Vovk, David Lindsay, Ilia Nouretdinov, and Alex Gammerman. Mondrian confidence machine. Technical Report , 2003. Vladimir Vovk, Alexander Gammerman, and Glenn Shafer. 
+
+Algorithmic learning in a random world , volume 29. Springer, 2005. Haifeng Wen, Hong Xing, and Osvaldo Simeone. Dis-tributed conformal prediction via message passing. In Forty-second International Conference on Machine Learning , 2025. URL https://openreview.net/ forum?id=R7sAZDq0M9 .Ran Xie, Rina Barber, and Emmanuel Candes. Boosted conformal prediction intervals. Advances in Neural Infor-mation Processing Systems , 37:71868–71899, 2024. Jiancheng Yang, Rui Shi, Donglai Wei, Zequan Liu, Lin Zhao, Bilian Ke, Hanspeter Pfister, and Bingbing Ni. Medmnist v2-a large-scale lightweight bench-mark for 2d and 3d biomedical image classifica-tion. Scientific Data , 10(1):41, 2023. doi: 10.1038/ s41597-022-01891-7. URL https://doi.org/10. 1038/s41597-022-01891-7 .Meiyi Zhu, Matteo Zecchin, Sangwoo Park, Caili Guo, Chunyan Feng, Petar Popovski, and Osvaldo Simeone. Conformal distributed remote inference in sensor net-works under reliability and communication constraints. 
+
+IEEE Transactions on Signal Processing , 73:1485–1500, 2025. doi: 10.1109/TSP.2025.3549222. Efficient Federated Conformal Prediction with Group-Conditional Guarantee (Supplementary Material) 
+
+Haifeng Wen 1 Osvaldo Simeone 2 Hong Xing 1,3 1IoT Thrust, The Hong Kong University of Science and Technology (Guangzhou), Guangzhou, China 
+
+> 2
+
+Institute for Intelligent Networked Systems (INSI), Northeastern University London, London, UK 
+
+> 3
+
+Department of ECE, The Hong Kong University of Science and Technology , HK SAR 
+
+A PROOF OF SECTION 4 
+
+A.1 PROOF OF THEOREM 4.1 
+
+Proof. First assume there are no ties, i.e., Si,k ̸ = ˆ gSn+1 (Xi,k ) for all i ∈ [nk], k ∈ [K], and Sn+1 ̸ = ˆ gSn+1 (Xn+1 ). The tie case is handled at the end of the proof. Recall that g(x) = β⊤Φ( x) with β ∈ R|G| and Φ( ·) defined in (6) , then the optimal function ˆgSn+1 (·) solved by (10) reduces to a real-value vector given by 
+
+β∗ = argmin 
+
+> β∈R|G|
+> K
+
+X
+
+> k=1
+
+ πk
+
+nk + 1  
+
+> nk+1
+
+X
+
+> i=1
+
+ℓα
+
+ X
+
+> G∈G
+
+βG1{Xi,k ∈ G}, S i,k 
+
+ 
+
+, (27) where we denote Snk +1 ,k = Sn+1 for simplicity. Under the no-ties assumption, the first-order optimality condition implies that for every group G ∈ G ,
+
+> K
+
+X
+
+> k=1
+
+πk
+
+nk + 1  
+
+> nk+1
+
+X
+
+> i=1
+
+
+
+1{Xi,k ∈ G}  1{Si,k < θ ∗
+
+> i,k
+
+} − (1 − α) 
+
+= 0 , ∀G ∈ G (28) where θ∗ 
+
+> i,k
+
+= P 
+
+> G∈G
+
+β∗
+
+> G
+
+1{Xi,k ∈ G}.Let Ek be the event that (Xn+1 , Y n+1 ) is drawn from Pk. Conditioned on Ek, the (nk + 1) scores {Si,k }nk +1  
+
+> i=1
+
+are exchangeable. Let E be the event that, for every k ∈ [K], there exists a permutation σk such that 
+
+ Sσk (1) ,k , . . . , S σk (nk +1) ,k 
+
+ =  s1,k , . . . , s nk +1 ,k 
+
+, (40) where (s1,k , . . . , s nk +1 ,k ) denotes the realized values of (S1,k , . . . , S nk +1 ,k ). Then, we have, for all G ∈ G ,
+
+P(Yn+1 ∈ C (Xn+1 | D ) | Xn+1 ∈ G, E)= P(Sn+1 ≤ θ∗
+
+> n+1
+
+, X n+1 ∈ G | E )
+
+P(Xn+1 ∈ G | E )=
+
+PKk=1 πkP(Sn+1 ≤ θ∗
+
+> n+1
+
+, X n+1 ∈ G | E , Ek)
+
+PKk=1 πkP(Xn+1 ∈ G | E , Ek)
+
+> (a)
+
+=
+
+PKk=1  
+
+> πk
+> nk+1
+
+Pnk +1  
+
+> i=1
+
+1{Si,k ≤ θ∗
+
+> i,k
+
+}1{Xi,k ∈ G}
+
+PKk=1  
+
+> πk
+> nk+1
+
+Pnk +1  
+
+> i=1
+
+1{Xi,k ∈ G}
+
+> (b)
+
+= (1 − α) PKk=1  
+
+> πk
+> nk+1
+
+Pnk +1  
+
+> i=1
+
+1{Xi,k ∈ G}
+
+PKk=1  
+
+> πk
+> nk+1
+
+Pnk +1  
+
+> i=1
+
+1{Xi,k ∈ G}
+
+= 1 − α, 
+
+(29) where (a) follows exchangeability on client k under the event Ek and (b) follows the first-order condition. This result implies marginal coverage under G = X . If the assumption Si̸ = ˆ gS (Xi) does not hold, we have 
+
+P(Yn+1 ∈ C (Xn+1 | D ) | Xn+1 ∈ G, E) ≥ 1 − α. 
+
+The proof technique is similar to [Gibbs et al., 2025] and Appendix B.2 and is omitted here. By the tower rule, we obtain the desired result. 
+
+B PROOFS FOR SECTION 5 
+
+B.1 RESULTS ON T-DIGEST 
+
+This section provides additional results on T-Digest and proves Lemma 5.1. To begin, we state the following fact that holds in our digest construction described in Section 4.2. 
+
+B.1.1 Important Lemmas Lemma B.1 (CDF error controlled by maximal cluster mass) . Let {(Ri, w i)}ℓi=1 be weighted samples with total weight W
+
+and empirical CDF F . Let TD = {( ¯Rc, W c)}mc=1 be a digest with induced CDF bF (t) = 1
+
+> W
+
+Pmc=1 Wc 1{ ¯Rc ≤ t}. Define the maximal normalized cluster mass 
+
+ρmax = max 
+
+> 1≤c≤m
+
+Wc
+
+W . (30) 
+
+Then, 
+
+sup 
+
+> t∈R
+
+F (t) − bF (t) ≤ ρmax . (31) 
+
+Proof. Let {R c}mc=1 be the partition for the digest defined in Section 4.2, and define Lc = min i∈R c Ri and Uc =max i∈R c Ri. Fix t ∈ R and consider any cluster c. If t < L c, then cluster c contributes zero to both F (t) and bF (t). If 
+
+t ≥ Uc, cluster c contributes Wc/W to both F (t) and bF (t). If t ∈ [Lc, U c), discrepancy arises from the cluster c only because max i∈R c Ri ≤ min i∈R c′ Ri for any c′ > c , which yields 
+
+F (t) − bF (t) ≤ Wc
+
+W . (32) Therefore, the above sum is bounded by ρmax . Taking the supremum over t completes the proof. 
+
+Lemma B.2 (Arcsine scale implies ρmax ≤ sin( π/δ )). Suppose the digest is constructed with the scale r(q) = 
+
+> δ
+> 2π
+
+arcsin(2 q − 1) under the condition of (13) . Then 
+
+ρmax = max 
+
+> 1≤c≤m
+
+Wc
+
+W ≤ sin 
+
+ πδ
+
+
+
+≤ πδ . (33) 
+
+Proof. For each cluster c, let its empirical left/right quantile boundaries be qLc = Vc−1/W and qRc = Vc/W , where 
+
+Vc = Pci=1 Wi (with V0 = 0 ). Then qRc − qLc = Wc/W . The well-formedness constraint gives 
+
+r(qRc ) − r(qLc ) ≤ 1 ⇐⇒ arcsin(2 qRc − 1) − arcsin(2 qLc − 1) ≤ 2πδ . (34) Let uL = 2 qLc − 1 and uR = 2 qRc − 1, so that uL, u R ∈ [−1, 1] and qRc − qLc = ( uR − uL)/2. Under the constraint 
+
+arcsin( uR)−arcsin( uL) ≤ 2π/δ , the difference uR −uL is maximized by taking symmetry around zero: arcsin( uR) = π/δ 
+
+and arcsin( uL) = −π/δ , hence uR = sin( π/δ ) and uL = − sin( π/δ ). Therefore 
+
+uR − uL ≤ 2 sin 
+
+ πδ
+
+
+
+=⇒ qRc − qLc = uR − uL
+
+2 ≤ sin 
+
+ πδ
+
+
+
+, (35) which is exactly Wc/W ≤ sin( π/δ ). Taking the maximum over c yields the claim. Lemma B.3 (From ∥F − bF ∥∞ to rank-accurate quantiles) . Let F, bF be CDFs on R and define the generalized quantile function bQ(u) = inf {t : bF (t) ≥ u}. If sup t∈R |F (t) − bF (t)| ≤ ϵ, then for all u ∈ [0 , 1] ,
+
+F ( bQ(u)) ∈ [u − ϵ, u + ϵ]. (36) 
+
+In particular, when F is an empirical CDF with total weight W , bQ(u) has empirical rank within (u ± ϵ)W .Proof. Fix u ∈ [0 , 1] and let t⋆ = bQ(u). By definition, bF (t⋆) ≥ u and for any t < t ⋆, bF (t) < u . Using sup t |F (t) −
+
+bF (t)| ≤ ϵ gives F (t⋆) ≥ bF (t⋆) − ϵ ≥ u − ϵ. For the upper bound, for any η > 0 we have bF (t⋆ − η) < u , hence 
+
+F (t⋆ − η) ≤ bF (t⋆ − η) + ϵ < u + ϵ. Letting η → 0 and using right-continuity of F yields F (t⋆) ≤ u + ϵ.
+
+B.1.2 Proof of Lemma 5.1 
+
+Proof. By Lemma B.1, 
+
+sup 
+
+> t
+
+|F (t) − bF (t)| ≤ ρmax . (37) By Lemma B.2, ρmax ≤ sin( π/δ ), hence sup t |F (t) − bF (t)| ≤ sin( π/δ ) =: ϵ. The bound sin( π/δ ) ≤ π/δ yields the second inequality. Finally, Lemma B.3 implies that bQ is ϵ-accurate in the quantile/rank sense. 
+
+B.2 PROOF OF THEOREM 5.1 
+
+We begin with the following corollary that controls the error of T-Digest for each atom. 
+
+Corollary B.1 (Atom-wise sketch accuracy) . Let pA be its weighted empirical CDF and let bpA be the step-CDF induced by the merged digest TD A. Then, under the arcsine scale (14) ,
+
+sup 
+
+> t∈R
+
+pA(t) − bpA(t) ≤ ϵ = πδ . (38) 
+
+Equivalently, the quantile query induced by TD A is ϵ-accurate in the sense of Section 4.3. Proof. This is a direct application of Lemma 5.1 to the weighted sample set DA.
+
+Step 1: First-order condition. The subgradient of (22) on ˆβ with respect to β is given by 
+
+( X
+
+> A∈A
+> mA
+
+X
+
+> c=1
+
+WA,c vA,c ΦA + wtest vtest Φ( Xn+1 )
+
+vA,c =
+
+
+
+α if ¯SA,c < ˆβT ΦA,
+
+−(1 − α) if ¯SA,c > ˆβT ΦA,tA,c if ¯SA,c = ˆβT ΦA
+
+, v test =
+
+
+
+α if S < ˆβT Φ( Xn+1 ),
+
+−(1 − α) if S > ˆβT Φ( Xn+1 ),ttest if S = ˆβT Φ( Xn+1 )
+
+ , (39) where wtest = PKk=1 λk with λk = πk/(nk + 1) and tA,c , t test ∈ [α − 1, α ].The first-order condition for optimality implies that for each group G ∈ G , there exist tA,c ∈ [α − 1, α ] (for clusters with ties) and ttest ∈ [α − 1, α ] (if the test point has a tie) such that 
+
+X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+WA,c vA,c + wtest vtest 1{Xn+1 ∈ G} = 0 ,
+
+where the vA,c and vtest are as defined above. Step 2: Empirical CDF and T-Digest approximate. The atoms {A} partition X disjointly, with membership vectors ΦA.The true empirical CDF per atom is 
+
+pA(t) = W −1
+
+> A
+
+X
+
+> i:Xi∈A
+
+λk(i)1{Si ≤ t},
+
+where WA = P 
+
+> i:Xi∈A
+
+λk(i), λk(i) = πk(i)/(nk(i) + 1) , and k(i) is the index of the client that the sample Xi belongs to, for i ∈ [n]. The coreset per atom yields 
+
+ˆpA(t) = W −1
+
+> AmA
+
+X
+
+> c=1
+
+WA,c 1{ ¯SA,c ≤ t},
+
+with sup t |pA(t) − ˆpA(t)| ≤ ϵ by Corollary B.1. 
+
+Step 3: Coverage. With (Xn+1 , Y n+1 ) ∼ PKk=1 πkPk, as in the proof of FCP [Lu et al., 2023], let Ek be the event that 
+
+(Xn+1 , Y n+1 ) is drawn from Pk. For each k ∈ [K], let Πnk +1 denote the set of all permutations of {1, . . . , n k + 1 }, and define the event 
+
+E = ∀k ∈ [K], ∃σk ∈ Πnk +1 s.t.  Sσk (1) ,k , . . . , S σk (nk +1) ,k 
+
+ =  s1,k , . . . , s nk +1 ,k 
+
+ , (40) where (s1,k , . . . , s nk +1 ,k ) denotes the realized values of (S1,k , . . . , S nk +1 ,k ).Then, we have, for all G ∈ G ,
+
+P(Yn+1 ∈ C (Xn+1 | eD) | Xn+1 ∈ G, E) = EEk
+
+h
+
+P(Sn+1 ≤ ˆβTSn+1 Φ( Xn+1 ) | Xn+1 ∈ G, E, E k)
+
+i
+
+= ND ,
+
+where 
+
+N = X
+
+> A:A⊆G
+
+WApA(ˆθA) + wtest 1{Sn+1 ≤ ˆθn+1 }1{Xn+1 ∈ G},D = X
+
+> A:A⊆G
+
+WA + wtest 1{Xn+1 ∈ G}
+
+with ˆθA = ˆβTSn+1 ΦA and ˆθn+1 = ˆβTSn+1 Φ( Xn+1 )
+
+Analogously, define the GC-FCP approximate numerator and denominator as 
+
+ˆN = X
+
+> A:A⊆G
+
+WA ˆpA(ˆθA) + wtest 1{Sn+1 ≤ ˆθn+1 }1{Xn+1 ∈ G}, ˆD = D. 
+
+By Corollary B.1, we have 
+
+N ≥ X
+
+> A:A⊆G
+
+WA(ˆ pA(ˆθA) − ϵ) + wtest 1{Sn+1 ≤ ˆθn+1 }1{Xn+1 ∈ G} = ˆN − ϵ X
+
+> A:A⊆G
+
+WA.
+
+By the first-order condition, for the component corresponding to G, there exist tA,c , t test ∈ [α − 1, α ] such that 
+
+α X
+
+> A:A⊆G
+
+X
+
+> c: ¯SA,c <ˆθA
+
+WA,c − (1 − α) X
+
+> A:A⊆G
+
+X
+
+> c: ¯SA,c >ˆθA
+
+WA,c + X
+
+> A:A⊆G
+
+X
+
+> c: ¯SA,c =ˆθA
+
+WA,c tA,c + wtest vtest 1{Xn+1 ∈ G} = 0 =⇒ X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+WA,c 1
+
+n ¯SA,c < ˆθA
+
+o
+
++ wtest 1
+
+n
+
+Sn+1 < ˆθn+1 
+
+o
+
+1{Xn+1 ∈ G} + (1 − α)T0 = (1 − α)D − T ,
+
+where 
+
+T0 = X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+WA,c 1
+
+n ¯SA,c = ˆθA
+
+o
+
++ wtest 1
+
+n
+
+Sn+1 = ˆθn+1 
+
+o
+
+1{Xn+1 ∈ G}T = X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+WA,c tA,c 1
+
+n ¯SA,c = ˆθA
+
+o
+
++ wtest ttest 1{Sn+1 = ˆθn+1 }1{Xn+1 ∈ G}.By the definition of ˆpA(t) and ˆN , we have 
+
+ˆN − αT0 = (1 − α)D − T 
+
+Because tA,c , t test ∈ [α − 1, α ],
+
+αT0 − T ≥ 0,
+
+yielding ˆN ≥ (1 − α)D. 
+
+This yields 
+
+P( Yn+1 ∈ C (Xn+1 | eD) | Xn+1 ∈ G, E) = ND
+
+≥
+
+ˆN − ϵ P 
+
+> A:A⊆G
+
+WA
+
+D
+
+≥ (1 − α)D − ϵ P 
+
+> A:A⊆G
+
+WA
+
+D
+
+≥ 1 − α − ϵ, 
+
+where the last inequality is due to P 
+
+> A:A⊆G
+
+WA < D . Taking expectation on both sides w.r.t. E yields the desired result. 
+
+C GROUP-CONDITIONAL COVERAGE UPPER BOUND OF GC-FCP 
+
+Theorem C.1 (Upper bound coverage in the case of perfect quantile regression) . Assume that the conditional score distribution S | X is continuous and fix any confidence level η ∈ (0 , 1) . Then, with probability at least 1 − η/ 2 over the calibration data, for every group G ∈ G , GC-FCP satisfies 
+
+P(Yn+1 ∈ C (Xn+1 | eD) | Xn+1 ∈ G) ≤ 1 − α + πδ + ∆ G, (41) 
+
+where the additive term 
+
+∆G = |G| 
+
+max 
+
+n πδ , PKk=1  
+
+> πk
+> nk+1
+
+oP
+
+> k
+
+ πk nk 
+
+> nk+1
+
+
+
+pk,G −
+
+q log(2 K/η )2nk
+
+ , (42) 
+
+with pk,G = P X,k (X ∈ G) being the probability that a covariate X drawn from client k belongs to group G.Proof: See Appendix C.1. Theorem C.1 shows that GC-FCP cannot be arbitrarily conservative. The group-wise coverage lies in a narrow band around 
+
+1 − α, with band width controlled explicitly by the additive term ∆G, which consists of the mis-coverage gap ϵ, calibration sizes nk, and the mixture-weighted group mass pk,G . For instance, when the mixture-weighted group mass P 
+
+> k
+
+πkpk,G 
+
+is small, the denominator shrinks, and ∆G grows, which suggests that an efficient prediction set for low-support groups requires more calibration samples. 
+
+C.1 PROOF OF THEOREM C.1 
+
+For any G ∈ G , where |G| = d, we begin with 
+
+P( Yn+1 ∈ C (Xn+1 | eD) | Xn+1 ∈ G, E) = ND ≤
+
+ˆN + ϵ P 
+
+> A:A⊆G
+
+WA
+
+D ≤ ˆND + ϵ
+
+Record that tA,c , t test ∈ [α − 1, α ], which yields 
+
+T ≥ (α − 1) T0, ˆN = (1 − α)D − T + αT0 =⇒ ˆN ≤ (1 − α)D + T0
+
+Hence, 
+
+P( Yn+1 ∈ C (Xn+1 | eD) | Xn+1 ∈ G, E) ≤ 1 − α + ϵ + T0
+
+DNow our target is to upper bound 
+
+T0 = X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+WA,c 1
+
+n ¯SA,c = ˆθA
+
+o
+
++ wtest 1
+
+n
+
+Sn+1 = ˆθn+1 
+
+o
+
+1{Xn+1 ∈ G}
+
+under the assumption that the distribution of S | X is continuous. To bound this term, we first simplify the notation by relabeling the pseudo-points with the test point with i = 1 , . . . , m, m +1 ,where m = P 
+
+> A∈A
+
+mA = O(δ|A| ) is the total number of clusters and ¯Sm+1 = Sn+1 .
+
+Claim 1. Under the conditions of Theorem C.1, with probability 1, we have 
+
+X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+1
+
+n ¯SA,c = ˆθA
+
+o
+
++ 1
+
+n
+
+Sn+1 = ˆθn+1 
+
+o
+
+≤ d. 
+
+Proof. See Appendix C.2 By Claim 1, with probability 1, we have 
+
+T0
+
+D ≤ d · max max A,c :A⊆G,c ∈[mA] WA,c , w test 1{Xn+1 ∈ G}
+
+P 
+
+> A:A⊆G
+
+WA + wtest 1{Xn+1 ∈ G}
+
+Next, we bound RHS using the properties of T-Digest. Record that wtest = PKk=1 λk = PKk=1   
+
+> πk
+> nk+1
+
+.
+
+Claim 2. Assume that GC-FCP uses the scale function r(q) = δ 
+
+> 2π
+
+arcsin(2 q − 1) for q ∈ [0 , 1] , where q is the normalized cumulative weight, i.e., quantile. Then, we have 
+
+max  
+
+> A,c
+
+WA,c ≤ WA sin 
+
+ πδ
+
+
+
+≤ sin 
+
+ πδ
+
+
+
+≤ πδ .
+
+Proof. This is a direct result of Lemma B.2 and WA ≤ 1.
+
+Claim 3. Assume that the mixture weights πk > 0, with pk,G = PX,k (X ∈ G) > 0, for any η > 0, with probability larger than 1 − η/ 2, we have 
+
+X
+
+> A:A⊆G
+
+WA ≥ X
+
+> k
+
+πknk
+
+nk + 1 
+
+pk,G −
+
+s
+
+log(2 K/η )2nk
+
+ . (43) 
+
+Proof. See Appendix C.3. Combining Claims 1, 2, and 3, we have 
+
+T0
+
+D ≤ d
+
+max 
+
+n πδ , PKk=1  
+
+> πk
+> nk+1
+
+oP  
+
+> kπknk
+> nk+1
+
+
+
+pk,G −
+
+q log(2 K/η )2nk
+
+
+
+Record that 
+
+P( Yn+1 ∈ C (Xn+1 | eD) | Xn+1 ∈ G, E) ≤ 1 − α + ϵ + T0
+
+D ,
+
+combing the bound of T0/D and taking expectation over E yield the desired result. C.2 PROOF OF CLAIM 1 
+
+Proof. Let L denote the set of all pseudo-points, consisting of the clusters across all atoms and the test point. Specifically, 
+
+L = {(A, c ) : A ∈ A , c ∈ [mA]} ∪ { test }, with |L| = m + 1 , where m = P 
+
+> A∈A
+
+mA = O(δ|A| ) is the total number of clusters at merged T-Digests. For each l ∈ L , define the feature Ψl = Φ A if l = ( A, c ) is a cluster in atom A, or 
+
+Ψl = Φ( Xn+1 ) if l = test, and the score Tl = ¯SA,c if l = ( A, c ), or Tl = Sn+1 if l = test. The optimizer ˆβSn+1 is the solution to the weighted quantile regression problem (22) with S = Sn+1 . A tie at pseudo-point 
+
+l occurs if Tl = ˆβTSn+1 Ψl. Let Daug = {Xi,k }i∈[nk ],k ∈[K] ∪ { Xn+1 }.As in [Gibbs et al., 2025], we calculate the probability 
+
+P X
+
+> l∈L
+
+1
+
+n
+
+Tl = ˆβTS Ψl
+
+o
+
+> d | D aug 
+
+!
+
+The event 
+
+nP 
+
+> l∈L
+
+1
+
+n
+
+Tl = ˆβTS Ψl
+
+o
+
+> d 
+
+o
+
+implies that there exists a subset I ⊆ L with |I| = d + 1 such that Tl = ˆβTS Ψl
+
+for all l ∈ I . Therefore, 
+
+P X
+
+> l∈L
+
+1
+
+n
+
+Tl = ˆβTS Ψl
+
+o
+
+> d | D aug 
+
+!
+
+≤ X 
+
+> I⊆L ,|I| =d+1
+
+P  ∃β ∈ Rd s.t. Tl = βT Ψl ∀l ∈ I Daug 
+
+For a fixed I, the event is that the vector (Tl)l∈I ∈ span {(Ψ Tl )l∈I }, where span {(Ψ Tl )l∈I } is the image of the map 
+
+β 7 → (Ψ Tl β)l∈I , which is a linear subspace of Rd+1 with dimension at most d.Under the continuity assumption, the conditional distribution of (Si,k )i,k ∪ { Sn+1 } given the X’s is absolutely continuous with respect to Lebesgue measure on Rn+1 .The mapping from the original scores Si,k (and Sn+1 ) to the coreset scores {Tl}l∈L is piecewise affine. For each atom 
+
+A, the score space RnA is partitioned into finitely many open cones Rπ indexed by permutations π ∈ S nA , where 
+
+Rπ = {s ∈ RnA : sπ(1) < · · · < s π(nA)}, where boundaries have measure zero. Within each Rπ , the sorted scores s(π)
+
+determine fixed quantile positions ql based on permuted weights, leading to fixed cluster assignments via the deterministic T-Digest merge rules. Thus, each ¯SA,c is an affine function of s(π) (weighted average over fixed indices), and hence affine in 
+
+s. The full map to (Tl)l∈I is therefore piecewise affine across atoms and the test score, preserving measure-zero sets under the continuous distribution of S | X.Since the subspace has Lebesgue measure zero in Rd+1 , its pre-image under the affine map also has measure zero. For a fixed I, we have 
+
+P  ∃β ∈ Rd s.t. Tl = βT Ψl ∀l ∈ I Daug  = 0 .
+
+Since there are at most  m+1 
+
+> d+1
+
+ many such I, the union bound yields 
+
+P X
+
+> l∈L
+
+1
+
+n
+
+Tl = ˆβTS Ψl
+
+o
+
+> d | D aug 
+
+!
+
+= 0 
+
+Because X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+1
+
+n ¯SA,c = ˆθA
+
+o
+
++ 1
+
+n
+
+Sn+1 = ˆθn+1 
+
+o
+
+> d 
+
+ ⊆
+
+(X
+
+> l∈L
+
+1
+
+n
+
+Tl = ˆβTS Ψl
+
+o
+
+> d 
+
+)
+
+,
+
+we have 
+
+P
+
+ X
+
+> A:A⊆GmA
+
+X
+
+> c=1
+
+1
+
+n ¯SA,c = ˆθA
+
+o
+
++ 1
+
+n
+
+Sn+1 = ˆθn+1 
+
+o
+
+> d | D aug 
+
+ ≤ P X
+
+> l∈L
+
+1
+
+n
+
+Tl = ˆβTS Ψl
+
+o
+
+> d | D aug 
+
+!
+
+= 0 .
+
+Marginalizing Daug yields the desired result. C.3 PROOF OF CLAIM 3 
+
+Proof. The calibration weight in G is P 
+
+> A:A⊆G
+
+WA = P 
+
+> k
+
+λk · #{i : Xi,k ∈ G}, where λk = πk/(nk + 1) .Let Zk = # {i : Xi,k ∈ G}, then P 
+
+> A:A⊆G
+
+WA = P 
+
+> k
+
+λkZk, and 
+
+Zk ∼ Bin( nk, p k,G ), with pk,G = PX,k (X ∈ G)
+
+and the expected weight is 
+
+E
+
+ X
+
+> A:A⊆G
+
+WA
+
+ = X
+
+> k
+
+λknkpk,G = X
+
+> k
+
+πknk
+
+nk + 1 pk,G .
+
+By Hoeffding’s inequality, for each k,
+
+P ( Zk ≤ nkpk,G − tk) ≤ exp 
+
+ −2t2
+
+> k
+
+nk
+
+
+
+,
+
+for tk > 0. Set tk = p(nk/2) log(2 K/η ) with any η > 0, we have 
+
+P( Zk ≤ nkpk,G − tk) ≤ η
+
+2K .
+
+By union bound over k, with probability larger than 1 − η/ 2,
+
+X
+
+> k
+
+λkZk ≥ X
+
+> k
+
+λk(nkpk,G − tk) = X
+
+> k
+
+πknk
+
+nk + 1 
+
+pk,G −
+
+s
+
+log(2 K/η )2nk
+
+ .
+
+We have, with probability larger than 1 − η/ 2,
+
+X
+
+> A:A⊆G
+
+WA = X
+
+> k
+
+λkZk ≥ X
+
+> k
+
+πknk
+
+nk + 1 
+
+pk,G −
+
+s
+
+log(2 K/η )2nk
+
+ .
+
+D DUAL CONSTRUCTION FOR (9) UNDER THE OBJECTIVE (10) 
+
+Reformulate the primal: Let λk = πk/(nk + 1) . The primal objective of (10) is rewritten as: 
+
+> K
+
+X
+
+> k=1
+
+λknkX
+
+> i=1
+
+ℓα(g(Xi,k ), S i,k ) + 
+
+> K
+
+X
+
+> k=1
+
+λk
+
+!
+
+ℓα(g(Xn+1 ), S ).
+
+The pinball loss is given by ℓα(u, s ) = (1 − α)( s − u)+ + α(u − s)+, where (a)+ = max {a, 0}. To reformulate the primal problem (10), we first introduce the following claim to rewrite the pinball loss as an optimization problem. 
+
+Claim 4 (Pinball Loss Reformulation) . Fix any scalar residual r = s − u. Consider the following problem 
+
+min  
+
+> p,q ≥0
+
+(1 − α)p + αq s.t. r = p − q. (44) Then, the optimal value of (44) equals ℓα(u, s ).
+
+Proof. Since r = p − q, we have p = r + q. Together with p ≥ 0 and q ≥ 0, feasible pairs satisfy q ≥ max {− r, 0} = ( −r)+
+
+and then p = r + q ≥ 0. Substitute p = r + q into the objective: 
+
+(1 − α)p + αq = (1 − α)( r + q) + αq = (1 − α)r + q. Thus, minimizing over feasible q is equivalent to 
+
+min 
+
+> q≥(−r)+
+
+(1 − α)r + q, 
+
+whose minimum is attained at q∗ = ( −r)+, giving value 
+
+(1 − α)r + ( −r)+.
+
+If r ≥ 0, then (−r)+ = 0 , so the value is (1 − α)r = (1 − α)( s − u). If r < 0, then (−r)+ = −r, so the value is 
+
+(1 − α)r − r = −αr = α(u − s). Therefore, the optimal value is exactly 
+
+(1 − α)( s − u)+ + α(u − s)+ = ℓα(u, s ).
+
+By Claim 4, we introduce auxiliary pi,k , q i,k ≥ 0 for each calibration point (i, k ) and ptest  
+
+> k
+
+, q test  
+
+> k
+
+≥ 0 for each virtual test copy per client k and rewrite the problem (10) as 
+
+(P0) : min  
+
+> g∈F G,p,q K
+
+X
+
+> k=1
+> nk
+
+X
+
+> i=1
+
+λk ((1 − α)pi,k + αq i,k ) + 
+
+> K
+
+X
+
+> k=1
+
+λk
+
+ (1 − α)ptest  
+
+> k
+
++ αq test 
+
+> k
+
+ ,
+
+s.t. Si,k − g(Xi,k ) = pi,k − qi,k , S − g(Xn+1 ) = ptest  
+
+> k
+
+− qtest  
+
+> k
+
+, ∀i ∈ [nk], ∀k ∈ [K]
+
+pi,k , q i,k , p test  
+
+> k
+
+, q test  
+
+> k
+
+≥ 0, ∀i ∈ [nk], ∀k ∈ [K]
+
+(45) 
+
+Dual problem: Introduce dual variables ηi,k for calibration constraints and ηtest  
+
+> k
+
+for each test copy. Using standard calculations, the dual problem is given by the following linear programming (LP) problem: 
+
+(P1) : max   
+
+> {ηi,k },{ηtest
+> k}
+> K
+
+X
+
+> k=1
+> nk
+
+X
+
+> i=1
+
+ηi,k Si,k + S
+
+> K
+
+X
+
+> k=1
+
+ηtest  
+
+> k
+
+(46) s.t. − λkα ≤ ηi,k ≤ λk(1 − α), ∀i ∈ [nk], ∀k ∈ [K], (47) 
+
+− λkα ≤ ηtest  
+
+> k
+
+≤ λk(1 − α), ∀k ∈ [K], (48) 
+
+> K
+
+X
+
+> k=1
+> nk
+
+X
+
+> i=1
+
+ηi,k Φ( Xi,k ) + 
+
+> K
+
+X
+
+> k=1
+
+ηtest  
+
+> k
+
+Φ( Xn+1 ) = 0 . (49) where Φ( x) =  1{x ∈ G} 
+
+> G∈G
+
+∈ { 0, 1}|G| . The last constraint is to enforce the linearity of g(x) = βT Φ( x), which arises mathematically from the stationary condition with respect to the primal weights β.
+
+Set construction via KKT conditions: In [Gibbs et al., 2025, Section 4], the conformal prediction set is constructed using the dual solution ηS (for input score S) and KKT conditions. The optimal ˆgS (Xn+1 ) satisfies: ηn+1  
+
+> S
+
+= 1 − α if 
+
+S > ˆgS (Xn+1 ), ηn+1  
+
+> S
+
+= −α if S < ˆgS (Xn+1 ), and ηn+1  
+
+> S
+
+∈ [−α, 1 − α] if S = ˆ gS (Xn+1 ).Similarly, let ηtest  
+
+> S
+
+= PKk=1 ηtest  
+
+> k,S
+
+be the sum of dual variables over test copies (since the test is duplicated). The set is: 
+
+ˆCdual (Xn+1 ) = 
+
+(
+
+y : ηtest  
+
+> s(Xn+1 ,y )
+
+≤
+
+> K
+
+X
+
+> k=1
+
+λk
+
+!
+
+(1 − α)
+
+)
+
+,
+
+using the weighted upper bound. 
+
+Binary search: We compute ˆCdual (Xn+1 ) using the following two-step procedure. First, using Algorithm 1 of [Gibbs et al., 2025], we binary search for the largest value of S∗ such that ηn+1  
+
+> S∗
+
+< 1 − α. Second, we output all y such that 
+
+s(Xn+1 , y ) ≤ S∗ [Gibbs et al., 2025, Theorem 4]. Table 3: Experimental setup for synthetic regression.                                
+
+> Parameter Value
+> T-Digest parameter δδ= 250
+> Local calibration sizes nkn1= 1000 ,nk= 333 for k > 1
+> Mixture weights πkπk= 1 /K for all k
+> Miscoverage level αα= 0 .1
+> Model f(·)linear regression Score s(x, y )|y−f(x)|
+> Test points ntest 200
+> Monte Carlo runs 100
+
+Table 4: Coverage and set size comparisons on PathMNIST [Yang et al., 2023]. 
+
+Methods Marginal coverage Coverage (set size) 
+
+G1 G2 G3 G4 G5
+
+Centralized CP 0.901 0.888 ↓ (1.00) 0.885 ↓ (1.00) 0.879 ↓ (1.00) 0.935 (1.00) 0.895 ↓ (1.00) FedCP 0.905 0.892 ↓ (1.01) 0.889 ↓ (1.01) 0.883 ↓ (1.02) 0.937 (1.01) 0.900 (1.02) GC-FCP ( δ = 25 ) 0.876 ↓ 0.891 ↓ (1.12) 0.890 ↓ (1.14) 0.880 ↓ (1.15) 0.895 ↓ (1.07) 0.853 ↓ (1.01) GC-FCP ( δ = 250 ) 0.908 0.913 (1.07) 0.910 (1.08) 0.911 (1.11) 0.911 (0.98) 0.898 ↓ (1.03) GC-FCP ( δ = 2500 ) 0.909 0.913 (1.07) 0.910 (1.08) 0.910 (1.11) 0.912 (0.98) 0.900 (1.03) 
+
+E ADDITIONAL EXPERIMENTAL RESULTS 
+
+E.1 EXPERIMENTAL SETTINGS AND RESULTS OF SECTION 6 
+
+Other parameters for the synthetic regression can be found in Table 3. The experimental results of PathMNIST are summarized in Table 4. Figure 4 reports the empirical group-wise coverage and the average set size over confidence level α on CIFAR-10. Vanilla CP achieves competitive marginal coverage but exhibits group-wise miscalibration under non-i.i.d. client partitions. GC-FCP reduces these discrepancies, pushing group-wise coverage closer to the target across G ∈ G . This improvement comes with a moderate increase in set size, reflecting the standard trade-off when enforcing conditional validity over overlapping groups. Figure 5 reports the empirical group-wise coverage and the average set size over confidence level α on PathMNIST. As expected, vanilla CP exhibits nonuniform conditional coverage across groups and different values of α. GC-FCP improves stability across groups while keeping prediction sets competitive, highlighting its practical value in privacy-constrained settings. 
+
+E.2 COMPARISON WITH PERSONALIZED FCP AND FEDCF 
+
+In this section, we compare the proposed GC-FCP with personalized FCP [Min et al., 2025] and FedCF [Srinivasan et al., 2025] on CIFAR-10 [Krizhevsky and Hinton, 2009] using a fixed pretrained ResNet-56 classifier pθ (· | x) and the standard classification nonconformity score S(x, y ) = 1 − pθ (y | x). We split the CIFAR-10 test set uniformly at random into a calibration pool and an evaluation pool independently in each Monte Carlo repetition. The calibration pool is partitioned into K = 5 source clients by a disjoint partition of the true labels: each sample (x, y ) is assigned to client k if y belongs to the corresponding label subset as in Sec. 6.2, yielding client-specific calibration sets {D k}Kk=1 . In addition, we construct a synthetic (K + 1) -th target client by sampling 2000 samples with replacement from the same calibration pool. All test points are drawn from the synthetic target client in the same way. FedCF [Srinivasan et al., 2025] and GC-FCP calibrate using the calibration data from the K source clients together with the synthetic target calibration client, whereas personalized FCP [Min et al., 2025] leverages the source-client data to train additional distribution-estimation models and calibrates for the target client accordingly. For grouping, we consider the model confidence X(x) = max c∈{ 0,..., 9} pθ (c | x) and define an overlapping family of confidence-based groups G = {G1, . . . , G 4} on the restricted confidence range [0 .5, 1] . Let 0.5 = a0 < a 1 < a 2 < a 3 <0.0 0.2 0.4 0.6 0.8 1.0                     
+
+> 1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> Marginal
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> {0,1}
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> {2,3}
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> {4,5}
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> {6,7}
+> vanilla CP
+> GC-FCP
+
+(a) Average coverage over different groups. 0.0 0.2 0.4 0.6 0.8 1.0                     
+
+> 1
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> Normalized Set Size
+> Marginal
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Normalized Set Size
+> {0,1}
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Normalized Set Size
+> {2,3}
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> Normalized Set Size
+> {4,5}
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> Normalized Set Size
+> {6,7}
+> vanilla CP
+> GC-FCP
+
+(b) Average set size over different groups. 
+
+Figure 4: Average coverage and set size versus coverage level 1 − α with vanilla CP and the proposed GC-FCP on CIFAR-10. 
+
+a4 = 1 be equally spaced breakpoints and define 
+
+G1 = {x : X(x) ∈ [a0, a 2)}, G 2 = {x : X(x) ∈ [a1, a 3)}, G 3 = {x : X(x) ∈ [a2, a 4)}, G 4 = {x : X(x) ∈ [a3, a 4]},
+
+so that a point may belong to multiple groups when its confidence lies in an overlap interval. Finally, since FedCF [Srinivasan et al., 2025] and personalized FCP [Min et al., 2025] are not designed to enforce simultaneous validity over overlapping 
+
+G, we enforce a single set-valued predictor by resolving overlaps with a fixed random tie-breaking rule: when a test point lies in multiple groups, we randomly select one eligible group and construct the prediction set using the corresponding group-specific calibration. The report results represent the average after 100 Monte Carlo simulations, each with 2000 test points drawn from the target client. Table 5 shows that GC-FCP achieves coverage across all overlapping groups. In contrast, personalized FCP and FedCF exhibit under-coverage for some groups despite providing marginal coverage, because both methods are group-wise procedures that treat each group independently and thus only admit guarantees when groups form a disjoint partition, which breaks under overlap. Consequently, the inability of these baselines to coordinate calibration across overlapping groups results in systematic group-conditional violations, whereas GC-FCP’s joint optimization over the overlapping family preserves group-conditional validity. Table 5: Coverage comparisons on CIFAR-10 [Krizhevsky and Hinton, 2009]. 
+
+Methods Marginal coverage Coverage 
+
+G1 G2 G3 G4
+
+Personalized FCP 0.898 0.893 ↓ 0.890 ↓ 0.626 ↓ 0.913 FedCF 0.898 0.801 ↓ 0.824 ↓ 0.792 ↓ 0.905 GC-FCP ( δ = 250 ) 0.899 0.922 0.930 0.925 0.901 0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Coverage
+
+Marginal 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Coverage
+
+{0,1} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Coverage
+
+{2,3} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Coverage
+
+{4,5} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Coverage
+
+{6,7} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Coverage
+
+{8} 
+
+vanilla CP 
+
+GC-FCP (a) Average coverage over different groups. 0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.10 
+
+> Normalized Set Size
+
+Marginal 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.10 
+
+> Normalized Set Size
+
+{0,1} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.10 
+
+> Normalized Set Size
+
+{2,3} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.10 
+
+> Normalized Set Size
+
+{4,5} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.10 
+
+> Normalized Set Size
+
+{6,7} 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+1
+
+0.00 
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.10 
+
+> Normalized Set Size
+
+{8} 
+
+vanilla CP 
+
+GC-FCP 
+
+(b) Average set size over different groups. 
+
+Figure 5: Average coverage and set size versus coverage level 1 − α with vanilla CP and the proposed GC-FCP on PathMNIST.

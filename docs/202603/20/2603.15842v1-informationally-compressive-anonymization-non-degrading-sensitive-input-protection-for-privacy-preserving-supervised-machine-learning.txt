@@ -1,0 +1,927 @@
+Title: Informationally Compressive Anonymization: Non-Degrading Sensitive Input Protection for Privacy-Preserving Supervised Machine Learning
+
+URL Source: https://arxiv.org/pdf/2603.15842v1
+
+Published Time: Wed, 18 Mar 2026 00:18:33 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Informationally Compressive Anonymization: Non-Degrading Sensitive Input Protection for Privacy-Preserving Supervised Machine Learning 
+
+# Jeremy J Samuelson: EVP, Artificial Intelligence & Innovation Integrated Quantum Technologies August 2023 
+
+Abstract 
+
+Modern machine learning systems increasingly rely on sensitive data, creating significant privacy, security, and regu-latory risks that existing privacy-preserving machine learning (ppML) techniques—such as Differential Privacy (DP) and Homomorphic Encryption (HE)—address only at the cost of degraded performance, increased complexity, or prohibitive computational overhead. This paper introduces Informationally Compressive Anonymization (ICA) and the VEIL architec-ture, a privacy-preserving ML framework that achieves strong privacy guarantees through architectural and mathematical design rather than noise injection or cryptography. ICA embeds a supervised, multi-objective encoder within a trusted Source Environment to transform raw inputs into low-dimensional, task-aligned latent representations, ensuring that only irreversibly anonymized vectors are exported to untrusted training and inference environments. The paper rigorously proves that these encodings are structurally non-invertible using topological and information-theoretic arguments, show-ing that inversion is logically impossible—even under idealized attacker assumptions—and that, in realistic deployments, the attacker’s conditional entropy over the original data diverges, driving reconstruction probability to zero. Unlike prior autoencoder-based ppML approaches, ICA preserves predictive utility by aligning representation learning with downstream supervised objectives, enabling low-latency, high-performance ML without gradient clipping, noise budgets, or encryption at inference time. The VEIL architecture enforces strict trust boundaries, supports scalable multi-region deployment, and naturally aligns with privacy-by-design regulatory frameworks, establishing a new foundation for enterprise ML that is secure, performant, and safe by construction—even in the face of post-quantum threats. 
+
+# 1 Introduction 
+
+Today, ML applications are nearly ubiquitous in many indus-try sectors, and the speed with which ML is being adopted is continuing to increase. The successful implementation of ML often requires very large amounts of training data. However, the need for such volumes of data to develop highly effective models has raised serious privacy concerns among regulators. For certain application domains, such as financial services and healthcare, the data needed can be extremely sensitive in na-ture. Furthermore, bad actors have been quick to respond to the widespread use of ML, and have developed new methods for exploiting ML solutions [1, 2, 3]. A given ML model may face multiple types of adversarial attacks depending on the type of access to the model an attacker gains. Among the most common ML attacks is the interception and exfiltration of sensitive input features in-flight from the data source to the deployed ML model’s prediction API [4, 5, 6, 7]. In response to this emerging threat, many regulations and ethical data policies, such as the EU’s General Data Pro-tection Regulation (GDPR), the California Consumer Pri-vacy Act (CCPA), the California Privacy Rights Act (CPRA), and the Health Insurance Portability and Accountability Act (HIPAA) were put in place to raise awareness and require ML practitioners to take precautions against attacks and data breaches that might occur in a given ML pipeline. Researchers have worked to develop various techniques against privacy at-tacks. Among the most common techniques are Differential Privacy (DP), Federated Learning (FL), and Homomorphic Encryption (HE) [8]. However, multiple studies have shown that these methods preserve data privacy at the expense of model performance [9] and can add a great deal of additional computational burden [10, 11], rendering such methods im-practical, or even useless, for some industry applications that require low response times and high predictive reliability. The autoencoder neural network architecture was introduced, and has long been used, as a methodology for nonlinear di-mensionality reduction that produces a latent vector space embedding for use with other ML algorithms [12]. Some re-searchers have shown that this latent vector space embed-ding can serve as a deep learning (DL) powered encoding for privacy-preserving data transfer over public channels when necessary [13, 14]. However, information loss due to the Infor-mation Bottleneck Principle [15] often results in degradation of predictive performance in the downsream ML model. The purpose of this paper is two-fold. First, to describe the current state-of-the-art in ppML methodologies, with a spe-cific focus on the Multi-Objective Supervised Convolution-Residual AutoEncoder (SCRAE) architecture introduced by Ouaari et al. in 2023[16]. This novel architecture aligns the representation produced by the encoder with the prediction objective of the downstream ML model. This supervised ap-proach is combined with a multi-objective framework that enforces certain properties in the latent representation of the inputs to provide privacy protection by obscuring the original 1
+
+> arXiv:2603.15842v1 [cs.LG] 16 Mar 2026
+
+data dimensionality, format, distribution, and content in a way that prevents accurate reconstruction, while maintaining prediction utility. This combined architecture is first developed in a way that is specialized for classification and is then extended to regression to produce a methodology that is generalized to all supervised learning. 
+
+# 2 A Brief Introduction to AutoEn-coders 
+
+In this section, a brief introduction and discussion of the au-toencoder, also known as an auto-associative neural network [17], architecture is given before showing, in an upcoming section, how the inherent information loss and resulting ML model degradation have been mitigated in the framework in-troduced by Ouaari et al. Principal Component Analysis (PCA) can be considered as a factor analysis that learns a linear mapping x 7 → z, called the 
+
+encoder , fe, and another linear mapping z 7 → x, called the 
+
+decoder , fd. The overall reconstruction function is of the form ˆ x = fd (fe (x)). The model is then trained to minimize the squared reconstruction error, L (θ) = ∥x − ˆx∥22 [18]. Now consider a feed-forward artificial neural network with a single hidden layer consisting of E neurons, in which the hid-den units are computed as z = W1x, and the output is a reconstruction of the input given by ˆ x = W2z, where x ∈ RD ,
+
+W1 is a E × D matrix, W2 is a D × E matrix, and E < D .Thus, the output of the model is given by ˆ x = W2W1x = ˆW x.If this model is trained to minimize the squared reconstruc-tion error, L
+
+ ˆW
+
+
+
+= PNn=1 xn − ˆW xn
+
+> 22
+
+, it has been shown [19][20] that ˆW is an orthogonal projection onto the first E
+
+eigenvectors of the empirical covariance matrix of the data, ΣX ∈ RD×D. Therefore, this linear autoencoder is equiv-alent to PCA [21]. If the architecture of this autoencoder is extended to include nonlinearities, this produces a model that has been proven [22] to be strictly more powerful than PCA. Such a model is capable of learning very useful representations of data, even under significant compression to a relatively low-dimensional latent space [23]. 
+
+Figure 1: A typical “bottleneck” AutoEncoder, yielding an undercomplete representation of the input data In general, autoencoders may have arbitrarily many hidden layers with nonlinear activations, yielding arbitrarily complex mappings. The hidden layers often form a bottleneck between the input and its reconstruction, as shown in Figure 1. 
+
+Figure 2: An AutoEncoder yielding an overcomplete repre-sentation of the input data Of course, if the hidden layers are wide enough, there is noth-ing to stop such a model from merely learning the identity function [18]. To prevent this degenerate solution, the model must be restricted in some way. The simplest approach is to use a narrow bottleneck, where E ≪ D. The resulting latent embedding is called an undercomplete representa-tion . An alternative approach is to use E ≫ D, as shown in Figure 2, which yields an overcomplete representation .
+
+Figure 3: The latent representation of an AutoEncoder can be directly input into another ML model When using an overcomplete representation, additional regu-larization is needed to prevent the model from overfitting, such as adding noise to the inputs, forcing hidden activa-tions to be sparse, or forcing weights to be small by adding a penalty term to the loss function. The autoencoder architec-ture is extremely flexible in its applications, as the densely-connected layers of the feed-forward architecture may also be substituted for convolutional, recurrent, or residual layers, to adapt the model to encode images, text, or other types of data, as needed. 2As previously mentioned, the autoencoder architecture is of-ten used as a method for reducing the dimensionality of input data for other ML models. This means the latent represen-tations produced by autoencoders do not need to be decoded prior to model inference, as ML models are capable of learning patterns and mappings directly from the latent vector space 
+
+z 7 → y, as illustrated in Figure 3. This is due to the fact that the autoencoder must simulta-neously learn the encoder, fe, and the decoder, fd, ensur-ing that the latent representation has retained enough infor-mation from the original input to accurately reconstruct it. Therefore, enough information is present in the latent embed-ding to support accurate ML inferences, despite the fact that the data have been given a complex, nonlinear encoding [24]. As mentioned before, when training ML models on latent en-codings from autoencoders, there is some amount of degrada-tion in the performance of the ML model due to the obfus-cation of the input data. This has long been accepted as an unavoidable trade off for reducing dimensionality to achieve a smaller model or to protect the input data from bad actors. 
+
+# 3 Related Work and the Current State of AutoEncoder-Based Pri-vacy Protection 
+
+Earlier applications of autoencoders for secure transmission treated the latent encoding as a cipher. Sagar and Ku-mar (2019) proposed “AutoEncoder Artificial Neural Network Public Key Cryptography” (AANNPKC) for encrypting mes-sages over unsecured public channels [13]. This was done by training identical autoencoders at both the sender and re-ceiver nodes of a communication channel, with the shared training data acting as the encryption key. They bench-marked throughput and latency against several classical ci-phers (DES, 3DES, Blowfish, IDEA, AES, and RC6), report-ing higher performance for small payloads and demonstrat-ing feasibility. However, this method relied on maintaining the secrecy of both the encoder and decoder trained parame-ters, as discovery of these parameters would make decoding of the transmitted data possible. This methodology also sufferd from degredation of data due to the information compression in under-complete autoencoders. More recent work by Ouaari et al. (2023) [16] explored combatting this degredation and improving autoencoder-based prediction utility by training a Supervised Convolution-Residual AutoEncoder (SCRAE) architecture. In this frame-work, the training of the encoder is aligned to two objectives to simultaneously minimize the reconstruction error and the prediction error of a supervised classifier that ingests the en-coding. This is expressed by the authors in the following loss function. (1) 
+
+L (x, y, θe, θd, θc) = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+h
+
+LR (xn, f d (fe (xn, θe) , θd)) + LM
+
+
+
+yn, ˆf (fe (xn, θe) , θc)
+
+i 
+
+In the next section, this multi-objective approach is extended to include other objectives enforced on the latent representa-tion. These additional objectives lead to beneficial geometric properties in the latent representation that are shown to fur-ther preserve, or enhance, the predictive utility of the encod-ing. This extension of the multi-objective training framework is also combined with aspects of a multi-level convolutional neural network architecture proposed by Xu and Duraisamy (2020) [25], allowing the autoencoder to learn robust encod-ings across multiple levels, or dimensionalities. 
+
+# 4 Multi-Level, Multi-Objective Au-toEncoders for Classification 
+
+To begin the extension of this multi-objective framework, the overall objective scaffolding is clarified by separating the in-dividual objectives. It is then extended by adding the new objective terms and modified with coefficients for each term to enable setting or modifying the relative prioritization of each objective. This enhanced mulit-objective function is ex-pressed as follows. (2) L = λrecon Lrecon + λrepr Lrepr + λpred Lpred + λreg Lreg 
+
+It becomes clear that the overall loss has four components: the autoencoder reconstruction loss ( Lrecon ), the loss func-tion enforcing useful characteristics in the latent representa-tion ( Lrepr ), the prediction loss of the downstream ML model (Lpred ), and a final term for any regularization on the latent representation ( Lreg ). The λ values are the aforementioned hyperparameters used to specify the relative importance of each objective. The most common objective function used to measure recon-struction loss is the Ordinary Least Squares loss, also known as the Mean Squared Error (MSE), which is adequate. (3) LOLS = 12N
+
+> N
+
+X
+
+> i=1
+
+∥xi − ˆxi∥22
+
+Given that the goal is to create a ppML system, a desirable property of the latent encodings is that they cannot support reconstruction. In future sections, it will also be established that no corresponding decoder is deployed as part of the ppML system. For these reasons, the recommended default is λrecon = 0. Unlike other systems that use autoencoders, including the approach defined by Ouaari et al., under this new objective structure, minimizing the reconstruction error is demoted from a primary objective to an optional regular-ization term that can be added to resist latent collapse during training, which will be discussed in future sections. As such, 
+
+λrecon should always be kept small relative to the other ob-jective prioritization hyperparameters. Starting with the SCRAE architecture, the densely-connected hidden layers of the encoder are concatenated into a single vector, Ψ, before being passed to the downstream ML model. This creates a multi-level autoencoder, as the encoder must learn to create optimal latent representations both at the last layer of the encoder, as will as at the level of this concate-nation [25]. The representation objective function, Lrepr , is applied to Ψ to ensure the latent representation has the de-sired properties. In the case of classification, a model must have clearly discern-able class clusters to accurately classify observations. Ideally, 3these class clusters will be as separable as possible to enable descrimination via the classifier’s learned decision boundary. To achieve this, the objective applied to the concatenated la-tent representation is the Center loss [26], (4) LC = 12N
+
+> N
+
+X
+
+> i=1
+
+∥μyi − Ψi∥22
+
+where μyi ∈ RE is the latent center of the class to which observation i belongs. The introduction of the Center loss minimizes intra-class distance and improves target resolution for the deployed ML model as visualized in Figures 4 and 5. 
+
+Figure 4: 2-D latent representation without the Center loss 
+
+Figure 5: 2-D latent representation after training with Center loss Any common prediction objective function used in classifica-tion is suitable to train the downstream model and to max-imize the prediction utility of the encoder. Common choices include the Cross-Entropy loss function, (5) LCE = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+> K
+
+X
+
+> k=1
+
+yik ln pik 
+
+or the Hinge loss function, more commonly used to train per-ceptron and Support Vector Machine models. (6) LHinge = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+X 
+
+> k̸=yi
+
+max {0, 1 + ⟨Wk, xi⟩ − ⟨ Wyi , xi⟩} 
+
+There are many options for model regularization within ML and DL. To achieve stability within the latent representation, and to dampen the high training variance sometimes observed in neural networks, a PCA Cosine Similarity loss is employed to enforce alignment between the learned nonlinear manifold and the geometry of PCA, which is equivalent to a linear au-toencoder, as established in Section 2. (7) LPCA = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1 − f2 (Ψ i) · (xPCA )i
+
+∥f2 (Ψ i)∥ ∥ (xPCA )i∥
+
+Here, f2 : RPLl=1 ml → R2, ml is the dimensionality of densely-connected layer l of the encoder, and ( xPCA )i ∈ R2 is the vector consisting of the first two principal components of the original input data, xi. This enforced PCA alignment also serves to preserve the global geometric structure, as PCA does [27], which places some restriction on the learned latent rep-resentation, thus reducing variance by imposing some bias. All of these components are combined to produce the final autoencoder architecture, vizualized in Figure 6. 
+
+Figure 6: Multi-Level, Multi-Objective SCRAE architecture The combination of these objectives and architectural aspects results in a powerful privacy-preserving encoding with aston-ishing prediction utility. To demonstrate this, an experiment was conducted in which the well-known MNIST data set was encoded from its original shape of 784 dimensions to 64. As a baseline, a densely-connected autoencoder was also trained to produce a 64-dimensional encoding under the standard methodology described in Section 2. Three Logistic Regres-sion classifiers were then trained, one on the original 784-dimensional data, one on the 64-dimensional multi-objective encoding, and the other on the 64-dimensional encoding pro-duced by the standard autoencoder. The out-of-sample ac-curacy was measured against a holdout validation set for all three models. The results are shown in Table 1. 4Model Input Test Accuracy vs. Raw 
+
+Raw Data 92.45% +0.00% Base AE 88.10% -4.35% SCRAE 99.25% +6.80% Table 1: Validation Accuracy Comparison The degradation of the base autoencoder is evident, as the validation accuracy of the model trained on this encoding lost 4.35 percentage points versus the model trained on the raw data. In contrast to this, not only did the model trained on the SCRAE encoding maintain the validation accuracy versus the raw data, but rather exceeded it by 6.80 percent-age points, outperforming the base autoencoder by 11.15 per-centage point in validation accuracy. This is a significant breakthrough in ppML, as the degradation in downstream ML model performance is no longer a required trade-off that must be accepted for the sake of security. 
+
+# 5 Adapting the Multi-Level, Multi-Objective AutoEncoder to Regres-sion 
+
+With the multi-level architecture and multi-objective loss function scaffolding developed for classification, the task of adapting this framework to regression simply amounts to find-ing objectives that achieve the desired effects in the context of target variable spaces of infinite cardinality. Beginning with the multi-objective loss function given by Equation 2, each component is considered and suitable substitutes are found when necessary. The reconstruction loss is agnostic to whether the downstream ML task is classification or regression, as is the PCA similar-ity loss. The most obvious change needed is the prediction loss of the downstream ML model ( Lpred ). The prediction loss used in classification, such as the Cross-Entropy loss or the Hinge loss, can be substituted for any objective function suited to regression. Examples of commonly used objective functions are the Ordinary Least Squares (OLS) loss (8) LOLS = 12N
+
+> N
+
+X
+
+> i=1
+
+∥yi − ˆyi∥22
+
+and the Mean Absolute Error (MAE) loss. (9) LMAE = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∥yi − ˆyi∥1
+
+For a robust regression model, which has the benefits of both the OLS and MAE loss functions, the Huber loss function [28, 29] is recommended. (10) Lδ =
+
+( 12 (yi − ˆyi)2 for |yi − ˆyi| < δ 
+
+|yi − ˆyi| δ − 12 δ2 for |yi − ˆyi| ≥ δ
+
+This leaves only the representation loss ( Lrepr ) to consider. The Center loss function relies on discrete target values, and is therefore also specific to the case of classification. Here, an objective function is needed to enforce the desired properties in the latent representation—smoothness, and similar latent representations for obervations with similar target values— but that is suitable for regression target variable spaces of infinite cardinality. The first proposed objective function constructs a densely-connected, weighted graph in which the nodes are the latent representations of the observations, Ψ, and the edge weights, 
+
+γij , are determined by the similarity of the corresponding tar-get values as follows. (11) γij = e− 1  
+
+> σ2∥yi−yj∥2
+
+Here, σ is a hyperparameter that controls how quickly the edge weight decreases as the distance between targets be-comes larger. This can either be automatically tuned to the distribution of y as, 
+
+σ = 12 IQR 
+
+ y − μy
+
+√σy
+
+
+
+or it can be found via a hyperparameter search in training. An objective function which then enforces similar latent represen-tations for observations with similar target values is given by the following. (12) LLap = 12N (N − 1) 
+
+> N
+
+X
+
+> i=1
+
+X 
+
+> j̸=i
+
+γij ∥Ψi − Ψj ∥22
+
+This loss is the Dirichlet energy of Ψ on the above described latent representation graph [30]. Therefore, minimizing it pulls together latent encodings whose targets are close, and doesn’t enforce proximity when targets are far apart, yielding a smooth, target-aware embedding, rather than discrete class clusters, which is ideal for regression models. Thus, this ob-jective function is a suitable replacement for the Center loss. For an alternative perspective on this loss function, define Γ = [ γij ] and D = diag ( ei) where ei = P  
+
+> j̸=i
+
+γij . Then, the unnormalized graph Laplacian is L = D − Γ. Stack the latent encodings as a matrix Ψ ∈ RN ×E where the i-th row is Ψ i.Then, the following equivalence emerges. (13) 12N
+
+> N
+
+X 
+
+> i=1
+
+X 
+
+> j̸=i
+
+γij ∥Ψi − Ψj ∥22 = 1
+
+N tr  ΨT LΨ
+
+Thus, the above described loss is the graph-smoothness penalty familiar from Laplacian Eigenmaps [31]. Minimizing tr  ΨT LΨ makes Ψ vary slowly across edges that connect similar targets, while remaining stationary across edges that connect dissimilar targets. For this reason, this loss is referred to as the Graph-Laplacian loss function, or LLap .The Graph-Laplacian loss preserves a continuum; that is, ob-servations with similar targets are given similar latent rep-resentations. It preserves order, or rank, because γij decays with ∥yi − yj ∥. Therefore, larger target gaps allow larger la-tent distances, thus, encoding the ordering in y. When com-bined with Lrecon and Lpred , the Graph-Laplacian loss is also robust to trivial collapse, in which all latent encodings, Ψ i,are equal. The Graph-Laplacian then shapes the latent ge-ometry, rather than defining it alone. The gradient with respect to one encoding, Ψ i, is as follows. (14) 
+
+∂LLap 
+
+∂Ψi
+
+= 1
+
+N (N − 1) 
+
+X 
+
+> j̸=i
+
+γij (Ψ i − Ψj )5Therefore, each Ψ i is nudged toward the weighted average of its target neighbors, furhter indicating a direct local smooth-ness force. An experiment analogous to the one described in Section 4 was conducted using the E2006-tfidf data set. In this ex-periment, a Linear Regression model was trained on the raw data with dimensionality 150,360. Two other Linear Regres-sion models were also trained on 2,048-dimensional encodings, one from a baseline feed-forward autoencoder, and one from a multi-objective SCRAE. The results are shown in Table 2. 
+
+Model Input Test R2 vs. Raw 
+
+Raw Data 0.5651 +0.0000 Base AE 0.2908 -0.2743 SCRAE 0.6329 +0.0678 Table 2: Validation R2 Comparison These results show that the adaptation of the mult-level, multi-objective autoencoder to regression has been success-ful, as the out-of-sample performance of the downstream ML model consuming the SCRAE encoding once again shows no performance degradation as seen in the base autoencoder and even exceeds the performance of the model trained on the raw data. This multi-level, multi-objective autoencoder exhibits the ability to severely compress information and data, thus pro-tecting sensitive inputs from bad actors, while generating an entirely new latent representation with the necessary geome-try to preserve predictive utility for any supervised ML model. 
+
+# 6 Practical Considerations for Training with the Graph-Laplacian Loss 
+
+For a batch of size B, the Graph-Laplacian loss function com-putes B (B − 1) ≈ B2 edge weights, leading to a time and memory complexity of approximately O  B2. Assuming sin-gle precision (float32) tensors, for batches above B ≈ 1, 024, tensors of size B2 start to dominate GPU RAM. In cases, where larger batches, B ≥ 1, 024, are needed, switching to a sparsified variant is recommended. A k-NN sparsification of the Graph-Laplacian loss function is proposed in which only the k strongest target neighbors are kept for each node. For scalar targets, the k nearest neighbors are simply the k nodes with the smallest absolute difference. These can be found efficiently with a single sort on the tar-get, y. This avoids the computation of a B × B distance matrix, and instead locates all nearest neighbor candidates in 
+
+O (B ln B). Then, trimming to the top k per row results in a total complexity of O (B ln B + kB ). For vector targets, the sort-window logic would need to be replaced by a k-NN search in the target space, which means tolerating a one-time O  B2 computation, if done naively. This may be tolerable on batches of moderate size. With optimized software, such as FAISS or ScaNN, it should be possible to construct a k-NN graph in the target space in sub-quadratic time. To further control the balance between complexity and smoothness, different schemes for symmetrization within the 
+
+k-NN graph may be used. The most straightforward case is to use no symmetrization. In this case, the edges of the k-NN graph are directed. That is, the set of neighbor edges, κ,has the following definition. 
+
+κ = {(i → j) : j ∈ N k (i)} (15) Here, each ordered pair contributes separately. The set κ
+
+may contain the edge i → j, but not j → i. This method preserves asymmetries naturally present in the k-NN graph. For a batch of size B and a latent encoding dimensionality of 
+
+E, the edge computation with no symmetrization has com-plexity O (kBE ). In this scenario, the Graph-Laplacian loss leads to a directed smoothness, as it is implemented as a sum over directed edges. The k-NN graph may be symmetrized to either increase smoothness at the cost of additional complexity, or to re-duce complexity at the risk of over sparsification. In the first case, the set of neighbor edges is constructed as an undirected union which includes all edges that appear in either direction. 
+
+κ = {{ i, j } : j ∈ N k (i) ∨ i ∈ N k (j)} (16) This can increase the number of edges up to 2 kB , leading to much better connectivity in the k-NN graph. This has the ef-fect of stabilizing training and removing potential “one-way” artifacts, which can improve the richness of the latent rep-resentation. For this reason, this method is proposed as the default, despite the increased complexity, which is O (2 kBE ). The second symmetrization case involves keeping only the edges that appear in both directions, leading to the following set of neighbor edges. 
+
+κ = {{ i, j } : j ∈ N k (i) ∧ i ∈ N k (j)} (17) This leads to fewer, higher-confidence edges, as the neighbor-hoods are mutually “agreed upon,” yielding a very clean local structure in the latent representation that is robust to outliers and asymmetric noise in the target space. The reduced num-ber of edges can reduce complexity, which is bounded above by O (kBE ). However, this can lead to a k-NN graph that is too sparse, or even empty when k is small, B is small, or when noise in the target space is large. In any case, this method re-sults in the following sparsified Graph-Laplacian loss 
+
+ ˜LLap 
+
+
+
+.(18) ˜LLap = 12kB 
+
+> B
+
+X
+
+> i=1
+
+X 
+
+> j∈N k(i)
+
+γij ∥Ψi − Ψj ∥22
+
+Here, Nk (i) is the set of the k nearest target neighbors of Ψ i.The gradients of this sparsified function still flow through Ψ, giving the following gradient with the same local smoothing effect. (19) 
+
+∂ ˜LLap 
+
+∂Ψi
+
+= 1
+
+kB 
+
+X 
+
+> j∈N k(i)
+
+γij (Ψ i − Ψj )During training, the dense Graph-Laplacian should be used whenever possible for the simplest implementation, and the smoothest behavior in the latent representation. For large batches, B ≥ 1, 024, higher-dimensional latents, or situations where prohibitive memory pressure is observed, the k-NN sparsified Graph-Laplacian should be substituted. 6Figure 7: Spearman rank correlation, ρ, vs. training epochs 
+
+Figure 8: 5-fold CV R2 
+
+> k-NN
+
+vs. training epochs 
+
+Figure 9: Convergence of R2 
+
+> k-NN
+
+and R2Huber vs. training epochs For noisy targets, a slightly larger σ should be used to in-crease smoothing. When using ˜LLap , use a smaller value for 
+
+k, as incorporating more nearest target neighbors allows more target noise to affect the smoothing process. In any case, the size of σ should be limited. If σ is too large, then edge weights are allowed to be large for too many edges. This may lead to representation collapse in which all Ψ i are either the same, or too similar to retain predictive utility. It should be noted that representation collapse is resisted and prevented by the presence of the reconstruction loss and pre-diction loss in the multi-objective loss function, as representa-tion collapse would make both reconstruction and prediction impossible. In cases where targets are especially noisy, a hy-perparameter search over combinations of all λ and σ values may be utilized to achieve the desired result. In difficult training scenarios with noisy targets, the Spear-man rank correlation, ρ, is a useful diagnostic to track mono-tonicity in the similarity of latent representations, ∥Ψi − Ψj ∥,and target similarity, ∥yi − yj ∥. This should increase reliably as training progresses, as seen in Figure 7. Some initial instability may be observed in early training epochs. However, if the algorithm is working as intended, the Spearman rank correlation is expected to become strictly increasing as training continues. A similar diagnostic tool involves fitting a k-NN model on the latent space and measuring the out-of-sample R2 
+
+> k-NN
+
+statis-tic for this model. Two behaviors are expected from R2
+
+> k-NN
+
+.First, this is also expected to become strictly increasing as training progresses, as seen in Figure 8. Second, as training progresses, R2 
+
+> k-NN
+
+is expected to approach the R2 statistic of the downstream ML model, as seen in Fig-ure 9, which was generated using different training data. In this case, the R2 statistics were calculated on a fixed valida-tion set. 
+
+Figure 10: Observed vs. Predicted Means Another useful training diagnostic that verifies the encoder is behaving as intended involves checking for regressor calibra-tion in the downstream model trained on the encoding. Acalibrated regressor should have the property that, for any predicted value, ˆ y, the average true target value among all cases with predictions near ˆ y is approximately ˆ y. More com-pactly, the diagnostic involves checking that the following is true for the downstream regressor. 
+
+E
+
+h
+
+Y | ˆY ≈ ˆy
+
+i
+
+≈ ˆy
+
+Given that |rng Y |≥ ℵ 0, conditioning on a single prediction value, ˆ y, is impossible. Therefore, the above expectation is ap-proximated by binning. In the case of the example visualized 7in Figure 10, predictions were binned in deciles to arrive at ten bins of equal frequency. Then, for each bin, b, the mean was computed for both predicted and true target values. The two means for each bin were then compared to vizualize whether they were roughly equal. Ideally, the points,  ¯ˆyb, ¯yb
+
+, should lie on the identity line. The results of this calibration diag-nostic are shown in Figure 10. In some extreme cases, collapse may still occur. In these rare cases, an alternative representation loss function that resists this effect may be used. One such alternative is discussed in the next section. 
+
+# 7 The Target-Aware Contrastive Loss Function: InfoNCE Adapted to Continuous Targets 
+
+The minute risk of latent collapse with the Graph-Laplacian loss proposed in the previous section arises from the fact that this loss function enforces a similar latent representation when observations have similar targets, but no particular behavior is enforced for observations with dissimilar targets. Thus, the only force applied within the latent space is an attractive force. It should be noted that this is also true of the Center loss described in section 4. In cases where latent collapse is occurring, it is avoided by applying a representation loss which enforces similar latent representations for observations with similar target values, while also enforcing dissimilar latent representations for ob-servations with dissimilar target values. In the case of classi-fication, such an objective funtion is found in the Information Noise-Contrastive Estimation (InfoNCE) loss [32], given by the following forumla. 
+
+LNCE = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ln 
+
+P  
+
+> j̸=i
+
+ind [ yi = yj ] esij 
+
+P  
+
+> k̸=i
+
+esik 
+
+(20) Here, ind [ ·] is the indicator function, defined as, (21) ind [ p ] = 
+
+(
+
+1 p is true 0 p is false and (22) sij = ΨTi Ψj
+
+τ ∥Ψi∥ ∥ Ψj ∥
+
+is the cosine similarity of the latent representations Ψ i and Ψ j
+
+with temperature τ > 0. This acts as a softmax classifier over neighbors, as the normalized exponentiated similarities form a categorical distribution. For a given observation, xi, it is clear that LNCE is the average of log-probabilities over the set of observations with the same class label. It is worth mentioning that this loss may be substituted for the less computationally expensive Center loss in classification in the event of latent collapse. However, the requirement of defining a discrete set of same-class positives is ill-suited to the continuous targets of regression. Just as with the Graph-Laplacian loss, some continuous notion of “soft matching” or similarity is needed to identify observations with similar target values without re-quiring that their target values be equal. Using hard bins to group observations with similar targets is not ideal, as hard bins would destroy resolution while injecting the need for dis-cretization hyperparameters. The desired notion of similarity is achieved by defining a sim-ilarity kernel for any two observations, γij . This can be done with the same formula given in equation 11. Replacing the discretized positive match indicator with the continuous simi-larity kernel then yields the following regression-adapted Con-trastive loss function. (23) LR-NCE = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ln 
+
+P  
+
+> j̸=i
+
+γij esij 
+
+P  
+
+> k̸=i
+
+esik 
+
+Due to the significantly increased complexity and compute requirements, these Contrastive loss functions are offered as a fallback strategy in the event of latent collapse with the Cen-ter loss or Graph-Laplacian loss. All diagnostics and calibra-tion tests described in the previous section can also be used to monitor training with the regression-adapted InfoNCE loss. When combined, all of these objective functions applied to the multi-level, multi-objective autoencoder architecture create a methodology for Informationally-Compressive Anonymiza-tion (ICA) of sensitive ML model inputs that is stable, flexi-ble, robust, and secure without compromising speed and pre-dictive utility, as with other solutions. 
+
+# 8 The VEIL Architecture 
+
+This section outlines the reference architecture and opera-tional deployment model for an ICA ppML system. The architecture is deliberately designed to enforce strict sep-aration between trusted environments–where sensitive data reside–and untrusted or semi-trusted external compute envi-ronments, where large-scale model training, optimization, and inference occur. By ensuring that all sensitive signals remain confined to trusted, controlled infrastructure, the proposed deployment pattern provides robust privacy guarantees while allowing or-ganizations to leverage the scalability of modern cloud plat-forms for downstream model training. The VEIL architecture is built around a three-tier trust model. First, is the Trusted Tier (Source Environment) which con-tains raw data and sensitive attributes. The encoder, here referred to as the Vector-Encoded Information Layer (VEIL), and its parameters are deployed and hosted within this tier at the relevant data source. All feature engineering, extraction, compression, and anonymization are performed at this layer. Within this tier, strict governance, residency, auditing, and compliance controls are enforced. Second, is the Semi-Trusted Tier (Training Environ-ment), which receives only non-invertible, informationally-compressed and anonymized latent representations. This tier is where training of the downstream ML model occurs using cloud-scale compute resources. This tier never sees raw data, gradients over sensitive features, or identifiable attributes. The third and final tier is the Application Tier (Inference Environment), which houses the inference runtime. This is the production environment in which model predictions are executed using the same latent-only interface from the semi-trusted tier. This environment can run in the cloud or on-8premises and maintains the same trust boundaries established in training. This structure ensures that sensitive information is never 
+
+present outside the Source Environment, ensuring privacy re-gardless of whether the cloud is compromised, misconfigured, or externally attacked. 
+
+# 8.1 The Source Environment (Trusted) 
+
+This environment contains the systems and data repositories already governed by the client organization’s internal policies, and may be a Virtual Private Cloud (VPC), on-premises dat-acenter, secure enclave, private subnet, or database-specific execution environment. This tier houses all raw data reposi-tories, such as any databases, data lakes, or data warehouses storing PII, financial data, PCI, PHI, operational data, inter-nal logs, etc. Under this architecture, these raw records are never exported outside of this environment. The multi-level, multi-objective autoencoder serves as the Vector-Encoded Information Layer (VEIL) and is deployed adjacent to the data. At the time of a call to send model inputs to a deployed ML model, raw records are engineered into the raw ML features and then passed through the VEIL. The VEIL removes any sensitive or identity-linked features by informationally compressing and anonymizing the raw fea-ture vectors into non-invertible, informationally minimal la-tent vectors. The latent representation constraints ensure non-invertibility while maximizing predictive utility. All en-coding operations are logged for compliance and auditing. This environment includes an access control and gover-nance layer that enforces Role-Based Access Control (RBAC), Attribute-Based Access Control (ABAC), token-scoped cre-dentials, encryption at rest, audit trails, and data residency restrictions. In addition to these traditional access and gov-ernance components, this layer would strictly enforce that only ICA-encoded latent vectors are allowed to cross the trust boundary to other environments. 
+
+Figure 11: Illustration of the Source Environment Encodings are transmitted from the trusted environment to the cloud using mutually authenticated channels (TLS 1.3 or better), customer-controlled API keys or IAM roles, op-tional VPN or private link peering, or transport-level integrity checks. While no sensitive or identifiable information is ever transmitted, these additional measures are required to pre-vent other forms of attack, such as injection [33] or poison pill attacks [34]. 
+
+# 8.2 The Cloud Training Environment (Un-trusted or Semi-Trusted) 
+
+This environment provides elastic compute and storage capa-bilities for training. Under this architecture, all training is on non-sensitive latent vectors. All standard ML frameworks (PyTorch, TensorFlow, JAX, SciKit-Learn, etc.) expect vec-tor or tensor inputs. Therefore, all these frameworks and training systems operate normally when ingesting the latent vectors for training. Since this environment is only ever ex-posed to non-invertible latent vectors, there is no exposure to sensitive gradients. This, in turn, means there is no risk of gradient-based inversion attacks [35], eliminating the need for implementing DP-SGD, fine-tuning ϵ and δ values, and tracking privacy budgets. In this environment, latent vectors can also be stored for pe-riodic model retraining. The recommended mode for storing latent vectors is a vectorDB solution (e.g., Milvus, Pinecone, Qdrant, or the pgvector plugin for PostgreSQL databases). However, as vectors can be batched together into matrices, la-tent vectors can be stored in any database solution amenable to the storage of array-like data. Some ML training or deploy-ment solutions, such as Amazon SageMaker, require model in-puts to be staged in blob storage, such as Amazon S3, prior to model ingestion, which is also possible. Since any storage in this environment contains only irreversibly anonymized latent vectors, these artifacts contain no PII, identifiers, or recon-struction pathways. Therefore, any storage of latent vectors for operational necessity or convenience creates no risk of sen-sitive data exposure. The training environment may also host a model registry that stores trained models and versioned artifacts. Again, these do not create any risk of data exposure, as these models have never been exposed to any sensitive data or gradients over sen-sitive data. These models operate purely on ICA latent input vectors and therefore cannot contain any sensitive internal representations tied to sensitive data or their distributions. 
+
+Figure 12: Illustration of the Training Environment 98.3 The Application / Inference Environ-ment (Untrusted) 
+
+During inference, new raw data are processed at the source to engineer input features, which are then passed through the VEIL to transform the input vectors into latent vectors via ICA. Only latent vectors are sent to the inference envi-ronment, which may exist on-premises, in the cloud, inside an edge device, or as part of a zero-trust integration with business applications. Predictions are then consumed by the appropriate system or user, as dictated by the specific use case. This preserves identical trust boundaries between train-ing and inference, meaning the deployed model never accepts any sensitive data as input, and all downstream systems are shielded from sensitive information. Model predictions are also returned to the source environment so that counterfactual analyses can be performed within the trusted environment. This accommodates regulatory com-pliance for use cases that require decision transparency and explainability, such as an adverse action report in credit de-cisioning. For a complete diagram of the VEIL architecture, see Figure A1 in Appendix A. 
+
+Figure 13: Illustration of the Application/Inference Environ-ment 
+
+# 8.4 Deployment Patterns 
+
+The VEIL architecture supports multiple deployment pat-terns. This section will describe some of the primary broad variants that are both possible and likely to be needed. The first deployment pattern is well-suited to organizations in highly regulated industries that are extremely averse to risk and prefer to keep their trusted Source Environment on premises, while needing access to the elastic storage and com-pute solutions offered by modern cloud platforms for the train-ing and deployment of ML/AI models. These organizations are likely to be in the finance and healthcare sectors, thus cre-ating regulatory constraints on data residency or sovereignty, and on how data are used. In this pattern, the Source Envi-ronment is on-premises, but the Training and Inference En-vironments are located on an enterprise cloud platform, such as AWS, Azure, or GCP. The second deployment pattern is the most secure, and is well-suited to organizations in the defense and intelligence sec-tors, as these organizations deal with highly classified data, as well as strict data sovereignty requirements. The VEIL ar-chitecture offers these organizations a solution that requires no external connectivity, as all environments will be fully on-premises with air-gapped connections. However, the envi-ronments are still fully partitioned from each other to limit internal exposure, as a precaution against any breach of the Training or Inference Environments. The third deployment pattern discussed in this section in-volves a hybrid or multicloud deployment. This deployment pattern is applicable to large, multi-regional enterprises that need ML training or inference across multiple cloud regions, cloud providers, or multiple vendor environments. These or-ganizations will need a solution that complies with all regional regulations governing sensitive data, is cost-optimized, is com-patible with distributed training workloads, and reduces ven-dor lock-in while maintaining privacy guarantees. One real-world example of how this type of deployment pat-tern is useful can be found in the context of a multinational financial services organization, such as a large credit reporting agency. Such an organization would provide ML/AI solutions for credit decisioning and identity fraud detection in the con-text of new account openings, among other services and solu-tions, to financial institutions across multiple regions. Provid-ing these types of services relies heavily on a variety of highly sensitive data sources on consumers and their identities, fi-nances, repayment history, income, employment history, real property ownership, residencial history, and more. Clearly these sensitive data will be subject to strict regulations and data residency requirements. To accommodate these regulations, these organizations cur-rently maintain entirely separate data operations in each re-gion. This has many effects on the operations and expenses of the organization. Notably, this often leads to useful so-lutions being deployed in single regions, limiting their bene-fit to the organization. In cases where a solution is deemed useful enough to be deployed in multiple regions, entire en-vironments and pipelines for training and inference are du-plicated across multiple regions in what are commonly called regionally-pinned deployments, as illustrated in Figure 14. 
+
+Figure 14: Illustration of duplicated ML pipelines in regionally-pinned deployments (map is not to scale) It must be noted that in this regionally-pinned deployment pattern, organizations rarely, if ever, apply end-to-end pro-tection to data traveling within these environments, leaving sensitive inputs exposed at key points in the pipeline. The data are not leaving the organization’s environment, nor are they leaving any regional jurisdiction, so technically this does not violate any regulations. However, if these environments are ever compromised, input vectors being passed from the database to the ML model’s prediction API can be easily ex-filtrated and later used to commit identity theft and other financial crimes [4]. 10 With the VEIL architecture and multi-region deployment pat-tern, multiple regional Source Environments can be defined to satisfy data residency regulations. Then, Training and In-ference Environments can be established in a single region and sent latent vectors from the various Source Environ-ments. Sensitive information never leaves its respective re-gional Source Environment, let alone its regional jurisdiction. Therefore, compliance with all regional regulations happens automatically and by design. This enables such an organi-zation to move away from regionally siloed MLOps and re-gionally pinned ML deployments, thereby expanding each ML solution across the entire organization and/or all of its cus-tomers without regionally duplicated Training and Inference Environments and pipelines. Figure 15 illustrates the glob-ally transformed inference framework under the VEIL archi-tecture. 
+
+Figure 15: Illustration of a simplified, multi-regional ML de-ployment with the VEIL architecture (map is not to scale) The fourth deployment pattern is well-suited to any ML/AI scenario in which several organizations would benefit from the cooperative, reciprocal sharing of information, but regulations ban or greatly restrict the sharing of sensitive data. Exam-ples of this include ML/AI modeling within hospitals or med-ical research, and fraud detection involving large-scale scams across multiple regions. Modeling in the context of medical research benefits greatly from training data that encompass a large and diverse patient population treated under a variety of conditions [36, 37]. Some large hospitals in urban centers have access to a large and diverse patient population and, as such, have become centers of excellence in AI for healthcare use cases. Simultaneously, most rural clinics have struggled to successfully adopt ML/AI systems, as they do not have access to their own large and diverse patient populations for model training [38]. This proposed deployment pattern would alleviate that imbalance. The latent encodings produced by ICA and deployed under this variant of the VEIL architecture would enable multiple facilities or sites to access a shared ML/AI infrastructure in which models benefit from patterns observed across multiple facilities, sites, or organizations without any of the partici-pants directly sharing any sensitive data. Under this frame-work, each participant would maintain and control its own Source Environment, which houses and secures that partici-pant’s sensitive data. An external unified ML/AI infrastruc-ture then houses models that would be useful to all partic-ipants. Some examples include models for fraud detection, patient triage recommendations, readmission risk detection, payor rejection probability estimates, and more. To prevent any information leakage, individual model calls can be mapped to specific consumers or patients within the Source Environment. This ensures the correct model response can be mapped back to the original requester and the con-sumer or patient in question without using any identifying information to index the latent vector in the model call, thus preventing the linkage of any latent to information that can be found within any external systems. This would also require standardization of the model call across all participants. Under this pattern, the models can be trained on latents from all participants, greatly enhancing the models by providing the large and diverse training data sets that have been out of reach for many researchers and organizations [39]. Simul-taneously, all sensitive data remain in the respective Source Environment of each participant, and no sensitive information is ever exposed to the shared ML/AI infrastructure allowing each participant to remain compliant with their regulatory obligations for privacy and security. For a complete diagram of this shared ML/AI infrastructure in the context of a health-care use case, see Figure A2 in Appendix A. 
+
+# 8.5 Summary and Key Architectural Guar-antees 
+
+The VEIL architecture is built around a clear and durable trust boundary: all sensitive operations occur within the trusted Source Environment, and only compressed, non-invertible latent representations leave that environment. This architecture and ICA provide the following. 
+
+• Data minimization by design: Raw data never cross the trust boundary. 
+
+• Structural non-invertibility: Latent vectors contain insufficient information to reconstruct original records. 
+
+• Attack-surface elimination: No gradients, activa-tions, or raw features are exposed to Training or In-ference Environments. 
+
+• Compliance alignment: VEIL fits naturally into frameworks requiring data minimization, privacy-by-design, and controlled data movement (GDPR, CPRA, HIPAA). 
+
+• High utility: ML performance is maintained because gradients are not clipped, and no artificial noise is in-jected into the training process. 
+
+• Low latency: Input vectors are significantly com-pressed, reducing transfer latency, complexity, ML model size, inference times, and power consumption. 
+
+• Operational simplicity: Unlike DP and HE, VEIL requires no privacy budgets, noise parameters, or spe-cialized cryptography stacks to implement. This structural design and its privacy guarantees, enable or-ganizations to move forward in their adoption of ML while meeting stringent regulatory requirements, keeping customer and consumer data safe, and avoiding the performance penal-ties and computational overhead of DP and HE. Organiza-tions no longer need to avoid the convenience of modern cloud platforms to preserve the security and privacy of their data, 11 since they can now train and deploy ML models without ex-posing sensitive data or gradients to these environments, and maintain a consistent privacy posture across the entire ML lifecycle. Finally, large, multi-region enterprises now have a globally scalable, secure, low latency, highly reliable, and cost efficient ML architecture that eliminates the need for siloed opera-tions and regionally-pinned ML deployments. In effect, ICA and the VEIL architecture provide a next-generation privacy foundation for enterprise ML that is secure, simple, scalable, and operationally aligned with modern MLOps patterns. 
+
+# 9 Proof of Non-Invertibility 
+
+Previous sections have asserted that the latent encoding produced by the technique described in this paper is non-invertible. In this section, this claim will be thoroughly proven. 
+
+# 9.1 Notation and Assumptions 
+
+Let X ⊆ RD be the input space of raw data (tabular records, images, text embeddings, etc.), with D ∈ N and D ≫ 1. Let 
+
+Z ⊆ RE , be the latent encoding space with E ≪ D. Let Y
+
+be the target space. Let fθ : X → Z be the above-described encoder, which is a continuous function with parameters θ.Finally, let gϕ : Z → Y be a downstream model trained in a cloud environment on latent encodings. Assume that the encoder is trained to optimize the predic-tive performance on the supervised task, gϕ ◦ fθ , not to re-construct x. Assume that any auxiliary losses are chosen to increase task utility and reduce identity leakage, not to pre-serve input information. Assume that there is no decoder network trained to approximate an inverse of fθ ; thus, ICA is implemented via a one-way encoder. Assume that in deploy-ment, θ and access to fθ applied to arbitrary inputs remain within the customer’s trusted Source Environment, while the untrusted Training and Inference Environments observe only 
+
+Z and gϕ. Finally, assume that X contains a nonempty open subset of RD . In other words, assume the input data live in a region with genuine D-dimensional variability, not on a low-dimensional manifold known to the attacker. With these assumptions and definitions, multiple types of non-invertibility are formalized. 
+
+# 9.2 Topological Non-Invertibility via Di-mensionality Reduction 
+
+In this subsection, the ICA encoder, or VEIL, is regarded as a function, and its non-invertibility is formalized and proven from an analytical, algebraic, and topological perspective. Be-fore this is formally stated as a theorem and a proof is con-structed, the following standard definitions must be recalled. 
+
+Definition 9.1 (Open set) . A set U ⊆ RD is said to be open 
+
+if ∀x ∈ U , ∃ϵ > 0 such that 
+
+Bϵ (x) ≡ y ∈ RD : ∥y − x∥ < ϵ 
+
+is contained in U .
+
+Definition 9.2 (Injective function) . A function f : X → Y
+
+is said to be injective (one-to-one) if ∀x1, x2 ∈ X, the fol-lowing is true. 
+
+f (x1) = f (x2) = ⇒ x1 = x2
+
+Definition 9.3 (Inverse function) . Let f : X → Y be a func-tion. An inverse of f is a function f −1 : Y → X such that 
+
+f −1 (f (x)) = x ∀x ∈ X, and f  f −1 (y) = y ∀y ∈ Y . Anecessary condition for f to admit an inverse is that f must be bijective (both injective and surjective). 
+
+Definition 9.4 (Continuous function) . A function f : U →
+
+Rm, where U ⊆ Rn is open, is continuous if ∀x ∈ U and 
+
+∀ϵ > 0, ∃δ > 0 such that the following is true. 
+
+∥x − x′∥ < δ =⇒ ∥ f (x) − f (x′)∥ < ϵ 
+
+It should be noted that neural networks are compositions of continuous functions (affine mappings, convolutions, continu-ous activations, etc.), and are, therefore, continuous functions. The proof of the non-injectivity of the encoder also relies upon a well-known theorem [40], which will not be re-proven here, as it is standard to take it as a known result in rigorous anal-ysis and topology. 
+
+Theorem 9.1 (Invariance of Domain) . Let D ≥ 1. If 
+
+U ⊆ RD is open and the function f : U → RD is continu-ous and injective, then: 
+
+• f (U ) is open in RD ; and 
+
+• f is a homeomorphism between U and f (U ) (f is bijec-tive and invertible, and f −1 is continuous). 
+
+Theorem 9.1 can now be used to prove the following lemma. 
+
+Lemma 9.1. Let D > E ≥ 1, and consider the following subset of RD .
+
+S ≡ RE × { 0}D−E = (x1, ..., x E , 0, ..., 0) ∈ RD : xi ∈ R
+
+Then, S has an empty interior in RD . That is, there is no nonempty subset U ⊆ RD such that U ⊆ S.Proof. Assume that ∃s ∈ S and a radius r > 0 such that the open ball Br (s) is contained in S. By the definition of S,
+
+s = ( s1, ..., s D ) with sE+1 = · · · = sD = 0. Now consider 
+
+v ∈ RD such that v = (0 , ..., 0, δ ), where the first D − 1 coor-dinates are 0 and the last coordinate is some δ ∈ R such that 0 < |δ| < r .Then, s + v = ( s1, ..., s E , 0, ..., 0, δ ) has a nonzero entry in the last coordinate. By the definition of S, s + v / ∈ S.However, ∥v∥ = |δ| < r . Therefore, s + v ∈ Br (s), which contradicts the assumption that Br (s) ⊆ S.Thus, by contradiction, no such open ball exists, and the in-terior of S is empty. These definitions and results can now be combined to give the following result. 
+
+Theorem 9.2 (Encoder Non-Injectivity) . Let D > E ≥ 1.Let U ⊆ RD be a nonempty open set, and let the function 
+
+f : U → RE be continuous. Then, f cannot be injective. 
+
+12 Proof. Assume that ∃f : U → RE such that f is a continuous injective function. Let i : RE → RD be the following canonical linear embedding. 
+
+i (ψ1, ..., ψ E ) = ( ψ1, ..., ψ E , 0, ..., 0) Clearly, i is continuous and injective. Now, consider the fol-lowing composition. 
+
+F ≡ i ◦ f : U → RD
+
+Since F is a composition of continuous injective functions, it is continuous and injective. The image of F lies in the following subspace. 
+
+S ≡ RE × { 0}D−E ⊆ RD
+
+By assumption, U is a nonempty open subset of RD , and, by construction, F : U → RD is continuous and injective. By Theorem 9.1, F (U ) is open in RD , and F : U → F (U ) is a homeomorphism. In particular, F (U ) must be a nonempty open subset of RD .However, by construction, F (U ) ⊆ S. From Lemma 9.1, the interior of S is empty in RD , and therefore contains no nonempty open subsets of RD .Thus, F (U ) cannot be open in RD unless F (U ) is empty, which contradicts the fact that U is nonempty and F is injec-tive. By this contradiction, f : U → RD with D > E cannot be injective. 
+
+Corollary 9.1 (Encoder Non-Invertibility) . Let f : RD →
+
+RE be a function with E < D . Then, the inverse function 
+
+f −1 : RE → RD does not exist as a function defined on any open region of its domain. Proof. Let D > E and f : RD → RE be a continuous func-tion. Suppose ∃U ⊆ RD such that U is open and nonempty and f |U is bijective onto its image f (U ). This yields a con-tinuous injective function from U to RE , which contradicts Theorem 9.2. Thus, no such open set U exists. It has now been shown that an ICA encoder f : RD → RE
+
+with E < D cannot be invertible on any open region of its domain. That is, the function f −1 cannot exist, which is the sense in which the encoding is not simply computationally difficult to invert, but is structurally non-invertible. To make this result more concrete, the various components of this result are described in terms of an ML modeling scenario and pipeline environment. The input space X = RD consists of input vectors x with D raw features. The encoder is a neu-ral network, which is equivalent to some continuous function 
+
+fθ : RD → RE . The latent encoded space has dimensionality 
+
+E, which is chosen to be stricly smaller than D (often much smaller) to enforce an informational bottleneck. Assume the distribution of the data varies over more than E
+
+degrees of freedom. That is, the set of possible inputs oc-cupies, or approximates, some nonempty open region of the input space X ⊆ RD . Then, by Theorem 9.2, the encoder, fθ
+
+cannot be injective on that region. By the definition of an in-jective function, this means multiple distinct inputs, x1̸ = x2,must satisfy fθ (x1) = fθ (x2). Thus, the latent encoding, Ψ = fθ (x) cannot uniquely identify the original data, x; the preimage set P (Ψ) ≡ { x : fθ (x) = Ψ } contains multiple ele-ments, typically infinitely many. Therefore, no function f −1 : RE → RD can be a true inverse to the encoder fθ on any open region in the input space; there is simply not enough information in Ψ to recover x uniquely. Even a computationally unbounded adversary with perfect knowledge of the encoder fθ cannot define a unique inverse on any nontrivial region. However, this is not even a reason-able assumption of adversarial capabilities, as the VEIL archi-tecture places the encoder inside the source database. This means the only way an adversary could gain access to the encoder is to compromise the source database environment itself, which would negate the need to access the encoder. Under a realistic threat model, the adversary would have no knowledge of the encoder fθ . In this situation, the adversary cannot even uniquely identify the original input space, which is the domain of the encoder. Under this realistic assumption, from the view of any adversary, the preimage set P (Ψ) now consists of countably infinite potential input spaces, which are each uncountably infinite. Once again, this leads to an encoding that is not simply diffi-cult to invert, or for which an inversion algorithm is currently unknown. It is logically impossible for an inverse to exist. 
+
+# 9.3 Information-Theoretic Loss and Under-Determination (Source Environment Attacker) 
+
+While the topological non-invertibility of the encoder was proven in the previous subsection, one might ask whether an adversary could still reconstruct the original input x “with high probability.” This is reasonable and necessary to con-sider, as some researchers have investigated the probabilistic invertibility of various latent representations in ML and DL [41]. This question is addressed now in this subsection. For completeness, the scenario of an “optimal attacker” will be considered. An optimal attacker is one who has somehow gained access to the encoder function fθ and its parameters 
+
+θ. Under the VEIL architecture, for an attacker to gain ac-cess to, or have any knowledge of, the encoder, the attacker would be required to breach the source database, since the encoder is embedded directly within the source database en-vironment. This is extremely unlikely, and would represent the catastrophic failure of the encryption, governance, and other security systems protecting the Source Environment. This being the case, a real-world attacker with this sort of ac-cess would be unlikely to have need of inverting the encoder. This would be the equivalent of a crew of bank robbers break-ing into the vault of a bank, and then, instead of taking the cash, deciding to spend their time and effort bypassing some additional aspect of the vault’s security. However, the sce-nario in which an attacker has somehow gained knowledge of the encoder without gaining direct access to the source data will still be considered to show that any compromise of the original data cannot be achieved through the encoder or the latent vectors it produces. To begin, a clear definition of what is known and unknown to the attacker must be given. An optimal attacker would, by assumption, have knowledge of the encoder fθ and its parame-ters θ, the latent representation space Z, and the downstream 13 ML model gϕ and its output space Y . Knowledge of the en-coder would also reveal that the input space is RD , and so the attacker would also know the dimensionality of the input space D, but would not have access to any specific inputs x. It can also be assumed that the attacker would have full knowl-edge of the Training and Inference Environments. This would include any cloud storage solutions and logs which would con-tain only latent vectors. Finally, the attacker would not have knowledge of any scaling, normalization, distributions, or structure of the original data, including the data type (tabular, images, text, etc.) or any categorical encodings applied in the engineering of categorical features. As in the previous subsection, key standard definitions [42, 43, 44] must be recalled before constructing a formal proof. 
+
+Definition 9.5 (Entropy) . Let X be a discrete random vari-able with image X and with probability mass function (PMF) 
+
+pX (x) = P (X = x). The (Shannon) entropy of X is de-fined as follows. 
+
+H (X) ≡ − X
+
+> x∈X
+
+pX (x) log bpX (x)
+
+Conventionally, 0 log b0 ≡ 0. Entropy is measured in bits when b = 2 and nats when b = e.
+
+Definition 9.6 (Joint and Conditional Entropy) . Let X and 
+
+Z be discrete random variables with images X and Z, respec-tively, and joint PMF pX,Z (x, Ψ) , where Ψ is a particular latent vector. The joint entropy is given by the following function. 
+
+H (X, Z ) ≡ − X
+
+> x∈X
+
+X
+
+> Ψ∈Z
+
+pX,Z (x, Ψ) log bpX,Z (x, Ψ) 
+
+The conditional entropy of X given Z is given by 
+
+H (X|Z) ≡ X
+
+> Ψ∈Z
+
+pZ (Ψ) H (X|Z = Ψ) 
+
+where 
+
+H (X|Z = Ψ) ≡ − X
+
+> x∈X
+
+pX|Z (x|Ψ) log bpX|Z (x|Ψ) 
+
+and pX|Z (x|Ψ) is the conditional PMF. By definition, 
+
+H (X|Z) ≥ 0.
+
+Definition 9.7 (Mutual Information) . Let X and Z be ran-dom variables. The mutual information between X and Z
+
+is given by the following. 
+
+I (X; Z) ≡ H (X) − H (X|Z) = H (Z) − H (Z|X)
+
+Mutual information measures how much observing Z reduces uncertainty about X.
+
+Definition 9.8 (Functinal Dependency) . Let X and Z be sets and suppose there is some relation that maps values in X to values in Z. The set X is said to functionally determine 
+
+Z if, and only if, each value in X is associated with precisely one value in Z. The relation is then said to be a functional dependency , written X → Z .
+
+Definition 9.9 (Support) . Let X be a discrete random vari-able with image X and PMF pX (x). The support of the distribution of X is the following set. supp (X) ≡ { x ∈ X : pX (x) > 0}
+
+The proof is now presented in the discrete setting, as this aligns with how finite-precision encoders and data are repre-sented in practice. In a theoretical sense, the raw data live mathematically in RD . However, no real ML system ever sees a truly continuous input, as every stage of data representation and processing uses finite-precision floating-point arithmetic. This induces a finite, discrete representational universe. The results derived in this discrete setting will also hold for the continuous setting. Suppose the mathematical input X∗
+
+is continuous in RD . The actual ML input is X = Q (X∗), where Q is the floating-point quantization operator. This has two important implications. 1. X∗ 7 → X is a many-to-one mapping. Quantization irre-trievably destroys information, even for an omniscient attacker. 2. The attacker never sees X∗. Only X exists in any com-putational pipeline that reaches the encoder. Therefore, the following holds true. 
+
+H (X∗|Z) ≥ H (X|Z)Thus, any lower bound on the discrete conditional entropy holds a fortiori for the truly continuous source. The discrete proofs actually provide a lower bound on the continuous un-certainties, meaning the real uncertainty is at least as great as the derived uncertainty. In the VEIL architecture, the encoder is a deterministic func-tion on the discrete space of representable inputs. Let X be the set of all possible inputs. Let Z be the set of all possible latent encodings. Let fθ : X → Z be the encoder, and let X
+
+be a random variable on X . Finally, define Z = fθ (X). Thus, conditionally on X, the latent representation Z is de-terministic, which yields the following. 
+
+P (Z = Ψ |X = x) = 
+
+(
+
+1 Ψ = fθ (x)0 otherwise Therefore, H (Z|X) = 0, and mutual information simplifies as follows. 
+
+I (X; Z) = H (Z) − H (Z|X) = H (Z)Intuitively, the encoder is a noiseless channel from X to Z,but it may compress, or lose, information by mapping multiple inputs x to the same latent vector encoding Ψ. The follow-ing is a fundamental fact that relates conditional entropy to functional dependence between X and Z.
+
+Lemma 9.2 (Zero Conditional Entropy if and only if Func-tional Dependence) . Let X and Z be discrete random vari-ables with images X and Z, respectively. Then, H (X|Z) = 0 
+
+if, and only if, there exists a (possibly deterministic) function 
+
+f : Z → X such that P (X = f (Z)) = 1 .
+
+14 Proof. Suppose H (X|Z) = 0. Then, ∀Ψ ∈ supp ( Z), 
+
+H (X|Z = Ψ) = 0. However, the entropy of a discrete dis-tribution is 0 if, and only if, that distribution is a point mass. That is, ∃xΨ such that P (X = xΨ|Z = Ψ) = 1. Define f (Ψ) = xΨ ∀Ψ ∈ supp ( Z). Then, the following result is given. 
+
+P (X = f (Z)) = X
+
+> Ψ∈supp( Z)
+
+pZ (Ψ) P (X = f (Ψ) |Z = Ψ) 
+
+P (X = f (Z)) = X
+
+> Ψ∈supp( Z)
+
+pZ (Ψ) · 1
+
+P (X = f (Z)) = 1 Conversely, if ∃f : Z → X such that P (X = f (Z)) = 1, then 
+
+∀Ψ ∈ supp ( Z), P (X = f (Ψ) |Z = Ψ) = 1. Thus, the conditional distribution of X given Z = Ψ is a point mass, and H (X|Z = Ψ) = 0. Applying the definition of conditional entropy from Definition 9.6 yields the following. 
+
+H (X|Z) = X
+
+> Ψ∈supp( Z)
+
+P (Z = Ψ) H (X|Z = Ψ) 
+
+H (X|Z) = X
+
+> Ψ∈supp( Z)
+
+P (Z = Ψ) · 0
+
+H (X|Z) = 0 Lemma 9.2 establishes that if an adversary can reconstruct X
+
+from Z with certainty, that is, if there is a true inverse f −1
+
+such that X = f −1 (Z), then H (X|Z) = 0. Conversely, if 
+
+H (X|Z) > 0, then no such deterministic inverse exists. Now consider the following definition and proposition. 
+
+Definition 9.10 (Injectivity on Support) . Let X and Z be random variables with images X and Z, respectively. Let f :
+
+X → Z be a function. The function f is said to be injective on the support of X if, and only if, ∀x1, x2 ∈ supp (X), the following is true. 
+
+x1̸ = x2 =⇒ f (x1)̸ = f (x2)
+
+Proposition 9.1 (Non-Injectivity Implies Information Loss) .
+
+Let X and Z be sets, X a discrete random variable on X , and 
+
+f : X → Z a deterministic encoder. Let Z ≡ f (X). Suppose 
+
+∃x1, x2 ∈ supp (X) such that x1̸ = x2 and f (x1) = f (x2) = Ψ⋆. Then, H (X|Z) > 0.Proof. Let X and Z be sets, X a discrete random vari-able on X , and f : X → Z a deterministic encoder. Let 
+
+Z ≡ f (X). Suppose ∃x1, x2 ∈ supp ( X) such that x1̸ = x2
+
+and f (x1) = f (x2) = Ψ ⋆.Since x1, x2 ∈ supp ( X), then by Definition 9.9, 
+
+pX (x1) , p X (x2) > 0. Define the event V ≡ { Z = Ψ ⋆}. Since f (x1) = f (x2) = Ψ ⋆,the following must be true. 
+
+pZ (Ψ ⋆) = P (f (X) = Ψ ⋆) ≥ pX (x1) + pX (x2) > 0Now, consider the conditional distribution pX|Z (x|Ψ⋆). For 
+
+x ∈ { x1, x2}, the definition of conditional probability yields the following. 
+
+pX|Z (x|Ψ⋆) ≡ P (X = x, Z = Ψ ⋆)
+
+P (Z = Ψ ⋆) = P (X = x)
+
+P (Z = Ψ ⋆) > 0Thus, the conditional PMF pX|Z (X = · | Z = Ψ ⋆) assigns positive probability to at least two distinct values in supp ( X). Therefore, it is not a point mass, and its entropy is strictly positive H (X|Z = Ψ ⋆) > 0. Definition 9.6 then yields the following. 
+
+H (X|Z) = X
+
+> Ψ∈supp( Z)
+
+pZ (Ψ) H (X|Z = Ψ) 
+
+H (X|Z) ≥ pZ (Ψ ⋆) H (X|Z = Ψ ⋆)It has already been shown that pZ (Ψ ⋆) , H (X|Z = Ψ ⋆) > 0. Thus, their product is strictly positive. Therefore, H (X|Z) >
+
+0. Combining Lemma 9.2 and Proposition 9.1, it must be con-cluded that if the function fθ : X → Z is non-injective on supp ( X), then H (X|Z) > 0. Therefore, there does not exist a function f −1 : Z → X with P  X = f −1 (Z) = 1. In other words, even for an attacker with full knowledge of the joint distribution, no perfect inverse exists. This is what is meant by information-theoretic under-determination; the data pro-cessing step X 7 → Z has irreversibly lost information about 
+
+X.This information loss can also be characterized through mu-tual information. Proposition 9.1 establishes that if a function 
+
+f : X → Z is non-injective on supp ( X), then H (X|Z) > 0. Applying Definition 9.7 yields the following. 
+
+I (X; Z) ≡ H (X) − H (X|Z) < H (X)This means that the encoder strictly reduces the information that Z carries about X. In an information-theoretic sense, some aspect of X has been irreversibly removed. Consider the consequences of this for an optimal attacker. An attacker with access to the latent representation Z and complete knowledge of the joint distribution pX,Z wishes to construct an estimator ˆX (Z) to guess or approximate the true X. An optimal Bayes estimator, in terms of minimizing the probability of error, is the following maximum a posteriori (MAP) rule. ˆx (Ψ) = argmax 
+
+> x∈X
+
+pX|Z (x|Z = Ψ) Define the probability of correct reconstruction as follows. 
+
+Precon ≡ P
+
+ ˆX (Z) = X
+
+
+
+The probability Precon is related to H (X|Z) in the following well-known inequality [45, 46, 47], which will not be re-proven here. 
+
+Theorem 9.3 (Fano’s Inequality) . Let X be a discrete ran-dom variable taking values in the set X with |X | = M , and let Z be any other random variable. Let ˆX (Z) be any sta-tistical estimator of X, and define the probability of error as Perr ≡ P
+
+ ˆX (Z)̸ = X
+
+
+
+. Then, the following inequality is true. 
+
+H (X|Z) ≤ H (Perr ) + Perr log b (M − 1) 
+
+Here, H (Perr ) is the binary entropy of Perr .
+
+15 Corollary 9.2 (Fundamental Under-Determination of the In-version Problem) . Let X and Z be discrete random variables with images X ⊂ RD and Z ⊂ RE , respectively, with E < D .Let fθ : X → Z be a deterministic encoder. Define an es-timator ˆX (Z), and define Perr ≡ P
+
+ ˆX (Z)̸ = X
+
+
+
+. Then, 
+
+Perr > 0.Proof. Let X and Z be discrete random variables with im-ages X ⊂ RD and Z ⊂ RE , respectively, with E < D . Let 
+
+fθ : X → Z be a deterministic encoder. Define an estimator ˆX (Z), and define Perr ≡ P
+
+ ˆX (Z)̸ = X
+
+
+
+.Since E < D , by Theorem 9.2, fθ cannot be injective on supp ( X). Therefore, ∃x1, x2 ∈ supp ( X) such that x1̸ = x2
+
+and fθ (x1) = fθ (x2). Since fθ is non-injective, by Proposition 9.1, H (X|Z) > 0. That is, there is irreducible uncertainty about X, given Z. In other words, by Definition 9.7, I (X; Z) ≡ H (X)−H (X|Z) <H (X), meaning the encoder has permanently removed some information about X.By Lemma 9.2, H (X|Z) > 0 implies that no true inverse f −1
+
+> θ
+
+exists. And, by Theorem 9.3, H (X|Z) > 0 = ⇒ Perr > 0. Corollary 9.2 clearly establishes that the probability of error 
+
+Perr for any estimator ˆX (Z) is bounded away from 0. Thus, the uncertainty about X given Z is fundamental, and is not due to any limitation in an attacker’s algorithmic or compu-tational power. This, again, is what is meant when it is said that the inversion problem is under-determined. The encoder has removed enough information that there is no unique so-lution to the inverse problem. In higher-dimensional cases, which are extremely common in ML applications, the cardinality of the pre-image set P (Ψ) is quite often infinite within the mathematical input space RD .However, since any real ML pipeline only sees quantized data of finite precision, P (Ψ) is not infinite, but is still extremely large. Assuming 32-bit precision, which is the most common for training and inference in ML pipelines, the input space 
+
+RD becomes the following. 
+
+X = {0, 1}32 D
+
+Therefore, while P (Ψ) may be finite, the probability of an at-tacker correctly identifying the correct input approaches the following. 
+
+Precon ≈ 1
+
+|P (Ψ) | = 1232 D ≈ 0Therefore, in most ML pipelines, even for an optimal attacker, the probability of accurately reconstructing any given input via inversion of the encoder collapses to 0. 
+
+# 9.4 Information-Theoretic Loss and Under-Determination (Training or Inference Environment Attacker) 
+
+In the previous subsection, the case of an optimal attacker, who would have knowledge of the encoder and its parame-ters, was considered for completeness and rigor. However, given the architectural isolation of the encoder under the VEIL architecture, this would require such an attacker to have breached the security of the Source Environment and even the source database itself. Not only does this pose sev-eral significant challenges to an attacker, but this is also ex-tremely atypical of strategies employed by attackers seeking to steal sensitive data from an ML pipeline [3]. Given the ex-treme difficulties and costs associated with directly attacking a database, many attackers instead opt to intercept sensitive data in flight as it travels through the ML pipeline, typically en route to the prediction API [4]. In this subsection, a cloud-side attacker, who has compro-mised the Training and Inference Environments, will be con-sidered, as this is aligned with security research [5, 2], real-world observations [6, 7], and the threat model addressed by the VEIL architecture. A cloud-side attacker is assumed to have knowledge of the latent representation space Z, the downstream ML model gϕ,the target space Y , and any infrastructure in the Training and Inference Environments, including storage solutions, model registries, and logs, which will only have knowledge of the la-tent representations. A cloud-side attacker has no knowledge of the encoder fθ , its domain RD , or even the dimensionality D of the input space. To give the attacker a little help, assume the attacker has enough expertise in ppML to guess that the latent encodings are the result of an autoencoder, and is familiar enough with autoencoders to correctly guess that D > E .From the attacker’s epistemic perspective, given a particular latent encoding Ψ, the preimage set is not a single set, but a family of sets. The preimage set is given by the following. 
+
+P (Ψ) = 
+
+> ∞
+
+[
+
+> d=E+1
+
+[ 
+
+> f∈F d
+
+x ∈ Rd : f (x) = Ψ 
+
+Here, d is the possible input dimension, which is unknown but must satisfy d > E , and Fd is the set of all continuous functions f : Rd → RE that possibly could have produced the encoder’s output Ψ. This union is vast. For each candidate dimension, d, the set Fd is uncountable. For each f ∈ F d,the preimage P (Ψ) is typically a ( d − E)-dimensional man-ifold. The cloud-side attacker must consider all possible in-put domains and encoders consistent with the observation of Ψ. Thus, the attacker’s preimage is not a single set, but a countably infinite family of uncountable manifolds across all possible input dimensions. When the attacker does not know fθ or X , the conditional entropy becomes H (X|Z, Icloud ), where Icloud is the infor-mation available to the attacker. The attacker must model 
+
+X as the union of all possible input spaces and all encoders. Thus, the attacker’s set of all possible inputs is given by the following. 
+
+Xattacker =
+
+> ∞
+
+[
+
+> d=E+1
+
+Rd
+
+This set is unbounded in dimension, not measurable as a finite-entropy space, and, therefore, cannot be assigned any finite prior by the attacker without additional information. Therefore, the entropy of this union is H (X|Z, Icloud ) =+∞. This follows because the entropy of a mixture model is bounded below by the entropy of its components. This mix-ture consists of infinitely many components with increasing 16 dimensionality. Each additional dimension introduces addi-tional uncertainty. Thus, the entropy grows without bound. Formally, ∀d ∈ N such that d > E , let Xd be a hypothet-ical random variable supported on Rd. The attacker must therefore consider the mixture X = Xd with probability 
+
+pd = P (D = d) where P∞ 
+
+> d=E+1
+
+pd = 1. Thus, the attacker’s full prior over X must be the following. 
+
+P (X ∈ A|Z = Ψ) = 
+
+> ∞
+
+X
+
+> d=E+1
+
+pdP (Xd ∈ Ad|Z = Ψ) Here, Ad = A ∩ Rd. This mixture expresses the fact that the attacker must evaluate reconstruction under uncertainty about the space containing X , how large that space is, and how many degrees of freedom the original sample has. From this, the following facts are considered to analyze 
+
+H (X|Z) from the attacker’s epistemic perspective. First, even if the attacker knew D = d and knew the correct en-coder fθ for that d, the mapping fθ : Rd → RE has un-derdetermined preimages, as dim P (Ψ) = d − E; therefore 
+
+H (Xd|Z = Ψ) > 0. However, the cloud-side attacker does not know D. There-fore, the entropy includes H (D|Z), which is unbounded if the attacker cannot rule out arbitrarily large input spaces. Furthermore, for each candidate dimension d, the entropy 
+
+H (Xd|Z = Ψ) grows at least linearly in d, because each new input coordinate introduces an independent degree of freedom in the preimage manifold. Therefore, by the Law of Total En-tropy, the attacker’s conditional entropy on X given Z is as follows. 
+
+H (X|Z) = H (D|Z) + 
+
+> ∞
+
+X
+
+> d=E+1
+
+pdH (Xd|Z, D = d)Even if pd decays exponentially, this weighted sum diverges. Therefore, H (X|Z) = + ∞.By Theorem 9.3, the following inequality must hold. 
+
+H (X|Z) ≤ H (Perr ) + Perr log b (|X |− 1) If H (X|Z) = + ∞, then this inequality can only be true under two conditions. 1. Perr = 1 2. |X | = + ∞
+
+In either case, the only possible interpretation is Precon =
+
+P
+
+ ˆX (Z) = X
+
+
+
+= 0. That is, the probability that the at-tacker succeeds in reconstructing the original data is not small, or negligible. It is identically 0 under the stated as-sumptions. 
+
+# 9.5 Summary of Non-Invertibility Guaran-tees 
+
+In this section, it has been shown that ICA encodings are non-invertible in multiple reinforcing senses. Taken together, these arguments support the claim that ICA provides structural, architectural non-invertibility, rather than relying on proba-bilistic obfuscation (as in DP) or cryptographic protection (as in HE). This non-invertibility is a key pillar of ICA’s privacy guarantees, even under post-quantum threats. This makes ICA the clear standard for secure, privacy-preserving ML de-ployments in the looming post-quantum age. The power of quantum computers will render the probabilistic obfuscation of DP and the traditional cryptographic protection of HE ob-solete. However, regardless of how powerful future computing systems become, they will never be able to extract informa-tion not present in a given latent representation. 
+
+# 10 Privacy Attack Simulations 
+
+While the previous section rigorously establishes the non-invertibility of the latent encodings produced by ICA and the VEIL architecture, this section acknowledges that there are various ways a bad actor may attack a machine learn-ing system. Here, several attacks are recreated and simulated against a VEIL system to demonstrate its performance under different threat scenarios. 
+
+# 10.1 Input Reconstruction 
+
+For completeness, the formal non-invertibility results devel-oped in Section 9 were supplemented with a direct empirical reconstruction attack simulation. The purpose of this evalu-ation was to test whether an adversary, given access to the latent space Z via exported latent vectors, could recover the original inputs either exactly or approximately. The threat model used in the evaluation is the canonical reconstruction setting. The attacker has a set of latent vectors, seeks a method to invert them to the original inputs f −1 : Z → X ,and aims to recover the original input from the latent rep-resentation. The evaluation was implemented with two com-plementary components: a structural validation stage, which tests whether the assumptions of Theorem 9.2 and Corollary 9.1 hold, and a decoder stage, which tests whether a learned inversion model can achieve useful approximate recovery in practice. This empirical test is conservative relative to the baseline VEIL deployment threat model. Under the VEIL architec-ture, the encoder remains confined to the trusted Source Envi-ronment, no decoder is deployed, and the untrusted Training and Inference Environments observe only latent vectors and downstream model artifacts. By contrast, the reconstruction simulation grants the attacker a stronger capability, as the attacker decoder is trained on paired examples of latent vec-tors and their corresponding raw feature rows (Ψ i, xi), and is then evaluated on held-out samples. In other words, the empirical decoder test asks whether inversion would remain ineffective even if an attacker were given supervised access to matched examples for attack training, which is a materially stronger assumption than the Training or Inference Environ-ment Attacker analyzed in Section 9.4, or even the Source Environment Attacker analyzed in Section 9.3. The simulation proceeds in two stages. First, the structural stage validates the conditions required for Theorem 9.2 to apply. The evaluation checks that the encoder performs gen-uine dimensionality reduction with E < D , that the exported ONNX encoder graph uses only continuous operations, and that the effective dimensionality of the input data exceeds 17 the latent dimensionality, thereby ruling out the degenerate case in which the data lie on a sufficiently low-dimensional manifold that would weaken the assumptions of the proof. A duplicate latent check is also included as a sanity test, since exact collisions are not expected for continuous inputs and are more likely to reflect duplicate or quantized source data than a meaningful inversion pathway. Second, the de-coder stage trains an MLP decoder to map Ψ to an approxi-mate reconstruction ˆ x, compares that reconstruction against naive baselines, and then performs a permutation test by shuf-fling the Ψ-to-x correspondence during training to determine whether any observed advantage exceeds what would be ex-pected by chance. For numeric features, performance is mea-sured against a mean-prediction baseline using normalized MSE; for binary features, performance is measured against a mode-prediction baseline using accuracy. The evaluation reports an overall weighted reconstruction advantage and in-dicates whether the decoder shows both statistical significance and a practically meaningful advantage. On the evaluated test data, all structural checks passed. The encoder reduced the input dimensionality from D = 132 to 
+
+E = 16, satisfying the strict compression condition required by Theorem 9.2. The ONNX graph used only operators from a whitelist of continuous operators, and the effective input dimensionality at the 95% variance threshold was 80, which remained well above the latent dimensionality E = 16. No exact duplicate latent vectors were detected. These results indicate that, on the evaluated encoder and data set, the for-mal assumptions required by Theorem 9.2 and Corollary 9.1 were satisfied in practice. The decoder-based attack likewise failed to produce useful recovery. The reported overall reconstruction advantage rela-tive to the baseline was −0.0003, indicating that the trained decoder performed slightly worse than the naive baseline on the weighted average, and the corresponding permutation-test p-value was 0 .4706. Under the evaluation criteria imple-mented in the test harness, this does not constitute a signif-icant reconstruction signal, and the simulated attack evalua-tion detected no significant empirical reconstruction. Taken together, these results are consistent with, and provide empirical support for, the formal analysis is Section 9. Ex-act inversion remains ruled out by the structural conditions underpinning Theorem 9.2, and no useful approximate inver-sion was observed even under a stronger-than-deployment at-tack model in which the attacker was allowed to train di-rectly on paired latent and raw examples. Accordingly, this reconstruction simulation provides additional evidence that exported VEIL latent vectors do not furnish a practical chan-nel for recovering the original sensitive inputs, and that the privacy guarantees claimed under this architecture are not merely theoretical, but are also borne out under direct attack simulation. 
+
+# 10.2 Attribute Inference 
+
+Whereas the reconstruction evaluation in the previous sub-section tests whether the full input, x, can be recovered from the latent representation, Ψ, the present evaluation considers a different privacy threat: whether a particular attribute, s,can be inferred from Ψ once the latent record has been linked to auxiliary labeled data [48, 49]. This is not a decoder-based inversion of the latent space, and it does not contradict the non-invertibility arguments established in Section 9. Instead, it asks whether an adversary can exploit residual, task-aligned signal in the latent geometry to predict a specific feature after constructing labeled examples ( Z, S). The VEIL reference ar-chitecture assumes that only anonymized latent vectors cross the trust boundary, and that the untrusted Training and In-ference Environments do not receive identifiers or identifiable attributes. This simulation therefore represents a stronger and more operationally contingent threat model, namely, one in which latent artifacts are stored, indexed, or otherwise han-dled in a manner that permits linkage to external data. The evaluation protocol utilizes a real estate data set contain-ing several features of houses. The downstream ML model is a regression model that predicts house prices based on the in-put features. The threat is operationalized by first encoding the model inputs with the VEIL encoder to obtain a set of la-tent vectors, Z. A target attribute column is then paired with the corresponding latents to simulate the result of a successful external join. In this test, the attribute column was a binary indicator variable that indicated whether the buyer of a home declared that it was intended as a primary residence. An at-tack classifier is then trained to learn the mapping Z → S .In the simulation, the encoder is used only to generate the latent sample under test; the attack model itself is trained solely on paired latents and attribute labels. The framework supports Logistic Regression, MLP, Random Forest, and His-togram Gradient Boosting Models. Performance is estimated with stratified k-fold cross-validation, with class-count checks to ensure a valid split, and statistical significance is assessed by comparing the observed accuracy to both a majority-class baseline and a permutation baseline obtained by repeatedly shuffling the attribute labels. When the initial p-value falls in a gray zone, the evaluation automatically reruns with up to 1,000 permutations for finer resolution. In addition to the primary classifier attack, the protocol runs two simpler base-lines: a magnitude attack using the L2 norm, L1 norm, and maximum absolute coordinate of Ψ, and a nearest centroid attack, in order to determine whether any leakage is already exposed by trivial latent geometry. In the evaluation, the attribute inference classifier achieved an accuracy of 0 .6907 ± 0.0198 against a majority-class base-line accuracy of 0 .5542, with a permutation p-value of 0 .0099. Under the evaluation rule implemented in the test harness, requiring both a positive practical advantage and statistical significance, this was classified as a leak. The magnitude baseline attack likewise succeeded, achieving an accuracy of 0.6573 ± 0.0350, an advantage of +0 .1031 over the major-ity baseline, and a p-value of 0 .0099, indicating that useful signal was already exposed by simple geometric properties of the latent vectors. The nearest-centroid baseline, by contrast, achieved an accuracy of 0 .5510 ± 0.0258, which was slightly below the majority baseline and therefore did not constitute a meaningful positive attack under the same decision rule. The evaluation further indicates that attribute inference is most effective for low-to-moderate entropy attributes that are cor-related with the downstream supervised task and present in the raw inputs. The significance of this result is precise. It does not show 18 that VEIL latent vectors are invertible, nor does it overturn the topological and information-theoretic non-invertibility re-sults established in Section 9. It does show, however, that if an organization permits latent vectors, requests, or upstream inputs to be indexed, tagged, or persisted in a manner that allows external information to be joined to them, then spe-cific attributes may become inferable even when full recon-struction remains impossible. In this sense, the privacy risk is not inversion of the full source record, but enrichment-by-linkage. Although the conjunction of conditions required for this attack is comparatively stringent and is not part of any described variant of the VEIL deployment, it remains an im-portant engineering concern because it identifies a concrete failure mode at the pipeline layer rather than at the encoder layer. Accordingly, VEIL deployments should enforce a strict operational rule that no latent artifact and no corresponding input may be indexed or retained in any way that enables aux-iliary information to be joined back to it. Preserving the VEIL trust boundary, therefore, requires not only a non-invertible encoder but also an MLOps discipline that eliminates identi-fiers, quasi-identifiers, and any other stable join handles from downstream storage, indexing, and processing paths. 
+
+# 10.3 Membership Inference 
+
+A further privacy question, distinct from both reconstruction and attribute inference, is whether an adversary can deter-mine that a particular record participated in the training of the downstream model, gϕ. In the ML privacy literature, this is the membership inference problem: given a data record and access to a model’s outputs, the attacker seeks to de-cide whether that record belonged to the model’s training set. This modern black-box formulation was popularized by Shokri et al., who showed that prediction vectors can reveal membership [50]. Yeom et al. later analyzed the connec-tion between membership advantage and overfitting, showing that overfitting is sufficient, though not necessary, for mem-bership leakage [51]. Salem et al. subsequently broadened the threat model by showing that effective posterior-based attacks can persist under substantially weaker adversarial as-sumptions [52]. Under the VEIL architecture, this threat is scoped to the downstream model, not the encoder. The encoder remains confined to the trusted Source Environment, while the un-trusted Training and Inference Environments observe only latent vectors, Ψ, and downstream model artifacts, such as model outputs, ˆ y. Accordingly, the relevant question is not whether a record was used to train the encoder, which would require compromise of the Source Environment, but whether a record was used to train the downstream model on latent inputs. The threat scenario, therefore, assumes that the attacker has access to the target record’s latent vector, access to the down-stream model outputs or output probabilities, and enough comparison data to calibrate or train a member-versus-non-member classifier. In the stronger, label-informed setting, the attacker also knows the true downstream label for the queried record; in the weaker black-box setting, the attacker relies only on the model’s prediction vector. Unlike the attribute inference scenario, no external joinable auxiliary data set is required. The attack exploits the model’s differential behav-ior on members and non-members. The evaluation protocol operationalizes this threat in a con-servative manner. This protocol uses the same real estate data set from Section 10.2. All records are first passed through the VEIL encoder to obtain a set, Z, of latent vectors. The downstream task is then defined as the prediction of quantile-binned targets from these latents, recalling that the target represents the sale price of the given house. The encoded data set is split, in a stratified fashion, into 60% downstream train-ing members, 20% attack training non-members, and 20% attack test non-members. A downstream Logistic Regression model is then used to generate probability vectors for matched member and non-member records. Two attack feature sets are supported. In the label-informed variant, the attack features are true-label loss, true-class confidence, entropy, and prob-ability margin. In the black-box variant, the attack features are maximum predicted probability, entropy, and probabil-ity margin. These features are passed to a secondary attack classifier, implemented as either Logistic Regression or Ran-dom Forest, and evaluated on a held-out attack test set using accuracy, AUC, and a permutation-test p-value. When the initial p-value falls into a gray zone, the harness reruns the test with up to 1,000 permutations. Under the implemented decision rule, concern is flagged only when the attack shows both statistical significance and a practically meaningful ad-vantage over the baseline. In the label-informed setting, which is the stronger of the two attacker models, no practical membership leakage was detected. The attack achieved an accuracy of 0 .5012 ± 0.0298 against a balanced baseline of 0 .5000, with AUC 0 .4987, an advantage of only +0 .0012, and a permutation-test p-value of 0 .4356. In this simulation, it was determined that the attacker could not distinguish training members from non-members better than chance in any statistically meaningful sense. Given that the results showed a failure of the attacker to infer membership in the stronger scenario, the weaker sce-nario was not simulated. As with the membership inference attack, this result is signif-icant in a precise sense. It does not prove that every down-stream model trained on VEIL latents is categorically immune to all forms of membership inference, because membership in-ference is analytically distinct from inversion and remains a known residual risk of predictive models more generally. It does show, however, that under the evaluated VEIL deploy-ment pattern, with the tested downstream task and attack protocol, exposure of latent vectors and downstream model probabilities did not yield a usable signal for identifying train-ing set participation. This is consistent with the broader literature and with the evaluation guidance in the employed protocol, which both in-dicate that membership inference is strengthened by overfit-ting, small training sets, and highly distinctive records, and weakened by better regularization and more diverse training data. Accordingly, this simulation provides empirical support for the claim that VEIL not only blocks reconstruction path-ways by architectural design, but can also materially narrow broader privacy leakage in downstream ML workflows when combined with ordinary discipline in model regularization and output exposure. 19 11 Conclusions 
+
+ML and AI have become the engine of modern enterprise decision-making, yet their continued adoption hinges on one uncompromising requirement: trust. Organizations must be confident that sensitive data will not be leaked, even in the event of cloud compromise, model extraction, insider threats, or unforeseen attack vectors that exploit the internal mechan-ics of ML systems. This paper has shown that ICA and the VEIL architecture provide a new, fundamentally stronger foundation for ML pri-vacy that does not rely on adding probabilistic noise or heavy-weight cryptography to ML inputs. Instead, the ICA and the VEIL architecture are built upon architectural separation of sensitive data and system components, mathematical non-invertibility, and information-theoretic guarantees. Unlike DP, ICA does not merely weaken the signal accessible to an adversary; it removes that signal entirely by ensuring that no raw data or reconstructible features ever leave an or-ganization’s Source Environment. Unlike HE, ICA does not burden organizations with unmanageable performance penal-ties or reliance on brittle approximations of modern neu-ral networks. Instead, ICA achieves privacy through struc-tural design: the encoder is protected at the same level as the sensitive source data; only non-invertible, task-aligned la-tent vectors are exported, and downstream training and in-ference operate exclusively on information that has already been stripped of its sensitive and identifying content. Even in the idealized scenario where an attacker has knowl-edge of the encoder and its parameters, the dimensionality re-duction and non-injectivity inherent in ICA make inversion of the latent vectors logically impossible. In the realistic deploy-ment model, where the attacker has no access to the encoder, no knowledge of the input space, and no ability to query the mapping, the inverse problem expands into a vast, and ulti-mately undefined, space of possibilities. From the attacker’s perspective, the entropy of the original input data conditioned on the information available to the attacker is not merely pos-itive; it tends toward infinity, and the adversary’s probability of recovering any individual input collapses to 0. This is not security by obscurity. It is security by design, backed by topology, information theory, and strict isolation of trust domains. Unlike DP, HE, and previous autoencoder architectures, ICA and the VEIL architecture preserve the utility and perfor-mance that enterprises and governments demand. Because ICA does not rely on noise injection or encryption at the time of inference, downstream ML models retain their predictive performance, and cloud-scale training remains efficient. The result is a privacy framework that does not force organiza-tions to choose between security and performance; ICA and the VEIL architecture deliver both. By embedding the protective encoder (the VEIL) at the source of the sensitive input data, and by ensuring that only irreversibly anonymized representations ever cross organiza-tional boundaries, ICA and the VEIL architecture establish a new standard for ppML; one that is practical today, resilient against the threats of tomorrow, and compatible with the ac-celerating complexity of enterprise ML/AI systems. Capable of encoding any tensorized input, the VEIL encoder is capable of compressing and anonymizing any ML inputs. This includes structured tabular inputs, images, text embed-dings, and graph data embeddings [53, 54]. ICA adds privacy and security for text inputs, which have been shown to be vul-nerable, even in their embedded forms [55]. Therefore, ICA and the VEIL architecture offer privacy and performance to any enterprise application involving supervised ML. Applications, such as credit-decisioning and fraud detection, that require transparency and explainability are easily accom-modated by the VEIL architecture, as predictions are also re-turned to the Source Environment, allowing algorithms such as SHapley Additive exPlainers (SHAP) [56, 57] to see the true inputs and accompanying outputs. Therefore, explana-tion via counterfactual analysis can be carried out easily by considering the composite model gϕ (fθ (x)) = ˆ y to satisfy any regulatory requirements concerning explainability. As regulatory pressure intensifies and the threat landscape expands, organizations need privacy technologies that are not merely incremental improvements, but step-function advances in risk reduction. ICA and the VEIL architecture represent such an advance. This solution does not attempt to make inherently risky architectures less dangerous; it replaces them with architectures that are fundamentally safe by design. This is the future of enterprise ML. A system that embodies trust by construction, privacy-by-design, mathematical non-invertibility, and uncompromising architectural isolation of sensitive data. 20 A Additional Figures 
+
+Figure A1: Complete VEIL Architecture 21 Figure A2: VEIL-enabled Shared Healthcare AI Infrastructure 22 References 
+
+[1] Reza Shokri et al. “Membership Inference Attacks Against Machine Learning Models”. In: 2017 IEEE Symposium on Security and Privacy (SP) . 2017, pp. 3–18. doi : 10.1109/SP.2017.41 .[2] Matt Fredrikson, Somesh Jha, and Thomas Ristenpart. “Model Inversion Attacks That Exploit Confidence Information and Basic Countermeasures”. In: Proceedings of the 22nd ACM SIGSAC Conference on Computer and Communica-tions Security . CCS ’15. Denver, Colorado, USA: Association for Computing Machinery, 2015, pp. 1322–1333. isbn :9781450338325. doi : 10.1145/2810103.2813677 . url : https://doi.org/10.1145/2810103.2813677 .[3] Maria Rigaki and Sebastian Garcia. “A Survey of Privacy Attacks in Machine Learning”. In: ACM Comput. Surv. 56.4 (Nov. 2023). issn : 0360-0300. doi : 10.1145/3624010 . url : https://doi.org/10.1145/3624010 .[4] Florian Tram` er et al. Stealing Machine Learning Models via Prediction APIs . 2016. arXiv: 1609.02943 [cs.CR] . url :
+
+https://arxiv.org/abs/1609.02943 .[5] Sheng Liu et al. Data Reconstruction Attacks and Defenses: A Systematic Evaluation . 2025. arXiv: 2402.09478 [cs.CR] .
+
+url : https://arxiv.org/abs/2402.09478 .[6] IBM X-Force Threat Intelligence. “Abusing MLOps Platforms to Compromise ML Models and Enterprise Data Lakes”. In: (July 2024). IBM X-Force Research Blog. url : https : / / www . ibm . com / think / x - force / abusing - mlops -platforms-to-compromise-ml-models-enterprise-data-lakes .[7] Andrea Siposova. Data Exfiltration Attacks and Defenses in Neural Networks . Master’s Thesis. Thesis submitted to the Faculty of Informatics, TU Wien. Vienna, Austria: Technische Universit¨ at Wien, 2023. url : https://repositum. tuwien.at/bitstream/20.500.12708/187491/1/Siposova%20Andrea%20-%202023%20-%20Data%20Exfiltration% 20Attacks%20and%20Defenses%20in%20Neural%20Networks.pdf .[8] Xuefei Yin, Yanming Zhu, and Jiankun Hu. “A Comprehensive Survey of Privacy-Preserving Federated Learning: A Taxonomy, Review, and Future Directions”. In: ACM Comput. Surv. 54.6 (2022). issn : 0360-0300. doi : 10 . 1145 / 3460427 . url : https://doi.org/10.1145/3460427 .[9] Stacey Truex et al. “A Hybrid Approach to Privacy-Preserving Federated Learning”. In: CoRR abs/1812.03224 (2018). arXiv: 1812.03224 . url : http://arxiv.org/abs/1812.03224 .[10] Eva Rodr´ ıguez, Beatriz Otero, and Ramon Canal. “A Survey of Machine and Deep Learning Methods for Privacy Protection in the Internet of Things”. In: Sensors 23.3 (2023). issn : 1424-8220. doi : 10 . 3390 / s23031252 . url :
+
+https://www.mdpi.com/1424-8220/23/3/1252 .[11] Joon-Woo Lee et al. “Privacy-Preserving Machine Learning With Fully Homomorphic Encryption for Deep Neural Networks”. In: IEEE Access 10 (2022), pp. 30039–30054. doi : 10.1109/ACCESS.2022.3159694 .[12] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. Deep Learning . The MIT Press, 2016, pp. 4, 345, 493. isbn :9780262035613. [13] Vigas Sagar and Krishan Kumar. Autoencoder Artificial Neural Network Public Key Cryptography in Unsecure Public Channel Communication . Sept. 2019. doi : 10.35940/ijitee.K1456.0981119 .[14] Ana Mar´ ıa Quintero-Ossa et al. Privacy-Preserving Machine Learning for Collaborative Data Sharing via Auto-encoder Latent Space Embeddings . 2022. arXiv: 2211.05717 [cs.LG] .[15] Naftali Tishby and Noga Zaslavsky. Deep Learning and the Information Bottleneck Principle . 2015. arXiv: 1503.02406 [cs.LG] . url : https://arxiv.org/abs/1503.02406 .[16] Sofiane Ouaari et al. Robust Representation Learning for Privacy-Preserving Machine Learning: A Multi-Objective Autoencoder Approach . 2023. arXiv: 2309.04427 [cs.LG] .[17] Christopher M. Bishop. Pattern Recognition and Machine Learning . Springer, 2009, p. 592. isbn : 9780387310732. [18] Kevin P. Murphy. Probabilistic Machine Learning, An Introduction . The MIT Press, 2022, p. 674. isbn : 9780262046824. [19] Pierre Baldi and Kurt Hornik. “Neural Networks and Principal Component Analysis: Learning from Examples without Local Minima”. In: Neural Networks 2.1 (1989), pp. 53–58. issn : 0893-6080. doi : https://doi.org/10.1016/0893-6080(89)90014-2 . url : https://www.sciencedirect.com/science/article/pii/0893608089900142 .[20] Juha Karhunen and Jyrki Joutsensalo. “Generalizations of Principal Component Analysis, Optimization Problems, and Neural Networks”. In: Neural Networks 8.4 (1995), pp. 549–562. issn : 0893-6080. doi : https://doi.org/10.1016/ 0893-6080(94)00098-7 . url : https://www.sciencedirect.com/science/article/pii/0893608094000987 .[21] I.T. Jolliffe. Principal Component Analysis, Second Edition . Springer, 2002, pp. 20, 21, 34–37, 61, 140–141, 393, 399. 
+
+isbn : 9780387954424. [22] Nathalie Japkowicz, Stephen Jos´ e Hanson, and Mark A. Gluck. “Nonlinear Autoassociation Is Not Equivalent to PCA”. In: Neural Computation 12.3 (Mar. 2000), pp. 531–545. issn : 0899-7667. doi : 10.1162/089976600300015691 .eprint: https://direct.mit.edu/neco/article-pdf/12/3/531/814389/089976600300015691.pdf . url : https: //doi.org/10.1162/089976600300015691 .23 [23] Kevin P. Murphy. Probabilistic Machine Learning, Advanced Topics . The MIT Press, 2023, pp. 634, 1038. isbn :9780262048439. [24] Adrian Wheeldon and Alexander Serb. “A Study on the Clusterability of Latent Representations in Image Pipelines”. In: Frontiers in Neuroinformatics 17 (2023). issn : 1662-5196. doi : 10 . 3389 / fninf . 2023 . 1074653 . url : https : //www.frontiersin.org/articles/10.3389/fninf.2023.1074653 .[25] Jiayang Xu and Karthik Duraisamy. “Multi-level convolutional autoencoder networks for parametric prediction of spatio-temporal dynamics”. In: Computer Methods in Applied Mechanics and Engineering 372 (Dec. 2020), p. 113379. 
+
+issn : 0045-7825. doi : 10.1016/j.cma.2020.113379 . url : http://dx.doi.org/10.1016/j.cma.2020.113379 .[26] Yandong Wen et al. “A Discriminative Feature Learning Approach for Deep Face Recognition”. In: Computer Vision – ECCV 2016 . Ed. by Bastian Leibe et al. Cham: Springer International Publishing, 2016, pp. 499–515. isbn : 978-3-319-46478-7. [27] Jianping Gou et al. “Discriminative and Geometry-Preserving Adaptive Graph Embedding for dimensionality reduc-tion”. In: Neural Networks 157 (2023), pp. 364–376. issn : 0893-6080. doi : https://doi.org/10.1016/j.neunet. 2022.10.024 . url : https://www.sciencedirect.com/science/article/pii/S0893608022004208 .[28] Peter J. Huber. “Robust Estimation of a Location Parameter”. In: The Annals of Mathematical Statistics 35.1 (1964), pp. 73–101. doi : 10.1214/aoms/1177703732 . url : https://doi.org/10.1214/aoms/1177703732 .[29] Gregory P. Meyer. An Alternative Probabilistic Interpretation of the Huber Loss . 2020. arXiv: 1911.02088 [stat.ML] .
+
+url : https://arxiv.org/abs/1911.02088 .[30] Kaixiong Zhou et al. Dirichlet Energy Constrained Learning for Deep Graph Neural Networks . 2021. arXiv: 2107.02392 [cs.LG] . url : https://arxiv.org/abs/2107.02392 .[31] Benjamin J. Choi. Geometric Machine Learning on EEG Signals . 2025. arXiv: 2502.05334 [cs.LG] . url : https: //arxiv.org/abs/2502.05334 .[32] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Representation Learning with Contrastive Predictive Coding . 2019. arXiv: 1807.03748 [cs.LG] . url : https://arxiv.org/abs/1807.03748 .[33] Md. Ahsan Ayub and Subhabrata Majumdar. Embedding-based classifiers can detect prompt injection attacks . 2024. arXiv: 2410.22284 [cs.CR] . url : https://arxiv.org/abs/2410.22284 .[34] Hanxi Guo et al. Poisoning with A Pill: Circumventing Detection in Federated Learning . 2024. arXiv: 2407.15389 [cs.LG] . url : https://arxiv.org/abs/2407.15389 .[35] Ligeng Zhu, Zhijian Liu, and Song Han. Deep Leakage from Gradients . 2019. arXiv: 1906.08935 [cs.LG] . url : https: //arxiv.org/abs/1906.08935 .[36] Valentijn M. T. de Jong et al. “Developing more generalizable prediction models from pooled studies and large clustered data sets”. In: Statistics in Medicine 40.15 (2021), pp. 3533–3559. doi : https://doi.org/10.1002/sim.8981 . eprint: 
+
+https://onlinelibrary.wiley.com/doi/pdf/10.1002/sim.8981 . url : https://onlinelibrary.wiley.com/doi/ abs/10.1002/sim.8981 .[37] Michiel Schinkel et al. “Embracing cohort heterogeneity in clinical machine learning development: a step toward gen-eralizable models”. In: Scientific Reports 13.1 (2023), p. 8363. doi : 10.1038/s41598- 023- 35557- y . url : https: //doi.org/10.1038/s41598-023-35557-y .[38] Katherine E Brown and Sharon E Davis. “Gaps in artificial intelligence research for rural health in the United States: a scoping review”. In: Journal of the American Medical Informatics Association 33.2 (Nov. 2025), pp. 509–520. issn :1527-974X. doi : 10.1093/jamia/ocaf206 . eprint: https://academic.oup.com/jamia/article- pdf/33/2/509/ 65492860/ocaf206.pdf . url : https://doi.org/10.1093/jamia/ocaf206 .[39] Jie Chen and Alice Shijia Yan. “Hospital Artificial Intelligence/Machine Learning Adoption by Neighborhood Depri-vation”. In: Medical Care 63.3 (2025), pp. 227–233. doi : 10.1097/MLR.0000000000002110 . url : https://doi.org/ 10.1097/MLR.0000000000002110 .[40] Glen E. Bredon. Topology and Geometry . Vol. 139. Graduate Texts in Mathematics. New York: Springer, 1993. isbn :9780387979269. doi : 10.1007/978-1-4757-6843-5 .[41] Siwoo Park. Investigating the Invertibility of Multimodal Latent Spaces: Limitations of Optimization-Based Methods .2025. arXiv: 2507.23010 [cs.LG] . url : https://arxiv.org/abs/2507.23010 .[42] David Applebaum. Probability and Information, Second Edition . Cambridge University Press, 2008. isbn : 9780521727884. [43] Fazlollah M. Reza. An Introductio to Information Theory . Dover Publications, 2016. isbn : 9780486682105. [44] A.I. Khinchin. Mathematical Foundations of Information Theory . Dover Publications, 1957. isbn : 9780486604343. [45] Jonathan Scarlett and Volkan Cevher. An Introductory Guide to Fano’s Inequality with Applications in Statistical Estimation . 2019. arXiv: 1901.00555 [cs.IT] . url : https://arxiv.org/abs/1901.00555 .24 [46] Sebastien Gerchinovitz, Pierre M´ enard, and Gilles Stoltz. Fano’s inequality for random variables . 2019. arXiv: 1702. 05985 [math.ST] . url : https://arxiv.org/abs/1702.05985 .[47] Jose C. Principe. Information Theoretic Learning: Renyi’s Entropy and Kernel Perspectives . Springer, 2010. isbn :9781441915696. doi : 10.1007/978-1-4419-1570-2 .[48] Matt Fredrikson, Somesh Jha, and Thomas Ristenpart. “Model Inversion Attacks that Exploit Confidence Information and Basic Countermeasures”. In: Proceedings of the 22nd ACM SIGSAC Conference on Computer and Communications Security . CCS ’15. Denver, Colorado, USA: Association for Computing Machinery, 2015, pp. 1322–1333. doi : 10.1145/ 2810103.2813677 . url : https://doi.org/10.1145/2810103.2813677 .[49] Neil Zhenqiang Gong et al. “Joint Link Prediction and Attribute Inference Using a Social-Attribute Network”. In: 
+
+ACM Transactions on Intelligent Systems and Technology 5.2 (2014), 27:1–27:20. doi : 10.1145/2594455 . url : https: //doi.org/10.1145/2594455 .[50] Reza Shokri et al. “Membership Inference Attacks Against Machine Learning Models”. In: 2017 IEEE Symposium on Security and Privacy (SP) . IEEE, 2017, pp. 3–18. doi : 10.1109/SP.2017.41 . url : https://doi.org/10.1109/SP. 2017.41 .[51] Samuel Yeom et al. “Privacy Risk in Machine Learning: Analyzing the Connection to Overfitting”. In: 2018 IEEE 31st Computer Security Foundations Symposium (CSF) . IEEE Computer Society, 2018, pp. 268–282. doi : 10.1109/CSF. 2018.00027 . url : https://doi.org/10.1109/CSF.2018.00027 .[52] Ahmed Salem et al. “ML-Leaks: Model and Data Independent Membership Inference Attacks and Defenses on Machine Learning Models”. In: Network and Distributed System Security Symposium (NDSS) . Internet Society, 2019. doi :
+
+10.14722/ndss.2019.23119 . url : https://doi.org/10.14722/ndss.2019.23119 .[53] Claudio Stamile, Aldo Marzullo, and Enrico Deusebio. Graph Machine Learning . Packt Publishing, 2021. isbn : 9781800204492. [54] Eric D. Kolaczyk. Statistical Analysis of Network Data: Methods and Models . Springer, 2009. isbn : 9780387881454. doi :
+
+10.1007/978-0-387-88146-1 .[55] John X. Morris et al. Text Embeddings Reveal (Almost) As Much As Text . 2023. arXiv: 2310.06816 [cs.CL] .[56] Scott M. Lundberg and Su-In Lee. “A Unified Approach to Interpreting Model Predictions”. In: CoRR abs/1705.07874 (2017). arXiv: 1705.07874 . url : https://arxiv.org/abs/1705.07874 .[57] Scott M. Lundberg et al. “From Local Explanations to Global Understanding with Explainable AI for Trees”. In: Nature Machine Intelligence 2.1 (2020), pp. 56–67. doi : 10.1038/s42256-019-0138-9 . url : https://doi.org/10.1038/ s42256-019-0138-9 .25

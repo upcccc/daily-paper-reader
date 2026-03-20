@@ -1,0 +1,3128 @@
+Title: SoK: Practical Aspects of Releasing Differentially Private Graphs
+
+URL Source: https://arxiv.org/pdf/2603.18779v1
+
+Published Time: Fri, 20 Mar 2026 01:13:16 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# SoK: Practical Aspects of Releasing Differentially Private Graphs 
+
+## Nicholas D’Silva 
+
+The University of New South Wales Sydney, NSW, Australia n.dsilva@unsw.edu.au 
+
+## Surya Nepal 
+
+CSIRO’s Data61 & The University of New South Wales Sydney, NSW, Australia surya.nepal@data61.csiro.au 
+
+## Salil S. Kanhere 
+
+The University of New South Wales Sydney, NSW, Australia salil.kanhere@unsw.edu.au 
+
+## Abstract 
+
+Graph data is increasingly prevalent across domains, offering ana-lytical value but raising significant privacy concerns. Edges may en-code sensitive relationships, while node attributes may contain sen-sitive entity or personal data. Differential Privacy (DP) has gained traction for its strong guarantees, yet applying DP to graphs is challenging because of their complex relational structure, leading to trade-offs between privacy and utility. Existing methods vary in privacy definitions, utility goals, and contextual settings, compli-cating comparison. For practitioners, this is compounded by DP’s interpretability issues, contributing to misleading protection claims. To address this, we propose a novel systemisation of existing methods tailored to practical considerations and adaptable to vary-ing practitioner objectives. Our contributions include: (i) a compre-hensive survey of differentially private graph release methods; (ii) identification of key vulnerabilities; and (iii) a practitioner-oriented, objective-based framework to guide the selection, interpretation, and sound evaluation of existing methods. We demonstrate the use of our systemisation through two exemplary scenarios in which we assume the role of a social network analyst, apply it, and conduct evaluations in accordance with our framework. Together, these two illustrative instantiations ultimately provide a unified benchmark for state-of-the-art methods in the social networks domain. 
+
+## CCS Concepts 
+
+• Security and privacy → Privacy protections .
+
+## Keywords 
+
+graph privacy, differential privacy, graph publishing 
+
+## 1 Introduction 
+
+Graphs are ubiquitous, foundational data structures, valued for their ability to model complex relationships between entities. They arise across diverse domains, including social networks, finan-cial markets, transport networks, and biological processes [ 6 , 12 ]. Advances in data collection technologies, including smartphones, smart sensors, and other tracking-enabled devices, have signifi-cantly increased the scale and richness of graph-structured data. This growth has been accelerated by the adoption of graph-based systems, including social media platforms, Internet of Things net-works, and graph databases [ 52 , 85 , 120 ]. These developments un-derscore the need for analytical methods that extract meaningful, domain-relevant insights from graphs. The increased collection and analysis of graph data raises sig-nificant privacy concerns [ 75 , 156 ]. While such data offers high 
+
+> This paper is an extended version of work accepted to the ACM Asia Conference on Computer and Communications Security, 2026 (ASIA CCS ’26).
+
+analytical value, both structural (e.g., edges representing relation-ships) and attribute information (e.g., demographic or behavioural details) can be exploited to compromise privacy [ 156 ]. Risks inten-sify when edges encode sensitive relationships, nodes represent entities requiring privacy, or attributes represent sensitive per-sonal information. Privacy breaches may arise intrinsically from the data (e.g., private associations represented by edges [ 80 ], or private community memberships [ 66 ]), or through linkage with external sources that enable inferences about individuals’ beliefs, affiliations, or other sensitive characteristics [ 104 ]. The rise of graph neural networks (GNNs) has amplified these risks, as tasks such as community detection, link prediction, and node classification or re-identification can inherently expose private information [ 167 ]. Protecting graph data while preserving its utility thus remains a critical challenge, often framed as the privacy-utility trade-off .Differential Privacy [ 29 ] (DP) has emerged as a leading privacy framework, offering formal guarantees through calibrated noise addition to algorithm outputs, ensuring minimal impact from any single record. While effective, this noise degrades the dataset’s util-ity, reinforcing the fundamental privacy-utility trade-off [ 29 ]. This challenge is even greater for graphs, which have a more complex relational structure than tabular data. Several methods for private graph release have been proposed [ 20 ,117 , 151 , 157 ], often optimising utility for specific applications. How-ever, the diversity of utility definitions (e.g., preserving certain structural features) and evaluation strategies makes meaningful cross-method comparison difficult. Several surveys consolidate methodologies and their privacy guarantees [ 16 , 89 , 94 , 103 ]. However, practical considerations such as utility, vulnerabilities, and validity in practice are often limited or fragmented due to diverse perspectives. Which utility metrics matter most? Which methods align with our threat model? Are the assumptions made by some privacy mechanisms acceptable? Practitioners often seek answers to these questions; however, to our knowledge, no work provides clear guidance, leaving these considerations ambiguous and challenging to navigate. This hinders the adoption of DP graph mechanisms in real-world settings. We posit that this challenge will persist unless practitioner objectives are scoped to their specific contexts, especially when the ultimate goal is private data release. Such trade-offs are highlighted in [ 132 ]. The usability and interpretability of DP guarantees remain a chal-lenge [ 106 ], especially for graphs where structural correlations add complexity. Practitioners, including non-experts, must understand the validity and assumptions of existing methods. This underscores the need for a flexible framework that increases the understandabil-ity of DP-based graph release approaches and adapts to evolving practitioner objectives regarding both privacy and utility. 
+
+> arXiv:2603.18779v1 [cs.CR] 19 Mar 2026 D’Silva et al.
+
+Contributions. This work addresses these issues through sev-eral key advances. First, we conduct an updated, comprehensive survey of existing methods and present a novel layer-based sys-temisation whose modular design clarifies methodological com-ponents and intended purposes. We also add a dimension that exposes vulnerabilities arising from specific design choices, an as-pect that prior work has mainly overlooked. Next, we propose a practitioner-oriented, objective-based framework to guide practi-tioners and non-specialists in selecting, applying, and evaluating privacy mechanisms tailored to their contexts and requirements, thereby improving interpretability and mitigating critical risks of invalid application or misleading data protection claims. To demon-strate our systematisation, we construct two exemplar scenarios in which we assume the role of a social network analyst, apply our framework, and conduct empirical evaluations, providing a comprehensive benchmark of state-of-the-art (SotA) methods for social network analysis. To summarise, our contributions are: (1) We propose a novel systemisation of differentially private graph release methods from practical perspectives, consisting of: (i) a modular systemisation of approaches; (ii) an additional dimen-sion addressing vulnerabilities and potential privacy attacks; and (iii) a practitioner-oriented framework to guide method selection, application, and evaluation for specific contexts; (2) We construct two illustrative scenarios (assuming the roles of social network analysts), demonstrating the framework in action and providing empirical evaluations; (3) A benchmark of SotA methods for social networks; and (4) We release all our source code and results as open-source 1, to support future research. To the best of our knowledge, no existing survey, framework, or systematisation addresses these critical practical considerations in DP-based graph release methods. The exact scope of the approaches we consider is detailed in Sec. 3. 
+
+Organisation. We discuss related and foundational work in Sec. 2. We present our systemisation in Sec. 3, and provide exemplar in-stances of our systemisation, including empirical evaluations, in Sec. 4. Future directions and limitations are discussed in Sec. 5, with conclusions in Sec. 6. We provide further details in the Appendix. 
+
+## 2 Related Work 
+
+A growing body of research addresses DP-based graph release. We identify four key areas that warrant discussion for related work: (1) Literature surveys that establish formal theoretical frameworks, definitions, and taxonomies for this domain; (2) Empirical evaluations that assess real-world utility, practicality, and applicability of SotA methods; (3) Coverage of contemporary differential privacy-preserving tech-niques for dataset publication in general, encompassing pertur-bative and generative approaches; and (4) Coverage of graph-specific methods designed to tackle chal-lenges unique to graph-structured data, which differ substan-tially from those in tabular data. A summary of related work is presented in Table 1.                                
+
+> 1https://github.com/ndsi6382/SoK_DP_Graph_Release
+> Work Literature Survey Empirical Evaluation Privacy Coverage Graph Coverage
+> This Work
+> [18] ##
+> [53] ##
+> [94] #G#
+> [45] ##
+> [89] ##
+> [103] #
+> [170] ##
+> [135] ##
+> [35] ##
+> [148] #G#
+> [12] ##
+> [16] G##
+> [64] G#G#
+> [47] ##
+> [61] #G#G#
+
+Table 1: Related work to the field of DP graph release, pre-sented in reverse chronological order. Key: = Coverage, G# = Limited coverage, # = No coverage. 
+
+Liu et al. (2024) [ 94 ] introduced the Private Graph Benchmark 
+
+(PGB), an open-source framework for evaluating graph privatisa-tion mechanisms, aiming to unify approaches across diverse pri-vacy definitions. Their empirical evaluation covers methods such as DP-dK [ 140 ], TmF [ 107 ], PrivSKG [ 101 ], PrivHRG [ 149 ], Priv-Graph [ 157 ], and DGG [ 117 ]. However, most of these are either baseline methods or over a decade old, and deep learning techniques are deliberately excluded. This raises concerns about the work’s currency and relevance to modern applications. From a theoretical perspective, Li et al. [ 89 ] provide a comprehen-sive survey categorising existing methods by intended use (query answering vs. graph dataset publication) and by privacy guaran-tees (provable vs. non-provable). Mueller et al. [ 103 ] extend this to privacy challenges in GNNs and related learning tasks for graph-structured data. Earlier works by Casas-Roma et al. [ 16 ] and Ji et al. [ 64 ], surveyed graph-modification techniques for general anonymisation, without necessitating formal privacy guarantees. While these surveys consolidate methodological perspectives, their discussions of utility remain limited and fragmented, with incon-sistent evaluation metrics that impede sound comparison. Conse-quently, practitioners face challenges in assessing the real-world applicability, validity, and utility of proposed approaches. In practical terms, evaluating utility in graph privacy remains challenging [ 64 ], motivating systems such as SecGraph [ 61 ] and 
+
+DPGraph [148 ]. While both offer sound frameworks, they focus on query-answering algorithms rather than graph release, and 
+
+SecGraph broadly addresses anonymisation without formal privacy guarantees, limiting applicability to modern privacy requirements. Our work also aligns with benchmarking initiatives, such as 
+
+DPBench [47 ], which introduced principles for sound end-to-end private evaluations. Using these principles, Tao et al. [ 135 ] bench-marked and evaluated DP synthetic data generation algorithms. More recent contributions include a theoretical survey by Hu et al. [ 53 ], and a benchmarking study by Chen et al. [ 18 ]. However, these efforts target tabular data rather than graph-structured data. Graph synthesis has a long history in network science [ 12 ] and recent advances in generative deep learning have extended this to SoK: Practical Aspects of Releasing Differentially Private Graphs 
+
+graphs, as discussed in surveys by Faez et al. [ 35 ], Guo et al. [ 45 ], and Zhu et al. [ 170 ]; however, privacy concerns such as the memo-risation of training data remain largely overlooked. In contrast, we present an updated and nuanced systemisation of DP graph release methods that explicitly account for the practi-cal considerations, vulnerabilities, and practitioner objectives. Our framework is flexible and adaptable to evolving contexts beyond the illustrative social network scenarios evaluated here. Our evaluation shares some similarity with PGB [ 94 ] but differs in key ways: (i) inclusion of deep learning techniques; (ii) empha-sis on recent mechanisms, rather than decade-old baselines, with only two overlapping methods; and (iii) broader utility metrics and downstream tasks for richer assessment. While our framework is general, evaluations are limited to social networks and are intended as illustrative instantiations rather than comprehensive. 
+
+Background on Differential Privacy. Differential Privacy [ 29 ] (DP) is a mathematical framework for providing rigorous, quantifiable privacy guarantees for datasets and computations performed on them. DP has become a foundational concept in data privacy, widely adopted in both industry and research [2, 28, 34]. A randomised algorithm 𝐴 : X𝑛 ↦ → Y is 𝜖 -differentially private ,if for all neighbouring datasets 𝑋, 𝑋 ′ ∈ X and 𝑌 ⊆ Y ,Pr [𝐴 (𝑋 ) ∈ 𝑌 ] ≤ 𝑒 𝜖 Pr [𝐴 (𝑋 ′) ∈ 𝑌 ], (1) where 𝑋 and 𝑋 ′ differ in exactly one record, and 𝜖 is the privacy budget. Intuitively, noise is added to the output of 𝐴 , which operates on a sensitive dataset 𝑋 to inhibit inferences about any singular record. The noise depends on two parameters: the privacy budget 𝜖 ,and the sensitivity Δ𝐴 . The privacy budget quantifies the allowed “privacy loss”; a smaller 𝜖 means stronger privacy guarantees (but lower accuracy), and vice versa for a larger 𝜖 . The Global ℓ𝑝 Sensitiv-ity , Δ𝐴 = max 𝑋 ,𝑋 ′ || 𝐴 (𝑋 ) − 𝐴 (𝑋 ′)|| 𝑝 , expresses the largest possible distance between neighbouring datasets. The choice of 𝑝 -norm depends on the specific noise mechanism used. Initially designed for tabular data, DP has been adapted to accom-modate graphs. Here, the neighbouring dataset notion is adapted to various privacy targets, including edges (edge-DP [ 71 ]), nodes (node-DP [ 73 ]), connected components (partition-DP [ 136 ]), and attributes ((node/edge)-attribute-DP [ 10 ]). As they overwhelmingly dominate the literature, we focus on edge- and node-DP, for which we provide formal definitions in App. A. 
+
+## 3 Systemisation 
+
+Scope and Methodology. Our systemisation focuses on methods for releasing entire graph datasets privately (not just statistics, properties, or latent features), specifically using indistinguishability-based privacy notions such as DP and its extensions. Other privacy notions, such as anonymity (e.g. 𝑘 -anonymity [ 124 ], 𝑙 -diversity [ 96 ]), information-theoretic definitions [ 8] or multiparty computation [ 92 ]are outside our scope. Similarly, private GNN and Federated Learn-ing models are only included if they are specifically designed to output private versions of graph datasets. To collate existing works, we conducted an exhaustive search using the following keywords and their variants: {blowfish, differ-ential, dynamic, edge, generation, graph, link, local, network, node, privacy, publication, pufferfish, relation, release, synthesis, tempo-ral, vertex}. These were derived from common terms associated with graphs, data publishing, differential privacy, and established variants. We include works published within the last decade (2015– 2025), supplemented by earlier studies deemed highly influential or foundational to the field. Our systemisation is then applied to this collection, with the results summarised in Table 2. 
+
+Structure. Central to our systemisation is an end-to-end pipeline (shown in the central blue column of Fig. 1) that spans from non-private input to private output, used to categorise existing ap-proaches. The pipeline consists of four layers: L1: The graph model , which identifies the applicable graph types for the approach; L2: The trust model , which specifies the assumed trust relationship between the individuals and data publishers; L3: The privacy mechanism , comprising the privacy target , (ele-ments over which privacy should be applied, and the privacy definition (formalises privacy guarantees); and L4: The privacy-enforcing transformation , which describes the com-putational process applied to produce the output graph. Each method we review represents a path through these layers, enabling modular analysis of design choices, their utility impact, consistent strengths and weaknesses, and future research directions. We also integrate a vulnerability dimension (right red column in Fig. 1), categorising risks as knowledge-based, access-based, or design-related, any of which may lead to attacks on the private output. To the best of our knowledge, no previous systemisation explicitly integrates this dimension; however, we find it critical for understanding failure points under different threat models. To complement this, we introduce a practitioner-oriented, object-ive-based framework (left green column in Fig. 1) mapped to the pipeline layers. It helps practitioners, even those without domain expertise, select and apply DP-based graph release mechanisms by clarifying guarantees and limitations. Such translation is essential given the well-documented usability challenges of DP [ 106 ] and the growing number of mechanisms, which make it difficult for practitioners to identify those most aligned with their goals. Categories below the dotted line in Fig. 1 ( O3 and O4 ) require evaluation for a sound comparison. Practitioners operate under diverse conditions (e.g., data domain, privacy/utility/computational needs). In the literature, evaluation practices vary widely, with inconsistent methodologies, privacy budgets, and metrics, making direct comparisons difficult. This lack of standardisation hinders data practitioners’ ability to assess utility and robustness against attacks. Our approach advocates evaluation tailored to practitioner-defined contexts, producing results aligned with their privacy and utility goals. These evaluation-related components are discussed in Sec. 3.3.3 and 3.3.4, with two illustrative scenarios and empirical demonstrations presented in Sec. 4.2 and 4.3 respectively. 
+
+## 3.1 Approaches 
+
+3.1.1 L1: Graph Models. A graph model defines the type(s) of graphs that an approach is designed to handle, such as undirected or directed, static or temporal, and semantically attributed or unattributed. Varying real-world applications necessitate different graph models. D’Silva et al. Vulnerabilities   
+
+> Knowledge
+> Design Weaknesses
+> Access Evaluation Privacy Mechanism
+> Trust Model Data Transformation Output
+> Utility
+> Attacks
+> Private Output Graph
+> Graph Model Temporal Static
+> Undirected Directed
+> Centralised
+> Localised
+> Approximate Differential Privacy
+> Extensions of Differential Privacy for Non-Independent Data
+> Graph Generation Models
+> Generative Deep Learning
+> (Non-Generative)
+> Gradient Perturbation
+> Data Perturbation
+> Non-Private Input Graph
+> Attributed Unattributed
+> Descriptive Analyses
+> Simulative & Modeling Analyses
+> Predictive Tasks
+> Adversarial Presence
+> Central Entity Security
+> Data Independence Assumption Issue
+> GNN-Related Issues
+> Reconstruction
+> De-anonymisation
+> Auxiliary Information
+> Membership Inference
+> Practical Objectives Objective 1: Privacy Guarantees
+> Data Context
+> Privacy Target
+> Objective 2: Practicality
+> Objective 4: Utility Objective 3: Empirical Privacy Preservation
+> Efficiency
+> Reproducibility
+> Mechanism Guarantees
+> (Pure) Differential Privacy
+> Nodes
+> Other
+> Edges
+> Probability of Failure
+> Attribute Inference
+
+Figure 1: Systemisation of DP graph release methods (central, blue), with two practical aspects: vulnerabilities (right, red), and practitioner objectives (left, green). The reader is encouraged to parse this as a flowchart from top to bottom, along the central blue column from sensitive input to private output. Overlaid pink and purple boxes represent two exemplar scenarios respectively (Sec. 4.2, 4.3), to illustrate our systemisation’s use. A clean version is provided in our supplementary repository. 
+
+For example, in social networks, undirected edges represent mu-tual relationships (e.g. friendships), while directed edges capture asymmetric interactions (e.g. a user following another), leading to distinct dynamics and properties. Adding attributes or temporal information enhances the repre-sentational capacity of graphs. Attributes encode contextual details, such as demographic information or community affiliations, while temporal dimensions capture dynamic processes, such as relation-ship evolution or influence propagation. While these elements can enhance realism, they heighten privacy risks by exposing sensitive details absent in unattributed or static graphs. Graph models characterise the generalisability of approaches, as they follow a hierarchy: directed graphs generalise undirected graphs, temporal generalises static (the case of a single time-step), and attributed generalises unattributed (by adding trivial attributes). Methods capable of handling directed, temporal, and attributed graphs are thus applicable across diverse scenarios. From Table 2, we observe a clear progression. Earlier works focus on simple graphs (undirected, unattributed, static), often grounded in theoretical foundations. Recent studies increasingly address attributed and temporal graphs, reflecting the growing scale, richness, and complexity of contemporary graph data. 
+
+3.1.2 L2: Trust Models. We assume individuals and their data are the subjects of protection, though this generalises to any entity whose data requires safeguarding. Individuals generate data, which a data publisher collects to release as a dataset for a data recipient .Existing graph privacy literature consists of two well-established trust models: centralised and localised. In both, individuals do not directly trust the recipient, so the published dataset must protect privacy while ensuring the recipient trusts the publisher’s accuracy. 
+
+Centralised. Individuals trust the publisher and share their raw data. The publisher applies a privacy mechanism before releasing a protected dataset. This model represents the de facto standard for publishing privacy-preserving data. 
+
+Localised. Individuals do not trust the publisher and apply pri-vacy mechanisms locally before sharing data. The publisher aggre-gates and optionally post-processes this privatised data. This model SoK: Practical Aspects of Releasing Differentially Private Graphs 
+
+Work Graph Model Trust Model Privacy Mechanism Transformation 
+
+HMG [90] Undirected, Temporal, Unattributed Localised Edge-DP Perturbation then Generation PrivDPR [163] Directed, Static, Unattributed Centralised Node-ADP Perturbation of Gradients Zou et al. [171] Undirected, Static, Unattributed Centralised Edge-ADP Perturbation DPCAG [165] Directed, Static, Unattributed Centralised Edge-DP Perturbation then Generation (“Global”) Brito et al. [13] Undirected, Static, Weighted Centralised (Edge & Weight)-DP Perturbation then Generation (“Local”) Brito et al. [13] Undirected, Static, Weighted Localised (Edge & Weight)-DP Perturbation then Generation PPDU [51] Undirected, Temporal, Unattributed Localised Edge-DP Perturbation 
+
+𝜋 𝑣 , Jian et al. [68] Undirected, Static, Unattributed Centralised Node-DP Perturbation 
+
+𝜋 𝑒 , Jian et al. [68] Undirected, Static, Unattributed Centralised Node-ADP Perturbation CGT [155] Directed, Static, Attributed Centralised Edge-ADP Generative Deep Learning PrivGraph [157] Undirected, Static, Unattributed Centralised Edge-DP Perturbation then Generation Chicha et al. [22] Undirected, Temporal, Unattributed Centralised Edge Blowfish Privacy Perturbation PSG [55] Undirected, Static, Unattributed Localised Edge-DP Perturbation then Generation WGPA [109] Undirected, Static, Weighted Centralised (Edge & Weight)-DP Perturbation then Generation DPGVAE [151] Directed, Static, Unattributed Centralised Edge-ADP Generative Deep Learning DPGGAN [151] Directed, Static, Unattributed Centralised Edge-ADP Generative Deep Learning CAGMDP [20] Undirected, Static, Attributed Centralised (Edge & Node-Att.)-DP Perturbation then Generation Eliáš et al. [32] Undirected, Static, Unattributed Centralised Edge-ADP Perturbation of Gradients MPDC-dK [58] Undirected, Static, Unattributed Centralised Edge-DP Perturbation VB-WNDP [141] Directed, Static, Weighted Centralised (Edge & Weight)-DP Perturbation then Generation AsgLDP [144] Undirected, Static, Attributed Localised Edge-DP Perturbation then Generation Yang et al. [152] Undirected, Static, Unattributed Localised Edge-DP Perturbation then Generation PrivCom [164] Undirected, Static, Unattributed Centralised Node-ADP Perturbation of Gradients PHDP [40] Undirected, Static, Unattributed Centralised Edge-DP Perturbation then Generation LMBCI [139] Undirected, Static, Weighted Centralised Weight-DP Perturbation then Generation DP-FT [169] Undirected, Static, Unattributed Centralised Degree-DP Perturbation then Generation Gao et al. [41] Undirected, Static, Unattributed Localised (Grouped Node)-DP Perturbation then Generation MB-CI [88] Undirected, Static, Weighted Centralised Weight-DP Perturbation then Generation LDPGen [117] Directed, Static, Unattributed Localised Edge-DP Perturbation then Generation TriCycLe [69] Undirected, Static, Attributed Centralised (Edge & Node-Att.)-DP Perturbation then Generation TmF [107] Undirected, Static, Unattributed Centralised Edge-DP Perturbation then Generation DER [19] Undirected, Static, Unattributed Centralised Dep. Edge-DP Perturbation then Generation PrivHRG [149] Undirected, Static, Unattributed Centralised Edge-DP Perturbation then Generation DP-2K [140] Undirected, Static, Unattributed Centralised Edge-ADP Perturbation then Generation Blocki et al. [9] Directed, Static, Unattributed Centralised Edge-DP Perturbation PrivSKG [101] Undirected, Static, Unattributed Centralised Edge-ADP Perturbation then Generation Pygmalion [123] Undirected, Static, Unattributed Centralised Edge-DP Perturbation then Generation 
+
+Table 2: Considered works on DP graph release, categorised according to our proposed systemisation, presented in reverse chronological order. Abbreviations: Dep. = Dependency-aware, Att. = Attribute, (A)DP = (Approximate) Differential Privacy. 
+
+offers stronger privacy but often reduces utility and introduces practical constraints, such as communication inefficiencies. The original DP definition assumes the centralised model, mak-ing it the de facto standard. A key variant, local-DP [ 72 ], has at-tracted attention but remains less explored due to utility and effi-ciency challenges. For example, Kasiviswanathan et al. [ 72 ] proved that some local-DP learning algorithms require exponentially more data and are strictly less powerful than their centralised coun-terparts. The localised model induces a client-server architecture, where each client corresponds to a graph node, introducing practi-cal constraints, e.g., communication inefficiencies. The increased difficulty of mitigating the localised model’s adverse effects on util-ity and efficiency explains why, as shown in Table 2, far fewer works target this trust model, leaving it an open area for future research. Other trust models, such as the shuffle model [ 21 ] (which may see application in attributed graphs where nodes could have their feature vectors shuffled), remain largely unexplored and present opportunities for future research. 
+
+3.1.3 L3: Privacy Mechanism. This considers the privacy target, i.e., the graph elements to protect (e.g., nodes, edges, attributes), and the privacy definition that formalises this. We distinguish between these definitions to account for differing guarantees they provide. 
+
+(Pure) Differential Privacy. For graphs, DP is typically instanti-ated as edge-DP [ 9 ] or node-DP [ 73 ], protecting edges or nodes, respectively. Most work focusses on edge-DP, while node-DP re-mains largely unaddressed. This imbalance reflects the relative ease of preserving utility in edge-DP. Sensitivity (Sec. 2) quantifies the maximum distance between neighbouring datasets. In edge-DP, neighbouring graphs differ by the addition or removal of an edge, inducing an 𝑂 (1) sensitivity for many typical queries. In node-DP, they differ by the addition or removal of a node and all incident edges. In the worst case, a node is connected to all others, yielding an 𝑂 (| 𝑉 |) sensitivity for several typical queries [ 73 ]. Achieving node-DP thus requires far more noise than for edges with the same privacy budget, degrading accuracy and utility. Another concern is that, for DP guarantees (Eq. 1, [ 29 ]) to hold, records are assumed to be independent. In edge-DP, edges are sup-posed to exist independently, and likewise nodes in node-DP. How-ever, since graphs are inherently relational, this assumption rarely holds in practice. Kifer and Machanavajjhala [ 75 ] illustrated this through social network simulations, showing that the dependent structure of graphs undermines this assumption. In their example, if two previously isolated communities become connected through a new link, additional links are more likely to form across the commu-nities; however, these new links are dependent on the existence of D’Silva et al. 
+
+the first. They argue that privacy should limit an attacker’s ability to infer participation, regardless of explicit presence in the data. This dependency challenge remains unresolved in graph privacy. 
+
+Approximate Differential Privacy. Approximate DP (ADP) is a relaxed variant of pure DP that introduces a parameter 𝛿 , which quantifies the probability of failure, i.e. of the claimed guarantees (as per pure DP) not holding. With the same definitions as Eq. 1, Pr [𝐴 (𝑋 ) ∈ 𝑌 ] ≤ 𝑒 𝜖 Pr [𝐴 (𝑋 ′) ∈ 𝑌 ] + 𝛿. (2) Typically, 𝛿 is set to very small values such as 10 −5 [ 164 ]. Typi-cally, the Gaussian mechanism [ 30 ] is used here, which incurs less noise for higher-dimensional outputs, and has seen widespread adoption in deep learning contexts upon the development of DP-SGD [ 1]. Consequently, all methods in Table 2 that make use of deep learning and other optimisation methods provide ADP guarantees. However, the same concerns regarding node sensitivity and the (non-)independence issue remain with this definition. 
+
+Extensions of Differential Privacy for Non-Independent Data. To address the (non-)independence issue noted, several extensions to standard DP have been proposed. The most naïve is Group Pri-vacy [ 29 ], a corollary of DP that can be used to prevent the leakage of sensitive information from a collection of records rather than singularly. If a mechanism 𝐴 satisfies 𝜖 -DP, then for any group of 
+
+𝑘 records, 𝐴 satisfies (𝑘𝜖 )-DP. This allows assuming correlations within groups of bounded size and scaling the privacy budget based on a ‘correlation parameter’. This approach was used by Chen et al. in DER [19], in which they consider correlation parameters ≤ 25 .Other variants of DP include Dependent DP [ 17 ], an alternative formulation with the same name by Zhao et al. [ 168 ], and Bayesian DP by Yang et al. [ 150 ]. Among these, the framework that has gar-nered the most attention is Pufferfish Privacy (PP), a generalisation of DP proposed by Kifer and Machanavajjhala [76]. PP requires the following definitions: a set of potential secrets 
+
+S is the privacy target, a set of discriminative pairs 𝑆 pairs ⊆ S × S 
+
+explicitly specifies which pairs of secrets should be indistinguish-able from each other, a set of data evolution scenarios D captures assumptions on how the data was generated (thus allowing to ac-count for dependencies and correlations), and a privacy budget 𝜖 .An algorithm 𝐴 satisfies 𝜖 -Pufferfish( S, 𝑆 pairs , D) Privacy if for all possible outputs 𝑦 ∈ Range (𝐴 ), for all (𝑠 𝑖 , 𝑠 𝑗 ) ∈ 𝑆 pairs , and for all distributions 𝜃 ∈ D where Pr [𝑠 𝑖 |𝜃 ] ≠ 0 and Pr [𝑠 𝑗 |𝜃 ] ≠ 0, we have: Pr [𝐴 (𝑋 ) = 𝑦 |𝑠 𝑖 , 𝜃 ] ≤ 𝑒 𝜖 Pr [𝐴 (𝑋 ) = 𝑦 |𝑠 𝑗 , 𝜃 ],
+
+Pr [𝐴 (𝑋 ) = 𝑦 |𝑠 𝑗 , 𝜃 ] ≤ 𝑒 𝜖 Pr [𝐴 (𝑋 ) = 𝑦 |𝑠 𝑖 , 𝜃 ], (3) where 𝑋 is a dataset generated from 𝜃 . While PP assumes a domain expert can specify secrets and probability distributions that define the data evolution scenarios, subsequent developments have been largely theoretical. Song et al. [ 130 ] proposed the Wasserstein and Markov Quilt mechanisms for achieving PP, proving that these incur less noise than group privacy. However, their practicality is hindered by the intractability of the Bayesian semantics underlying PP [ 93 , 150 ]. Recently, Pierquin et al. [ 114 ] introduced Rényi-PP, which reinstates the validity of post-processing (absent in general PP) and extends its applicability to iterative settings, such as private convex optimisation. To date, PP has been applied to graphs only by Shafieinejad et al. [ 127 ], who studied private histogram queries and set unions on communication graphs. Blowfish Privacy (BP) [ 48 ], extends PP into a policy-based frame-work, offering more intuitive control over privatisation. A policy specifies both the set of secrets (as in PP) and constraints represent-ing known properties of the data. At its core is a discriminative secret graph, where nodes represent records, and edges connect records that must remain indistinguishable from one another. For-mally, a policy is defined as a triple 𝑃 = (T , 𝐺, I𝑄 ) where T is the domain of records, 𝐺 = (𝑉 , 𝐸 ) where 𝑉 ⊆ T and 𝐸 := 𝑆 pairs 
+
+is the secret graph, and I𝑄 is the set of possible databases under constraints 𝑄 . A randomised algorithm 𝐴 satisfies (𝜖, 𝑃 )-Blowfish Privacy if, for all possible outputs 𝑌 ⊆ Range (𝐴 ), we have: Pr [𝐴 (𝑋 ) ∈ 𝑌 ] ≤ 𝑒 𝜖 Pr [𝐴 (𝑋 ′) ∈ 𝑌 ], (4) where 𝑋, 𝑋 ′ ∈ I 𝑄 are neighbouring datasets. Intuitively, two datasets are considered neighbouring if their corresponding secret graphs 
+
+𝐺 and 𝐺 ′ induce minimal graph edit distances [ 125 ], subject to 𝑄 .As an extension of PP, BP is also a generalisation of DP. Applications of BP to graphs remain limited. Nassar et al. [ 105 ]utilised BP for private histogram queries in communication graphs with heterogeneous privacy guarantees. Chicha et al. [ 22 ] proposed a mechanism for publishing temporal graphs under policies that capture temporal correlations between edges. 
+
+3.1.4 L4: Privacy-Enforcing Transformation. This captures the trans-formation applied to the data to achieve privacy, i.e., the core com-putational process behind the privacy mechanism. We identify four main strategies used in existing works: 
+
+Data Perturbation. The most straightforward strategy is to per-turb the input graph directly. For the methods in Table 2, this typically involves rearranging or transforming the adjacency ma-trix, followed by any required corrections for the graph to remain valid. This strategy often yields simpler algorithms, as no additional work is needed. Many earlier works, including most 𝑘 -anonymous approaches, as surveyed in [16], follow this approach. 
+
+Perturbation then Generation. More commonly, a set of graph statistics is perturbed and then used as input for various graph gen-eration models. These generative models may be newly proposed, e.g., [ 19 , 40 , 107 ], or drawn from established network science liter-ature. Examples include the Attributed Graph Model [ 112 ] (used in [ 20 , 69 , 144 , 165 ]), the Chung-Lu model [ 3 ] (e.g. [ 20 , 69 , 157 ]), the Block Two-Level Erdös–Rényi model [ 126 ] (e.g. [ 117 ]), the Hi-erarchical Random Graph model [ 24 ] (e.g. [ 41 , 149 ]), the Stochastic Kronecker Graph model [ 83 ], and the Havel-Hakimi algorithm [ 46 ](e.g. [ 123 , 140 ]). This approach offers greater expressivity than di-rect perturbation but has declined with the rise of deep learning. 
+
+Differentially Private Generative Deep Learning. Differentially Private Stochastic Gradient Descent (DP-SGD) [ 1] incorporates DP into model training. Each gradient descent step is bounded by clip-ping the ℓ2-norm, and Gaussian noise is added to ensure that both the model parameters and any derived outputs satisfy DP. With the surge of generative deep learning for graph generation tasks [ 170 ], recent studies have applied DP-SGD to train advanced models, such as Transformers [ 137 ] (e.g. [ 155 ]), Variational Autoencoders [ 78 ](e.g. [151]), and Generative Adversarial Networks [43] (e.g. [151]). SoK: Practical Aspects of Releasing Differentially Private Graphs 
+
+Differentially Private Gradient Perturbation. Beyond generative models, DP-SGD and related gradient-privatising methods can be applied to a broader set of optimisation problems. For instance, Zhang et al. [ 163 ] use DP-SGD to devise a DP deep PageRank [ 110 ]method by scoring nodes and sampling a private synthetic graph, Zhang et al. [ 164 ] apply DP to Oja’s method [ 59 ] to approximate adjacency matrix eigen-decompositions, and Eliáš et al. [ 32 ] formu-late a convex optimisation problem based on graph cuts and devise a privacy-aware mirror descent [14]. 
+
+## 3.2 Vulnerabilities and Attacks 
+
+Several studies examine attacks against DP-protected graph data [ 61 ,64 , 97 , 99 , 113 ]. Thus, we provide only a brief discussion here, as our primary focus is on privacy defence methods. We categorise vulnerabilities loosely by their association with the different layers of our systemisation, grouping them by knowledge, access, and design weaknesses (see Fig. 1, right red column). 
+
+3.2.1 Knowledge. This captures an adversary’s existing knowledge and assumptions of the target data. In graph privacy, two main categories emerge: adversarial presence and auxiliary information. An adversarial presence occurs when the adversary can influence the data. For example, in online social networks, adversaries can create Sybil accounts [ 153 ], then re-identify them in the private graph. In graph de-anonymisation, adversaries with partial node mappings between sensitive and private graphs can launch potent seeded attacks to re-identify nodes, as opposed to comparatively weaker seed-free attacks [61]. For further discussion, see [64]. Auxiliary information includes external data or assumptions that enhance attack effectiveness [ 115 ], such as record linkage [ 38 ]. It also covers any assumptions about data distribution and statistics that can similarly improve attack success, as shown in [61, 64]. 
+
+3.2.2 Access. This relates to the trust models adopted by various methods. As mentioned in Sec. 3.1.2, the centralised model requires a higher degree of trust than the local model. Consequently, ensur-ing the security of the centralised entity acting as the aggregator is critical. If this is compromised, sensitive raw data could leak. 
+
+3.2.3 Design Weaknesses. These vulnerabilities stem from limi-tations in the selection of privacy mechanisms and in algorithm design. As noted in Sec. 3.1.3, common issues include assuming independent records or allowing a non-zero probability of failed protection guarantees. Both can lead to underestimating the re-quired noise and inadequate data masking. Furthermore, all deep learning-based methods [ 151 , 155 , 163 ]apply DP only to later feed-forward layers due to the difficulty of ap-plying DP-SGD to convolutional settings [ 1 ], including GNNs [ 103 ]. Isolating the influence of a single node in a graph is inherently chal-lenging due to message passing, which complicates per-example gradient computation. Without careful design, independence as-sumptions are violated, as dependent information propagates through random walks [44] and GCN-based embeddings [79]. 
+
+3.2.4 Attacks. We also present a succinct categorisation of existing attacks in Table 3, grouped by attack type and privacy target, to help identify which threat models should be considered. In summary, de-anonymisation attacks primarily concern nodes, as these are                                                                                 
+
+> Work Attack Type Privacy Target
+> [4] Reconstruction Nodes & Edges [95] De-anonymisation Nodes [156] Attribute Inference Node Attributes [27] De-anonymisation Nodes [160] De-anonymisation Nodes [87] De-anonymisation Nodes [161] De-anonymisation Nodes [166] (Edge) Membership Inference Edges [98] Attribute Inference Node Attributes [39] De-anonymisation Nodes (Temporal Graph) [133] De-anonymisation Nodes [159] De-anonymisation Nodes (Attributed Graph) [54] De-anonymisation Nodes [147] De-anonymisation Nodes [67] Attribute Inference Node Attributes [65] De-anonymisation Nodes [116] De-anonymisation Nodes [82] De-anonymisation Nodes [145] Attribute Inference Node Attributes [63] De-anonymisation Nodes [42] Attribute Inference Node Attributes [33] Reconstruction Nodes & Edges [128] De-anonymisation Nodes [81] De-anonymisation Nodes [62] De-anonymisation Nodes [108] De-anonymisation Nodes [154] De-anonymisation Nodes [111] De-anonymisation Nodes [36] (Edge) Membership Inference Edges [131] De-anonymisation Nodes [102] Attribute Inference Node Attributes [146] Reconstruction Nodes & Edges [91] Attribute Inference Node Attributes [104] De-anonymisation Nodes [24] (Edge) Reconstruction Edges [26] Reconstruction Nodes & Edges [80] (Edge) Membership Inference Edges [7] Attribute Inference Node Attributes [5] De-anonymisation Nodes
+
+Table 3: Considered works on attacks against privately re-leased graph data, presented in reverse chronological order. 
+
+mainly used to model people and their identities. Reconstruction attacks attempt to recover the graph structure, thereby additionally recovering edge information. Attribute inferences can apply either to node or edge attributes, and similarly, membership inference can be conducted over nodes or edges. 
+
+## 3.3 Practitioner Objectives 
+
+The final component is a practitioner-oriented, objective-based framework for curating suitable approaches, adaptable to specific applications and requirements. It consists of four key objectives: the privacy guarantees they provide (given context), their practi-cality, their empirical protection against known attacks, and the utility they provide (see Fig. 1, left green column). This assists prac-titioners in answering the question, “Which private graph release mechanisms are feasible for us to apply, given our requirements?” This motivation arises from the growing number of available mech-anisms, which makes it difficult for practitioners to identify those aligned with their goals. It also clarifies the nature and validity of the guarantees promised by each mechanism, mitigating misleading claims of data protection. We link each objective to the relevant layer(s) of our central pipeline, clarifying relationships between D’Silva et al. 
+
+practical goals, and mechanism components and their vulnerabili-ties. O1 and O2 can be employed pre-evaluation to filter and select candidate mechanisms. Then, evaluations are conducted to answer 
+
+O3 and O4 in accordance with the practitioner’s specifications. 
+
+3.3.1 O1: Privacy Guarantees. This objective broadly addresses the privacy guarantees offered by a mechanism and the condi-tions under which they hold. We divide this objective into two sub-objectives: context , and mechanism target and properties .
+
+Context. This refers to the specific graph model(s) that the mech-anism is designed to address, as well as the trust assumptions that underpin its design. As mentioned in Sec. 3.1, these concepts are essential in determining the applicability of a mechanism. For ex-ample, mechanisms that only handle undirected graphs cannot be applied to directed graphs. Similar distinctions arise between tem-poral and static graphs, and between unattributed and attributed graphs. Equally important is the trust model; specific architectures may require localised mechanisms (e.g., local DP), whereas others permit centralised approaches. Also importantly, some mechanisms are tailored to specific domains (e.g. social networks [ 20 , 69 , 117 ]), and may not perform well in other contexts. This sub-objective corresponds to layers L1 and L2 in our systemisation of approaches. 
+
+Mechanism Target and Properties. This sub-objective relates to the privacy target and its properties. Practitioners must clearly define the privacy target (e.g., edges, nodes, attributes) and se-lect mechanisms to protect it, while understanding the guarantees offered. For example, DP offers strong, provable guarantees, but as-sumes independent record generation [ 29 , 75 ]. Several mechanisms use ADP rather than (pure) DP [ 151 , 163 , 164 ]; while this definition can improve utility, the trade-off, which increases the risk of failure (quantified by 𝛿 ), should be clearly acknowledged. Misinterpreting these conditions can lead to privacy breaches or misleading claims. This sub-objective aligns with L3 .
+
+3.3.2 O2: Practicality. For a privacy mechanism to deliver utility, it must be readily applicable in real-world settings, rather than remain theoretical. Mechanisms that cannot be executed or imple-mented given the available resources ultimately provide no practical value. Accordingly, practitioners must assess which mechanisms are feasible given resource constraints. We frame this objective as comprising two sub-objectives: efficiency and reproducibility .
+
+Efficiency. Mechanisms need to run efficiently on datasets of a size relevant to the practitioner, without exceeding available com-puting resources or time budgets. Otherwise, methods that appear theoretically suitable may become impractical due to excessive computation or execution times. This aspect is most influenced by L4 , which encompasses the core computational processes. Ex-amples include training deep learning models [ 151 , 163 ], switch-ing edges [ 15 , 68 ], or executing complex graph generation proce-dures [20, 117], all of which impact efficiency. 
+
+Reproducibility. A mechanism must be reproducible and accessi-ble to practitioners; otherwise, correct implementation becomes dif-ficult, undermining both efficiency and the reliability of its claimed privacy guarantees. To meet this objective, source code should be publicly available, or detailed implementation guidance must be provided to enable accurate and confident reimplementation. 
+
+3.3.3 O3: Empirical Privacy Preservation. While O1 ensures privacy guarantees hold theoretically, practitioners must also validate that they protect against threats in practice. This is critical when strong assumptions are made about the data when selecting mechanisms based on O1 and O2 . After developing a threat model, a set of relevant attacks should be chosen, in accordance with the privacy target specified in O1 , to validate whether privacy is preserved in practice. To ensure reliability, the same metrics and implementation (source code) as the original publication should be used. 
+
+3.3.4 O4: Utility. Graphs are typically published to support down-stream analytical tasks, making it essential that mechanisms pre-serve sufficient utility to justify their release. Various metrics have been employed in the literature to quantify how well graph proper-ties and performance on downstream tasks are preserved (e.g., mod-ularity for community structure [ 117 ] and link prediction [ 151 ]); however, these metrics exhibit significant variations across studies. Thus, comparability is limited. When practitioners know in advance which downstream tasks will be performed on a published graph, they can select metrics aligned with those tasks. In the absence of such task-specific knowledge, a more comprehensive evaluation of utility is needed to guide the curation of suitable approaches. We categorise utility into three broad classes of common graph analytical tasks: descriptive, simulative, and predictive. Descriptive tasks compute graph statistics and structural metrics. Simulative tasks model graph dynamics and behaviour, such as influence max-imisation, stochastic block models [ 49 ], and exponential random graph models [ 37 , 142 ]. Predictive tasks infer outcomes and trends not explicitly encoded in the graph, with learning tasks forming a key subset. The widespread adoption of GNNs attests to their utility and applicability across diverse domains. Lastly, we highlight the principles-based framework proposed by Hay et al. [ 47 ] to enable the sound and fair evaluation of DP mech-anisms. These principles extend well into this domain and should be adhered to across the evaluative portion of this systemisation, as demonstrated with our examples in Sec. 4.1. 
+
+## 4 Illustrative Evaluations 
+
+We provide two exemplar evaluations that demonstrate our systemi-sation in practice. To do this, we assume the role of a social network data practitioner under two different scenarios (one focusing on edge-DP (Sec. 4.2), the other on node-DP (Sec. 4.3)), and conduct evaluations accordingly to illustrate the evaluative portion of our framework. For both evaluations, we consider mechanisms that represent the SotA, published in ICORE [ 57 ] A* or A-ranked venues from the last decade. Inclusion and exclusion criteria for methods evaluated are handled by applying O1 and O2 ; their applications in Scenarios 1 and 2 are shown in Tables 5 and 7 respectively. Together, these evaluations provide a SotA benchmark of recent developments in DP graph publishing in the social networking do-main, one of the most widespread applications in the literature. We emphasise, these results do not necessarily translate to other do-mains. Our deliberate focus on a single domain exemplifies practical instantiations of our systemisation. Accounting for domain-specific variations in utility metrics and relevant threat models requires an infeasible scale of evaluations, beyond our scope. SoK: Practical Aspects of Releasing Differentially Private Graphs                                               
+
+> Facebook LastFM GitHub Brightkite
+> [86] [122] [121] [23] # Nodes 4039 7624 37 700 58 228
+> # Edges 88 234 27 806 289 003 214 078
+> Density 0.0108 0.0010 0.0004 0.0001
+> H. Diameter 3.2618 4.8742 3.0680 4.8982
+> Assortativity 0.0636 0.0170 −0.0752 0.0108
+> Modularity 0.8348 0.8143 0.4537 0.6862
+> Infl. Max. Sp. 58 .7196 9.6470 29 .7435 12 .4432
+> L.P. AUROC 0.9666 0.7930 0.9134 0.8259
+> # Node Classes No Labels 5*2No Labels N.C. F1-Score No Labels 0.2426 0.6207 No Labels
+
+Table 4: Dataset properties. Key: * = After preprocessing. H. = Harmonic; Infl. Max. Sp. = Influence Maximisation Spread; L.P. = Link Prediction; N.C. = Node Classification. 
+
+## 4.1 Evaluation Methodology 
+
+For both evaluations, we adopted the following methodology. Each mechanism was evaluated across twelve privacy budgets ( 𝜖 ) chosen to reflect the exponential relationship: 𝜖 ∈ [0.5, 0.75, 1, 1.5, 2, 3, 4.5, 6.5, 9, 12, 16, 20]. This design maintains consistency between the amount of noise (privacy) and measured utility, thereby clarifying observable trends. Intuitively, the difference between 𝜖 = 1 and 
+
+𝜖 = 2 is more drastic than that between 𝜖 = 11 and 𝜖 = 12 , which our chosen values reflect. This also enables us to efficiently cover a broader range of 𝜖 , addressing what practitioners may consider to be “strong”, “moderate”, and “weak” privacy regimes in real-world policy settings. They approximately follow an exponential growth pattern; however, rounded values were selected to maintain comparability with existing studies. For each method, 10 trials were run across the 12 privacy budgets, yielding 120 graphs for measurement. Reported results correspond to trial averages. After generating the private graphs, utility and empirical pri-vacy evaluations were performed. Due to the high computational demands of some attacks, evaluations were performed on the small-est dataset over a subset of privacy budgets: 𝜖 ∈ [ 1, 3, 9], with the average taken across 10 trials for each. 
+
+## 4.2 Example Scenario 1: Edge Privacy 
+
+For the first scenario, we assume the role of a practitioner in the social network analysis domain, concerned with ensuring privacy over the structural information (i.e., edges) of their data. We outline the scenario details according to the objectives in our systemisation: 
+
+4.2.1 O1. Originally sourced from the Stanford Network Analy-sis Project repository [ 85 ], we have four static, undirected, node-attributed social graphs: Facebook [ 86 ], LastFM [ 122 ], GitHub [ 121 ], and Brightkite [ 23 ]. To evaluate generalisability within our domain, the datasets vary in size and sub-domain (online social, music, de-velopment, and location-based, respectively). Several mechanisms that process node features [ 20 , 69 ] are de-signed for binary attributes. Following [ 20 ], we limit the number of features to 50 . For the Facebook dataset, which contains missing data, we retain the 50 features with the fewest missing entries. The other datasets have categorical features, which we one-hot encode. To preserve end-to-end privacy, target variables are excluded dur-ing preprocessing. Instead, we heuristically select the 50 features with the highest entropy. The LastFM dataset initially has 18 target                      
+
+> Work Privacy Mechanism Efficient Reproducible
+> DPCAG [165] Edge-DP #
+> CGT [155] Edge-ADP G##
+> PrivGraph [157] Edge-DP
+> DPGVAE [151] Edge-ADP
+> DPGGAN [151] Edge-ADP
+> CAGMDP [20] (Edge & Node-Att.)-DP
+> Eliáš et al. [32] Edge-ADP ##
+> PHDP [40] Edge-DP #
+> LDPGen [117] Edge-DP
+> TriCycLe [69] (Edge & Node-Att.)-DP
+> TmF [107] Edge-DP
+> DER [19] Dep. Edge-DP
+
+Table 5: Application of O1 and O2 for edge-DP mechanism selection in Scenario 1 . We then evaluate fully-satisfying works. Satisfaction Key: = Full, G# = Partial, # = None. 
+
+classes which we reduce to 5 via 𝑘 -means clustering. This improves classification interpretability before evaluation, thereby enabling more stable and meaningful measurement of performance changes resulting from the application of privacy mechanisms. We implement centralised and localised mechanisms. We accept a small probability of failure, 𝛿 = 10 −5, arising from ADP. We also accept the potential weakening of guarantees from applying DP over possibly non-independent edges. Thus, empirical validation is required to assess practical privacy preservation ( O3 ). 
+
+4.2.2 O2. Mechanisms must be computationally feasible on our system: a machine with Ubuntu 24.04 LTS, an AMD EPYC 7763 64-Core processor, 500GB of RAM, and two NVIDIA RTX A6000 GPUs with 48GB of VRAM each. As per Sec. 3.3.2, they must also be reproducible. The first column of Table 5 shows mechanisms avail-able after applying O1 , and the next two show O2 . The authors of CGT [ 155 ] note an inability to achieve convergence using DP-SGD on a transformer, thus rendering the method a theoretical result and not reproducible. Eliáš et al. noted their method is implementable with a time complexity of 𝑂 (𝑛 7), inefficient given the scale of our datasets. We then include satisfactorily efficient and reproducible works in our evaluation; we were unable to obtain source code for those remaining works indicated as ‘not reproducible’. 
+
+4.2.3 O3. We adopt the following threat model. Given a sensitive input graph 𝐺 = (𝑉 , 𝐸 ), a mechanism 𝑀 outputs a private ver-sion of it, 𝐺 ′, under edge-DP, thus protecting edges, i.e., structural information. An adversary has two potential goals: to correctly determine whether some (𝑢, 𝑣 ) ∈ 𝑉 ×𝑉 is such that (𝑢, 𝑣 ) ∈ 𝐸 (edge prediction), and to produce an estimated set of edges ˜𝐸 that overlaps substantially with 𝐸 (edge set reconstruction). The adversary has no privileged access or background knowledge, only access to 𝐺 ′;however, it is known that node identifiers align between 𝐺 and 𝐺 ′.To evaluate, we perform a link prediction task, reporting accu-racy, and apply Azogagh et al.’s GRAND reconstruction attack [ 4], reporting relative absolute error, as defined in App. Table 9. 
+
+4.2.4 O4. In our utility evaluation, we aim to investigate how different methods preserve structural information. As there are many ways to describe this, we select a large set of descriptive, simulative, and predictive tasks to quantify different aspects of structural preservation. Formal definitions are provided in App. A. D’Silva et al. 
+
+Descriptive Metrics. We group descriptive metrics into local (node-level) and global (graph-level) [ 6]. For local statistics, we report distributional errors for node degrees, betweenness centralities, closeness centralities, and clustering coefficients, which respec-tively capture connectivity, information flow, reachability, and co-hesion. Using full distributions rather than aggregates provides a nuanced view of structural fidelity. Preserving such properties is es-sential for maintaining the utility of downstream tasks that rely on realistic structural patterns. We use the Wasserstein distance [ 138 ]to measure distribution errors with respect to the original graphs, as it captures ordered value shifts, is robust to disjoint data, and maintains interpretability. For the larger GitHub and Brightkite datasets, computing exact betweenness and closeness centralities is infeasible due to superquadratic complexities [ 84 ]. Thus, we use approximation algorithms by Riondato and Kornaropoulos [ 118 ] for betweenness and Cohen et al. [ 25 ] for closeness, each configured to ensure errors within 1 % of actual values. Global statistics assess the preservation of global structural prop-erties that underpin many downstream analytical tasks. We re-port errors in density, harmonic diameter (chosen over standard diameter to remain meaningful for disconnected graphs), assor-tativity, and modularity. These capture sparsity, reachability, ho-mophily, and community structure, respectively. Preserving such traits is essential for application-oriented utility. For example, spar-sity, small-world characteristics, and “birds-of-a-feather” commu-nity behaviour are expected in social graphs [ 100 , 143 ]. We report absolute errors for all global metrics, except for harmonic diameter, where relative error is used due to its scale-dependent nature. We also report the Adjusted Rand Index (ARI) [56], which mea-sures the chance of agreement between clusterings. This assesses the preservation (utility) of clusterings within the original and private graphs. As the datasets lack community labels, we obtain partitions detected by the Louvain method [11]. 
+
+Simulative Tasks. We simulate influence maximisation to mea-sure the preservation of realistic diffusion processes. Relevant ap-plications include information dissemination [ 129 ] and behavioural modelling [ 158 ]. For each graph, we run 1000 simulations using the TIM+ algorithm [ 134 ] under the Independent Cascade diffusion model [ 74 ], starting from 1 % of the nodes. We report the absolute error in the percentage of influenced nodes to quantify how closely the private graph replicates the dynamics of the original. 
+
+Predictive Tasks. To quantify the utility of predictive analyses, we compare the performance of ranking- and outcome-inference tasks across non-private and private graphs. Predictive task performance is a direct proxy for utility in many real-world applications. For recommendation tasks, we report the Normalised Discounted Cumulative Gain (NDCG) [ 60 ], which accounts for both the rele-vance and ranking. Node scores are computed with PageRank [ 110 ], a widely adopted metric balancing influence and communicability. We evaluate utility on two learning tasks: link prediction [ 162 ]and node classification [ 79 ]. For private graphs, we train a two-layer Graph Convolutional Network (GCN) [ 79 ] and report absolute errors in the AUROC for an edge-prediction task on datasets with labelled nodes (LastFM and GitHub). For node classification, we use another two-layer GCN with feature augmentation generated from a Node2Vec model, using all recommended parameters from the original publication [ 44 ]. We report the absolute error in the F1-score. These metrics were selected for their robustness under class imbalance, a common property of real-world graphs [6]. Both GCNs use a hidden layer dimension of 256 , a 25 % dropout rate, and the Adam optimiser [ 77 ] with a learning rate of 0.01 .These hyperparameters and architectures were selected as standard, broadly applicable defaults commonly used in the literature [ 79 ]. Our goal is not to optimise model performance but to ensure a consistent setup for comparing the relative impact of graph privati-sation methods on downstream learning tasks. We use a 80 /10 /10 
+
+split for training, validation, and testing. To accurately evaluate util-ity preservation, the same test set used for the unprotected graph is applied to the private graph, isolating the effect of privatisation. 
+
+4.2.5 Utility Results and Discussion. We present results as plots (Fig. 2) due to the multidimensional nature of our measurements. In our repository, we provide numerical, tabular results and further plots. During the evaluation, we found that LDPGen significantly overestimated graph density in smaller privacy budgets, render-ing our influence maximisation simulations computationally in-feasible. Thus, we excluded their evaluation for privacy budgets 
+
+𝜖 ∈ [ 0.5, 0.75 ] for the GitHub and Brightkite datasets. 
+
+Descriptive Analyses. Our descriptive graph metrics capture topo-logical structure, providing insights into reachability, connectiv-ity, node importance, clusterings, and community structure. Their preservation is quantified by measuring errors between metrics on non-private and private graphs. Lower errors imply greater utility. Reachability and connectivity are quantified with density, har-monic diameter, and degree distributions. Most methods replicate graph density with reasonable accuracy; however, smaller 𝜖 tend to produce overly dense graphs, as shown in Fig. 2(e). This is a known trait of edge-DP methods, where false edges are added for indistin-guishability [ 166 ]. This inflates connectivity and reachability, most notably in LDPGen due to its stricter local-DP guarantees. Har-monic diameters (Fig. 2(f)) are generally well-preserved; however, the deep learning methods (DPGGAN and DPGVAE) incur higher errors on larger datasets, implying a bias towards underestimat-ing connectivity. Since these methods accurately estimate density, inflated harmonic diameters suggest reachability issues. Degree distributions are approximated well by most methods (Fig. 2(a)), though TmF and PrivGraph underperform under smaller 𝜖 . A closer inspection of their respective degree distributions (available in our repository) indicates a tendency to overestimate the proportion of lower-degree nodes, leading to an underestimation of connectivity. Node importance, underpinning many downstream tasks such as influence maximisation, is measured using centrality metrics that correlate with connectivity. We observe similarities between de-gree and betweenness (Fig. 2(c)) and closeness centrality (Fig. 2(d)) distributions, confirming the link between local connectivity and shortest-path structures. Edge-and-node-attribute-DP methods, CA-GMDP and TriCycLe, preserve betweenness most consistently. Gen-erally, methods replicate closeness less accurately, likely because it relies on global reachability. Larger errors were observed at smaller 
+
+𝜖 for LDPGen, likely due to inflated density, and PrivGraph, whose elevated harmonic diameter errors imply reachability limitations. For most associative and community-based metrics, most meth-ods exhibit minimal sensitivity to 𝜖 . We observe in Fig. 2(b) that SoK: Practical Aspects of Releasing Differentially Private Graphs 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+10 
+
+20 
+
+30 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+100 
+
+200 
+
+300 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+100 
+
+200 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+1
+
+2
+
+1e3 Brightkite 
+
+(a) Degree Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+Brightkite 
+
+(b) Clustering Coefficient Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+1e 4 Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+2
+
+4
+
+1e 4 LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.5 
+
+1.0 1e 4 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+1e 5 Brightkite 
+
+(c) Betweenness Centrality Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+5
+
+10 
+
+15 
+
+Brightkite 
+
+(d) Closeness Centrality Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.02 
+
+0.04 
+
+0.06 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.000 
+
+0.005 
+
+0.010 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+1
+
+2
+
+3
+
+1e 3 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+1e 4 Brightkite 
+
+(e) Density Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+5
+
+10 
+
+15 
+
+Brightkite 
+
+(f) Harmonic Diameter Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+Brightkite 
+
+(g) Assortativity Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+Brightkite 
+
+(h) Modularity Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 Brightkite 
+
+(i) Adjusted Rand Index 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 Brightkite 
+
+(j) Normalised Discounted Cumulative Gain over PageRank Scores 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+Brightkite 
+
+(k) Influence Maximisation Spread Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.02 
+
+0.04 
+
+0.06 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.000 
+
+0.005 
+
+0.010 
+
+0.015 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+Brightkite 
+
+(l) Link Prediction AUROC Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.000 
+
+0.025 
+
+0.050 
+
+0.075 
+
+0.100 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+GitHub 
+
+(m) Node Classification F1 Score Error DER 
+
+TmF 
+
+TriCycLe 
+
+LDPGen 
+
+CAGMDP 
+
+DPGVAE 
+
+DPGGAN 
+
+PrivGraph 
+
+Figure 2: Results for Scenario 1. Distribution errors are quantified with the Wasserstein distance; harmonic diameter with relative error; and remain-ing error-based metrics with absolute error. All values are averaged over 10 independent trials. Each metric is assigned an alphabetical identifier. 
+
+clustering coefficient distributions are generally better preserved in larger datasets, with TmF, CAGMDP, and TriCycLe performing most competitively. By contrast, PrivGraph underestimates assor-tativity (Fig. 2(g)) for smaller 𝜖 , failing to capture homophily, the tendency of similar nodes to connect, resulting in larger errors than other methods. Across all methods, modularity is underestimated (Fig. 2(h)), suggesting a shared weakness in replicating community structures. Nevertheless, PrivGraph, TmF, and CAGMDP showed improvement with larger 𝜖 . Lower assortativity and reduced mod-ularity preservation are expected to result in poorer community preservation, confirmed by ARI results: most methods yield near-zero ARI across all 𝜖 , shown in Fig. 2(i), implying randomised com-munity labels. Only TmF and DER (for the Facebook dataset only) demonstrate preservation at moderate to large 𝜖 .In summary, most methods preserve basic structural properties reasonably well; only a subset, particularly CAGMDP, TriCycLe, and TmF, consistently achieve stronger utility for descriptive anal-yses. More nuanced properties, such as centralities and community structures, vary significantly across methods. To maximise utility, practitioners should prioritise the preservation of specific structural features most relevant to their intended tasks. 
+
+Simulative Analyses. Influence maximisation was measured by spread error, with results shown in Fig. 2(k). Since this task depends heavily on connectivity, results strongly correlate with the connec-tivity metrics. Higher connectivity accelerates diffusion, leading to larger spreads—most evident in methods that overestimate density, such as LDPGen, DER, CAGMDP, and TriCycLe. Interestingly, TmF, D’Silva et al. 
+
+despite accurate density preservation, shows high spread error, likely due to poor preservation of node roles along paths. Con-versely, DPGGAN and DPGVAE exhibit reduced spread accuracy, consistent with inflated harmonic diameters and longer paths. These observations highlight how connectivity properties af-fect influence propagation: higher degrees improve hub placement, while larger harmonic diameters suggest slower diffusion due to longer average paths between nodes. Consequently, methods that best preserve utility for influence maximisation are generally those that most effectively preserve connectivity. Under a smaller 𝜖 , Priv-Graph is the most consistent, while under a larger 𝜖 , TmF, TriCycLe, DPGGAN, and DPGVAE become viable options. 
+
+Predictive Tasks. The PageRank NDCG results (Fig. 2(j)) indicate decent utility for PageRank-related ranking and recommendation tasks. Most methods preserve node rankings well, with LDPGen achieving nearly perfect alignment under moderate and larger 𝜖 .Errors in link prediction and node classification performance are shown in Figs. 2(l) and 2(m), respectively. Across both tasks, most methods perform similarly, apart from the edge-and-node-attribute-DP methods, CAGMDP and TriCycLe. Their lower utility is explained by the added noise required to privatise semantic at-tributes, which directly impacts feature quality. Despite this, pre-dictive performance error remains generally low across methods. We measure predictive performance error rather than raw accu-racy to assess utility preservation. This highlights a key tension: strong predictive utility can conflict with privacy guarantees. For example, accurate link prediction on edge-DP graphs constitutes a reconstruction attack, since predicted edges replicate those of the original sensitive graph, undermining the edge-DP guarantee. Similarly, precise node classification implies effective recovery of node attributes (i.e., target classes), increasing susceptibility to node re-identification [50], opposing the goal of node-DP. We formalise this trade-off using the hypothesis-testing inter-pretation of DP by Kairouz et al. [ 70 ]. Let 𝐴 be an 𝜖 -DP mecha-nism and 𝐹 : 𝐴 (·) ↦ → { 0, 1} be a binary predictor on the privacy target (e.g., 𝐴 may be an edge-DP mechanism and 𝐹 a link predic-tor). Then, we have 𝛼 ≤ 𝑒 𝜖 𝛽 , where 𝛼 = Pr [𝐹 (𝐴 (𝑋 )) = 1] and 
+
+𝛽 = Pr [𝐹 (𝐴 (𝑋 ′)) = 1]. With a uniform prior, the accuracy of 𝐹 is 
+
+𝐹 acc = 12 𝛼 + 12 (1 − 𝛽 ) = 12 + 𝛼 −𝛽  
+
+> 2
+
+. We also have 𝛼 − 𝛽 ≤ ( 𝑒 𝜖 − 1)𝛽 ≤
+
+𝑒 𝜖 − 1. Therefore, the prediction advantage over random guessing is 𝐹 adv = 𝐹 acc − 12 = 𝛼 −𝛽  
+
+> 2
+
+≤ 𝑒 𝜖 −12 . Then, to achieve 𝐹 adv > 0, the required privacy budget is lower bounded by 𝜖 ≥ ln (2𝐹 adv + 1).This reflects the trade-off between privacy and prediction accuracy when the privacy and prediction targets align, such as in edge-DP versus link prediction, or node-DP versus node re-identification. Thus, when downstream predictive tasks are known in advance, it is crucial to assess whether privacy and utility are fundamen-tally opposed in that setting, and whether compromises in privacy budgets, notions, and granularity are necessary. 
+
+4.2.6 Empirical Privacy Results and Discussion. Results for the Face-book dataset are shown in Fig. 3 for the link prediction task and Table 6 for the reconstruction attack. Variability across methods and 𝜖 is minimal: link prediction accuracy remains around 60 % , and reconstruction attacks consistently reduce relative absolute error to about 78 % , cutting error by more than half for most methods. 0.5    
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+> Privacy Budget ( )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 Facebook
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+> Privacy Budget ( )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 LastFM
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+> Privacy Budget ( )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 GitHub
+> 0.5
+> 0.75
+> 1
+> Pr
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Link Prediction Accuracy Non-Private
+> DER
+> TmF
+> TriCycLe
+> LDPGen
+> CAGMDP
+> DPGVAE
+> DPGGAN
+> PrivGraph
+
+Figure 3: Link prediction accuracy against edge-DP methods, evaluated on the Facebook dataset.                                                                    
+
+> Method Private Graph Reconstruction
+> 𝜖 =1𝜖 =3𝜖 =9𝜖 =1𝜖 =3𝜖 =9
+> DER 165.046 152.772 149.11 78.641 78.741 78.719 TmF 140.268 139.625 136.42 78.594 78.59 78.683 TriCycLe 144.936 140.939 139.82 78.779 78.668 78.656 LDPGen 278.242 151.122 141.796 78.548 78.765 78.825 CAGMDP 150.165 141.663 139.61 78.828 78.648 78.593 DPGVAE 140.662 140.638 140.629 78.528 78.731 78.7 DPGGAN 140.626 140.689 140.706 78.856 78.63 78.729 PrivGraph 133.534 136.287 136.616 78.607 78.64 78.735
+
+Table 6: Relative absolute error of the reconstruction at-tack [4] against edge-DP methods on the Facebook dataset. 
+
+While these tasks do not achieve optimal success, they recover a significant amount of sensitive information (the edges, in this case). The consistent success across methods and budgets suggests a shared vulnerability. To identify this, we refer to our systemisa-tion diagram (Fig. 1). Starting from the bottom, we evaluated link prediction, which simultaneously serves as a membership inference attack under our threat model (as discussed in Sec. 4.2.5), plus a reconstruction attack. Tracing the relevant lines up the right-hand side, we identify a large set of possible vulnerabilities; however, the one that is critically shared amongst all methods is the data independence assumption issue. As shown in [ 75 ] and noted in Sec. 3.1.3, edges are rarely independent in practice, yet edge-DP mechanisms implicitly assume so. The observed consistency of the empirical attacks despite vary-ing 𝜖 indicates that while the DP mechanisms calibrate noise to individual edge-level sensitivity, the attacks exploit global and multi-hop structural correlations. In the large, sparse graphs (typical of social networks [ 6 ]) evaluated here, such structural patterns have higher signal-to-noise ratios; thus, varying 𝜖 is not guaranteed to significantly affect higher-order features leveraged by the at-tack. These results indicate a substantial empirical privacy loss, an essential consideration for practitioners. 
+
+## 4.3 Example Scenario 2: Node Privacy 
+
+For the second scenario, we assume a similar role to the first, but focus on node privacy rather than edges. For O1 , we use the same datasets and accept the same guarantees as Scenario 1 , but define our privacy target as the nodes. For O2 , we use the same machine configuration and similarly express these first two objectives in Table 7. We evaluate all node-DP mechanisms from our taxonomy in Table 2, noting that PrivCom [ 164 ] is only partially efficient due to its super-quadratic time complexity, limiting its evaluation to the two smaller datasets. SoK: Practical Aspects of Releasing Differentially Private Graphs           
+
+> Work Privacy Mechanism Efficient Reproducible
+> PrivDPR [163] Node-ADP
+> 𝜋 𝑣 , Jian et al. [68] Node-DP
+> 𝜋 𝑒 , Jian et al. [68] Node-ADP
+> PrivCom [164] Node-ADP G#
+
+Table 7: Application of O1 and O2 for node-DP mechanism selection in Scenario 2 . Satisfaction Key: = Full, G# = Partial. 
+
+4.3.1 O3. We adopt the following threat model. Given a sensi-tive input graph 𝐺 , a mechanism 𝑀 outputs a private version of a graph, 𝐺 ′ = (𝑉 ′, 𝐸 ′), under node-DP, thus protecting against the inference of any node’s presence in the graph, i.e., node identifi-cation. An adversary attempts to de-anonymise (i.e., re-identify) the nodes in the graph by producing a mapping 𝐹 : 𝑉 ′ ↦ → 𝑉 of nodes from the private graph 𝐺 ′ to those of the sensitive graph 𝐺 
+
+(node de-anonymisation). The adversary has no privileged access or background knowledge, only access to 𝐺 ′. They also have no partial mapping of pre-known seeds (anchor pairings) from 𝑉 ′ to 
+
+𝑉 , and thus must conduct a seed-free de-anonymisation attack. We evaluate node-DP methods on the seed-free de-anonymisation attack by Pedarsani et al. [ 111 ]. However, as noted in Sec. 3.1.3 ( L3 
+
+of our systemisation), edges or nodes may be perturbed to achieve node-DP, meaning some methods do not maintain consistent node mappings, preventing ground-truth evaluation of mapping accuracy. Thus, we adopt two popular ground-truth-agnostic metrics from graph de-anonymisation [ 104 ] and alignment literature [ 31 , 119 ]: edge correctness, and the symmetric substructure score. 
+
+4.3.2 O4. We use the same local and global graph metrics described in Sec. 4.2.4, with additional relative error for the number of nodes and edges due to variability in graph sizes. For the same reason, we excluded partition-based descriptive metrics and the NDCG recommendation ranking task, as these require the node dimensions to be similar. We further excluded the simulation and remaining predictive tasks due to PrivCom’s tendency to produce overly dense graphs, as well as the methods by Jian et al., which produced graphs that were too small, rendering these comparisons unsound. Due to PrivCom’s inefficiency, evaluation was feasible only on the two smaller datasets, Facebook and LastFM. To summarise, we report the errors in the number of nodes, number of edges, density, harmonic diameter, assortativity, and modularity. The errors in the number of nodes, the number of edges, and the harmonic diameter are quantified using relative errors, given their scale-dependent nature. All others are quantified with absolute error. We also use the Wasserstein distance to quantify errors in the distributions of degrees, clustering coefficients, and centralities (betweenness and closeness). 
+
+4.3.3 Utility Results and Discussion. Results are presented in Fig. 4, with further plots available in our repository, similarly to Scenario 1. PrivCom provides node-DP by approximating the Katz Index of the input graph, estimating the eigen-decomposition using a private variant of Oja’s method, and then generating a noisy Katz matrix to construct a private graph via the graph Laplacian. Since the node set of the private output graph remains identical to that of the input graph, a large number of edges must be added to make the nodes indistinguishable, thereby ensuring node-DP. This explains the high error in the density and number of nodes for PrivCom. Jian et al. recently proposed two node-DP algorithms: 𝜋 𝑣 , which relies on vertex perturbation, and 𝜋 𝑒 , which relies on edge pertur-bation. While promising results are claimed, our analysis raises concerns about their practical utility for real-world graphs. At the core of 𝜋 𝑣 lies two parameters, 0 < 𝑝 < 1 and 0 < 𝑞 < 1,which control the fraction of vertices to be removed and added (with randomly connected edges), respectively. For DP to hold, these parameters must satisfy the constraints: 1/𝑝 ≤ 𝑒 𝜖 , and 𝑝 + ( 1 −
+
+𝑝 )2𝑛 /( 1 − 𝑞 ) ≤ 𝑒 𝜖 , where 𝑛 = |𝑉 |. However, since 0 < 𝑞 < 1, we get that 𝑝 + ( 1−𝑝 )2𝑛 ≤ 𝑒 𝜖 . Then, 𝑝 ≥ 1− ( 𝑒 𝜖 −1)/( 2𝑛 −1), which means for 𝑛 > 1, the constraint implies 𝑝 ≥ 1 − 𝑒 𝜖 /2𝑛 , regardless of the choice of 𝑞 . If 𝑝 ≃ 1, then all nodes are removed, meaning the output graph is randomly generated, providing trivial privacy. For example, even with a generous privacy budget of 𝜖 = 100 and a relatively small graph of 𝑛 = 200 , we still find that 𝑝 ≥ 1 − 1.673 × 10 −17 ,which converges ever closer to 1 as 𝑛 increases. The 𝜋 𝑒 algorithm faces a similar issue. Although it introduces an optimal estimation procedure for its probability parameters, in practice, most edges are removed before random edges are added, severely undermining the utility. As shown in Fig. 4, both 𝜋 𝑣 and 𝜋 𝑒 exhibit substantially larger errors across all metrics. To emphasise, this effect exists even in the simplest structural preservation metrics, such as errors in the number of nodes, the number of edges, and the density. A fail-ure to preserve these foundational structural properties inevitably impacts the preservation of more complex, nuanced topological properties that capture cohesion and community structure, thus offering considerably less utility for downstream analytical tasks than other approaches. In contrast, PrivDPR preserves most structural properties well, performing at least as well as other node-DP methods across most statistics. Its advantage likely stems from being the only deep-learning-based node-DP method that synthesises graphs via a Page-Rank-based approach. However, this comes at a cost in scalability, as adjacency matrix parameters must be stored in GPU memory, which limits the dataset size. Nevertheless, PrivDPR establishes itself as a SotA method for node-DP graph synthesis, provided that scalability is not a constraint for practitioners. 
+
+4.3.4 Empirical Privacy Results and Discussion. We present the re-sults for empirical privacy preservation in Table 8. Since the 𝜋 𝑣 and 
+
+𝜋 𝑒 methods produced graphs that were drastically different from their inputs, we evaluated attacks only on PrivCom and PrivDPR. As in Scenario 1, results do not vary with privacy budget, likely for the same reasons mentioned in Sec. 4.2.6. Specifically, they again suggest that higher-order structures tend to not be significantly affected by DP noise. However, the results differ across methods: PrivCom offers weaker protection than PrivDPR, especially for edge correctness, where 50 % of edges can be correctly mapped, compared to 0.4 % for PrivDPR, indicating much stronger protection. PrivCom’s tendency to produce overly dense graphs likely inflates edge correctness, as more edges increase the likelihood of overlap with the original graph. Both methods perform reasonably well on the symmetric sub-structure score, which measures the number of conserved edges D’Silva et al. 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+Brightkite 
+
+(a) Number of Nodes Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+200 
+
+400 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 Brightkite 
+
+(b) Number of Edges Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+1e3 Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+1
+
+2
+
+3
+
+1e3 LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+1e4 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+1
+
+2
+
+1e4 Brightkite 
+
+(c) Degree Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+Brightkite 
+
+(d) Clustering Coefficient Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.000 
+
+0.005 
+
+0.010 
+
+0.015 
+
+0.020 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.000 
+
+0.005 
+
+0.010 
+
+0.015 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.01 
+
+0.02 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+Brightkite 
+
+(e) Betweenness Centrality Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+1e4 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+1e4 Brightkite 
+
+(f) Closeness Centrality Distribution Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+Brightkite 
+
+(g) Density Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+1e5 Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+1e5 LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+1
+
+2
+
+3
+
+1e7 GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0
+
+2
+
+4
+
+1e7 Brightkite 
+
+(h) Harmonic Diameter Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+Brightkite 
+
+(i) Assortativity Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+LastFM 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+GitHub 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+Brightkite 
+
+(j) Modularity Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+Facebook 
+
+> 0.5
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.00 
+
+0.02 
+
+0.04 
+
+0.06 LastFM 
+
+(k) Link Prediction AUROC Error 0.5 
+
+> 0.75
+> 1
+> 1.5
+> 2
+> 3
+> 4.5
+> 6.5
+> 9
+> 12
+> 16
+> 20
+
+Privacy Budget ( ) 
+
+0.000 
+
+0.005 
+
+0.010 
+
+0.015 
+
+(l) Node Classification 
+
+F1 Score Error (LastFM) PrivCom 
+
+> v
+> e
+
+PrivDPR 
+
+Figure 4: Results for Scenario 2. Distribution errors are quan-tified with the Wasserstein distance; the number of nodes, number of edges, and harmonic diameter with relative error; and remaining error-based metrics with absolute error. All values are averaged over 10 independent trials. 
+
+Method Edge Correctness (%) Symmetric Substructure Score (%) 
+
+𝜖 = 1 𝜖 = 3 𝜖 = 9 𝜖 = 1 𝜖 = 3 𝜖 = 9
+
+PrivCom 50 .081 50 .058 51 .152 1.067 1.067 1.090 
+
+PrivDPR 0.258 0.348 0.246 0.221 0.299 0.211 
+
+Table 8: Results of the de-anonymisation attack [ 111 ] against relevant node-DP methods, on the Facebook dataset. 
+
+relative to the union of both graphs, with PrivDPR again offering slightly better protection. Finally, and as mentioned briefly in Sec. 4.3.1, evaluating node de-anonymisation attacks against node-DP mechanisms is challenging. Most such mechanisms do not maintain a mapping between the sensitive input and privatised output graphs, making ground-truth-based metrics infeasible. This necessitates reliance on indirect and ambiguous ground-truth–agnostic measures, which complicates the interpretation and contextualisation of results. 
+
+## 5 Future Directions and Limitations 
+
+Future Directions. We identify and summarise open avenues for future research. First, our systemisation revealed that temporal and attributed graphs have received limited attention. As datasets grow in scale and semantic richness, advancing privacy-preserving methods for these graph models becomes increasingly important. Second, our findings revealed a strong focus on edge-DP meth-ods. However, in many cases, nodes represent entities that require privacy, making node-DP equally, if not more, critical. Yet, our eval-uations showed that existing node-DP approaches offer insufficient utility for practical use, underscoring the need for improvement. Third, we observed an emerging trend of using deep learning techniques to generate private graphs, due to their ability to model complex structural and semantic patterns. While promising, this area remains underexplored, with current methods still in their infancy. Developing methods that balance privacy guarantees with the expressive power of deep learning models is a valuable direction. Fourth, most existing methods use DP mechanisms that neglect dependencies. Since graphs inherently capture relationships, DP SoK: Practical Aspects of Releasing Differentially Private Graphs 
+
+definitions that do not account for this cannot provably guarantee privacy. Accounting for dependencies inevitably requires more noise, likely degrading utility. Small-world networks, common in social graphs, offer a promising starting point due to their short-range dependencies [ 143 ]. The alignment of BP with policy-graph structures represents a promising avenue for future research. Fifth, we found few methods explicitly targeting the privacy of edge attributes (beyond edge-weights), while keeping structure public. While this privacy notion is strictly weaker than edge-DP, we posit that it may offer greater utility given the established trade-off. This is particularly valuable in domains where protecting edge attributes suffices, e.g., transactional or communication networks. Last, our evaluation results highlighted ongoing challenges, par-ticularly in preserving clustering and community structures, and the inherent tension between privacy and predictive utility when their targets align. Each presents valuable future directions. 
+
+Limitations. Despite the contributions of this work, we acknowl-edge the following limitations. First, our scope was confined to indistinguishability-based notions of privacy, focusing on DP and its variants. Alternative notions of privacy such as 𝑘 -anonymity [ 124 ], 
+
+𝑙 -diversity [ 96 ], information-theoretic definitions [ 8], multiparty computation [ 92 ], or other cryptographic approaches, were not considered. Extending systematisation to these paradigms would be a valuable contribution. Second, our illustrative evaluations benchmark only social net-work results. Whether these findings generalise to other domains remains an open question; future work could instantiate our frame-work across diverse application areas. Third, as noted in Sec. 4, larger datasets were excluded due to computational inefficiencies in specific methods. While our selected datasets reveal general trends across varying sizes, scale-dependent effects would be more apparent on larger graphs. With many recent graph datasets [ 52 , 85 , 120 ] far exceeding our scale, the primary constraint is computational resources rather than data availability. 
+
+## 6 Conclusion 
+
+In this work, we proposed a novel systemisation of differentially private graph release methods, with a particular emphasis on crit-ical practical considerations. The systemisation fuses a modular taxonomy of existing approaches with dimensions of vulnerabili-ties and attacks, and practitioner-defined contexts. These additions equip both experts and non-experts to select, apply, and evaluate suitable methods for real-world use cases. In doing so, we have contributed to improving the understandability of DP graph re-lease approaches, mitigating the risks of invalid use and misleading claims about data protection. To demonstrate the use of our frame-work, we conducted two extensive empirical evaluations across social networks, providing a comprehensive benchmark within this domain. Finally, by releasing all code and results as open-source, we encourage reproducibility and further research. 
+
+## Acknowledgments 
+
+This research was supported by the Commonwealth through an Australian Government Research Training Program Scholarship 2.The authors also thank UNSW and the anonymous reviewers. 
+
+> 2
+
+DOI: 10.82133/C42F-K220 
+
+## References 
+
+[1] Martin Abadi, Andy Chu, Ian Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. 2016. Deep Learning with Differential Privacy. In 
+
+Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communica-tions Security (Vienna, Austria) (CCS ’16) . Association for Computing Machinery, New York, NY, USA, 308–318. doi:10.1145/2976749.2978318 [2] John M. Abowd. 2018. The U.S. Census Bureau Adopts Differential Privacy. In 
+
+Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining (London, United Kingdom) (KDD ’18) . Association for Computing Machinery, New York, NY, USA, 2867. doi:10.1145/3219819.3226070 [3] William Aiello, Fan Chung, and Linyuan Lu. 2001. A Random Graph Model for Power Law Graphs. Exp. Math. 10, 1 (2001), 53–66. doi:10.1080/10586458.2001. 10504428 [4] Sofiane Azogagh, Zelma Aubin Birba, Josée Desharnais, Sébastien Gambs, Marc-Olivier Killijian, and Nadia Tawbi. 2025. GRAND: Graph Reconstruction from Potential Partial Adjacency and Neighborhood Data. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (Toronto ON, Canada) (KDD ’25) . Association for Computing Machinery, New York, NY, USA, 47–58. doi:10.1145/3711896.3736988 [5] Lars Backstrom, Cynthia Dwork, and Jon Kleinberg. 2007. Wherefore art thou r3579x? anonymized social networks, hidden patterns, and structural steganography. In Proceedings of the 16th International Conference on World Wide Web (Banff, Alberta, Canada) (WWW ’07) . Association for Computing Machinery, New York, NY, USA, 181–190. doi:10.1145/1242572.1242598 [6] Albert-László Barabási and Márton Pósfai. 2016. Network science . Cambridge University Press, Cambridge. http://barabasi.com/networksciencebook/ [7] Smriti Bhagat, Irina Rozenbaum, and Graham Cormode. 2007. Applying link-based classification to label blogs. In Proceedings of the 9th WebKDD and 1st SNA-KDD 2007 Workshop on Web Mining and Social Network Analysis (San Jose, California) (WebKDD/SNA-KDD ’07) . Association for Computing Machinery, New York, NY, USA, 92–101. doi:10.1145/1348549.1348560 [8] Matthieu Bloch, Onur Günlü, Aylin Yener, Frédérique Oggier, H. Vincent Poor, Lalitha Sankar, and Rafael F. Schaefer. 2021. An Overview of Information-Theoretic Security and Privacy: Metrics, Limits and Applications. IEEE J. Sel. Areas Inf. Theory 2, 1 (2021), 5–22. doi:10.1109/JSAIT.2021.3062755 [9] Jeremiah Blocki, Avrim Blum, Anupam Datta, and Or Sheffet. 2012. The Johnson-Lindenstrauss Transform Itself Preserves Differential Privacy. In 2012 IEEE 53rd Annual Symposium on Foundations of Computer Science . 410–419. doi:10.1109/ FOCS.2012.67 [10] Jeremiah Blocki, Avrim Blum, Anupam Datta, and Or Sheffet. 2013. Differentially private data analysis of social networks via restricted sensitivity. In Proceedings of the 4th Conference on Innovations in Theoretical Computer Science (Berkeley, California, USA) (ITCS ’13) . Association for Computing Machinery, New York, NY, USA, 87–96. doi:10.1145/2422436.2422449 [11] Vincent D Blondel, Jean-Loup Guillaume, Renaud Lambiotte, and Etienne Lefeb-vre. 2008. Fast unfolding of communities in large networks. J. Stat. Mech: Theory Exp. 2008, 10 (oct 2008), P10008. doi:10.1088/1742-5468/2008/10/P10008 [12] Angela Bonifati, Irena Holubová, Arnau Prat-Pérez, and Sherif Sakr. 2020. Graph Generators: State of the Art and Open Challenges. ACM Comput. Surv. 53, 2, Article 36 (April 2020), 30 pages. doi:10.1145/3379445 [13] Felipe T. Brito, Victor A. E. Farias, Cheryl Flynn, Subhabrata Majumdar, Javam C. Machado, and Divesh Srivastava. 2023. Global and Local Differentially Private Release of Count-Weighted Graphs. Proc. ACM Manag. Data 1, 2, Article 154 (June 2023), 25 pages. doi:10.1145/3589299 [14] Sébastien Bubeck. 2015. Convex Optimization: Algorithms and Complexity. 
+
+Found. Trends Mach. Learn. 8, 3-4 (2015), 231–357. doi:10.1561/2200000050 [15] Jordi Casas-Roma, Jordi Herrera-Joancomartí, and Vicenç Torra. 2017. k-Degree anonymity and edge selection: improving data utility in large networks. Knowl. Inf. Syst. 50, 2 (01 Feb 2017), 447–474. doi:10.1007/s10115-016-0947-7 [16] Jordi Casas-Roma, Jordi Herrera-Joancomartí, and Vicenç Torra. 2017. A survey of graph-modification techniques for privacy-preserving on networks. Artif. Intell. Rev. 47, 3 (March 2017), 341–366. doi:10.1007/s10462-016-9484-8 [17] Liu Changchang, Chakraborty Supriyo, and Mittal Prateek. 2016. Dependence Makes You Vulnerable: Differential Privacy Under Dependent Tuples. Proc. 2016 Netw. Distrib. Syst. Secur. Symp. (2016). doi:10.14722/ndss.2016.23279 [18] Kai Chen, Xiaochen Li, Chen GONG, Ryan McKenna, and Tianhao Wang. 2025. Benchmarking Differentially Private Tabular Data Synthesis Algorithms. In 
+
+Will Synthetic Data Finally Solve the Data Access Problem? SynthData Workshop at the Thirteenth International Conference on Learning Representations (ICLR 2025) . https://openreview.net/forum?id=0bvWk1HuJC [19] Rui Chen, Benjamin C. M. Fung, Philip S. Yu, and Bipin C. Desai. 2014. Correlated network data publication via differential privacy. VLDB J. 23, 4 (01 Aug 2014), 653–676. doi:10.1007/s00778-013-0344-8 [20] Xihui Chen, Sjouke Mauw, and Yunior Ramírez-Cruz. 2020. Publishing Community-Preserving Attributed Social Graphs with a Differential Privacy Guarantee. Proc. Priv. Enhancing Technol. 2020 (10 2020), 131–152. doi:10.2478/ popets-2020-0066 D’Silva et al. 
+
+[21] Albert Cheu, Adam Smith, Jonathan Ullman, David Zeber, and Maxim Zhilyaev. 2019. Distributed Differential Privacy via Shuffling. In Advances in Cryptology – EUROCRYPT 2019 , Yuval Ishai and Vincent Rijmen (Eds.). Springer International Publishing, Cham, 375–403. [22] Elie Chicha, Bechara Al Bouna, Mohamed Nassar, Richard Chbeir, Ramzi A. Haraty, Mourad Oussalah, Djamal Benslimane, and Mansour Naser Alraja. 2021. A User-Centric Mechanism for Sequentially Releasing Graph Datasets under Blowfish Privacy. ACM Trans. Internet Technol. 21, 1, Article 20 (Feb. 2021), 25 pages. doi:10.1145/3431501 [23] Eunjoon Cho, Seth A. Myers, and Jure Leskovec. 2011. Friendship and mobility: user movement in location-based social networks. In Proceedings of the 17th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining 
+
+(San Diego, California, USA) (KDD ’11) . Association for Computing Machinery, New York, NY, USA, 1082–1090. doi:10.1145/2020408.2020579 [24] Aaron Clauset, Cristopher Moore, and M. E. J. Newman. 2008. Hierarchical structure and the prediction of missing links in networks. Nature 453, 7191 (01 May 2008), 98–101. doi:10.1038/nature06830 [25] Edith Cohen, Daniel Delling, Thomas Pajor, and Renato Werneck. 2014. Com-puting Classic Closeness Centrality, at Scale. COSN 2014 - Proc. 2014 ACM Conf. Online Soc. Netw. (08 2014). doi:10.1145/2660460.2660465 [26] Francesc Comellas and Jordi Diaz-Lopez. 2008. Spectral reconstruction of complex networks. Physica A 387, 25 (2008), 6436–6442. doi:10.1016/j.physa. 2008.07.032 [27] Nidhi Desai and Manik Lal Das. 2021. DeSAN: De-anonymization against Background Knowledge in Social Networks. In 2021 12th International Confer-ence on Information and Communication Systems (ICICS) . 99–105. doi:10.1109/ ICICS52457.2021.9464573 [28] Apple Differential Privacy Team. 2017. Learning with Privacy at Scale. https://docs-assets.developer.apple.com/ml-research/papers/learning-with-privacy-at-scale.pdf. [29] Cynthia Dwork. 2006. Differential privacy. In Proceedings of the 33rd In-ternational Conference on Automata, Languages and Programming - Volume Part II (Venice, Italy) (ICALP’06) . Springer-Verlag, Berlin, Heidelberg, 1–12. doi:10.1007/11787006_1 [30] Cynthia Dwork and Aaron Roth. 2014. The Algorithmic Foundations of Dif-ferential Privacy. Found. Trends Theor. Comput. Sci. 9, 3–4 (2014), 211–407. doi:10.1561/0400000042 [31] Mohammed El-Kebir, Jaap Heringa, and Gunnar W. Klau. 2015. Natalie 2.0: Sparse Global Network Alignment as a Special Case of Quadratic Assignment. 
+
+Algorithms 8, 4 (2015), 1035–1051. doi:10.3390/a8041035 [32] Marek Eliáš, Michael Kapralov, Janardhan Kulkarni, and Yin Tat Lee. 2020. Differentially private release of synthetic graphs. In Proceedings of the Thirty-First Annual ACM-SIAM Symposium on Discrete Algorithms (Salt Lake City, Utah) 
+
+(SODA ’20) . Society for Industrial and Applied Mathematics, USA, 560–578. [33] Dóra Erdős, Rainer Gemulla, and Evimaria Terzi. 2014. Reconstructing Graphs from Neighborhood Data. ACM Trans. Knowl. Discov. Data 8, 4, Article 23 (Aug. 2014), 22 pages. doi:10.1145/2641761 [34] Úlfar Erlingsson, Vasyl Pihur, and Aleksandra Korolova. 2014. RAPPOR: Ran-domized Aggregatable Privacy-Preserving Ordinal Response. In Proceedings of the 2014 ACM SIGSAC Conference on Computer and Communications Security 
+
+(Scottsdale, Arizona, USA) (CCS ’14) . Association for Computing Machinery, New York, NY, USA, 1054–1067. doi:10.1145/2660267.2660348 [35] Faezeh Faez, Yassaman Ommi, Mahdieh Soleymani Baghshah, and Hamid R. Rabiee. 2021. Deep Graph Generators: A Survey. IEEE Access 9 (2021), 106675– 106702. doi:10.1109/ACCESS.2021.3098417 [36] Michael Fire, Gilad Katz, Lior Rokach, and Yuval Elovici. 2013. Links Recon-struction Attack . Springer New York, New York, NY, 181–196. doi:10.1007/978-1-4614-4139-7_9 [37] Ove Frank and David Strauss. 1986. Markov Graphs. J. Am. Stat. Assoc. 81, 395 (1986), 832–842. doi:10.1080/01621459.1986.10478342 [38] Zhichun Fu, Peter Christen, and Jun Zhou. 2014. A Graph Matching Method for Historical Census Household Linkage. In Advances in Knowledge Discovery and Data Mining , Vincent S. Tseng, Tu Bao Ho, Zhi-Hua Zhou, Arbee L. P. Chen, and Hung-Yu Kao (Eds.). Springer International Publishing, Cham, 485–496. [39] Tianchong Gao and Feng Li. 2019. De-Anonymization of Dynamic Online Social Networks via Persistent Structures. In ICC 2019 - 2019 IEEE International Conference on Communications (ICC) . 1–6. doi:10.1109/ICC.2019.8761563 [40] Tianchong Gao and Feng Li. 2019. PHDP: Preserving Persistent Homology in Differentially Private Graph Publications. In IEEE INFOCOM 2019 - IEEE Conference on Computer Communications . 2242–2250. doi:10.1109/INFOCOM. 2019.8737584 [41] Tianchong Gao, Feng Li, Yu Chen, and XuKai Zou. 2018. Local Differential Privately Anonymizing Online Social Networks Under HRG-Based Model. IEEE Trans. Comput. Social Syst. 5, 4 (2018), 1009–1020. doi:10.1109/TCSS.2018. 2877045 [42] Neil Zhenqiang Gong and Bin Liu. 2016. You Are Who You Know and How You Behave: Attribute Inference Attacks via Users’ Social Friends and Behaviors. In 
+
+25th USENIX Security Symposium (USENIX Security 16) . USENIX Association, Austin, TX, 979–995. https://www.usenix.org/conference/usenixsecurity16/ technical-sessions/presentation/gong [43] Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. 2014. Generative Ad-versarial Nets. In Advances in Neural Information Processing Systems , Z. Ghahra-mani, M. Welling, C. Cortes, N. Lawrence, and K.Q. Weinberger (Eds.), Vol. 27. Curran Associates, Inc. https://proceedings.neurips.cc/paper_files/paper/2014/ file/f033ed80deb0234979a61f95710dbe25-Paper.pdf [44] Aditya Grover and Jure Leskovec. 2016. node2vec: Scalable Feature Learning for Networks. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (San Francisco, California, USA) 
+
+(KDD ’16) . Association for Computing Machinery, New York, NY, USA, 855–864. doi:10.1145/2939672.2939754 [45] Xiaojie Guo and Liang Zhao. 2023. A Systematic Survey on Deep Generative Models for Graph Generation. IEEE Trans. Pattern Anal. Mach. Intell. 45, 5 (2023), 5370–5390. doi:10.1109/TPAMI.2022.3214832 [46] S. L. Hakimi. 1962. On Realizability of a Set of Integers as Degrees of the Vertices of a Linear Graph. I. J. Soc. Ind. Appl. Math. 10, 3 (1962), 496–506. http://www.jstor.org/stable/2098746 [47] Michael Hay, Ashwin Machanavajjhala, Gerome Miklau, Yan Chen, and Dan Zhang. 2016. Principled Evaluation of Differentially Private Algorithms using DPBench. In Proceedings of the 2016 International Conference on Management of Data (San Francisco, California, USA) (SIGMOD ’16) . Association for Computing Machinery, New York, NY, USA, 139–154. doi:10.1145/2882903.2882931 [48] Xi He, Ashwin Machanavajjhala, and Bolin Ding. 2014. Blowfish privacy: tuning privacy-utility trade-offs using policies. In Proceedings of the 2014 ACM SIGMOD International Conference on Management of Data (Snowbird, Utah, USA) (SIGMOD ’14) . Association for Computing Machinery, New York, NY, USA, 1447–1458. doi:10.1145/2588555.2588581 [49] Paul W. Holland, Kathryn Blackmond Laskey, and Samuel Leinhardt. 1983. Stochastic blockmodels: First steps. Soc. Netw. 5, 2 (1983), 109–137. doi:10.1016/ 0378-8733(83)90021-7 [50] Sameera Horawalavithana, Juan Arroyo Flores, John Skvoretz, and Adriana Iamnitchi. 2019. The risk of node re-identification in labeled social graphs. Appl. Netw. Sci. 4, 1 (13 Jun 2019), 33. doi:10.1007/s41109-019-0148-x [51] Lihe Hou, Weiwei Ni, Sen Zhang, Nan Fu, and Dongyue Zhang. 2023. PPDU: dynamic graph publication with local differential privacy. Knowl. Inf. Syst. 65, 7 (March 2023), 2965–2989. doi:10.1007/s10115-023-01838-1 [52] Weihua Hu, Matthias Fey, Marinka Zitnik, Yuxiao Dong, Hongyu Ren, Bowen Liu, Michele Catasta, and Jure Leskovec. 2020. Open Graph Benchmark: Datasets for Machine Learning on Graphs. In Advances in Neural Information Processing Systems , H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (Eds.), Vol. 33. Curran Associates, Inc., 22118–22133. https://proceedings.neurips.cc/ paper_files/paper/2020/file/fb60d411a5c5b72b2e7d3527cfc84fd0-Paper.pdf [53] Yuzheng Hu, Fan Wu, Qinbin Li, Yunhui Long, Gonzalo Munilla Garrido, Chang Ge, Bolin Ding, David Forsyth, Bo Li, and Dawn Song. 2024. SoK: Privacy-Preserving Data Synthesis. In 2024 IEEE Symposium on Security and Privacy (SP) . 4696–4713. doi:10.1109/SP54263.2024.00002 [54] Zhongzhao Hu, Luoyi Fu, and Xiaoying Gan. 2019. De-anonymize social net-work under partial overlap. In Proceedings of the ACM Turing Celebration Confer-ence - China (Chengdu, China) (ACM TURC ’19) . Association for Computing Ma-chinery, New York, NY, USA, Article 16, 5 pages. doi:10.1145/3321408.3321577 [55] Hongyu Huang, Yao Yang, and Yantao Li. 2021. PSG : Local Privacy Preserving Synthetic Social Graph Generation. In Collaborative Computing: Networking, Applications and Worksharing , Honghao Gao and Xinheng Wang (Eds.). Springer International Publishing, Cham, 389–404. [56] Lawrence Hubert and Phipps Arabie. 1985. Comparing partitions. J. Classif. 2, 1 (01 Dec 1985), 193–218. doi:10.1007/BF01908075 [57] ICORE Rankings. 2025. ICORE Conference Portal. https://portal.core.edu.au/ conf-ranks/. [58] Masooma Iftikhar, Qing Wang, and Yu Lin. 2020. dK-Microaggregation: Anonymizing Graphs with Differential Privacy Guarantees. In Advances in Knowledge Discovery and Data Mining , Hady W. Lauw, Raymond Chi-Wing Wong, Alexandros Ntoulas, Ee-Peng Lim, See-Kiong Ng, and Sinno Jialin Pan (Eds.). Springer International Publishing, Cham, 191–203. [59] Prateek Jain, Chi Jin, Sham M. Kakade, Praneeth Netrapalli, and Aaron Sidford. 2016. Streaming PCA: Matching Matrix Bernstein and Near-Optimal Finite Sample Guarantees for Oja’s Algorithm. In 29th Annual Conference on Learning Theory (Proceedings of Machine Learning Research, Vol. 49) , Vitaly Feldman, Alexander Rakhlin, and Ohad Shamir (Eds.). PMLR, Columbia University, New York, New York, USA, 1147–1164. https://proceedings.mlr.press/v49/jain16.html [60] Kalervo Järvelin and Jaana Kekäläinen. 2002. Cumulated gain-based evaluation of IR techniques. ACM Trans. Inf. Syst. 20, 4 (Oct. 2002), 422–446. doi:10.1145/ 582415.582418 [61] Shouling Ji, Weiqing Li, Prateek Mittal, Xin Hu, and Raheem Beyah. 2015. SecGraph: A Uniform and Open-source Evaluation System for Graph Data SoK: Practical Aspects of Releasing Differentially Private Graphs 
+
+Anonymization and De-anonymization. In 24th USENIX Security Sympo-sium (USENIX Security 15) . USENIX Association, Washington, D.C., 303– 318. https://www.usenix.org/conference/usenixsecurity15/technical-sessions/ presentation/ji [62] Shouling Ji, Weiqing Li, Mudhakar Srivatsa, and Raheem Beyah. 2014. Struc-tural Data De-anonymization: Quantification, Practice, and Implications. In 
+
+Proceedings of the 2014 ACM SIGSAC Conference on Computer and Communica-tions Security (Scottsdale, Arizona, USA) (CCS ’14) . Association for Computing Machinery, New York, NY, USA, 1040–1053. doi:10.1145/2660267.2660278 [63] Shouling Ji, Weiqing Li, Mudhakar Srivatsa, Jing Selena He, and Raheem Beyah. 2016. General Graph Data De-Anonymization: From Mobility Traces to Social Networks. ACM Trans. Inf. Syst. Secur. 18, 4, Article 12 (April 2016), 29 pages. doi:10.1145/2894760 [64] Shouling Ji, Prateek Mittal, and Raheem Beyah. 2017. Graph Data Anonymiza-tion, De-Anonymization Attacks, and De-Anonymizability Quantification: A Survey. IEEE Commun. Surv. Tutor. 19, 2 (2017), 1305–1326. doi:10.1109/COMST. 2016.2633620 [65] Shouling Ji, Ting Wang, Jianhai Chen, Weiqing Li, Prateek Mittal, and Raheem Beyah. 2019. De-SAG: On the De-Anonymization of Structure-Attribute Graph Data. IEEE Trans. Dependable Secure Comput. 16, 4 (2019), 594–607. doi:10.1109/ TDSC.2017.2712150 [66] Tianxi Ji, Changqing Luo, Yifan Guo, Jinlong Ji, Weixian Liao, and Pan Li. 2019. Differentially Private Community Detection in Attributed Social Networks. In 
+
+Proceedings of The Eleventh Asian Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 101) , Wee Sun Lee and Taiji Suzuki (Eds.). PMLR, 16–31. https://proceedings.mlr.press/v101/ji19a.html [67] Jinyuan Jia, Binghui Wang, Le Zhang, and Neil Zhenqiang Gong. 2017. AttriInfer: Inferring User Attributes in Online Social Networks Using Markov Random Fields. In Proceedings of the 26th International Conference on World Wide Web 
+
+(Perth, Australia) (WWW ’17) . International World Wide Web Conferences Steering Committee, Republic and Canton of Geneva, CHE, 1561–1569. doi:10. 1145/3038912.3052695 [68] Xun Jian, Yue Wang, and Lei Chen. 2023. Publishing Graphs Under Node Differential Privacy. IEEE Trans. Knowl. Data Eng. 35, 4 (2023), 4164–4177. doi:10.1109/TKDE.2021.3128946 [69] Zach Jorgensen, Ting Yu, and Graham Cormode. 2016. Publishing Attributed Social Graphs with Formal Privacy Guarantees. In Proceedings of the 2016 Inter-national Conference on Management of Data (San Francisco, California, USA) 
+
+(SIGMOD ’16) . Association for Computing Machinery, New York, NY, USA, 107–122. doi:10.1145/2882903.2915215 [70] Peter Kairouz, Sewoong Oh, and Pramod Viswanath. 2015. The Composi-tion Theorem for Differential Privacy. In Proceedings of the 32nd International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 37) , Francis Bach and David Blei (Eds.). PMLR, Lille, France, 1376–1385. https://proceedings.mlr.press/v37/kairouz15.html [71] Vishesh Karwa, Sofya Raskhodnikova, Adam Smith, and Grigory Yaroslavtsev. 2011. Private analysis of graph structure. Proc. VLDB Endow. 4, 11 (Aug. 2011), 1146–1157. doi:10.14778/3402707.3402749 [72] Shiva Prasad Kasiviswanathan, Homin K. Lee, Kobbi Nissim, Sofya Raskhod-nikova, and Adam Smith. 2011. What Can We Learn Privately? SIAM J. Comput. 
+
+40, 3 (2011), 793–826. doi:10.1137/090756090 [73] Shiva Prasad Kasiviswanathan, Kobbi Nissim, Sofya Raskhodnikova, and Adam Smith. 2013. Analyzing Graphs with Node Differential Privacy. In Theory of Cryptography , Amit Sahai (Ed.). Springer Berlin Heidelberg, Berlin, Heidelberg, 457–476. [74] David Kempe, Jon Kleinberg, and Éva Tardos. 2003. Maximizing the spread of influence through a social network. In Proceedings of the Ninth ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (Washington, D.C.) (KDD ’03) . Association for Computing Machinery, New York, NY, USA, 137–146. doi:10.1145/956750.956769 [75] Daniel Kifer and Ashwin Machanavajjhala. 2011. No free lunch in data privacy. In Proceedings of the 2011 ACM SIGMOD International Conference on Management of Data (Athens, Greece) (SIGMOD ’11) . Association for Computing Machinery, New York, NY, USA, 193–204. doi:10.1145/1989323.1989345 [76] Daniel Kifer and Ashwin Machanavajjhala. 2014. Pufferfish: A framework for mathematical privacy definitions. ACM Trans. Database Syst. 39, 1, Article 3 (Jan. 2014), 36 pages. doi:10.1145/2514689 [77] Diederik Kingma and Jimmy Ba. 2014. Adam: A Method for Stochastic Opti-mization. Int. Conf. Learn. Represent. (12 2014). [78] Diederik P. Kingma and Max Welling. 2014. Auto-Encoding Variational Bayes. In 2nd International Conference on Learning Representations, ICLR 2014, Banff, AB, Canada, April 14-16, 2014, Conference Track Proceedings . arXiv:1312.6114v11 [79] Thomas N. Kipf and Max Welling. 2017. Semi-Supervised Classification with Graph Convolutional Networks. In International Conference on Learning Repre-sentations (ICLR) .[80] Aleksandra Korolova, Rajeev Motwani, Shubha U. Nabar, and Ying Xu. 2008. Link privacy in social networks. In Proceedings of the 17th ACM Conference on Information and Knowledge Management (Napa Valley, California, USA) 
+
+(CIKM ’08) . Association for Computing Machinery, New York, NY, USA, 289–298. doi:10.1145/1458082.1458123 [81] Nitish Korula and Silvio Lattanzi. 2014. An efficient reconciliation algorithm for social networks. Proc. VLDB Endow. 7, 5 (Jan. 2014), 377–388. doi:10.14778/ 2732269.2732274 [82] Wei-Han Lee, Changchang Liu, Shouling Ji, Prateek Mittal, and Ruby B. Lee. 2017. Blind De-anonymization Attacks using Social Networks. In Proceedings of the 2017 on Workshop on Privacy in the Electronic Society (Dallas, Texas, USA) 
+
+(WPES ’17) . Association for Computing Machinery, New York, NY, USA, 1–4. doi:10.1145/3139550.3139562 [83] Jure Leskovec, Deepayan Chakrabarti, Jon Kleinberg, Christos Faloutsos, and Zoubin Ghahramani. 2010. Kronecker Graphs: An Approach to Modeling Networks. J. Mach. Learn. Res. 11 (March 2010), 985–1042. [84] Jure Leskovec and Christos Faloutsos. 2006. Sampling from large graphs. In 
+
+Proceedings of the 12th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (Philadelphia, PA, USA) (KDD ’06) . Association for Computing Machinery, New York, NY, USA, 631–636. doi:10.1145/1150402. 1150479 [85] Jure Leskovec and Andrej Krevl. 2014. SNAP Datasets: Stanford Large Network Dataset Collection. http://snap.stanford.edu/data. [86] Jure Leskovec and Julian Mcauley. 2012. Learning to Discover Social Cir-cles in Ego Networks. In Advances in Neural Information Processing Systems ,F. Pereira, C.J. Burges, L. Bottou, and K.Q. Weinberger (Eds.), Vol. 25. Curran Associates, Inc. https://proceedings.neurips.cc/paper_files/paper/2012/file/ 7a614fd06c325499f1680b9896beedeb-Paper.pdf [87] Kaiyang Li, Guoming Lu, Guangchun Luo, and Zhipeng Cai. 2020. Seed-free Graph De-anonymiztiation with Adversarial Learning. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management 
+
+(Virtual Event, Ireland) (CIKM ’20) . Association for Computing Machinery, New York, NY, USA, 745–754. doi:10.1145/3340531.3411970 [88] Xiaoye Li, Jing Yang, Zhenlong Sun, and Jianpei Zhang. 2017. Differential Privacy for Edge Weights in Social Networks. Secur. Commun. Netw. 2017, 1 (2017), 4267921. doi:10.1155/2017/4267921 [89] Yang Li, Michael Purcell, Thierry Rakotoarivelo, David Smith, Thilina Ran-baduge, and Kee Siong Ng. 2023. Private Graph Data Release: A Survey. ACM Comput. Surv. 55, 11, Article 226 (Feb. 2023), 39 pages. doi:10.1145/3569085 [90] Zhetao Li, Yong Xiao, Haolin Liu, Xiaofei Liao, Ye Yuan, and Junzhao Du. 2025. Dynamic Graph Publication With Differential Privacy Guarantees for Decentralized Applications. IEEE Trans. Comput. 74, 5 (2025), 1771–1785. doi:10. 1109/TC.2025.3543605 [91] Jack Lindamood, Raymond Heatherly, Murat Kantarcioglu, and Bhavani Thu-raisingham. 2009. Inferring private information using social network data. In 
+
+Proceedings of the 18th International Conference on World Wide Web (Madrid, Spain) (WWW ’09) . Association for Computing Machinery, New York, NY, USA, 1145–1146. doi:10.1145/1526709.1526899 [92] Yehuda Lindell. 2020. Secure multiparty computation. Commun. ACM 64, 1 (Dec. 2020), 86–96. doi:10.1145/3387108 [93] Depeng Liu, Bow-Yaw Wang, and Lijun Zhang. 2022. Verifying Pufferfish Privacy in Hidden Markov Models. In Verification, Model Checking, and Abstract Interpretation , Bernd Finkbeiner and Thomas Wies (Eds.). Springer International Publishing, Cham, 174–196. [94] Shang Liu, Hao Du, Yang Cao, Bo Yan, Jinfei Liu, and Masatoshi Yoshikawa. 2025. PGB: Benchmarking Differentially Private Synthetic Graph Generation Algorithms . In 2025 IEEE 41st International Conference on Data Engineering (ICDE) . IEEE Computer Society, Los Alamitos, CA, USA, 1348–1361. doi:10. 1109/ICDE65448.2025.00105 [95] Guangxi Lu, Kaiyang Li, Xiaotong Wang, Ziyue Liu, Zhipeng Cai, and Wei Li. 2024. Neural-based inexact graph de-anonymization. High-Confid. Comput. 4, 1 (2024), 100186. doi:10.1016/j.hcc.2023.100186 [96] Ashwin Machanavajjhala, Daniel Kifer, Johannes Gehrke, and Muthuramakrish-nan Venkitasubramaniam. 2007. L-diversity: Privacy beyond k-anonymity. ACM Trans. Knowl. Discov. Data 1, 1 (March 2007), 3–es. doi:10.1145/1217299.1217302 [97] Jian Mao, Wenqian Tian, Jingbo Jiang, Zhaoyuan He, Zhihong Zhou, and Jianwei Liu. 2018. Understanding structure-based social network de-anonymization techniques via empirical analysis. EURASIP J. Wireless Commun. Networking 
+
+2018, 1 (05 Dec 2018), 279. doi:10.1186/s13638-018-1291-2 [98] Jian Mao, Wenqian Tian, Yitong Yang, and Jianwei Liu. 2019. An Efficient Social Attribute Inference Scheme Based on Social Links and Attribute Relevance. 
+
+IEEE Access 7 (2019), 153074–153085. doi:10.1109/ACCESS.2019.2946179 [99] Jian Mao, Yitong Yang, and Tianchen Zhang. 2021. Empirical Analysis of Attribute Inference Techniques in Online Social Network. IEEE Trans. Network Sci. Eng. 8, 2 (2021), 881–893. doi:10.1109/TNSE.2020.3009864 [100] Miller McPherson, Lynn Smith-Lovin, and James M Cook. 2001. Birds of a Feather: Homophily in Social Networks. Annu. Rev. Sociol. 27, Volume 27, 2001 (2001), 415–444. doi:10.1146/annurev.soc.27.1.415 [101] Darakhshan Mir and Rebecca N. Wright. 2012. A differentially private estimator for the stochastic Kronecker graph model. In Proceedings of the 2012 Joint EDBT/ICDT Workshops (Berlin, Germany) (EDBT-ICDT ’12) . Association for D’Silva et al. 
+
+Computing Machinery, New York, NY, USA, 167–176. doi:10.1145/2320765. 2320818 [102] Alan Mislove, Bimal Viswanath, Krishna P. Gummadi, and Peter Druschel. 2010. You are who you know: inferring user profiles in online social networks. In 
+
+Proceedings of the Third ACM International Conference on Web Search and Data Mining (New York, New York, USA) (WSDM ’10) . Association for Computing Machinery, New York, NY, USA, 251–260. doi:10.1145/1718487.1718519 [103] Tamara T. Mueller, Dmitrii Usynin, Johannes C. Paetzold, Daniel Rueckert, and Georgios Kaissis. 2022. SoK: Differential Privacy on Graph-Structured Data. arXiv:2203.09205 [cs.CR] https://arxiv.org/abs/2203.09205 [104] Arvind Narayanan and Vitaly Shmatikov. 2009. De-anonymizing Social Networks. In 2009 30th IEEE Symposium on Security and Privacy . 173–187. doi:10.1109/SP.2009.22 [105] Mohamed Nassar, Elie Chicha, Bechara Al Bouna, and Richard Chbeir. 2020. VIP Blowfish Privacy in Communication Graphs. In Proceedings of the 17th International Joint Conference on e-Business and Telecommunications - SECRYPT .INSTICC, SciTePress, 459–467. doi:10.5220/0009875704590467 [106] Ivoline C. Ngong, Brad Stenger, Joseph P. Near, and Yuanyuan Feng. 2024. Evaluating the Usability of Differential Privacy Tools with Data Practitioners. In Twentieth Symposium on Usable Privacy and Security (SOUPS 2024) . USENIX Association, Philadelphia, PA, 21–40. https://www.usenix.org/conference/ soups2024/presentation/ngong [107] Hiep H. Nguyen, Abdessamad Imine, and Michaël Rusinowitch. 2015. Differen-tially Private Publication of Social Graphs at Linear Cost. In Proceedings of the 2015 IEEE/ACM International Conference on Advances in Social Networks Analysis and Mining 2015 (Paris, France) (ASONAM ’15) . Association for Computing Machinery, New York, NY, USA, 596–599. doi:10.1145/2808797.2809385 [108] Shirin Nilizadeh, Apu Kapadia, and Yong-Yeol Ahn. 2014. Community-Enhanced De-anonymization of Online Social Networks. In Proceedings of the 2014 ACM SIGSAC Conference on Computer and Communications Security (Scottsdale, Ari-zona, USA) (CCS ’14) . Association for Computing Machinery, New York, NY, USA, 537–548. doi:10.1145/2660267.2660324 [109] Bo Ning, Yunhao Sun, Xiaoyu Tao, and Guanyu Li. 2021. Differential privacy protection on weighted graph in wireless networks. Ad Hoc Networks 110 (2021), 102303. doi:10.1016/j.adhoc.2020.102303 [110] Lawrence Page, Sergey Brin, Rajeev Motwani, and Terry Winograd. 1999. The PageRank Citation Ranking: Bringing Order to the Web. Technical Report 1999-66. Stanford InfoLab. http://ilpubs.stanford.edu:8090/422/ Previous number = SIDL-WP-1999-0120. [111] Pedram Pedarsani, Daniel R. Figueiredo, and Matthias Grossglauser. 2013. A Bayesian method for matching two similar graphs without seeds. In 2013 51st Annual Allerton Conference on Communication, Control, and Computing (Aller-ton) . 1598–1607. doi:10.1109/Allerton.2013.6736720 [112] Joseph J. Pfeiffer, Sebastian Moreno, Timothy La Fond, Jennifer Neville, and Brian Gallagher. 2014. Attributed graph models: modeling network structure with correlated attributes. In Proceedings of the 23rd International Conference on World Wide Web (Seoul, Korea) (WWW ’14) . Association for Computing Machinery, New York, NY, USA, 831–842. doi:10.1145/2566486.2567993 [113] Yangheran Piao, Kai Ye, and Xiaohui Cui. 2021. Privacy Inference Attack Against Users in Online Social Networks: A Literature Review. IEEE Access 9 (2021), 40417–40431. doi:10.1109/ACCESS.2021.3064208 [114] Clément Pierquin, Aurélien Bellet, Marc Tommasi, and Matthieu Boussard. 2024. Rényi pufferfish privacy: general additive noise mechanisms and privacy amplification by iteration via shift reduction lemmas. In Proceedings of the 41st International Conference on Machine Learning (Vienna, Austria) (ICML’24) .JMLR.org, Article 1655, 33 pages. [115] Jianwei Qian, Xiang-Yang Li, Taeho Jung, Yang Fan, Yu Wang, and Shaojie Tang. 2019. Social Network De-anonymization: More Adversarial Knowledge, More Users Re-identified? ACM Trans. Internet Technol. 19, 3, Article 33 (May 2019), 22 pages. doi:10.1145/3310363 [116] Jianwei Qian, Xiang-Yang Li, Chunhong Zhang, Linlin Chen, Taeho Jung, and Junze Han. 2019. Social Network De-Anonymization and Privacy Inference with Knowledge Graph Model. IEEE Trans. Dependable Secure Comput. 16, 4 (2019), 679–692. doi:10.1109/TDSC.2017.2697854 [117] Zhan Qin, Ting Yu, Yin Yang, Issa Khalil, Xiaokui Xiao, and Kui Ren. 2017. Gen-erating Synthetic Decentralized Social Graphs with Local Differential Privacy. In Proceedings of the 2017 ACM SIGSAC Conference on Computer and Commu-nications Security (Dallas, Texas, USA) (CCS ’17) . Association for Computing Machinery, New York, NY, USA, 425–438. doi:10.1145/3133956.3134086 [118] Matteo Riondato and Evgenios M. Kornaropoulos. 2014. Fast approximation of betweenness centrality through sampling. In Proceedings of the 7th ACM International Conference on Web Search and Data Mining (New York, New York, USA) (WSDM ’14) . Association for Computing Machinery, New York, NY, USA, 413–422. doi:10.1145/2556195.2556224 [119] Guillem Rodríguez Corominas, Maria J. Blesa, and Christian Blum. 2023. AntNe-tAlign: Ant Colony Optimization for Network Alignment. Appl. Soft Comput. 
+
+132 (2023), 109832. doi:10.1016/j.asoc.2022.109832 [120] Ryan A. Rossi and Nesreen K. Ahmed. 2015. The Network Data Reposi-tory with Interactive Graph Analytics and Visualization. In AAAI . https: //networkrepository.com [121] Benedek Rozemberczki, Carl Allen, and Rik Sarkar. 2021. Multi-Scale Attributed Node Embedding. J. Complex Netw. 9, 2 (05 2021), cnab014. doi:10.1093/comnet/ cnab014 [122] Benedek Rozemberczki and Rik Sarkar. 2020. Characteristic Functions on Graphs: Birds of a Feather, from Statistical Descriptors to Parametric Models. In Proceedings of the 29th ACM International Conference on Information and Knowledge Management (CIKM ’20) . ACM, 1325–1334. [123] Alessandra Sala, Xiaohan Zhao, Christo Wilson, Haitao Zheng, and Ben Y. Zhao. 2011. Sharing graphs using differentially private graph models. In Proceedings of the 2011 ACM SIGCOMM Conference on Internet Measurement Conference 
+
+(Berlin, Germany) (IMC ’11) . Association for Computing Machinery, New York, NY, USA, 81–98. doi:10.1145/2068816.2068825 [124] P. Samarati and L. Sweeney. 1998. Protecting Privacy when Disclosing Informa-tion: k-Anonymity and its Enforcement through Generalization and Suppression .Technical Report. http://www.csl.sri.com/papers/sritr-98-04/ [125] Alberto Sanfeliu and King-Sun Fu. 1983. A distance measure between attributed relational graphs for pattern recognition. IEEE Trans. Syst. Man Cybern. SMC-13, 3 (1983), 353–362. doi:10.1109/TSMC.1983.6313167 [126] C. Seshadhri, Tamara G. Kolda, and Ali Pinar. 2012. Community structure and scale-free collections of Erdős-Rényi graphs. Phys. Rev. E 85 (May 2012), 056109. Issue 5. doi:10.1103/PhysRevE.85.056109 [127] Masoumeh Shafieinejad, Huseyin A. Inan, Marcello Hasegawa, and Robert Sim. 2022. On Privacy and Confidentiality of Communications in Organizational Graphs. In Proceedings of the Third AAAI Workshop on Privacy-Preserving Ar-tificial Intelligence (PPAI-22) at the Thirty-Sixth AAAI Conference on Artificial Intelligence (AAAI-22) . https://arxiv.org/abs/2105.13418 [128] Kumar Sharad and George Danezis. 2014. An Automated Social Graph De-anonymization Technique. In Proceedings of the 13th Workshop on Privacy in the Electronic Society (Scottsdale, Arizona, USA) (WPES ’14) . Association for Com-puting Machinery, New York, NY, USA, 47–58. doi:10.1145/2665943.2665960 [129] Shashank Sheshar Singh, Kuldeep Singh, Ajay Kumar, Harish Kumar Shakya, and Bhaskar Biswas. 2019. A Survey on Information Diffusion Models in Social Networks. In Advanced Informatics for Computing Research , Ashish Kumar Luhach, Dharm Singh, Pao-Ann Hsiung, Kamarul Bin Ghazali Hawari, Pawan Lingras, and Pradeep Kumar Singh (Eds.). Springer Singapore, Singapore, 426– 439. [130] Shuang Song, Yizhen Wang, and Kamalika Chaudhuri. 2017. Pufferfish Pri-vacy Mechanisms for Correlated Data. In Proceedings of the 2017 ACM Inter-national Conference on Management of Data (Chicago, Illinois, USA) (SIGMOD ’17) . Association for Computing Machinery, New York, NY, USA, 1291–1306. doi:10.1145/3035918.3064025 [131] Mudhakar Srivatsa and Mike Hicks. 2012. Deanonymizing mobility traces: using social network as a side-channel. In Proceedings of the 2012 ACM Conference on Computer and Communications Security (Raleigh, North Carolina, USA) 
+
+(CCS ’12) . Association for Computing Machinery, New York, NY, USA, 628–637. doi:10.1145/2382196.2382262 [132] Theresa Stadler and Carmela Troncoso. 2022. Why the search for a privacy-preserving data sharing mechanism is failing. Nat. Comput. Sci. 2, 4 (01 Apr 2022), 208–210. doi:10.1038/s43588-022-00236-x [133] Qi Sun, Jiguo Yu, Honglu Jiang, Yixian Chen, and Xiuzhen Cheng. 2019. De-anonymizing Scale-Free Social Networks by Using Spectrum Partitioning Method. Procedia Comput. Sci. 147 (2019), 441–445. doi:10.1016/j.procs.2019.01. 262 2018 International Conference on Identification, Information and Knowl-edge in the Internet of Things. [134] Youze Tang, Xiaokui Xiao, and Yanchen Shi. 2014. Influence Maximization: Near-Optimal Time Complexity Meets Practical Efficiency. Proc. ACM SIGMOD Int. Conf. Manag. Data (04 2014). doi:10.1145/2588555.2593670 [135] Yuchao Tao, Ryan McKenna, Michael Hay, Ashwin Machanavajjhala, and Gerome Miklau. 2022. Benchmarking Differentially Private Synthetic Data Generation Algorithms. In Proceedings of the Third AAAI Workshop on Privacy-Preserving Artificial Intelligence (PPAI-22) at the Thirty-Sixth AAAI Conference on Artificial Intelligence (AAAI-22) . https://arxiv.org/abs/2112.09238 [136] Christine Task and Chris Clifton. 2014. What Should We Protect? Defining Dif-ferential Privacy for Social Network Analysis . Springer International Publishing, Cham, 139–161. doi:10.1007/978-3-319-05912-9_7 [137] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is All you Need. In Advances in Neural Information Processing Systems , I. Guyon, U. Von Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett (Eds.), Vol. 30. Curran Associates, Inc. https://proceedings.neurips.cc/paper_ files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf [138] Cédric Villani. 2009. Optimal Transport: Old and New . Springer Berlin, Heidel-berg. [139] Dan Wang and Shigong Long. 2019. Boosting the accuracy of differentially private in weighted social networks. Multimedia Tools and Appl. 78, 24 (01 Dec SoK: Practical Aspects of Releasing Differentially Private Graphs 
+
+2019), 34801–34817. doi:10.1007/s11042-019-08092-0 [140] Yue Wang and Xintao Wu. 2013. Preserving Differential Privacy in Degree-Correlation based Graph Generation. Trans. Data Privacy 6, 2 (Aug. 2013), 127–145. [141] Yuye Wang, Jing Yang, and Jianpei Zhang. 2020. Differential Privacy for Weighted Network Based on Probability Model. IEEE Access 8 (2020), 80792– 80800. doi:10.1109/ACCESS.2020.2991062 [142] Stanley Wasserman and Philippa Pattison. 1996. Logit Models and Logistic Regressions for Social Networks: I. An Introduction to Markov Graphs and 𝑝 .
+
+Psychometrika 61, 3 (1996), 401–425. doi:10.1007/BF02294547 [143] Duncan J. Watts and Steven H. Strogatz. 1998. Collective dynamics of ‘small-world’ networks. Nature 393, 6684 (01 Jun 1998), 440–442. doi:10.1038/30918 [144] Chengkun Wei, Shouling Ji, Changchang Liu, Wenzhi Chen, and Ting Wang. 2020. AsgLDP: Collecting and Generating Decentralized Attributed Graphs With Local Differential Privacy. IEEE Trans. Inf. Forensics Secur. 15 (2020), 3239–3254. doi:10.1109/TIFS.2020.2985524 [145] Raymond K. Wong and B. S. Vidyalakshmi. 2016. Privacy Leakage via Attribute Inference in Directed Social Networks. In Information and Communications Security , Kwok-Yan Lam, Chi-Hung Chi, and Sihan Qing (Eds.). Springer Inter-national Publishing, Cham, 333–346. [146] Leting Wu, Xiaowei Ying, and Xintao Wu. 2010. Reconstruction from Randomized Graph via Low Rank Approximation . 60–71. doi:10.1137/1.9781611972801.6 [147] Xinyu Wu, Zhongzhao Hu, Xinzhe Fu, Luoyi Fu, Xinbing Wang, and Songwu Lu. 2018. Social Network De-anonymization with Overlapping Communities: Analysis, Algorithm and Experiments. In IEEE INFOCOM 2018 - IEEE Conference on Computer Communications . 1151–1159. doi:10.1109/INFOCOM.2018.8486260 [148] Siyuan Xia, Beizhen Chang, Karl Knopf, Yihan He, Yuchao Tao, and Xi He. 2021. DPGraph: A Benchmark Platform for Differentially Private Graph Analysis. In 
+
+Proceedings of the 2021 International Conference on Management of Data (Virtual Event, China) (SIGMOD ’21) . Association for Computing Machinery, New York, NY, USA, 2808–2812. doi:10.1145/3448016.3452756 [149] Qian Xiao, Rui Chen, and Kian-Lee Tan. 2014. Differentially private network data release via structural inference. In Proceedings of the 20th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (New York, New York, USA) (KDD ’14) . Association for Computing Machinery, New York, NY, USA, 911–920. doi:10.1145/2623330.2623642 [150] Bin Yang, Issei Sato, and Hiroshi Nakagawa. 2015. Bayesian Differential Privacy on Correlated Data. In Proceedings of the 2015 ACM SIGMOD International Conference on Management of Data (Melbourne, Victoria, Australia) (SIGMOD ’15) . Association for Computing Machinery, New York, NY, USA, 747–762. doi:10. 1145/2723372.2747643 [151] Carl Yang, Haonan Wang, Ke Zhang, Liang Chen, and Lichao Sun. 2021. Secure Deep Graph Generation with Link Differential Privacy. In The International Joint Conference on Artificial Intelligence (IJCAI) .[152] Jingyu Yang, Xuebin Ma, Xiangyu Bai, and Lianwei Cui. 2020. Graph Publish-ing with Local Differential Privacy for Hierarchical Social Networks. In 2020 IEEE 10th International Conference on Electronics Information and Emergency Communication (ICEIEC) . 123–126. doi:10.1109/ICEIEC49280.2020.9152325 [153] Zhi Yang, Christo Wilson, Xiao Wang, Tingting Gao, Ben Y. Zhao, and Yafei Dai. 2014. Uncovering social network Sybils in the wild. ACM Trans. Knowl. Discov. Data 8, 1, Article 2 (Feb. 2014), 29 pages. doi:10.1145/2556609 [154] Lyudmila Yartseva and Matthias Grossglauser. 2013. On the performance of percolation graph matching. In Proceedings of the First ACM Conference on Online Social Networks (Boston, Massachusetts, USA) (COSN ’13) . Association for Computing Machinery, New York, NY, USA, 119–130. doi:10.1145/2512938. 2512952 [155] Minji Yoon, Yue Wu, John Palowitch, Bryan Perozzi, and Russ Salakhutdinov. 2023. Graph Generative Model for Benchmarking Graph Neural Networks. In 
+
+Proceedings of the 40th International Conference on Machine Learning (Proceed-ings of Machine Learning Research, Vol. 202) , Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett (Eds.). PMLR, 40175–40198. https://proceedings.mlr.press/v202/yoon23d.html [156] Hanyang Yuan, Jiarong Xu, Cong Wang, Ziqi Yang, Chunping Wang, Keting Yin, and Yang Yang. 2024. Unveiling Privacy Vulnerabilities: Investigating the Role of Structure in Graph Data. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (Barcelona, Spain) (KDD ’24) . Association for Computing Machinery, New York, NY, USA, 4059–4070. doi:10.1145/3637528.3672013 [157] Quan Yuan, Zhikun Zhang, Linkang Du, Min Chen, Peng Cheng, and Mingyang Sun. 2023. PrivGraph: Differentially Private Graph Data Publication by Exploit-ing Community Information. In 32nd USENIX Security Symposium (USENIX Security 23) . USENIX Association, Anaheim, CA, 3241–3258. https://www. usenix.org/conference/usenixsecurity23/presentation/yuan-quan [158] Ahmad Zareie and Rizos Sakellariou. 2023. Influence maximization in social networks: a survey of behaviour-aware methods. Soc. Netw. Anal. Min. 13, 1 (25 Apr 2023), 78. doi:10.1007/s13278-023-01078-9 [159] Cheng Zhang, Shang Wu, Honglu Jiang, Yawei Wang, Jiguo Yu, and Xiuzhen Cheng. 2019. Attribute-Enhanced De-anonymization of Online Social Networks. In Computational Data and Social Networks , Andrea Tagarelli and Hanghang Tong (Eds.). Springer International Publishing, Cham, 256–267. [160] Jiapeng Zhang, Luoyi Fu, Xinbing Wang, and Guihai Chen. 2021. De-anonymizing Social Networks Under Partial Overlap: An F-score Based Ap-proach. In IEEE INFOCOM 2021 - IEEE Conference on Computer Communications .1–10. doi:10.1109/INFOCOM42981.2021.9488911 [161] Jiapeng Zhang, Luoyi Fu, Xinbing Wang, and Songwu Lu. 2020. De-anonymization of Social Networks: the Power of Collectiveness. In IEEE INFO-COM 2020 - IEEE Conference on Computer Communications . 89–98. doi:10.1109/ INFOCOM41043.2020.9155499 [162] Muhan Zhang and Yixin Chen. 2018. Link Prediction Based on Graph Neural Networks. In Advances in Neural Information Processing Systems , S. Bengio, H. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi, and R. Garnett (Eds.), Vol. 31. Curran Associates, Inc. https://proceedings.neurips.cc/paper_files/ paper/2018/file/53f0d7c537d99b3824f0f99d62ea2428-Paper.pdf [163] Sen Zhang, Haibo Hu, Qingqing Ye, and Jianliang Xu. 2025. PrivDPR: Synthetic Graph Publishing with Deep PageRank under Differential Privacy. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.1 (Toronto ON, Canada) (KDD ’25) . Association for Computing Machinery, New York, NY, USA, 1936–1947. doi:10.1145/3690624.3709334 [164] Sen Zhang, Weiwei Ni, and Nan Fu. 2020. Community Preserved Social Graph Publishing with Node Differential Privacy. In 2020 IEEE International Conference on Data Mining (ICDM) . 1400–1405. doi:10.1109/ICDM50108.2020.00184 [165] Xinjian Zhang, Bo Ning, and Chengfei Liu. 2024. DPCAG: A Community Affiliation Graph Generation Model for Preserving Group Relationships. In 
+
+Proceedings of the 33rd ACM International Conference on Information and Knowl-edge Management (Boise, ID, USA) (CIKM ’24) . Association for Computing Machinery, New York, NY, USA, 3259–3268. doi:10.1145/3627673.3679657 [166] Yang Zhang, Mathias Humbert, Bartlomiej Surma, Praveen Manoharan, Jilles Vreeken, and Michael Backes. 2020. Towards Plausible Graph Anonymization. 
+
+Proc. 2020 Netw. Distrib. Syst. Secur. Symp. (2020). https://dx.doi.org/10.14722/ ndss.2020.23032 [167] Yi Zhang, Yuying Zhao, Zhaoqing Li, Xueqi Cheng, Yu Wang, Olivera Kotevska, Philip S. Yu, and Tyler Derr. 2024. A Survey on Privacy in Graph Neural Networks: Attacks, Preservation, and Applications. IEEE Trans. Knowl. Data Eng. 36, 12 (2024), 7497–7515. doi:10.1109/TKDE.2024.3454328 [168] Jun Zhao, Junshan Zhang, and H. Vincent Poor. 2017. Dependent Differential Privacy for Correlated Data. In 2017 IEEE Globecom Workshops (GC Wkshps) .1–7. doi:10.1109/GLOCOMW.2017.8269219 [169] Hong Zhu, Xin Zuo, and Meiyi Xie. 2019. DP-FT: A Differential Privacy Graph Generation With Field Theory for Social Network Data Release. IEEE Access 7(2019), 164304–164319. doi:10.1109/ACCESS.2019.2952452 [170] Yanqiao Zhu, Yuanqi Du, Yinkai Wang, Yichen Xu, Jieyu Zhang, Qiang Liu, and Shu Wu. 2022. A Survey on Deep Graph Generation: Methods and Applications. In Proceedings of the First Learning on Graphs Conference (Proceedings of Machine Learning Research, Vol. 198) , Bastian Rieck and Razvan Pascanu (Eds.). PMLR, 47:1–47:21. https://proceedings.mlr.press/v198/zhu22a.html [171] Zongrui Zou, Jingcheng Liu, and Jalaj Upadhyay. 2025. Almost linear time differentially private release of synthetic graphs. In Proceedings of The 28th International Conference on Artificial Intelligence and Statistics (Proceedings of Machine Learning Research, Vol. 258) , Yingzhen Li, Stephan Mandt, Shipra Agrawal, and Emtiyaz Khan (Eds.). PMLR, 289–297. https://proceedings.mlr. press/v258/zou25a.html 
+
+## A Formal Definitions A.1 Graph Differential Privacy 
+
+We provide formal definitions of the two graph DP notions that dom-inate the literature, and that our work focuses on: edge-DP [ 71 ] and node-DP [ 73 ]. We then provide definitions for the less common no-tions mentioned, namely partition-DP [ 136 ] and attribute-DP [ 10 ]. 
+
+Edge Differential Privacy [ 71 ]. A randomised algorithm 𝐴 : G ↦ → Y is 𝜖 -edge-differentially private if for all neighbouring graphs 
+
+𝐺 = (𝑉 , 𝐸 ), 𝐺 ′ = (𝑉 , 𝐸 ′) ∈ G and for all possible outputs 𝑌 ⊆ Y ,Pr [𝐴 (𝐺 ) ∈ 𝑌 ] ≤ 𝑒 𝜖 Pr [𝐴 (𝐺 ′) ∈ 𝑌 ], (5) where 𝐺, 𝐺 ′ are neighbouring graphs if |𝐸 △𝐸 ′ | = 1. Intuitively, 
+
+𝐺 and 𝐺 ′ differ on exactly one edge by its addition or removal, however the node set remains the same. D’Silva et al. 
+
+Metric Formula Additional Notes 
+
+Number of Nodes |𝑉 |
+
+Number of Edges |𝐸 |
+
+(Undirected) Density (𝐺 ) |𝐸 |(| 𝑉 | (| 𝑉 |− 1)/ 2
+
+Harmonic Diameter (𝐺 ) |SD |    
+
+> Í
+> 𝑥 ∈SD 𝑥 −1
+
+SD is the set of shortest distances between all pairs of vertices. (Degree) Assortativity (𝐺 )   
+
+> Í𝑥 𝑦 𝑥 𝑦 (𝑒𝑥 𝑦 −𝑎𝑥 𝑏𝑦 )
+> 𝜎𝑎 𝜎 𝑏
+
+𝑒 𝑥 𝑦 is the proportion of edges joining nodes of degree 𝑥 and 𝑦 ,
+
+{𝑎, 𝑏 }∗ are the proportions of edges incident on vertex ∗,and 𝜎 𝑎 , 𝜎 𝑏 are the standard deviations of 𝑎 𝑥 , 𝑏 𝑦 .Modularity (𝐺, 𝑐 ) 12|𝐸 |
+
+Í𝑖,𝑗 ∈𝑉 ×𝑉 
+
+ 𝐴 𝑖 𝑗 − Deg. (𝑖 )Deg. ( 𝑗 ) 
+
+> 2|𝐸 |
+
+𝛿 (𝑐 𝑖 , 𝑐 𝑗 )
+
+𝛿 (𝑐 𝑖 , 𝑐 𝑗 ) is 1 if nodes 𝑖 and 𝑗 have the same community, else 0,
+
+𝐴 𝑖 𝑗 is 1 if an edge exists between 𝑖 and 𝑗 , else 0, 
+
+𝑐 is a partition of communities, and Deg. abbreviates Degree. Degree (𝑣 ) | { ( 𝑢, 𝑣 ) ∈ 𝐸 } | Number of edges incident to a given node 𝑣 .Clustering Coefficient (𝑣 ) 2𝑇 (𝑣 ) 
+
+> Degree (𝑣 ) ( Degree (𝑣 ) − 1)
+
+𝑇 (𝑣 ) is the number of triangles through vertex 𝑣 .Betweenness Centrality (𝑣 ) Í𝑠,𝑡 ∈𝑉 ×𝑉 |SP (𝑠,𝑡 |𝑣 ) | |SP (𝑠,𝑡 ) | 
+
+|SP (𝑠, 𝑡 |𝑣 ) | is the number of shortest paths from 𝑠 to 𝑡 via 𝑣 ,
+
+|SP (𝑠, 𝑡 ) | is the number of shortest paths from 𝑠 to 𝑡 .Closeness Centrality (𝑣 ) |𝑉 |− 1Í   
+
+> 𝑢 ∈𝑉 ,𝑢 ≠𝑣 SD (𝑢,𝑣 )
+
+SD is the shortest distance function between 𝑢 and 𝑣 .PageRank (𝑣 ) 1−𝑑   
+
+> |𝑉 |
+
++ 𝑑 Í(𝑢,𝑣 ) ∈ 𝐸 PageRank (𝑢 )|{ ( 𝑢,𝑤 ) ∈ 𝐸 }| 𝑑 is the dampening factor, usually set to 0.85 .Adjusted Rand Index (𝐴, 𝐵 ) 
+
+> Í𝑖 𝑗
+
+(𝑛 𝑖 𝑗  
+
+> 2
+
+) −
+
+ Í𝑖 (𝑎 𝑖  
+
+> 2
+
+) Í𝑗 (𝑏 𝑗  
+
+> 2
+
+)  (𝑛  
+
+> 2
+
+)
+
+> 12
+
+ Í𝑖 (𝑎 𝑖  
+
+> 2
+
+)+Í𝑗 (𝑏 𝑗  
+
+> 2
+
+) −
+
+ Í𝑖 (𝑎 𝑖  
+
+> 2
+
+) Í𝑗 (𝑏 𝑗  
+
+> 2
+
+)  (𝑛  
+
+> 2
+
+)
+
+𝑎 𝑖 is the size of true label 𝑖 (representing a community), 
+
+𝑏 𝑗 is the size of predicted label 𝑗 , and 
+
+𝑛 𝑖 𝑗 is the number of nodes with true label 𝑖 and predicted label 𝑗 .Normalised Discounted Cumulative Gain (𝐴, 𝐵 ) DCG (𝐵 ) 
+
+> DCG (𝐴 )
+
+; where DCG (𝑋 ) = Í|𝑉 |   
+
+> 𝑖 =1
+> PageRank (𝑖 )
+> log 2(𝑖 +1)
+
+𝐴 is the true ranking, 𝐵 is the predicted ranking. Absolute Error |𝑦 − ˆ𝑦 | 𝑦 = true value; ˆ𝑦 = measured value. Relative Error |𝑦 − ˆ𝑦 |/ 𝑦 𝑦 = true value; ˆ𝑦 = measured value. 
+
+𝐹 1 Score 2TP  
+
+> 2TP +FP +FN
+
+T = true; F = false; P = positive; N = negative. Edge Correctness (𝐺 1, 𝐺 2 ) |𝑓 (𝐸 1 )∩ 𝐸 2 ||𝐸 1 | 𝑓 is the node mapping, and 𝐺 1 is the true graph. Symmetric Substructure Score (𝐺 1, 𝐺 2 ) |𝑓 (𝐸 1 )∩ 𝐸 2 ||𝐸 1 |+| 𝐸 (𝐺 2 [𝑓 (𝑉 1 ) ]) |+| 𝑓 (𝐸 1 )∩ 𝐸 2 | 𝑓 is the node mapping, square brackets induce a subgraph. Reconstruction Relative Absolute Error (𝐺 1, 𝐺 2 ) || 𝐺 1 −𝐺 2 || 𝐹   
+
+> || 𝐺 1|| 𝐹
+
+𝐺 ∗ are adjacency matrices, as defined in [4]. 
+
+Table 9: Formal definitions of metrics. Graphs are notated as 𝐺 = (𝑉 , 𝐸 ), and vertex iterators are typically denoted by 𝑢, 𝑣, 𝑤 .
+
+Node Differential Privacy [ 73 ]. A randomised algorithm 𝐴 : G ↦ → Y is 𝜖 -node-differentially private if for all neighbouring graphs 
+
+𝐺, 𝐺 ′ ∈ G and for all possible outputs 𝑌 ⊆ Y , Eq. 5 holds. 𝐺 =
+
+(𝑉 , 𝐸 ), 𝐺 ′ = (𝑉 ′, 𝐸 ′) are neighbouring graphs if there exists some 
+
+𝑉 ∗ ⊆ 𝑉 ∩𝑉 ′ such that 3 𝐺 [𝑉 ∗] = 𝐺 ′ [𝑉 ∗] and max (| 𝑉 |, |𝑉 ′ |) − | 𝑉 ∗ | =
+
+1. Intuitively, 𝐺 and 𝐺 ′ differ on exactly one node by its addition or removal. If removed, all incident edges are implicitly removed; if added, the node is connected by any number of edges within J0, 𝑛 K.
+
+Partition Differential Privacy [ 136 ]. A partitioned graph is one consisting of 𝑘 > 1 connected components, where 𝐺 = {𝑔 1, . . . , 𝑔 𝑘 }
+
+and all 𝑔 𝑖 are disjoint subgraphs of 𝐺 such that 𝐺 = Ð𝑘 𝑖 =1 {𝑔 𝑘 }.A randomised algorithm 𝐴 : G ↦ → Y is 𝜖 -partition-differentially private if for all neighbouring partitioned graphs 𝐺, 𝐺 ′ ∈ G and for all possible outputs 𝑌 ⊆ Y , Eq. 5 holds. 𝐺 and 𝐺 ′ are neighbouring if |𝐺 △𝐺 ′ | = 1, i.e., they differ on exactly one connected component. 
+
+Vertex (and Edge) Attribute Differential Privacy [ 10 ]. A vertex-attributed graph (𝐺 = (𝑉 , 𝐸 ), ℓ ) is a graph with a labelling function 
+
+ℓ : 𝑉 ↦ → R𝑚 that encodes information about its vertices. A ran-domised algorithm 𝐴 : H ↦ → Y is 𝜖 -vertex-attribute-differentially private if for all neighbouring attributed graphs (𝐺, ℓ ), (𝐺, ℓ ′) ∈ H 
+
+and for all possible outputs 𝑌 ⊆ Y ,Pr [𝐴 (( 𝐺, ℓ )) ∈ 𝑌 ] ≤ 𝑒 𝜖 Pr [𝐴 (( 𝐺, ℓ ′)) ∈ 𝑌 ]. (6) 
+
+> 3
+
+The notation 𝐺 [𝑆 ] indicates an induced subgraph of 𝐺 given vertices 𝑆 ⊆ 𝑉 , i.e. 
+
+𝐺 [𝑆 ] = ( { 𝑣 |𝑣 ∈ 𝑆 }, { ( 𝑢, 𝑣 ) | ( 𝑢, 𝑣 ) ∈ 𝐸 ∩ 𝑆 × 𝑆 } ) .
+
+Adapting the neighbouring notion from Blocki et al. [ 10 ] to priva-tise attributes only , we define two vertex-attributed graphs (𝐺 =
+
+(𝑉 , 𝐸 ), ℓ ), (𝐺 = (𝑉 , 𝐸 ), ℓ ′) as neighbouring if there exists some 𝑣 ∈
+
+𝑉 where ℓ (𝑣 ) ≠ ℓ′ (𝑣 ) and for all 𝑢 ∈ 𝑉 where 𝑢 ≠ 𝑣 , ℓ (𝑢 ) = ℓ′ (𝑢 ).Intuitively, (𝐺, ℓ ) and (𝐺, ℓ ′) differ on exactly one vertex attribute vector, while the structural information ( 𝐺 ) remains the same. Note the current expression assumes vertex attributes, but is trivially adaptable to provide 𝜖 -edge-attribute-differential privacy .
+
+## A.2 Metrics 
+
+Formal definitions of all metrics used throughout our work are provided in Table 9. 
+
+## B Further Details 
+
+Our supplementary repository 1 contains all source code, results, and additional plots omitted from this paper. Most notably, these in-clude complementary cumulative distribution functions (CCDF) for various distribution results and raw measurements plotted against dataset statistics. An unannotated copy of Fig. 1, and high-resolution copies of all plots in this paper are also included.

@@ -1,0 +1,2866 @@
+Title: DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy
+
+URL Source: https://arxiv.org/pdf/2603.14994v2
+
+Published Time: Fri, 20 Mar 2026 01:02:09 GMT
+
+Number of Pages: 36
+
+Markdown Content:
+# DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 
+
+YUAN QIU, Southeast University, China 
+
+XIAOKUI XIAO, National University of Singapore, Singapore 
+
+YIN YANG, Hamad Bin Khalifa University, Qatar Answering Select-Join-Aggregate (SJA) queries with differential privacy (DP) is a fundamental problem with important applications in various domains. The current state-of-the-art methods ensure user-level DP (i.e., the adversary cannot infer the presence or absence of any given individual user with high confidence) and achieve instance-optimal accuracy on the query results. However, these solutions involve solving expensive optimization programs, which may incur prohibitive computational overhead for large databases. One promising direction to achieve scalability is through sampling, which provides a tunable trade-off between result utility and computational costs. However, applying sampling to differentially private SJA processing is a challenge for two reasons. First, it is unclear what to sample , in order to achieve the best accuracy within a given computational budget. Second, prior solutions were not designed with sampling in mind, and their mathematical tool chains are not sampling-friendly. To our knowledge, the only known solution that applies sampling to private SJA processing is S&E , a recent proposal that (i) samples users and (ii) combines sampling directly with existing solutions to enforce DP. We show that both are suboptimal designs; consequently, even with a relatively high sample rate, the error incurred by S&E can be 10x higher than the underlying DP mechanism without sampling. Motivated by this, we propose Differentially Private Sampling for Scale (DP-S4S ), a novel mechanism that addresses the above challenges by (i) sampling aggregation units instead of users, and (ii) laying the mathematical foundation for SJA processing under Rényi-DP , which composes more easily with sampling. Further, DP-S4S can answer both scalar (e.g., COUNT, SUM, etc.) and vector (with GROUP BY predicts) SJA queries. Extensive experiments on real data demonstrate that DP-S4S enables scalable SJA processing on large datasets under user-level DP, while maintaining high result utility. CCS Concepts: • Security and privacy → Differential privacy ; • Information systems → Database query processing ; • Mathematics of computing → Probability and statistics. Additional Key Words and Phrases: differential privacy, user-level privacy, sampling, query processing, graph analytics, relational databases 
+
+ACM Reference Format: 
+
+Yuan Qiu, Xiaokui Xiao, and Yin Yang. 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy. Proc. ACM Manag. Data 4, 3 (SIGMOD), Article 165 (June 2026), 36 pages. https://doi.org/10.1145/3802042 
+
+1 Introduction 
+
+Differential privacy (DP) [13 ] provides a rigorous framework for releasing query results while protecting individuals’ privacy, by requiring outputs to remain statistically similar on any two 
+
+neighboring datasets , so that the adversary cannot infer with high confidence which dataset was 
+
+Authors’ Contact Information: Yuan Qiu, yuanqiu@seu.edu.cn, Southeast University, Nanjing, Jiangsu, China; Xiaokui Xiao, xkxiao@nus.edu.sg, National University of Singapore, Singapore City, Singapore; Yin Yang, yyang@hbku.edu.qa, Hamad Bin Khalifa University, Doha, Qatar. 
+
+This work is licensed under a Creative Commons Attribution 4.0 International License. 
+
+© 2026 Copyright held by the owner/author(s). ACM 2836-6573/2026/6-ART165 https://doi.org/10.1145/3802042 Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026.  
+
+> arXiv:2603.14994v2 [cs.DB] 19 Mar 2026 165:2 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+used to produce the outputs. The precise privacy guarantee depends on the definition of neighboring datasets. In a relational database, record-level DP considers two datasets as neighbors if they differ in exactly one record [ 11 , 16 , 19 , 30 , 34 ]. User-level DP , in contrast, treats two datasets as neighbors if they differ in the set of all the records contributed by one user [ 15 , 22 ]. The latter, stronger notion is necessary when each user may contribute multiple, potentially correlated records, e.g., connections in a social network, purchase histories in an e-commerce platform, etc. This paper focuses on enforcing user-level DP when answering Select-Join-Aggregate (SJA) 
+
+queries, which combine selection predicates, joins, and aggregation operators to capture a broad spectrum of reporting workloads, making them a central target for private query processing systems [ 10 , 23 ]. A major challenge in processing SJA queries under user-level DP is that such a query often has a high sensitivity , meaning that adding or removing a user (which may lead to the addition or removal of many records) can significantly alter the query output. As we review in Section 2.1, a high sensitivity necessitates large amounts of noise to be injected into the query result to satisfy DP, leading to poor result utility. To address this issue, state-of-the-art approaches to SJA processing under user-level DP (e.g., [ 9 , 10 ]) commonly employ a technique called truncation . The main idea is to impose a limit on the influence that any single user can have on the SJA query result. For instance, consider a simple query: edge counting in a social network, in which a user can have a large number of connections (e.g., up to 5,000 on Facebook [ 31 ]). With truncation, the query engine can impose an upper bound, e.g., up to 10 edges are counted for each user, which reduces the query sensitivity dramatically, leading to a lower noise requirement to satisfy DP, as we explain in Section 2.1. Truncation, however, also has a negative impact on query result accuracy, since it introduces a bias by capping the influence of every user. Thus, to design an effective truncation scheme that maximizes result utility, one must carefully balance the error due to truncation bias and the noise injected to satisfy DP, which is a non-trivial problem. Prior work R2T [ 9 ] addresses this by considering all possible truncation thresholds that are a power of two, which guarantees asymptotically optimal result accuracy, as we elaborate further in Section 2.3. The downside of 
+
+R2T , however, is that for each truncation threshold, it needs to solve a linear program to choose aggregation units to retain [ 22 ]. Since it is computationally expensive to solve so many linear programs, R2T does not scale well to large datasets [ 15 ], as shown in our experiments in Section 5. Further, R2T is limited to SJA queries with scalar outputs, i.e., each query returns a single numeric result. For SJA queries with vector outputs , e.g., those involving a GROUP BY clause, the best known solution to our knowledge is PMSJA [ 10 ], which involves solving even more expensive quadratically constrained quadratic programs (QCQPs) [27, 29], which exacerbates the scalability issue. A natural approach to improving efficiency is sampling, which enables the user to reach a desirable trade-off between query result accuracy and computational costs by choosing an appropriate sample size. Unfortunately, incorporating sampling into user-level private SJA processing is challenging, since (i) it is unclear what objects should be sampled to stay within a computational budget, and (ii) existing truncation-based pipelines are calibrated in the (𝜀, 𝛿 )-DP model, which is not easy to compose with sampling. To our knowledge, the only user-level DP solution with sampling is 
+
+S&E [15 ], which (i) samples users and then extends the sample by exploring their neighboring records, and (ii) applies an existing solution such as R2T or PMSJA on the extended sample set. Since the sampled users may remain highly correlated, the privacy analysis demands injecting far more noise, yielding errors that can exceed those of R2T or PMSJA by more than an order of magnitude. This paper presents Differentially Private Sampling for Scale (DP-S4S ), a mechanism that delivers user-level DP accuracy comparable to R2T and PMSJA while scaling to much larger databases. DP-S4S samples aggregation units (e.g., join tuples) instead of users, which keeps samples compact and  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:3
+
+avoids the worst cross-user correlations as in S&E . We show that the error introduced by sampling can be partially compensated for by its privacy amplification effect, which reduces the noise level to satisfy DP. Meanwhile, for vector SJA queries, we build new mathematical infrastructure to adapt the idea of PMSJA to satisfy Rényi DP (which composes well with sampling), before converting the privacy guarantee to the standard DP notion. In particular, we design the first smooth sensitivity mechanism under Rényi DP, which can be of independent interest. Extensive experiments with real data demonstrate that for scalar queries, DP-S4S sustains the accuracy of R2T while dramatically improving efficiency. For vector queries, the extended version of DP-S4S matches PMSJA at a fraction of the runtime. Both versions of DP-S4S consistently outperform S&E , achieving more than 10 × lower error at smaller sample rates under the same privacy budget. 
+
+2 Background 
+
+Section 2.1 provides preliminaries on the definitions and properties of differential privacy. Section 2.2 clarifies the problem setting, and Section 2.3 reviews notable existing solutions. 
+
+2.1 Differential Privacy 
+
+In this paper, we follow the standard centralized differential privacy setting, in which a trusted data curator has access to the raw data, and releases only query results that under differential privacy constraints. The adversary aims to infer private information from the DP-compliant query outputs. Since DP offers information-theoretic privacy guarantees, we do not rely on any assumption on the computational power of the adversary. Let I be the domain of all instances of a given relational database schema, differential privacy (DP ) is defined as follows: 
+
+Definition 2.1 (Differential Privacy [ 13 ]). For 𝜀 > 0 and 𝛿 ≥ 0, a randomized mechanism M : I → O is (𝜀, 𝛿 )-DP, if for any pair of neighboring database instances I ∼ I′ and any subset of outputs 
+
+𝑂 ⊆ O , it holds that 
+
+Pr [M ( I) ∈ 𝑂 ] ≤ 𝑒 𝜀 · Pr [M ( I′) ∈ 𝑂 ] + 𝛿 . 
+
+When 𝛿 = 0, we say the mechanism satisfies pure DP . Otherwise (i.e., when 𝛿 > 0), we say the mechanism satisifes approximate DP . Note that in the above definition, the concept of “neighboring” database instances I ∼ I′ is left abstract, which we will clarify with concrete definitions in Section 2.2. A common approach to answering numerical queries under differential privacy is to inject random noise into the query results, whose scale is calibrated to the sensitivity of the query. The widely used notion of global sensitivity (GS ) considers all possible neighboring instances in the domain I, as follows. 
+
+Definition 2.2 (Global Sensitivity [ 14 ]). Given 𝐹 : I → R𝑑 , the global sensitivity of 𝐹 is defined as 
+
+GS 𝐹 := max   
+
+> I,I′∈ I :I∼I′
+
+∥𝐹 (I) − 𝐹 (I′)∥ .
+
+GS can be defined over 𝐿 1 or 𝐿 2 norms. The Laplace mechanism calibrates noise to the 𝐿 1-GS of the query to achieve pure DP: 
+
+Lemma 2.3 (Laplace Mechanism). Given 𝐹 : I → R𝑑 ,
+
+MLap (I) := 𝐹 (I) + 𝑏 · Lap 𝑑 (0, 1)
+
+satisfies (𝜀, 0)-DP when 𝑏 ≥ GS 𝐿 1 /𝜀 .
+
+An important property of DP mechanisms is composability , meaning that multiple DP mechanisms can be combined to form a composite mechanism that still satisfies DP, as follows.  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:4 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+Lemma 2.4 (Composition Theorems [ 13 , 14 ]). Let M be the adaptive composition of DP algorithms 
+
+M1, . . . M𝑘 , then 
+
+(1) (Basic Composition) If each M𝑖 is (𝜀 𝑖 , 𝛿 𝑖 )-DP, then M is (Í𝑖 𝜀 𝑖 , Í𝑖 𝛿 𝑖 )-DP. 
+
+(2) (Advanced Composition) If each M𝑖 is (𝜀, 𝛿 )-DP, then for any 𝛿 ′ > 0, M is (𝜀 √︁ 2𝑘 ln (1/𝛿 ′) + 
+
+𝑘𝜀 𝑒 𝜀 −1  
+
+> 𝑒 𝜀 +1
+
+, 𝑘𝛿 + 𝛿 ′)-DP. 
+
+The composability properly enables DP mechanism designers to split the problem into subtasks, each with a portion of the privacy parameters 𝜀 and 𝛿 called its privacy budget .
+
+Rényi DP. In Lemma 2.4, the basic composition is clean but loose for approximate DP, whereas the advanced composition is tighter but with a messy formula. Next, we introduce an alternative definition of differential privacy: Rényi DP, which has tight and clean composition, and can be easily converted to standard DP, as follows. 
+
+Definition 2.5 (Rényi Differential Privacy (RDP) [ 26 ]). For 𝛼 > 1 and 𝜌 > 0, a randomized mechanism M : I → O is (𝛼, 𝜌 )-RDP, if for any pair of neighboring datasets I ∼ I′, it holds that 
+
+D𝛼 (M ( I)∥M ( I′)) ≤ 𝜌 , 
+
+where D𝛼 (𝑃 ∥𝑄 ) := 1  
+
+> 𝛼 −1
+
+ln ∫   
+
+> 𝑧 ∈supp (𝑄 )
+
+𝑃 (𝑧 )𝛼 𝑄 (𝑧 )1−𝛼 d𝑧 is the Rényi divergence of order 𝛼 .
+
+Lemma 2.6 (RDP Composition [ 26 ]). Let M be the adaptive composition of DP algorithms 
+
+M1, . . . M𝑘 , where each M𝑖 is (𝛼, 𝜌 𝑖 )-RDP, then M is (𝛼, Í𝑖 𝜌 𝑖 )-RDP. 
+
+Lemma 2.7 (Conversion between DP and RDP [ 5, 26 ]). If M is (𝜀, 0)-DP, then M is also 
+
+(𝛼, 𝛼𝜀 2 
+
+> 2
+
+)-RDP for any 𝛼 > 1. If M is (𝛼, 𝜌 )-RDP, then M is also 
+
+
+
+𝜌 + ln (1/𝛿 )  
+
+> 𝛼 −1
+
+, 𝛿 
+
+
+
+-DP for any 𝛿 > 0.
+
+A common mechanism for enforcing Rényi DP is the Gaussian mechanism, which is based on the concept of Gaussian Rényi divergence, as follows. 
+
+Lemma 2.8 (Gaussian Rényi Divergence [ 18 ]). Let N ( 𝝁 , 𝜎 21𝑑 ) denote a multivariate Gaussian distribution, then 
+
+D𝛼 (N ( 𝝁 1, 𝜎 21 1𝑑 )∥N ( 𝝁 2, 𝜎 22 1𝑑 )) 
+
+=𝛼 
+
+2 · ∥𝝁 1 − 𝝁 2 ∥22
+
+(1 − 𝛼 )𝜎 21 + 𝛼𝜎 22
+
++ 𝑑 
+
+2(𝛼 − 1) ln 𝜎 2(1−𝛼 ) 
+
+> 1
+
+𝜎 2𝛼 
+
+> 2
+
+(1 − 𝛼 )𝜎 21 + 𝛼𝜎 22
+
+if (1 − 𝛼 )𝜎 21 + 𝛼𝜎 22 > 0, otherwise infinite. 
+
+Lemma 2.9 (Gaussian Mechanism). Given 𝐹 : I → R𝑑 ,
+
+MGauss (I) := 𝐹 (I) + 𝜎 · N ( 0, 1𝑑 )
+
+satisfies (𝛼, 𝜌 )-RDP when 𝜎 ≥ GS 𝐿 2 ·√︁ 𝛼 /2𝜌 .
+
+Local sensitivity and smooth sensitivity. Lastly, we define local sensitivity of a function 𝐹 with respect to a given instance I as: 
+
+LS 𝐹 (I) := max   
+
+> I′∈ I :I∼I′
+
+∥𝐹 (I) − 𝐹 (I′)∥ .
+
+Sometimes, a function 𝐹 ’s local sensitivity is far smaller than its global sensitivity, which is a situation we encounter later in Section 4. However, it is known that injecting noise directly based on local sensitivities cannot guarantee DP [ 32 ]. The following definition provides a middle ground between global and local sensitivities.  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:5
+
+Lemma 2.10 (Smooth-sensitivity [ 28 ]). Given 𝐹 : I → R𝑑 and an upper bound function 
+
+𝐵 (I) ≥ LS 𝐹 (I), the 𝛾 -smooth-sensitivity of 𝐹 is defined as 
+
+SS 𝐹 (I, 𝛾 ) := max   
+
+> I′∈ I
+
+{𝐵 (I′) · 𝑒 −𝛾 ·dist (I,I′ ) } ,
+
+where dist (· , ·) is defined over the neighboring relationship. It satisfies SS 𝐹 (I, 𝛾 ) ≥ LS 𝐹 (I) and 
+
+SS 𝐹 (I, 𝛾 ) ≤ 𝑒 𝛾 · SS 𝐹 (I′, 𝛾 ) for any I ∼ I′.
+
+2.2 SJA Queries with User-Level DP 
+
+SJA queries. Consider a database schema R = {𝑅 1, . . . , 𝑅 𝑠 } where each 𝑅 𝑖 is a logical relation. A multi-way join is defined as 
+
+𝐽 = 𝑅 1 (x1) Z 𝑅 2 (x2) Z · · · Z 𝑅 𝑠 (x𝑠 ) ,
+
+where each x𝑖 is a set of attributes. The set of variables in the full join is denoted 𝑣𝑎𝑟 (𝐽 ) = x1 ∪· · ·∪ x𝑠 .A database instance I defined over R consists of tables I(𝑅 1), . . . , I(𝑅 𝑠 ). Correspondingly, the join result 𝐽 (I) is a flat table 𝑇 where each tuple takes value in dom (𝑣𝑎𝑟 (𝐽 )) . A Select-Join-Aggregate (SJA) query is defined by both the join 𝐽 and an aggregation function 𝑓 : dom (𝑣𝑎𝑟 (𝐽 )) → R≥0 that assigns a weight 𝑓 (𝑡 ) = 𝑤 𝑡 to each join result 𝑡 ∈ 𝐽 (I). Evaluating query 𝑓 on 𝐽 (I) gives the query result 
+
+𝑄 (I) := 𝑓 (𝑇 ) =∑︁  
+
+> 𝑡 ∈𝑇
+
+𝑤 𝑡 ,
+
+where 𝑇 = 𝐽 (I). Our target is to answer scalar or vector SJA queries. We refer to each join result 
+
+𝑡 ∈ 𝑇 in the flat table as a join tuple or an aggregation unit interchangeably. We also assume the range of 𝑓 is 𝑤 𝑡 ∈ [ 0, 1] for simplicity. This can always be done through normalization: if 
+
+𝑤 𝑡 ∈ [ 0,𝑊 ], then we can consider an 𝑓 ′ = 𝑓 /𝑊 and rescale the query result by 𝑊 to answer 𝑓 .
+
+User-level DP for SJA queries. Next, we define user-level DP in the context of SJA query processing. Recall from Section 2.1 that in the DP definition, the concept of neighboring databases instances I ∼ I′ is left abstract. In this paper, we adopt “user-level DP with foreign-key constraints” [ 9 ,15 , 23 ]. Specifically, we assume that there is a primary private relation 𝑅 𝑝 ∈ R where each record 
+
+𝑢 ∈ I(𝑅 𝑝 ) is a private user. The set of all users is denoted as 𝑈 := I(𝑅 𝑝 ).We say a record 𝑟 ∈ I(𝑅 ) is contributed by user 𝑢 , denoted 𝑢 { 𝑟 , following a recursive definition: 1) 𝑢 { 𝑢 ; 2) if there is an 𝑟 ′ ∈ I(𝑅 ′) such that 𝑢 { 𝑟 ′, and there is a foreign key in 𝑟 that references the primary key in 𝑟 ′, then we have 𝑟 is also contributed by 𝑢 , i.e., 𝑢 { 𝑟 . Two instances I and I′
+
+are neighbors (i.e., I ∼ I′), if there exists a user 𝑢 such that for each record 𝑟 that I and I′ differ, we have 𝑢 { 𝑟 . We call such a user 𝑢 a witness .Let 𝑛 = |𝐽 (I)| be the number of join results, and 𝑚 = |𝑈 | be the number of users. Note that by our definition, a user may contribute to multiple tuples, and a tuple may be contributed by multiple users. We assume that each user can have at most Δ tuples, and that each tuple is contributed by 𝑙 
+
+users. Note that this model generalizes DP definitions in the literature: when 𝑙 = 1, it degenerates to “user-DP without self-joins” [ 17 , 25 ]; when Δ = 𝑙 = 1, it reduces to tuple-level DP; without a constraint on Δ or 𝑙 , it is user-level DP. 
+
+2.3 Existing Solutions 
+
+Although there are generic mechanisms to enforce differential privacy, e.g., Laplace and Gaussian mechanisms reviewed in Section 2.1, they cannot be directly applied to the problem of SJA query processing under user-level DP as described in Section 2.2, in which the problem setting incurs a prohibitively high global sensitivity (Definition 2.2). In particular, assume that a record can have up to 𝐷 matching partners in one join operation, and that the aggregate is COUNT. With 𝑡 joins, in  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:6 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+the worst case, one user’s record 𝑢 can contribute 𝑂 (𝐷 𝑡 ) join results, leading to a global sensitivity of 𝑂 (𝐷 𝑡 ), and, thus, overwhelming noise required to satisfy DP. 
+
+Trucation [ 22 ]. To reduce the global sensitivity of the SJA query, a common technique is truncation ,which imposes a constraint on the maximum influence of a user on the query result. Formally, given a truncation threshold 𝜏 , we compute the result of a truncated SJA query where the contribution of any user is capped to 𝜏 , meaning that the global sensitivity of the truncated query is bounded by 
+
+𝜏 [22 ]. This step involves solving a linear program [ 22 ], which minimizes the error after injecting noise to satisfy DP. Clearly, the result of the truncated SJA query can differ from the original query, which we call the truncation bias . Hence, the truncation threshold 𝜏 is a critical system parameter that balances truncation bias with DP noise: a larger 𝜏 reduces the truncation error, but at the same leads to a larger global sensitivity, and, thus, higher noise needed to satisfy DP, and vice versa. The optimal value for 𝜏 depends upon the maximum contribution of a user in the dataset, called the downward sensitivity , defined as 
+
+DS 𝐹 (I) := max   
+
+> I′⊆I:I∼I′
+
+∥𝐹 (I) − 𝐹 (I′)∥ .
+
+Note that choosing the truncation threshold 𝜏 using the exact downward sensitivity DS 𝐹 (I)
+
+would violate differential privacy [ 9 , 22 ], since DS 𝐹 (I) itself may depend upon private information. 
+
+R2T [ 9 ]. The R2T algorithm chooses an appropriate trucation threshold 𝜏 by considering all the candidate 𝜏 ’s that are powers of 2, each of which is allocated with a portion of the privacy budget. For every 𝜏 , the algorithm solves the linear program in [ 22 ], whose target value gives the truncated query result. Then, R2T injects random noise according to the corresponding 𝜏 ’s to satisfy DP. After subtracting the error bound, all of them become under-estimates with high probability, and the maximum among them provides a balance between the truncation error and the DP noise. Since the candidate 𝜏 ’s are powers of 2, the number of candidates is logarithmic; accordingly, the authors of [ 9] prove that the utility guarantee of R2T matches the instance-optimal lower bound Ω(DS (I)) 
+
+up to polylogarithmic factors. 
+
+PMSJA [ 10 ]. R2T is designed for scalar queries that return a single value. For SJA queries that return vectors (e.g., GROUP BY aggregates), a natural idea is to exploit the composition property in Lemma 2.4 to split the privacy budget among the vector entries. In particular, using advanced composition in Lemma 2.4, the 𝐿 2 error of the noisy result is then ˜𝑂 
+
+√𝑑 ·√︃ Í𝑑 𝑖 =1 DS 2 
+
+> 𝑖
+
+(I)
+
+
+
+, where 
+
+DS 𝑖 (I) is the maximum contribution of an user to the 𝑖 -th entry. This is optimal if the user with maximum contribution is the same across all entries. However, if each user contributes to a different entry, this error becomes ˜𝑂 (𝑑 ), whereas the optimal bound is ˜𝑂 (√𝑑 ) as DS 𝐹 (I) = 1. To address this issue, the PMSJA algorithm [ 10 ] resorts to using a quadratically constrained quadratic program (QCQP) combined with local-sensitivity based mechanisms to achieve instance-optimal error 
+
+˜𝑂 (√𝑑 · DS 𝐹 (I)) , which we revisit in Section 4. 
+
+S&E [ 15 ]. The user-level DP solutions presented so far for SJA queries all involve solving expensive optimization programs, which are inherently difficult to scale. To reduce the computational costs, 
+
+sample-and-explore (S&E ) applies sampling to the set of users. Specifically, S&E takes as input the number of iterations; in each iteration, it samples a user uni-formly at random. The algorithm then builds an “explored” instance containing all the aggregation units where the sampled user appears first. After that, a DP mechanism (e.g. R2T or PMSJA ) is applied on the explored instance. To obtain the estimator for an iteration, the output is scaled back by the number of users 𝑚 , which is also the inverse of the probability that each aggregation unit is sampled. S&E then takes the average over multiple iterations to reduce the sample variance.                      
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:7
+> D
+> BF
+> E
+> GA
+> C
+> Fig. 1. A social network 𝐺 .
+> User Triangle Count
+> before trunc. after trunc. A, G 11B, F 22C, D, E 32
+> Table 1. Users’ triangle counts in 𝐺 .
+> Triangle Weight
+> △ABC ,△EFG 1
+> △BCD ,△DEF 1
+> △CDE 0
+> Table 2. A truncation with 𝜏 =2.
+
+The privacy guarantee of S&E relies on a given upper bound 𝐶 on the number of collaborators of each user. Two users collaborate if they contribute to the same aggregation unit. The intuition is that on a neighboring dataset with an extra user, the explored instance will be the same unless the sampled user happens to be the witness or one of their collaborators, which occurs with probability approximately 𝐶 /𝑚 .A major issue for S&E is that its privacy cost is linear to 𝐶 . which leads to large errors as we show in Section 3.3. The proposed approach DP-S4S , presented in the next section, overcomes this problem. In particular, our amplification bound has no assumption on 𝐶 , and achieves a strict amplification in the privacy budget. As a result, the result utility of DP-S4S may even surpass that of the R2T mechanism without sampling in some cases, as shown in our experiments in Section 5. 
+
+3 DP-S4S for Scalar Queries 
+
+This section presents DP-S4S for scalar SJA queries that return a single aggregate value. The extension to vector SJA queries is deferred to Section 4. The main idea is that instead of sampling users as in S&E , DP-S4S samples aggregate units , i.e., the join tuples upon which the scalar query is aggregating. For example, consider a triangle count query with pure DP in a social network 𝐺 , illustrated in Figure 1, where each vertex is a user. Table 1 lists the number of triangles contributed by each user, before and after applying a truncation threshold of 2. The 5 triangles shown in Table 2 are the aggregate units. DP-S4S first constructs a sample set 𝑆 of such aggregate units, and then applies truncations on 𝑆 to reduce the 𝐿 1 sensitivity of the aggregation on 𝑆 ; after that, it generates the aggregation result on the truncated 𝑆 , injects Laplace noise, and then returns the noisy result scaled up by a factor decided by the sampling rate. The truncation threshold 𝜏 used on 𝑆 is decided using a differentially private algorithm, which ensures that the choice of 𝜏 does not lead to a privacy breach. In the following, we first focus on pure DP (i.e., ( 𝜀 , 0)-DP) in Sections 3.1-3.3, and extend the result to approximate DP in Section 3.4. In particular, Section 3.1 explains the truncation of a sample set 𝑆 
+
+given a threshold 𝜏 . Section 3.2 focuses on the DP algorithm for choosing 𝜏 . Section 3.3 analyzes the theoretical guarantee of DP-S4S and compares against existing solutions. 
+
+3.1 Sample and Truncate 
+
+Recall from Section 2.2 that for a query 𝑓 over the join tuples 𝑇 , our target is to compute 𝑓 (𝑇 ) :=Í𝑡 ∈𝑇 𝑤 𝑡 . Similar to Dong et al . [9] , the proposed mechanism DP-S4S applies after computing all the joins and before the final aggregation. Specifically, DP-S4S samples each join tuple 𝑡 ∈ 𝑇 with probability 𝑞 to form 𝑆 , and rescales the aggregation result 𝑓 (𝑆 ) by 1/𝑞 as an estimator for 𝑓 (𝑇 ).Thus, the problem reduces to how to release 𝑓 (𝑆 ) accurately with user-level DP. Given a truncation threshold 𝜏 , we can simply apply the steps in [ 9 , 22 ] reviewed in Section 2.2, i.e., solving a linear program to compute the optimal truncation for each user, and then applying the Laplace mechanism to achieve pure DP.  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:8 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+Algorithm 1 Sample-and-Truncate for pure DP 
+
+Input: Join tuples 𝑇 , query 𝑓 , truncation threshold 𝜏 , sample rate 𝑞 , privacy parameter 𝜀 
+
+Output: Private query result ˆ𝑓 (𝑇 , 𝜏 ) 
+
+> 1:
+
+𝑆 ← ∅  
+
+> 2:
+
+for each 𝑡 ∈ 𝑇 do  
+
+> 3:
+
+Sample 𝑡 into 𝑆 with probability 𝑞  
+
+> 4:
+
+¯𝑓 (𝑆, 𝜏 ) ← Optimal target value to problem (1) on 𝑆 , 𝜏  
+
+> 5:
+
+Release ˆ𝑓 (𝑆, 𝜏 ) ← ¯𝑓 (𝑆, 𝜏 ) + Lap ( 𝜏 𝜀 ) 
+
+> 6:
+
+Report ˆ𝑓 (𝑇 , 𝜏 ) ← 1 
+
+> 𝑞
+
+· ˆ𝑓 (𝑆, 𝜏 )
+
+Formally, Algorithm 1 presents the above algorithm for releasing 𝑓 (𝑇 , 𝜏 ) for a given threshold 𝜏 
+
+under ( 𝜀 , 0)-DP. The linear program for computing optimal truncation [9, 22] is as follows. maximize 
+
+> 𝑥 𝑡
+
+∑︁ 𝑡 ∈𝑆 
+
+𝑥 𝑡 (1) subject to ∑︁  
+
+> 𝑡 :𝑢 {𝑡
+
+𝑥 𝑡 ≤ 𝜏, ∀𝑢 ∈ 𝑈 
+
+0 ≤ 𝑥 𝑡 ≤ 𝑤 𝑡 ∀𝑡 ∈ 𝑆 
+
+where each variable 𝑥 𝑡 ∈ [ 0, 𝑤 𝑡 ] is the fractional contribution of join tuple 𝑡 in the sample set 𝑆 
+
+to the truncated query, subject to the constraint that the total contribution of 𝑢 does not exceed the truncation threshold 𝜏 . For a given query, minimizing the truncation bias is equivalent to maximizing the remaining weights; thus, the optimal target value ¯𝑓 (𝑆, 𝜏 ) := Í𝑡 ∈𝑆 𝑥 ∗ 
+
+> 𝑡
+
+is used as the truncated query result. Note that for any 𝜏 ≥ DS (I) (see Section 2.3), the optimal solution is 
+
+𝑥 ∗ 
+
+> 𝑡
+
+= 𝑤 𝑡 and we have ¯𝑓 (𝑆, 𝜏 ) = Í𝑡 ∈𝑆 𝑤 𝑡 = 𝑓 (𝑆 ).After obtaining the result of the truncated query, the algorithm proceeds to add Laplace noise with scale 𝜏 /𝜀 (Line 5), and then scale the result back by 1/𝑞 to correct for sampling (Line 6). Although Algorithm 1 is simple, its privacy analysis is highly non-trivial. A major contribution of this work is to show that sampling join tuples (rather than users), followed by an 𝜀 -user-level DP mechanism on the sample, preserves a stronger 𝜀 ′-user-level DP guarantee, for 𝜀 ′ ≤ 𝜀 . Note that prior work has only considered either sampling users for user-level DP [ 15 ] or tuples for tuple-level DP [ 3 ], but not a combination of both. In addition, when the subsequent pure DP mechanism is truncation-based, we can further achieve an amplified privacy guarantee due to randomness in subsampling. Formally, we have the following result 3.1. 
+
+Lemma 3.1 (Sample-and-Truncate Amplification). Algorithm 1 satisfies 𝜀 ′-user-level DP for 
+
+𝜀 ′ (𝜀, 𝜏, Δ, 𝑞 ) = ln 
+
+
+
+max 
+
+ ⌊𝜏 ⌋∑︁ 
+
+> 𝑘 =0
+
+𝑝 𝑘 exp 
+
+𝑘 𝜏 𝜀 
+
+
+
++ Pr [Bin (Δ, 𝑞 ) > 𝜏 ] exp (𝜀 ),
+
+1
+
+Í⌊𝜏 ⌋ 
+
+> 𝑘 =0
+
+𝑝 𝑘 exp 
+
+
+
+−𝑘 𝜏 𝜀 
+
+
+
++ Pr [Bin (Δ, 𝑞 ) > 𝜏 ] exp (− 𝜀 )
+
+ 
+
+,
+
+where 𝑝 𝑘 = Pr [Bin (Δ, 𝑞 ) = 𝑘 ] =  Δ
+
+> 𝑘
+
+𝑞 𝑘 (1 − 𝑞 )Δ−𝑘 .
+
+Proof. We will show that M ( 𝑇 ) = ˆ𝑓 (𝑆, 𝜏 ) is private, as the final step is a post-processing. Denote the independent Bernoulli (a.k.a. Poisson) subsampling process by 𝜆 , then the probability  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:9
+
+of observing output 𝑧 can be expressed as 1
+
+Pr [M ( 𝑇 ) = 𝑧 ] =∑︁  
+
+> 𝑆 ⊆𝑇
+
+Pr [𝜆 (𝑇 ) = 𝑆 ] · Pr [ ˆ𝑓 (𝑆, 𝜏 ) = 𝑧 ] .
+
+Consider a user-level neighbor 𝑇 ′ = 𝑇 ∪𝑇 𝑢 where the witness is 𝑢 and 𝑇 𝑢 are the records contributed by 𝑢 . WLOG, we assume |𝑇 𝑢 | = Δ, which brings the maximum divergence. Due to independent sampling, 
+
+Pr [M ( 𝑇 ′) = 𝑧 ] =∑︁  
+
+> 𝑆 ⊆𝑇
+
+Pr [𝜆 (𝑇 ) = 𝑆 ] · ∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] · Pr [ ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 ) = 𝑧 ] .
+
+We will use the fact that for 𝑝 𝑖 , 𝐴 𝑖 , 𝐵 𝑖 > 0,
+
+Í𝑖 𝑝 𝑖 𝐴 𝑖 
+
+Í𝑖 𝑝 𝑖 𝐵 𝑖 
+
+≤ max 
+
+> 𝑖
+
+𝐴 𝑖 
+
+𝐵 𝑖 
+
+,
+
+which can be verified by 𝐴 𝑖 ≤ 𝐵 𝑖 · max 𝑖 𝐴 𝑖  
+
+> 𝐵 𝑖
+
+for any 𝑖 . Borrowing ideas from [20], we consider 
+
+Pr [M ( 𝑇 ) = 𝑧 ]
+
+Pr [M ( 𝑇 ′) = 𝑧 ] =
+
+Í𝑆 ⊆𝑇 Pr [𝜆 (𝑇 ) = 𝑆 ] · Pr [ ˆ𝑓 (𝑆, 𝜏 ) = 𝑧 ]
+
+Í𝑆 ⊆𝑇 Pr [𝜆 (𝑇 ) = 𝑆 ] · Í𝑆 𝑢 ⊆𝑇 𝑢 Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] Pr [ ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 ) = 𝑧 ]≤ max  
+
+> 𝑆 ⊆𝑇
+
+Pr [ ˆ𝑓 (𝑆, 𝜏 ) = 𝑧 ]
+
+Í𝑆 𝑢 ⊆𝑇 𝑢 Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] Pr [ ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 ) = 𝑧 ]
+
+= 1
+
+Í𝑆 𝑢 ⊆𝑇 𝑢 Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] Pr [ ˆ𝑓 (𝑆 ∗∪𝑆 𝑢 ,𝜏 )=𝑧 ]    
+
+> Pr [ˆ𝑓 (𝑆 ∗,𝜏 )=𝑧 ]
+
+,
+
+where 𝑆 ∗ = arg max 𝑆 ⊆𝑇 Pr [ ˆ𝑓 (𝑆,𝜏 )=𝑧 ]            
+
+> Í𝑆𝑢 ⊆𝑇𝑢 Pr [𝜆 (𝑇 𝑢 )=𝑆 𝑢 ]Pr [ˆ𝑓 (𝑆 ∪𝑆 𝑢 ,𝜏 )=𝑧 ]
+
+. Consider the optimal solution {𝑥 𝑡 } that achieves 𝑆 ∗, it is also feasible for 𝑆 ∗ ∪ 𝑆 𝑢 , thus ¯𝑓 (𝑆 ∗, 𝜏 ) ≤ ¯𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 , 𝜏 ). On the other hand, given an optimal solution to 𝑆 ∗ ∪ 𝑆 𝑢 , we can obtain a feasible solution for 𝑆 ∗ by setting 𝑥 ′ 
+
+> 𝑡
+
+= 0 for 𝑡 ∈ 𝑆 𝑢 . In doing so, the weight reduced is Í𝑡 ∈𝑆 𝑢 𝑥 𝑡 ≤ min {𝜏, |𝑆 𝑢 |} , since 𝑤 𝑡 ∈ [ 0, 1] (see Section 2.2). Thus, we also have ¯𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 , 𝜏 ) ≤ ¯𝑓 (𝑆 ∗) + min {𝜏, |𝑆 𝑢 |} . In summary, we have | ¯𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 , 𝜏 ) − ¯𝑓 (𝑆 ∗)| ≤ 
+
+min {𝜏, |𝑆 𝑢 |} for any 𝑆 𝑢 .Based on the above fact, we have 
+
+Pr [ ˆ𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 , 𝜏 ) = 𝑧 ]
+
+Pr [ ˆ𝑓 (𝑆 ∗, 𝜏 ) = 𝑧 ] ≥ exp 
+
+
+
+− 𝜀 𝜏 ¯𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 , 𝜏 ) − ¯𝑓 (𝑆 ∗, 𝜏 )
+
+
+
+≥ exp 
+
+
+
+− min {𝜏, |𝑆 𝑢 |} 
+
+𝜏 𝜀 
+
+
+
+,
+
+thus, 
+
+Pr [M ( 𝑇 ) = 𝑧 ]
+
+Pr [M ( 𝑇 ′) = 𝑧 ] ≤ 1
+
+ÍΔ 
+
+> 𝑘 =0
+
+𝑝 𝑘 · exp (− min {𝜏,𝑘 } 
+
+> 𝜏
+
+𝜀 ) ,   
+
+> 1We abuse the notation of Pr [·] for probability density as with convention. Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:10 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+where 𝑝 𝑘 = Pr [Bin (Δ, 𝑞 ) = 𝑘 ] =  Δ
+
+> 𝑘
+
+𝑞 𝑘 (1 − 𝑞 )Δ−𝑘 . Similarly, 
+
+Pr [M ( 𝑇 ′) = 𝑧 ]
+
+Pr [M ( 𝑇 ) = 𝑧 ] ≤ max  
+
+> 𝑆 ⊆𝑇
+
+Í𝑆 𝑢 ⊆𝑇 𝑢 Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] Pr [ ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 ) = 𝑧 ]
+
+Pr [ ˆ𝑓 (𝑆, 𝜏 ) = 𝑧 ]
+
+=∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] Pr [ ˆ𝑓 (𝑆 ◦ ∪ 𝑆 𝑢 , 𝜏 ) = 𝑧 ]
+
+Pr [ ˆ𝑓 (𝑆 ◦, 𝜏 ) = 𝑧 ]≤
+
+> Δ
+
+∑︁ 
+
+> 𝑘 =0
+
+𝑝 𝑘 · exp 
+
+ 𝜀 𝜏 min {𝜏, 𝑘 }
+
+
+
+,
+
+where 𝑆 ◦ = arg max 𝑆 ⊆𝑇                 
+
+> Í𝑆𝑢 ⊆𝑇𝑢 Pr [𝜆 (𝑇 𝑢 )=𝑆 𝑢 ]Pr [ˆ𝑓 (𝑆 ∪𝑆 𝑢 ,𝜏 )=𝑧 ]
+> Pr [ˆ𝑓 (𝑆,𝜏 )=𝑧 ]
+
+.Putting it together, we get Lemma 3.1. □
+
+Optimization with a PGF trick. Lemma 3.1 requires computing Í⌊𝜏 ⌋ 
+
+> 𝑘 =0
+
+𝑝 𝑘 exp 
+
+ 𝑘 𝜏 𝜀 
+
+
+
+and 
+
+Í⌊𝜏 ⌋ 
+
+> 𝑘 =0
+
+𝑝 𝑘 exp 
+
+
+
+−𝑘 𝜏 𝜀 
+
+
+
+, which takes 𝑂 (𝜏 ) = 𝑂 (Δ) time, which can be expensive when 𝜏 is large. We show that with the help of probability-generating function (PGF), we can obtain a numerically stable result in 𝑂 (1) time, assuming the CDF function of a binomial distribution can be evaluated in 𝑂 (1).Let 𝐾 ∼ Bin (Δ, 𝑞 ), consider the PGF of 𝐾 , defined as 
+
+𝐺 (𝑧 ) := E[𝑧 𝐾 ] =
+
+> Δ
+
+∑︁ 
+
+> 𝑘 =0
+
+𝑝 𝑘 · 𝑧 𝑘 =
+
+> Δ
+
+∑︁ 
+
+> 𝑘 =0
+
+Δ
+
+𝑘 
+
+
+
+(1 − 𝑞 )Δ−𝑘 (𝑞𝑧 )𝑘 = (1 − 𝑞 + 𝑞𝑧 )Δ .
+
+WLOG, we assume an integer 𝜏 . Then the target is to compute the sum of the first 𝜏 + 1 terms in 
+
+𝐺 (𝑧 ) for 𝑧 = exp (± 𝜀 𝜏 ). Let 𝐴 = 1 − 𝑞 + 𝑞𝑧 . We divide each summand by 𝐴 Δ. Then, the 𝑘 -th term becomes Δ
+
+𝑘 
+
+  1 − 𝑞 𝐴 
+
+Δ−𝑘 𝑞𝑧 𝐴 
+
+𝑘 
+
+=
+
+Δ
+
+𝑘 
+
+ 
+
+1 − 𝑞𝑧 𝐴 
+
+Δ−𝑘 𝑞𝑧 𝐴 
+
+𝑘 
+
+= Pr 
+
+h
+
+Bin (Δ, 𝑞𝑧 𝐴 ) = 𝑘 
+
+i
+
+,
+
+which is exactly the probability of another binomial distribution. Taking the sum is equivalent to querying its CDF. Accordingly, we present in Lemma 3.2 a faster computation of the amplification. 
+
+Lemma 3.2 (Simplified Computation). Algorithm 1 satisfies 𝜀 ′-user-level DP for 
+
+𝜀 ′ (𝜀, 𝜏, Δ, 𝑞 ) = max 
+
+
+
+(logcdf (𝜏, Δ, 𝑞 1) + Δ · log 𝐴 1) ⊕ ( logsf (𝜏, Δ, 𝑞 ) + 𝜀 ),
+
+−
+
+
+
+(logcdf (𝜏, Δ, 𝑞 2) + Δ · log 𝐴 2) ⊕ ( logsf (𝜏, Δ, 𝑞 ) − 𝜀 )
+
+ 
+
+,
+
+where ⊕ denotes the LogSumExp function, logcdf and logsf are the cumulative distribution function and survival function for the binomial distribution respectively, 𝐴 1 = 1 − 𝑞 + 𝑞 · exp (𝜀 /𝜏 ), 𝑞 1 =
+
+𝑞 · exp (𝜀 /𝜏 )/ 𝐴 1; 𝐴 2 = 1 − 𝑞 + 𝑞 · exp (− 𝜀 /𝜏 ), 𝑞 2 = 𝑞 · exp (− 𝜀 /𝜏 )/ 𝐴 2.
+
+3.2 Truncation Threshold Selection 
+
+The Sample-and-Truncate mechanism presented in Algorithm 1 requires the knowledge of the truncation threshold 𝜏 . As explained in Section 2.3, choosing an appropriate 𝜏 under user-level DP is highly non-trivial, and it is a major contribution of R2T [9]. In this subsection, we carefully combine the doubling research solution in [ 9 ] to Sample-and-Truncate, leading to the complete 
+
+DP-S4S for scalar SJA query with pure DP in Algorithm 2.  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:11
+
+Algorithm 2 DP-S4S for scalar SJA and pure DP 
+
+Input: Join tuples 𝑇 , query 𝑓 , sample rate 𝑞 , privacy parameter 𝜀 , tuple bound Δ, probability 𝛽 
+
+Output: Private query result ˆ𝑓 (𝑇 ) 
+
+> 1:
+
+Compute sample set 𝑆 with Lines 1-3 of Algorithm 1.  
+
+> 2:
+
+𝜀 0 ← 𝜀  
+
+> 3:
+
+𝐿 ← ⌊ log Δ⌋ + 1 
+
+> 4:
+
+for 𝑖 ← 𝐿 downto 1 do  
+
+> 5:
+
+𝜏 𝑖 ← 2𝑖 −1, 𝜀 𝑖 ← 𝜀 0/𝑖  
+
+> 6:
+
+¯𝑓 (𝑆, 𝜏 𝑖 ) ← Optimal target value to problem (1) on 𝑆, 𝜏 𝑖  
+
+> 7:
+
+ˆ𝑓 (𝑆, 𝜏 𝑖 ) ← ¯𝑓 (𝑆, 𝜏 𝑖 ) + Lap ( 𝜏 𝑖  
+
+> 𝜀 𝑖
+
+) 
+
+> 8:
+
+˜𝑓 (𝑆, 𝜏 𝑖 ) ← ˆ𝑓 (𝑆, 𝜏 𝑖 ) − 𝜏 𝑖  
+
+> 𝜀 𝑖
+
+ln 3𝐿 𝛽  
+
+> 9:
+
+𝜀 ′ 
+
+> 𝑖
+
+← 𝜀 ′ (𝜀 𝑖 , 𝜏 𝑖 , Δ, 𝑞 ) by Lemma 3.2  
+
+> 10:
+
+𝜀 0 ← 𝜀 0 − 𝜀 ′ 
+
+> 𝑖
+> 11:
+
+Report ˆ𝑓 (𝑇 ) ← 1 
+
+> 𝑞
+
+· max 𝑖 ˜𝑓 (𝑆, 𝜏 𝑖 )
+
+Recall from Lemma 3.1 that 𝜀 ′ ≤ 𝜀 , and that a mechanism on the sampled join tuples preserves user-level pure DP. Therefore, a naive solution is to allocate 𝜀 𝑖 = 𝜀 /𝐿 to each iteration. However, this approach fails to exploit the amplification from combining a truncation mechanism with subsampling. Ideally, one wish to adopt some 𝜀 ∗ > 𝜀 such that the amplified 𝜀 ′ (𝜀 ∗, 𝜏, Δ, 𝑞 ) ≤ 𝜀 .While the amplified 𝜀 ′ (𝜀, 𝜏, Δ, 𝑞 ) is easily computable for a given 𝜀 , finding the optimal 𝜀 ∗ involves a binary search. Observe from Lemma 3.1 that the amplification effect is more significant for large 
+
+𝜏 ’s. Accordingly, we adopt an adaptive budget allocation strategy in DP-S4S . In particular, we run the 𝐿 subroutines in descending order of 𝜏 𝑖 (Line 4 of Algorithm 2). For each 𝜏 𝑖 , we allocate a target privacy consumption 𝜀 𝑖 inversely proportional to the number of remaining subproblems, i.e. applying basic composition in Lemma 2.4. After obtaining the private result, we only charge its actual consumption from the remaining budgets (Lines 9-10). Note that the algorithm also takes as input a probability 𝛽 (used in Line 8), which is important for its utility analysis, presented in the next subsection. 
+
+Remark. In [ 15 ], the authors also propose a faster variant of S&E for scalar queries that explicitly requires that a good truncation threshold 𝜏 be given in advance; in their experiments, 𝜏 is tuned from data, which might leak private information according to [ 9 ]. In this paper, we follow [ 9 ] to properly select 𝜏 with differential privacy, and do not consider this variant of S&E .
+
+3.3 Utility Analysis 
+
+The following lemma establishes the correctness of DP-S4S for scalar SJA queries under user-level pure DP, as well as its result utility guarantee. The error bound covers both sampling error and noise injected to satisfy DP. 
+
+Lemma 3.3. Algorithm 2 satisfies (𝜀, 0)-DP. Let 𝑛 be the number of records, 𝑚 be the number of users and 𝑞 be the sample rate. With probability 1 − 𝛽 , its error is 
+
+| ˆ𝑓 (𝑇 ) − 𝑓 (𝑇 )| = ˜𝑂  √︂ 𝑛 𝑞 + 1
+
+𝑞 + 1
+
+𝜀 𝑖 ∗
+
+𝜏 ∗ (𝑇 ) + √︄ 𝜏 ∗ (𝑇 )
+
+𝑞 
+
+!! 
+
+, 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:12 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+Algorithm 3 Sample-and-Truncate for Rényi DP 
+
+Input: Join tuples 𝑇 , query 𝑓 , truncation threshold 𝜏 , sample rate 𝑞 , privacy parameters 𝛼 and 𝜌 
+
+Output: Private query result ˆ𝑓 (𝑇 , 𝜏 ) 
+
+> 1:
+
+Compute ¯𝑓 (𝑆, 𝜏 ) with Lines 1-4 in Algorithm 1  
+
+> 2:
+
+Release ˆ𝑓 (𝑆, 𝜏 ) ← ¯𝑓 (𝑆, 𝜏 ) + N ( 0, 𝜎 2) for 𝜎 = 𝜏 ·√︁ 𝛼 /2𝜌  
+
+> 3:
+
+Report ˆ𝑓 (𝑇 , 𝜏 ) ← 1 
+
+> 𝑞
+
+· ˆ𝑓 (𝑆, 𝜏 ) as in Algorithm 1 
+
+where ˜𝑂 (·) omits constants and polylogarithmic factors in 𝑚 and 1/𝛽 ; 𝜏 ∗ (𝑇 ) := max 𝑢 ∈𝑈 
+
+Í𝑡 ∈𝑇 1[𝑢 {
+
+𝑡 ] is the maximum number of tuples a user contribute to in 𝑇 ; and 𝜀 𝑖 ∗ ≥ 𝜀 /𝐿 is the allocated noise-calibration budget where 𝐿 = ⌊log Δ⌋ + 1.
+
+The proof of Lemma 3.3 can be found in Appendix B.1. As a sketch, main ideas of the proof include (i) we apply standard Bernstein bounds for the sampling error and (ii) for DP noise, conditioned on the high probability event that ˜𝑓 ’s are all underestimates, we show that the output error depends on 
+
+𝜏 ∗ (𝑆 ), i.e., the maximum contribution of a user in the sample. A key observation in the proof is that besides the amplification effect that reduces the DP noise scale (see Lemma 3.1), another benefit of sampling in DP-S4S is that it reduces the maximum contribution among the users. Roughly speaking, if the maximum contribution of a user is 𝜏 ∗ (𝑇 ) for the raw join results, then we expect the maximum contribution to be 𝜏 ∗ (𝑆 ) ≈ 𝑞 · 𝜏 ∗ (𝑇 ) in the sample, subject to some lower-order terms. After scaling the results by 1 
+
+> 𝑞
+
+, we obtain 𝜏 ∗ (𝑇 ), so that the DP error does not increase. Appendix C evaluates the contribution of both error sources. 
+
+Comparison with R2T . The utility guarantee of R2T is as follows. 
+
+Lemma 3.4 (Result Utility of R2T [ 9 ]). With probability 1 − 𝛽 , the output of the R2T mechanism satisfies 
+
+|M R2T (𝑇 ) − 𝑓 (𝑇 )| = ˜𝑂 
+
+ 𝐿 𝜀 · DS (I)
+
+
+
+.
+
+Compared to R2T, DP-S4S introduces an additional error term √︁ 𝑛 /𝑞 for 𝑞 = Ω(( 𝜏 ∗ (𝑇 )) −1), due to sampling error. For counting queries, 𝜏 ∗ (𝑇 ) = DS (I) is the downward sensitivity of query 𝑓 
+
+(see Section 2.3). Thus, the sampling-based mechanism achieves the same asymptotic error for a sufficiently large sample rate. In addition, we improve the 𝐿 𝜀 term in the DP error to 1 
+
+> 𝜀 𝑖 ∗
+
+≤ 𝐿 𝜀 ,which benefits from the privacy amplification. To see why, note that the first iteration allocates exactly 𝜀 𝐿 = 𝜀 /𝐿 . Meanwhile, its amplified privacy guarantee 𝜀 ′ 
+
+> 𝐿
+
+≤ 𝜀 𝐿 , meaning the remaining budget 𝜀 0 ≥ 𝜀 − 𝜀 /𝐿 = 𝜀 · ( 1 − 1/𝐿 ). By induction, we have in each iteration the allocated 𝜀 𝑖 is at least as large as 𝜀 /𝐿 .
+
+Comparison with S&E . Fang and Yi [15] do not include a closed-form error bound for S&E under pure DP. In the following, we show that its error can be large even when the exact (i.e., non-private) best truncation threshold is used. Specifically, the error analysis in [ 15 ] for running S&E with R2T focuses on approximate DP. It is not hard to see that when each of the 𝑘 iterations is allocated with a privacy budget of 𝜀 𝑖 = 𝑂 (𝜀 /𝑘 ),the mechanism satisfies pure DP, according to basic composition (Lemma 2.4). When 𝜀 𝑖 is small, the amplified 𝜀 ′ 
+
+> 𝑖
+
+for each iteration can be approximated as 
+
+𝜀 ′ 
+
+> 𝑖
+
+= ln 
+
+
+
+1 + 𝑚 𝐶 (𝑒 𝜀 𝑖 − 1)
+
+
+
+= 𝑂 
+
+𝑚𝜀 𝑘𝐶 
+
+
+
+, 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:13
+
+where 𝑚 is the inverse of the sample rate. The final estimator scales the sample average by 𝑚 . Thus, its variance from DP noise is 
+
+𝑚 2
+
+𝑘 2 ·
+
+> 𝑘
+
+∑︁ 
+
+> 𝑖 =1
+
+2𝜏 2
+
+(𝜀 ′ 
+
+> 𝑖
+
+)2
+
+!
+
+= 𝑂 
+
+
+
+𝑘𝐶 2 · 𝜏 2
+
+𝜀 2
+
+
+
+.
+
+Thus, the injected error to satisfy pure DP grows with √𝑘 , which becomes high when we set a large 
+
+𝑘 , which is important for reducing sampling error. More importantly, its DP error is also linear to 
+
+𝐶 , the maximum number of collaborators for each user (see Section 2.3), which is data-dependent and can be large, as our experiments show in Section 5. The proposed approach DP-S4S does not suffer from either of these issues, according to Lemma 3.3. Finally, as discussed in Appendix D, the sampling error of S&E is also a factor of 𝑙 larger compared to our DP-S4S , since the former takes all tuples associated with the sampled user, whereas the latter performs sampling on aggregation units, which automatically takes into account the correlation between users. 
+
+3.4 DP-S4S for Approximate DP 
+
+So far, our description of DP-S4S aims at enforcing pure DP, i.e., 𝛿 = 0. For approximate DP, i.e., 
+
+𝛿 > 0, we adapt DP-S4S to employ the Gaussian mechanism (Lemma 2.9) to satisfy Rényi-DP, and subsequently convert Rényi DP to ( 𝜀 , 𝛿 )-DP using Lemma 2.7. Algorithm 3 adapts Algorithm 1 to enforce Rényi DP. Under Rényi-DP, we derive privacy amplification as follows. 
+
+Lemma 3.5 (RDP Amplification). Algorithm 3 satisfies (𝛼, 𝜌 ′)-user-level RDP for 
+
+𝜌 ′ (𝛼, 𝜌, 𝜏, Δ, 𝑞 ) = 1
+
+𝛼 − 1 ln 
+
+ ⌊𝜏 ⌋∑︁ 
+
+> 𝑘 =0
+
+𝑝 𝑘 · exp 
+
+
+
+(𝛼 − 1) 𝑘 2
+
+𝜏 2 𝜌 
+
+
+
++ Pr [Bin (Δ, 𝑞 ) > 𝜏 ] · exp (( 𝛼 − 1)𝜌 )
+
+
+
+,
+
+where 𝑝 𝑘 = Pr [Bin (Δ, 𝑞 ) = 𝑘 ] =  Δ
+
+> 𝑘
+
+𝑞 𝑘 (1 − 𝑞 )Δ−𝑘 .
+
+The proof can be found in Appendix B.2, which is similar to that for Lemma 3.1. The difference is that we apply properties of Rényi divergence instead of analyzing the ratio between probabilities. We also have 𝜌 ′ ≤ 1  
+
+> 𝛼 −1
+
+ln (ÍΔ 
+
+> 𝑘 =0
+
+𝑝 𝑘 · exp (( 𝛼 − 1)𝜌 )) = 𝜌 .2
+
+Using Lemma 3.5 as a building block, we can arrive at a variant of Algorithm 2 that achieves 
+
+(𝛼, 𝜌 )-RDP, which implies (𝜀, 𝛿 )-DP: we only need to change the noise and noise bound to Gaussian, and allocate 𝜌 𝑖 instead of 𝜀 𝑖 during each iteration. For the utility analysis, note that the sampling error is independent of the noise, and we also have the same bound for the user contribution in the sample. Thus, its utility is given as follows. 
+
+Corollary 3.6 (RDP-S4S for scalar SJA). There is an (𝛼, 𝜌 )-RDP version of Algorithm 2. Let 𝑛 
+
+be the number of records, 𝑚 be the number of users, 𝑞 be the sample rate and 𝜏 ∗ (𝑇 ) be the maximum contribution of a user. With probability 1 − 𝛽 , its error is 
+
+| ˆ𝑓 (𝑇 ) − 𝑓 (𝑇 )| = ˜𝑂  √︂ 𝑛 𝑞 + 1
+
+𝑞 +√︂ 𝛼 𝜌 𝑖 ∗
+
+𝜏 ∗ (𝑇 ) + √︄ 𝜏 ∗ (𝑇 )
+
+𝑞 
+
+!! 
+
+,
+
+where 𝜌 𝑖 ∗ ≥ 𝜌 /(⌊ log Δ⌋ + 1) is the amplified privacy budget.    
+
+> 2While we show that sampling join tuples amplifies user-level DP under both pure and Rényi DP, the same proof does not easily extend to (𝜀, 𝛿 )-DP mechanisms outside the Rényi-DP class. It is left open whether an arbitrary approximate-DP mechanism on such a sample preserves the same level of user-level privacy. Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:14 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+In particular, this indicates an (𝜀, 𝛿 )-DP variant by taking 𝜌 = 𝜀 − ln (1/𝛿 )  
+
+> 𝛼 −1
+
+. Now, the DP error scales with √︃ 𝛼 (𝛼 −1)    
+
+> 𝜀 (𝛼 −1) − ln (1/𝛿 )
+
+, and the order 𝛼 can be optimized for given 𝜀 and 𝛿 .
+
+4 DP-S4S for Vector Queries 
+
+This section focuses on DP-S4S for vector queries that return 𝑑 > 1 scalars (e.g., a group-by count query). Observe that a vector query 𝐹 can be viewed as 𝑑 scalar queries 𝐹 = {𝑓 1, . . . , 𝑓 𝑑 }.As discussed in Section 2.3, a naive idea for answering a vector SJA queries with user-level DP is to process each component scalar query separately, each with an allocated privacy budget according to Lemma 2.4. The problem of this approach, however, is that its error depends on the sensitivity of each scalar, rather than the sensitivity of the whole vector, which can be significantly smaller. In particular, the 𝐿 2 sensivitity for a 𝑑 -dimensional vector query is smaller than that of its component scalar queries by a factor of √𝑑 [ 10 ]. PMSJA [ 10 ] address this issue by considering the following quadratically constrained quadratic program (QCQP): maximize  
+
+> 𝑦 𝑢 ,𝑧 𝑓 ,𝑡
+
+∑︁ 𝑢 ∈𝑈 
+
+𝑦 𝑢 (2) subject to ∑︁  
+
+> 𝑓 ∈𝐹
+
+©«∑︁ 𝑡 ∈𝑇 𝑓 :𝑢 {𝑡 
+
+𝑤 𝑓 ,𝑡 · 𝑧 𝑓 ,𝑡 ª®¬
+
+> 2
+
+≤ 𝜏 2, ∀𝑢 ∈ 𝑈 ∑︁ 
+
+> 𝑢 :𝑢 {𝑡
+
+(𝑦 𝑢 − 1) ≤ 𝑧 𝑓 ,𝑡 − 1, ∀𝑓 ∈ 𝐹, 𝑡 ∈ 𝑇 𝑓 
+
+0 ≤ 𝑦 𝑢 ≤ 1, ∀𝑢 ∈ 𝑈 
+
+0 ≤ 𝑧 𝑓 ,𝑡 ≤ 1, ∀𝑓 ∈ 𝐹, 𝑡 ∈ 𝑇 𝑓 
+
+For given 𝜏 , let 𝑦 ∗
+
+> 𝑢
+
+, 𝑧 ∗ 
+
+> 𝑓 ,𝑡
+
+be the optimal solution to Program (2) (with ties broken arbitrarily). The truncated query for 𝑓 ∈ 𝐹 is then 
+
+¯𝑓 (𝑇 𝑓 ) := Í𝑡 ∈𝑇 𝑓 𝑤 𝑓 ,𝑡 · 𝑧 ∗ 
+
+> 𝑓 ,𝑡
+
+. (3) Unlike in R2T , the global sensitivity of the truncated queries ¯𝐹 is still large. To address this issue, 
+
+PMSJA considers the local sensitivity of ¯𝐹 (explained in Section 2.1). Analysis shows that the 𝐿 2
+
+local sensitivity satisfies: 
+
+LS ¯𝐹 (I) ≤ 2𝜏 · ( 𝐸 (I) + 1), (4) where 𝐸 (I) := Í𝑢 ∈𝑈 (1 −𝑦 ∗ 
+
+> 𝑢
+
+) is the number of truncated users. Intuitively, 𝐸 (I) has global sensitivity 
+
+1, since the optimal solution on I can be transferred into a feasible solution on I′ which contains one more user, by additionally truncating the extra user and all his/her tuples. The formal proof can be found in [ 10 ]. PMSJA then invokes an (𝜀, 𝛿 )-DP algorithm to release ¯𝐹 . For choosing the threshold 
+
+𝜏 , it runs the sparse-vector-technique (SVT) mechanism [ 13 ] to privately find the smallest power of 2 such that only 𝐸 (I) = ˜𝑂 (1) users are truncated. To achieve scalability, the main idea of DP-S4S is to combine join-tuple sampling described in Section 3 with PMSJA . Note that PMSJA enforces approximate DP; hence, we adopt the approach in Section 3.4 that processes the query under Rényi-DP, and subsequently converts the privacy guarantee to the standard ( 𝜀 , 𝛿 )-DP. 
+
+Challenges. There are two major challenges in realizing this idea. First, as mentioned above, 
+
+PMSJA involves the use of local sensitivity, which cannot be directly used to calibrate DP noise as described in Section 2.1. For ( 𝜀 , 𝛿 )-DP, we can inject noise according to the smooth sensitivity (Lemma 2.10), which provides a viable middle ground that satisfies differential privacy while  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:15
+
+reducing the noise scale compared to global sensitivity. To our knowledge, however, there is no existing fundamental mechanism that utilizes smooth sensitivities to achieve Rényi DP, which is more strict than (𝜀, 𝛿 )-DP. Second, even with the necessary tools in place to enforce Rényi DP with smooth sensitivity, it is still highly non-trivial to derive a similar sample-and-truncate algorithm with privacy amplification for PMSJA , which involves solving a far more complex QCQP than the linear program in Section 3.1. In the following, Sections 4.1 and 4.2 address these two challenges, respectively. 
+
+4.1 Smooth Sensitivity Mechanism for Rényi DP 
+
+In this subsection, we build a new fundamental Rényi DP mechanism for the scenario that the local sensitivity is far smaller than the global sensitivity, i.e., LS 𝐿 2 ≪ GS 𝐿 2 . This is common in practical applications [9, 10, 13, 15, 32]. Utilizing Lemma 2.8, we have the following result. 
+
+Lemma 4.1 (RDP Smooth Sensitivity Mechanism). Given 𝐹 : I → R𝑑 and its smooth-sensitivity function SS 𝐹 : I × R → R as in Lemma 2.10, the RDP-SS mechanism defined as 
+
+MRDP-SS (I) := 𝐹 (I) + 𝜎 (I) · N ( 0, 1𝑑 )
+
+satisfies (𝛼, 𝜌 )-RDP for 
+
+𝜎 (I) = SS 𝐹 (I, 𝛾 )
+
+1 − 𝛼 + 𝛼𝑒 −2𝛾 ·√︂ 𝛼 𝜌 ,
+
+where 𝛾 := 12 ln min {𝑡 −11 , 𝑡 2 }, and 0 < 𝑡 1 < 1 < 𝑡 2 are solutions to 
+
+ℎ(𝑡 ) := 𝑡 𝛼 − 𝛼𝑒 (𝛼 −1) 𝜌 𝑑 𝑡 + ( 𝛼 − 1)𝑒 (𝛼 −1) 𝜌 𝑑 = 0 .
+
+The proof can be found in Appendix B.3. The intuition is that to bound the Rényi-divergence between two Gaussian distributions, there are two constraints in Lemma 2.8: the noise scales must be large enough to bound the first term, which depends on the difference between their means. In addition, the scales must also be multiplicatively close to ensure the second term is bounded: when 
+
+𝜎 1 = 𝜎 2, the second term takes the minimum value of 0; when the variances differ, we must bound their ratio, which can be achieved by properly setting the smoothness factor 𝛾 . After deciding 𝛾 (see the proof for details), we calibrate the noise scale according to both 𝛾 and the 𝛾 -smooth sensitivity 
+
+SS 𝐹 .
+
+Implementation. A major challenge in implementing smooth-sensitivity mechanisms is that the 
+
+SS 𝐹 function is hard to compute in general [ 28 ]. In the following, we make an assumption that there exists an upper bound 𝐵 on the 𝐿 2 local sensitivity LS 𝐹 such that 𝐵 (I) ≥ LS 𝐹 (I) and |𝐵 (I) − 𝐵 (I′)| ≤ 1
+
+for neighboring datasets. Under this assumption, we can compute SS 𝐹 in constant time. We first argue that this is a feasible assumption, which was also made by existing work [ 21 , 22 , 32 ]. A trivial bound that satisfies this constraint is a constant function 𝐵 (·) ≡ GS . But it does not utilize the fact that LS ≪ GS . To reduce noise, the goal is to set 𝐵 as close to LS as possible. Note that due to normalization, requiring |𝐵 (I)− 𝐵 (I′)| ≤ 1 is equivalent to the more general form of |𝐵 (I)− 𝐵 (I′)| ≤ 𝜏 .This is exactly how we will apply this lemma in our mechanism for vector queries in Section 4.2, following Equation (4). Algorithm 4 implements the MRDP-SS mechanism. Here, the equation ℎ(𝑡 ) = 0 is solved using Brent’s method [4] (Line 1). Under the assumption for 𝐵 , for any I′ ∈ I ,
+
+LS (I′) ≤ 𝐵 (I′) ≤ 𝐵 (I) + dist (I, I′) .
+
+Therefore, 𝐺 (I) := max 𝑘 ∈N≥0 (𝑘 + 𝐵 (I)) · 𝑒 −𝛾𝑘 is the 𝛾 -smooth sensitivity of 𝐹 by Lemma 2.10. In addition, to compute 𝐺 (𝐼 ), we only need to evaluate two values of 𝑘 , as follows. Consider 
+
+𝑔 (𝑘 ) = (𝑘 + 𝑏 ) · 𝑒 −𝛾𝑘 , we have its derivative 𝑔 ′ (𝑘 ) = (1 − 𝛾𝑘 − 𝛾𝑏 )𝑒 −𝛾𝑘 , thus the maximum is taken  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:16 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+Algorithm 4 RDP Smooth Sensitivity Mechanism MRDP-SS 
+
+Input: Instance I, vector query 𝐹 : I → R𝑑 , upper bound 𝐵 on LS 𝐿 2 (𝐹 ) with |𝐵 (I) − 𝐵 (I′)| ≤ 1,privacy parameters 𝛼, 𝜌 
+
+Output: Private estimate ˜𝐹 (I) 
+
+> 1:
+
+𝑡 1, 𝑡 2 ← brentq (𝑡 𝛼 − 𝛼𝑒 (𝛼 −1)𝜌 /𝑑 · 𝑡 + ( 𝛼 − 1)𝑒 (𝛼 −1)𝜌 /𝑑 = 0) 
+
+> 2:
+
+𝛾 ← 12 ln min {𝑡 −11 , 𝑡 2 } 
+
+> 3:
+
+𝑘 ← ⌊ 1 
+
+> 𝛾
+
+− 𝐵 (I)⌋ , 𝐺 (I) ← ( 𝑘 + 𝐵 (I)) · 𝑒 −𝛾𝑘  
+
+> 4:
+
+𝑘 ← 𝑘 + 1, 𝐺 (I) ← max {𝐺 (I), (𝑘 + 𝐵 (I)) · 𝑒 −𝛾𝑘 } 
+
+> 5:
+
+𝜎 ← 𝐺 (I)  
+
+> 1−𝛼 +𝛼𝑒 −2𝛾
+
+·√︃ 𝛼 𝜌  
+
+> 6:
+
+return 𝐹 (I) + 𝜎 · N ( 0, 1𝑑 )
+
+at the closest integers to 𝑘 ∗ = 1 
+
+> 𝛾
+
+− 𝑏 . Therefore, each 𝐺 (I) can be obtained by computing two values at most (Lines 4 and 6) and is bounded by 
+
+𝐺 (I) ≤ 1 
+
+> 𝛾
+
+· 𝑒 𝛾 ·𝐵 (I) − 1 .
+
+We compare RDP-SS with the smooth sensitivity mechanism in Appendix E. 
+
+4.2 DP-S4S for Vector Queries 
+
+Equipped with the smooth sensitivity mechanism MRDP-SS in Lemma 4.1, we are now ready to construct our DP-S4S mechanism for answering vector SJA queries under user-level DP, presented in Algorithm 5. Similar to Algorithm 2 for scalar queries, Algorithm 5 consists of three stages, for computing the sample set 𝑆 (Lines 2-7), choosing the truncation threshold 𝜏 (Lines 9-16), and releasing the result of the truncated query (Lines 18-22), respectively. Specifically, in the first stage, for each scalar query 𝑓 ∈ 𝐹 , DP-S4S samples every join tuple with probability 𝑞 , obtaining the sample set 𝑆 𝑓 for 𝑓 . The combined sample set 𝑆 is then the union of the samples 𝑆 𝑓 for all 𝑓 (Line 7). The second stage then follows the PMSJA framework, which applies the SVT mechanism to choose 𝜏 , solving QCQPs on the sample set 𝑆 in each iteration with a 𝜏 that is a power of 2, as mentioned at the beginning of Section 4. It remains to clarify Stage 3, which receives from Stage 2 the chosen truncation threshold 𝜏 ,as well as the truncated vector query ¯𝐹 (defined in Eq. (3) ). The goal is to release ¯𝐹 under Rényi DP so that the overall mechanism attains (𝜀, 𝛿 )-DP via Lemma 2.7. Stage 3 first selects the Rényi order 𝛼 (discussed below), and then the divergence parameter 𝜌 such that the resulting (𝛼, 𝜌 )-RDP guarantee can be converted to (𝜀, 𝛿 )-DP. It then defines the 𝐿 2 local-sensitivity bound 𝐵 for function 
+
+¯𝐹 /( 2𝜏 ) according to Inequality (4) , and invokes mechanism MRDP-SS (Algorithm 4) to compute a noisy version of ˆ𝐹 (𝑆 ) under DP, before reporting the scaled version of ˆ𝐹 (𝑆 ) as the final result (Line 21). Finally, we clarify the choice of the order 𝛼 in Rényi divergence (Line 17). While our mechanism is private for any 𝛼 > 1 + ln (1/𝛿 ) 
+
+> 𝜀 2
+
+, the error depends on the choice of 𝛼 . To choose an appropriate 𝛼 ,we perform a doubling search: from the lower bound of 𝛼 (which leads to an infinite error), we repeatedly double it until we find some 𝛼 that the data-independent error term √︁ 𝛼 /𝜌 /( 1−𝛼 +𝛼𝑒 −2𝛾 )
+
+is smaller compared to choosing 𝛼 /2 or 2𝛼 . Then we iterate through possible choices within the interval (𝛼 /2, 2𝛼 ) to locate an 𝛼 that minimizes the term, and set 𝜌 = 𝜀 2 − ln (1/𝛿 )  
+
+> 𝛼 −1
+
+accordingly. The following lemma formalizes the privacy guarantee of Algorithm 5, whose proof appears in Appendix B.4. For this lemma, amplification only accounts for the probability that no record is sampled from the witness user. Note that since 𝑞 ′ ≤ 1, we have 𝜀 ′ ≤ 𝜀  
+
+> 5
+
++ 4𝜀  
+
+> 5
+
+= 𝜀 . 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:17
+
+Algorithm 5 DP-S4S for vector SJA and approximate DP 
+
+Input: Join tuples 𝑇 1, . . . ,𝑇 𝑑 , queries 𝐹 = {𝑓 1, . . . , 𝑓 𝑑 }, privacy parameters 𝜀, 𝛿 , sample rate 𝑞 ,probability 𝛽 
+
+Output: Private query results ˆ𝐹 (I) 
+
+> 1:
+
+// Stage 1: compute the sample set 𝑆  
+
+> 2:
+
+𝑆 ← ∅  
+
+> 3:
+
+for each 𝑓 ∈ 𝐹 do  
+
+> 4:
+
+𝑆 𝑓 ← ∅  
+
+> 5:
+
+for each 𝑡 ∈ 𝑇 𝑓 do  
+
+> 6:
+
+Sample 𝑡 into 𝑆 𝑓 with probability 𝑞  
+
+> 7:
+
+𝑆 ← 𝑆 ∪ { 𝑆 𝑓 } 
+
+> 8:
+
+// Stage 2: choose truncation threshold 𝜏 with SVT [10, 13]  
+
+> 9:
+
+𝜀 1 ← 𝜀 /5, 𝜀 2 ← 4𝜀 /5, 𝜃 ← 6 
+
+> 𝜀 1
+
+ln 6 
+
+> 𝛽
+
++ Lap ( 2 
+
+> 𝜀 1
+
+) 
+
+> 10:
+
+for each 𝜏 ← 1, 2, 4, 8, . . . do  
+
+> 11:
+
+𝑦 ∗
+
+> 𝑢
+
+, 𝑧 ∗ 
+
+> 𝑓 ,𝑡
+
+← Optimal solution to problem (2) on 𝑆 , 𝜏  
+
+> 12:
+
+𝐸 (𝑆 ) ← Í𝑢 (1 − 𝑦 ∗ 
+
+> 𝑢
+
+) 
+
+> 13:
+
+if 𝐸 (𝑆 ) + Lap ( 4 
+
+> 𝜀 1
+
+) ≤ 𝜃 then  
+
+> 14:
+
+¯𝐹 (𝑆 ) ← { ¯𝑓 (𝑆 ) := Í𝑡 ∈𝑆 𝑓 𝑤 𝑓 ,𝑡 · 𝑧 𝑓 ,𝑡 | 𝑓 ∈ 𝐹 } 
+
+> 15:
+
+break  
+
+> 16:
+
+// Stage 3: release query result via Algorithm 4  
+
+> 17:
+
+𝛼 ← find _alpha (𝜀 2, 𝛿, 𝑑 ) 
+
+> 18:
+
+𝜌 ← 𝜀 2 − ln (1/𝛿 )  
+
+> 𝛼 −1
+> 19:
+
+Define LS upper bound 𝐵 (𝑆 ) := 𝐸 (𝑆 ) + 1 
+
+> 20:
+
+˜𝐹 (𝑆 ) ← 2𝜏 · M RDP-SS (𝑆, ¯𝐹, 𝐵, 𝛼, 𝜌 ) 
+
+> 21:
+
+Report ˆ𝐹 (I) := 1 
+
+> 𝑞
+
+· ˜𝐹 (𝑆 )
+
+Lemma 4.2. For any chosen 𝛼 , algorithm 5 satisfies (𝜀 ′, 𝛿 )-DP for 
+
+𝜀 ′ = ln (1 + 𝑞 ′ (𝑒 𝜀 /5 − 1)) + 1
+
+𝛼 − 1
+
+
+
+ln 
+
+
+
+1 + 𝑞 ′ 
+
+𝑒 4(𝛼 −1)𝜀 /5 · 𝛿 − 1
+
+ 
+
++ ln 1
+
+𝛿 
+
+
+
+,
+
+where 𝑞 ′ = 1 − ( 1 − 𝑞 )Δ.
+
+Discussion. Unlike the case for scalar queries, where we derive a strong result for sampling amplification in Lemma 3.1, here the amplification effect is limited for a large Δ, i.e., when each user may contribute to many join tuples. The reason is that it is unclear how the optimal solution to Program (2) changes even when only 1 tuple is sampled from the witness user. Note that this is the first mechanism that achieves user-level RDP with sampling of join tuples. In particular, it remains unclear whether the original PMSJA mechanism under (𝜀, 𝛿 )-DP achieves the same privacy guarantee when run on sample join tuples. We further evaluate the error of Algorithm 5 in Appendix F. 
+
+5 Experiments 
+
+This section presents extensive experiment evaluations comparing DP-S4S with the state-of-the-art algorithms on real benchmark datasets, for both relational queries and graphlet counting ones.  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:18 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+5.1 Setup 
+
+Mechanisms. We consider the following mechanisms: DP-S4S , R2T [9], PMSJA [10 ], and S&E [15 ]. As mentioned in Section 3.2, we do not consider the variant of S&E that requires a pre-known good truncation threshold 𝜏 (used in the experiments in [ 15 ]), which might leak private information and, thus, would be unfair to other mechanisms. However, we also observe that if we simply allocate a privacy budget in each of the 𝑘 independent iterations of S&E for truncation threshold computation (e.g., by invoking R2T ), its overall noise becomes overwhelming that S&E ’s error reaches almost 
+
+100% error for scalar queries across multiple datasets. To make S&E competitive, we improve the mechanism so that it samples multiple users at the same time, which avoids allocating a privacy budget in each iteration, leading to empirical performance compared to the implementation based on their original description. This is formally described in Corollary D.2 in Appendix D. In addition, we adopt an assumption favorable for S&E that the number of users 𝑚 is public. Since all the mechanisms work on precomputed join results, we separate the time for computing the join using PostgreSQL from the time consumed by the DP mechanisms. We implement all algorithms in a single-threaded setting to enable a fair evaluation of CPU time. Each mechanism is run 100 times independently, and we report the average error and running time, dropping the 20 largest and 20 smallest ones. 
+
+Datasets. We use the same datasets as existing work [ 9 , 10 , 15 ] for evaluation. For graph pattern counting queries, we use 4 real datasets: Deezer is a friendship network. Amazon is a co-purchasing graph. Answer-to-question ( A2Q ) and comment-to-answer ( C2A ) are the interactions between users in the Stack Overflow network 3, with edges labeled by date. All of them can be obtained from SNAP [24]. Their statistics are summarized in Table 4. For relational database SQL queries, we use the TPC-H benchmark dataset. There are 8 relations: 
+
+Region(RK) , Nation(NK,RK) , Customer(CK,NK) , Orders(OK,CK) , Supplier(SK,NK) , Part(PK) ,
+
+PartSupp(PSID,PK,SK) , Lineitem(LID,OK,PSID) . By default, we use data scale factor 4, where the largest table ( Lineitem ) contains roughly 24 million records. For the definition of user-level DP, we regard each vertex as a user for the graph datasets. In TPC-H, depending on the query, we may treat each customer ( CK ), supplier ( SK ), part-supp ( PID ), or order ( OK ) as a user, where a join result is contributed by a user if it is related to these primary keys through foreign-key references. 
+
+Queries. For graph datasets, we consider common graphlet counting queries, including edges 𝑄 1− ,line-2 paths 𝑄 2− , line-3 paths 𝑄 3− , triangles 𝑄 △ and rectangles 𝑄 □. For directed graphs, we also consider the fanout-2 pattern 𝑄 <, which differs from 𝑄 2− . For all these queries, an aggregation unit is contributed by 𝑙 ≥ 2 users. We evaluate the vector query mechanisms on the TPC-H benchmark using the same queries as in [ 10 ]. All the queries are derived from the original 𝑄 5 or 𝑄 7 in TPC-H, with different aggregation functions { count(1) , sum(l_extendedprice*(1-l_discount)) }, different group by attributes {n_name , l_shipdate , extract(year from l_shipdate) }, and different definitions of private users {( SK ,CK ), ( PSID ,CK ), ( PSID ,OK )}. 
+
+Parameters and environment. Unless otherwise specified, we consider pure DP with 𝜀 = 1 for a scalar query, and approximate DP with 𝜀 = 4 and 𝛿 = 10 −7 for vector queries. The default failure probability 𝛽 is set to 0.1. For S&E , the number of sampled users is chosen as 𝑘 = ⌊𝑞 · 𝑚 ⌋, so that the expected number of records is the same as our mechanism. Following prior works, we use data-independent degree upper bounds 𝐷 for graph datasets as shown in Table 4. The global sensitivity is computed accordingly. For example, GS 1− = 𝐷 , 
+
+> 3We perform a similar preprocessing as in [10]. Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:19
+
+R2T S&E DP-S4S    
+
+> 0.1 110 100
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+> relative error (%)
+
+(a) 𝑸 1− (base query time: 0.18s).    
+
+> 10 100 1000 10000
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+
+(b) 𝑸 2− (base query time: 57.4s).    
+
+> 0.1 110 100
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+
+(c) 𝑸 △ (base query time: 8.87s).    
+
+> 10 100 1000 10000
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+
+(d) 𝑸 □ (base query time: 296s). 
+
+Fig. 2. Query error vs. time on Deezer with 𝜀 = 1. (Sampling rates 𝑞 ∈  164 , 132 , 116 , 18 , 14 )   
+
+> 0.1 110 100
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+> relative error (%)
+
+(a) 𝑸 1− (base query time: 0.21s).    
+
+> 110 100 1000
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+
+(b) 𝑸 2− (base query time: 35.1s).    
+
+> 0.1 110 100
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+
+(c) 𝑸 △ (base query time: 7.27s).    
+
+> 110 100 1000
+> 0.1
+> 1
+> 10
+> 100
+> time (s)
+
+(d) 𝑸 □ (base query time: 36.2s). 
+
+Fig. 3. Query error vs. time on Amazon with 𝜀 = 1. (Sampling rates 𝑞 ∈  164 , 132 , 116 , 18 , 14 )
+
+GS 2− = GS △ = 𝐷 2, GS □ = 𝐷 3, etc. The upper bound on the number of collaborators 𝐶 for S&E can also be computed from 𝐷 . To be more precise, for edge counting and triangle counting, we have 
+
+𝐶 = 𝐷 since two collaborators must share an edge. For line-2 paths and rectangles, 𝐶 = 𝐷 + 𝐷 2
+
+since a collaborator is either a neighbor or a distance-2 neighbor. In the experiments, we always use 𝐶 = 𝐷 = 1024 for S&E for simplicity, which is favorable to S&E .For TPC-H, none of the mechanisms requires the global sensitivity GS as input. S&E still requires setting 𝐶 . Following their paper [ 15 ], we still set 𝐶 = 1024 (again in its favor), though this can be insufficient, especially for vector queries. All experiments were conducted on a Linux server equipped with an Intel(R) Xeon(R) Gold 6252N 2.30GHz CPU with 96 cores and 1.5TB of memory. Each experiment was run in a separate Docker container. For scalar queries, we allocated 32GB of memory; for vector queries, we allocated 256GB of memory. The experiment code can be found at https://github.com/QiuTedYuan/DP-S4S/. 
+
+5.2 Comparison on Scalar Queries 
+
+Figures 2 and 3 compare the empirical performance of R2T , S&E , the proposed DP-S4S over graphlet counting queries, with varying sample rate from 1/64 to 1/4 for the latter two. Horizontal axes correspond to execution times, while vertical axes correspond to error (in percentage) relative to the actual query result, both in log scale. Each data point in the plot corresponds to the result for a given sample rate; a high sample rate leads to longer execution time. In the figure captions, base query time refers to the join computation time measured by PostgreSQL. Comparing DP-S4S with R2T , we observe that DP-S4S achieves a similar error on almost every dataset at moderate sample rates. As analyzed in Section 3.3, there are two sources of error in 
+
+DP-S4S : sampling error and DP noise. While it is typical for sampling error to increase when lowering the sample rate, the amplification through Lemma 1 also becomes more effective, leading to a larger 𝜀 ∗ 
+
+> 𝑖
+
+and, correspondingly, lower noise to satisfy DP. The overall error depends on which  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:20 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+is dominating. Recall that a lower sample rate also reduces the maximum contribution of a user to the sample, which offsets the increase in the scaling-back factor. Therefore, despite having an additional sampling error, it is still possible for DP-S4S to be slightly more accurate than R2T 
+
+under certain sample rates thanks to the privacy amplification. The optimal sample rate, however, depends on both the data size (which affects the sampling error) and the downward sensitivity of the original query (which impacts the DP error). Under differential privacy, we cannot use the exact best value for 𝑞 that balances both. On the other hand, the experimental results show that the accuracy of DP-S4S is stable across various datasets and a range of sample rates, suggesting that 𝑞 can be chosen in a data-inpdenent manner. Notably, on the largest set of join tuples (Deezer 
+
+𝑄 2− ), DP-S4S reduces the running time of R2T from 1855 seconds (or 30 minutes) to 36.7 seconds at sample rate 𝑞 = 1/64 , with only a mild error increase from 6.30% to 6.72% .Compared with S&E , DP-S4S is consistently more accurate given the same execution time. Their accuracy gap is larger for small 𝑞 , and is more than 10x for 𝑞 = 1/64 . This is because DP-S4S benefits from having a better sample amplification when 𝑞 is small, whereas S&E has no amplification effect unless 𝑞 ≤ 1/( 𝐶 + 1) ≈ 10 −3 as per Corollary D.2. Also, as shown in Section 3.3, the error of S&E 
+
+grows with the sample rate (and, thus, the number of iterations 𝑘 ) under pure DP. Even when relaxed to approximate DP, the overhead due to DP noise, 𝐶 √︁ log (1/𝛿 ), causes its error to be more than 6000x larger than in the non-sampling setting. We also observe that S&E has a slightly higher running time than our mechanism when given the same sample rate. This is mainly because of the variance in its sample size. While both mechanisms have the same expected sample size, DS-S4S uses Poisson sampling, whose size is stable. For S&E ,the sampled tuples are correlated since all the records from the sampled users are taken. When high-degree nodes are sampled, more join tuples are produced, leading to a higher running time. 
+
+5.3 Comparison on Vector Queries 
+
+Relational SJA queries. We adopt the same query set as [ 10 ]: 𝑄 5 aggregates the revenue grouped by nation names, where each customer or supplier is a private user. In the three variants of 𝑄 7,both 7𝑎 and 7𝑏 compute group record counts where each customer or partsupp is a private user: 7𝑎 
+
+groups the join results by nation names, while 7𝑏 uses the year of the shipdate as an additional group-by attribute. 7𝑐 computes the revenue grouped by shipdate, where each user is a partsupp or an order. Figure 4 presents the results on a TPC-H benchmark. Clearly PMSJA consumes a lot of memory and CPU time on such datasets. In particular, PMSJA took more than 10 , 000 seconds (about 2.7 hours) to produce an output for 𝑄 5. We have also experimented with 𝑄 7 by considering customers and suppliers as private users, and PMSJA ran out of memory even after we increased its RAM limit to 512GB. Note that the CPU time and memory consumption of a QCQP solver are super-linear: a typical solver such as MOSEK [ 1] requires over 𝑂 (𝑛 3) time and 𝑂 (𝑛 2) space. Accordingly, doubling the data size may cause the mechanism to be slower by more than 8x, and may increase the memory usage by 4x. Following the same logic, sampling provides a significant efficiency boost for large datasets. For 
+
+𝑄 5, even with a relatively high sample rate of 1/4, we can reduce the running time to 38 .11 𝑠 , which speeds up PMSJA by more than 260x. The error, on the other hand, increases from 13 .9% to 23 .5% .This is mainly due to the fact that the amplification effect in Lemma 4.2 is small, meaning that the theoretical result of DP-S4S only guarantees the sampled instance is at least as private with respect to the original instance, but it does not allow using a significantly larger 𝜌 (in Rényi DP) or 𝜀 (in ( 𝜀 , 𝛿 )-DP) when running the mechanism on sub-sampled data, and reducing the sample rate will increase the scale-up factor 1/𝑞 . It is an interesting future direction to investigate better  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:21
+
+PMSJA S&E DP-S4S      
+
+> 110 10 210 310 410 5
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> time (s)
+> relative error (%)
+
+(a) 𝑸 5 (base query time: 14.2s).    
+
+> 10 −1110 10 2
+> 1
+> 10
+> 10 2
+> 10 3
+> time (s)
+
+(b) 𝑸 7𝑎 (base query time: 6.46s).    
+
+> 10 −1110 10 2
+> 1
+> 10
+> 10 2
+> 10 3
+> time (s)
+
+(c) 𝑸 7𝑏 (base query time: 14.2s).    
+
+> 110 10 210 3
+> 1
+> 10
+> 10 2
+> 10 3
+> time (s)
+
+(d) 𝑸 7𝑐 (base query time: 10.3s). 
+
+Fig. 4. Query error vs. time on TPC-H SF4 with 𝜀 = 4, 𝛿 = 10 −7. (Sampling rates 𝑞 ∈  132 , 116 , 18 , 14 )   
+
+> 10 −1110 10 2
+> 1
+> 10
+> 10 2
+> 10 3
+> time (s)
+> relative error (%)
+
+(a) 𝑸 1− (base query time: 1.46s).    
+
+> 10 −1110 10 2
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> time (s)
+
+(b) 𝑸 2− (base query time: 1.65s).     
+
+> 110 10 210 310 4
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> time (s)
+
+(c) 𝑸 3− (base query time: 1.91s).      
+
+> 110 10 210 310 410 5
+> 1
+> 10
+> 10 2
+> 10 3
+> time (s)
+
+(d) 𝑸 < (base query time: 1.28s). 
+
+Fig. 5. Query error vs. time on C2A with 𝜀 = 4, 𝛿 = 10 −7. (Sampling rates 𝑞 ∈  132 , 116 , 18 , 14 )
+
+amplification bounds for combining sampling with the PMSJA mechanism. Nevertheless, DP-S4S 
+
+helps reduce the noise level to achieve consistently and significantly improved efficiency-utility trade-offs compared to S&E , whose error exceeds 100% even at a sample rate of 1/4 on 𝑄 5.
+
+Graph queries. In addition to the queries in [ 10 ], we include another query that counts the fanout-2 pattern 𝑎 → 𝑏 ∧ 𝑎 → 𝑐 , which is different from a length-2 path on a directed graph. The results are presented in Figure 5. Similar to the performance on TPC-H, we observe that DP-S4S is consistently more accurate than S&E by an order of magnitude. The actual improvement depends on both the sample rate and the characteristics of the data. For the fanout-2 query on C2A, we have to allocate PMSJA with 512GB memory since under the default setup, the QCQP solver MOSEK runs out of memory. In addition to high memory consumption, PMSJA is also slow: it took more than 4 hours to finish a single iteration. Our sampling mechanism reduces the running time to within a minute at a sample rate around 10% ,without severely affecting the error, whereas S&E offers the same level of efficiency improvement at the cost of rather low result utility. 
+
+5.4 Parameter Study 
+
+Varying privacy parameter 𝜀 . Figure 6 presents the effect of varying the privacy parameter 𝜀 on all the mechanisms over scalar queries. Observe that even under a relatively small sample rate of 
+
+1% , DP-S4S still matches the error of R2T , whereas S&E has an overhead that can reach 14x. In all the scenarios other than DP-S4S on 𝑄 1− , DP noise dominates sampling error; thus, the accuracy of all mechanisms improves with increasing 𝜀 . DP-S4S clearly achieves a better privacy-utility trade-off compared to S&E in all settings. The privacy amplification effect may also help DP-S4S 
+
+to outperform R2T when DP noise dominates (as for 𝑄 2− and 𝑄 □), in addition to the benefit of reducing the query time by over 100x.  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:22 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+R2T PMSJA GS S&E DP-S4S   
+
+> 0.1 110
+> 0.1
+> 1
+> 10
+> 100
+> 𝜀
+> relative error (%)
+
+(a) 𝑸 1−  
+
+> 0.1 110
+> 1
+> 10
+> 100
+> 𝜀
+
+(b) 𝑸 2−  
+
+> 0.1 110
+> 0.1
+> 1
+> 10
+> 100
+> 𝜀
+
+(c) 𝑸 △  
+
+> 0.1 110
+> 1
+> 10
+> 100
+> 𝜀
+
+(d) 𝑸 □
+
+Fig. 6. Query error vs. 𝜀 on Amazon with 𝑞 = 1% for sampling mechanisms.    
+
+> 1248
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> 𝜀
+> relative error (%)
+
+(a) 𝑸 1−   
+
+> 1248
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> 𝜀
+
+(b) 𝑸 2−   
+
+> 1248
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> 𝜀
+
+(c) 𝑸 3−   
+
+> 1248
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> 𝜀
+
+(d) 𝑸 <
+
+Fig. 7. Query error vs. 𝜀 on C2A with 𝛿 = 10 −5 and 𝑞 = 10% for sampling mechanisms.    
+
+> 512 1024 2048 4096
+> 0.01
+> 0.1
+> 1
+> 10
+> 𝐷
+> relative error (%)
+
+(a) 𝑸 1−   
+
+> 512 1024 2048 4096
+> 1
+> 10
+> 100
+> 1000
+> 𝐷
+
+(b) 𝑸 2−   
+
+> 512 1024 2048 4096
+> 1
+> 10
+> 100
+> 1000
+> 𝐷
+
+(c) 𝑸 △   
+
+> 512 1024 2048 4096
+> 1
+> 10
+> 100
+> 1000
+> 10000
+> 𝐷
+
+(d) 𝑸 □
+
+Fig. 8. Query error vs. 𝐷 on Amazon with 𝜀 = 1 and 𝑞 = 1% for sampling mechanisms. 
+
+Figure 7 shows the results for scalar queries. Since the amplification from Lemma 4.2 is limited, we run the sampling mechanisms with 𝑞 = 10% to avoid large scale-back factors. We observe a 2x-3x error increase for DP-S4S , compared to a more than 15x increase in error for S&E . Nevertheless, since QCQPs are far more expensive to solve than LPs, even with a sample rate of 10% , we achieve 2-3 orders of magnitude improvement in running time, according to Figure 5. This leads to a favorable privacy-accuracy trade-off, and DP-S4S consistently outperforms S&E .
+
+Degree upper bound 𝐷 (equivalently 𝐶 and Δ). All the mechanisms considered above achieve instance-specific error, which is practical for queries with a large global sensitivity. For graph queries, there are two reasons that account for a large GS : on the one hand, the degree upper bound 𝐷 should be a data-independent worst-case upper bound. Under-estimating 𝐷 can lead to DP violations. In practice, this can be obtained from domain knowledge, e.g., Facebook limits each user to have up to 5,000 friends. On the other hand, for queries involving joins, we need to adopt worst-case join size bounds [ 2 ], whereas in practice the join size can be much smaller. The same logic applies to the number of collaborators bound 𝐶 in S&E , and the number of tuples bound Δ in our mechanism. This has been studied in existing work [9, 10].  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:23
+
+Figure 8 shows the results with varying 𝐷 and correspondingly 𝐶 and Δ. For all queries, we vary the degree bound 𝐷 from 512 to 4096. Note that the maximum degree in the dataset is 549 > 512 ;therefore, setting 𝐷 = 512 actually violates the privacy constraint. As expected, GS mechanism scales linearly with Δ, which is 𝐷 for 𝑄 1− and Ω(𝐷 2) for the other queries. Instance-specific mechanisms like R2T is better when GS is large, as the dependency is only 𝑂 (log 𝐷 ). For sampling mechanisms, besides the overhead introduced by R2T , a larger 𝐷 also leads to a larger 𝐶 for S&E 
+
+and a larger Δ for DP-S4S , weakening the privacy amplification effects in both. Accordingly, the result utility of DP-S4S is slightly worse than R2T , and consistently better than S&E .For vector queries, both PMSJA and DP-S4S show performance independent of the choice of 𝐷 .Note that 𝐷 (or Δ) is not an input to Algorithm 5, as do not apply privacy amplification in this case. 
+
+6 Conclusion 
+
+We have designed and implemented a novel sampling-based mechanism DP-S4S for efficiently and accurately answering both scalar and vector SJA queries under user-level differential privacy. The main ideas are to (i) sample join tuples and (ii) employ Rényi DP as an intermediate step to reach the required ( 𝜀 , 𝛿 )-DP. For scalar queries, we have derived a strong sampling amplification result, leading to DP-S4S matching (and sometimes even exceeding) the accuracy of the non-sampling solution R2T , at a fraction of the latter’s cost. For vector queries, we have additionally built the necessary infrastructure: the first RDP smooth sensitivity mechanism, which can be of independent interest in tasks such as releasing graph statistics or computing gradient vectors in machine learning. Extensive experiments confirm the consistent and significant (often 10x) accuracy improvement over the previous state of the art S&E .For future work, we plan to investigate whether the amplification from sampling aggregation units extends to arbitrary (𝜀, 𝛿 )-DP mechanisms beyond Rényi DP. In addition, enforcing DP on streaming data [6–8, 12] via dynamic sampling is another exciting future topic. 
+
+Acknowledgments 
+
+Yuan Qiu is supported by the Start-up Research Fund of Southeast University, under grant RF1028625150. Xiaokui Xiao is supported by the Ministry of Education, Singapore, under an AcRF Tier-2 Grant (MOE-000761-01), and by Google under grant 00006186. Yin Yang is supported by the Qatar National Research Fund, a member of the Qatar Foundation (No. PPM 05-0506-210017). Any opinions, findings, and conclusions, or recommendations expressed in this material are those of the authors and do not reflect the views of the funding agencies. We thank the anonymous reviewers for their constructive comments. We also thank Yangfan Jiang for discussions on privacy amplification, and Yiwei Chen for discussions on smooth sensitivity. 
+
+References             
+
+> [1] MOSEK ApS. 2025. The MOSEK Python Fusion API manual. Version 11.0. https://docs.mosek.com/latest/pythonfusion/ index.html [2] Albert Atserias, Martin Grohe, and Dániel Marx. 2008. Size Bounds and Query Plans for Relational Joins. In FOCS .IEEE Computer Society, 739–748. [3] Borja Balle, Gilles Barthe, and Marco Gaboardi. 2018. Privacy Amplification by Subsampling: Tight Analyses via Couplings and Divergences. In NeurIPS . 6280–6290. [4] Richard P Brent. 2013. Algorithms for minimization without derivatives . Courier Corporation. [5] Mark Bun and Thomas Steinke. 2016. Concentrated Differential Privacy: Simplifications, Extensions, and Lower Bounds. In TCC (B1) (Lecture Notes in Computer Science, Vol. 9985) . 635–658. [6] Xuyang Cao, Yang Cao, Primal Pappachan, Atsuyoshi Nakamura, and Masatoshi Yoshikawa. 2023. Differentially Private Streaming Data Release Under Temporal Correlations via Post-processing. In DBSec (Lecture Notes in Computer Science, Vol. 13942) . Springer, 184–200. Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026.
+
+165:24 Yuan Qiu, Xiaokui Xiao, and Yin Yang 
+
+[7] T.-H. Hubert Chan, Mingfei Li, Elaine Shi, and Wenchang Xu. 2012. Differentially Private Continual Monitoring of Heavy Hitters from Distributed Streams. In Privacy Enhancing Technologies (Lecture Notes in Computer Science, Vol. 7384) . Springer, 140–159. [8] Wei Dong, Zijun Chen, Qiyao Luo, Elaine Shi, and Ke Yi. 2024. Continual Observation of Joins under Differential Privacy. Proc. ACM Manag. Data 2, 3 (2024), 128. [9] Wei Dong, Juanru Fang, Ke Yi, Yuchao Tao, and Ashwin Machanavajjhala. 2022. R2T: Instance-optimal Truncation for Differentially Private Query Evaluation with Foreign Keys. In SIGMOD Conference . ACM, 759–772. [10] Wei Dong, Dajun Sun, and Ke Yi. 2023. Better than Composition: How to Answer Multiple Relational Queries under Differential Privacy. Proc. ACM Manag. Data 1, 2 (2023), 123:1–123:26. [11] Cynthia Dwork. 2006. Differential Privacy. In ICALP (2) (Lecture Notes in Computer Science, Vol. 4052) . Springer, 1–12. [12] Cynthia Dwork, Moni Naor, Toniann Pitassi, and Guy N. Rothblum. 2010. Differential privacy under continual observation. In STOC . ACM, 715–724. [13] Cynthia Dwork and Aaron Roth. 2014. The Algorithmic Foundations of Differential Privacy. Found. Trends Theor. Comput. Sci. 9, 3-4 (2014), 211–407. [14] Cynthia Dwork, Guy N. Rothblum, and Salil P. Vadhan. 2010. Boosting and Differential Privacy. In FOCS . IEEE Computer Society, 51–60. [15] Juanru Fang and Ke Yi. 2024. Privacy Amplification by Sampling under User-level Differential Privacy. Proc. ACM Manag. Data 2, 1 (2024), 34:1–34:26. [16] Chang Ge, Xi He, Ihab F. Ilyas, and Ashwin Machanavajjhala. 2019. APEx: Accuracy-Aware Differentially Private Data Exploration. In SIGMOD Conference . ACM, 177–194. [17] Badih Ghazi, Pritish Kamath, Ravi Kumar, Pasin Manurangsi, Raghu Meka, and Chiyuan Zhang. 2023. User-Level Differential Privacy With Few Examples Per User. In NeurIPS , Vol. 36. 19263–19290. [18] Manuel Gil, Fady Alajaji, and Tamás Linder. 2013. Rényi divergence measures for commonly used univariate continuous distributions. Inf. Sci. 249 (2013), 124–131. [19] Hong Guan, Lei Yu, Lixi Zhou, Li Xiong, Kanchan Chowdhury, Lulu Xie, Xusheng Xiao, and Jia Zou. 2025. Privacy and Accuracy-Aware AI/ML Model Deduplication. Proc. ACM Manag. Data 3, 3 (2025), 203:1–203:28. [20] Yangfan Jiang, Xinjian Luo, Yin Yang, and Xiaokui Xiao. 2024. Calibrating Noise for Group Privacy in Subsampled Mechanisms. Proc. VLDB Endow. 18, 2 (2024), 322–334. [21] Vishesh Karwa, Sofya Raskhodnikova, Adam D. Smith, and Grigory Yaroslavtsev. 2014. Private Analysis of Graph Structure. ACM Trans. Database Syst. 39, 3 (2014), 22:1–22:33. [22] Shiva Prasad Kasiviswanathan, Kobbi Nissim, Sofya Raskhodnikova, and Adam D. Smith. 2013. Analyzing Graphs with Node Differential Privacy. In TCC (Lecture Notes in Computer Science, Vol. 7785) . Springer, 457–476. [23] Ios Kotsogiannis, Yuchao Tao, Xi He, Maryam Fanaeepour, Ashwin Machanavajjhala, Michael Hay, and Gerome Miklau. 2019. PrivateSQL: A Differentially Private SQL Query Engine. Proc. VLDB Endow. 12, 11 (2019), 1371–1384. [24] Jure Leskovec and Andrej Krevl. 2014. SNAP Datasets: Stanford Large Network Dataset Collection. http://snap.stanford. edu/data. [25] Daniel Levy, Ziteng Sun, Kareem Amin, Satyen Kale, Alex Kulesza, Mehryar Mohri, and Ananda Theertha Suresh. 2021. Learning with User-Level Privacy. In NeurIPS . 12466–12479. [26] Ilya Mironov. 2017. Rényi Differential Privacy. In CSF . IEEE Computer Society, 263–275. [27] Yurii Nesterov and Arkadii Nemirovskii. 1994. Interior-Point Polynomial Algorithms in Convex Programming . SIAM, Philadelphia. doi:10.1137/1.9781611970791 [28] Kobbi Nissim, Sofya Raskhodnikova, and Adam D. Smith. 2007. Smooth sensitivity and sampling in private data analysis. In STOC . ACM, 75–84. [29] Panos M. Pardalos and Stephen A. Vavasis. 1991. Quadratic Programming with One Negative Eigenvalue is NP-hard. 
+
+Journal of Global Optimization 1, 1 (1991), 15–22. doi:10.1007/BF00120662 [30] Yuchao Tao, Amir Gilad, Ashwin Machanavajjhala, and Sudeepa Roy. 2025. Differentially private explanations for aggregate query answers. VLDB J. 34, 2 (2025), 20. [31] Johan Ugander, Brian Karrer, Lars Backstrom, and Cameron Marlow. 2011. The Anatomy of the Facebook Social Graph. 
+
+arXiv preprint arXiv:1111.4503 (2011). https://arxiv.org/abs/1111.4503 [32] Salil P. Vadhan. 2017. The Complexity of Differential Privacy. In Tutorials on the Foundations of Cryptography . Springer International Publishing, 347–450. [33] Tim van Erven and Peter Harremoës. 2014. Rényi Divergence and Kullback-Leibler Divergence. IEEE Trans. Inf. Theory 
+
+60, 7 (2014), 3797–3820. [34] Shufan Zhang and Xi He. 2023. DProvDB: Differentially Private Query Processing with Multi-Analyst Provenance. 
+
+Proc. ACM Manag. Data 1, 4 (2023), 267:1–267:27. Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:25 
+
+A Useful Lemmas 
+
+Lemma A.1 (Quasi-convexity of Rényi Divergence [33]). For any pair of distributions (𝑃, 𝑄 )
+
+and (𝑃 ′, 𝑄 ′) and any 0 < 𝛽 < 1, we have 
+
+𝐷 𝛼 (𝛽𝑃 + ( 1 − 𝛽 )𝑃 ′ ∥𝛽𝑄 + ( 1 − 𝛽 )𝑄 ′) ≤ max {𝐷 𝛼 (𝑃 ∥𝑄 ), 𝐷 𝛼 (𝑃 ′ ∥𝑄 ′)} .
+
+Lemma A.2 (Convexity of Rényi Divergence in its Second Term [ 33 ]). For any distributions 
+
+𝑃 , 𝑄 , 𝑄 ′ and any 0 < 𝛽 < 1, we have 
+
+𝐷 𝛼 (𝑃 ∥𝛽𝑄 + ( 1 − 𝛽 )𝑄 ′) ≤ 𝛽𝐷 𝛼 (𝑃 ∥𝑄 ) + ( 1 − 𝛽 )𝐷 𝛼 (𝑃 ′ ∥𝑄 ′) .
+
+Lemma A.3 (Bernstein ineqality). Let 𝑋 1, . . . , 𝑋 𝑘 be independent zero-mean random variables such that |𝑋 𝑖 | ≤ 1 for all 𝑖 , then 
+
+Pr 
+
+" 𝑘 ∑︁ 
+
+> 𝑖 =1
+
+𝑋 𝑖 ≥ 𝑡 
+
+#
+
+≤ 2 exp − 𝑡 2/2
+
+Í𝑘 𝑖 =1 E[𝑋 2 
+
+> 𝑖
+
+] + 𝑡 /3
+
+!
+
+.
+
+Lemma A.4 (Chernoff bound). Let 𝑋 1, . . . , 𝑋 𝑘 be independent Bernoulli random variables, where 
+
+E[Í𝑘 𝑖 =1 𝑋 𝑖 ] = 𝜇 . For 0 ≤ 𝑡 ≤ 4,
+
+Pr 
+
+" 𝑘 ∑︁ 
+
+> 𝑖 =1
+
+𝑋 𝑖 ≥ ( 1 + 𝑡 )𝜇 
+
+#
+
+≤ exp 
+
+
+
+−𝑡 2𝜇 
+
+4
+
+
+
+.
+
+B Proofs B.1 Proof for Lemma 3.3 
+
+Proof. Denote by 𝑓 (𝑆 ) := Í𝑡 ∈𝑆 𝑤 𝑡 . Note that 𝑓 (𝑆 ) = Í𝑡 ∈𝑇 1[𝑡 is sampled ] · 𝑤 𝑡 . Therefore 
+
+E[𝑓 (𝑆 )] = 𝑞 · 𝑓 (𝑇 ), and Var [𝑓 (𝑆 )] = 𝑞 (1 − 𝑞 )∑︁  
+
+> 𝑡 ∈𝑇
+
+𝑤 2 
+
+> 𝑡
+
+≤ 𝑞𝑛 . 
+
+We have Pr 
+
+h
+
+Lap ( 𝜏 𝑖  
+
+> 𝜀 𝑖
+
+) ≤ 𝜏 𝑖  
+
+> 𝜀 𝑖
+
+ln 3𝐿 𝛽 
+
+i
+
+> 1 − 𝛽  
+
+> 3𝐿
+
+. By a union bound, this holds for all iterations with probability at least 1 − 𝛽 /3. Conditioned on this happening, ˜𝑓 (𝑆, 𝜏 𝑖 ) is always an un-derestimate since ˜𝑓 (𝑆, 𝜏 𝑖 ) ≤ ¯𝑓 (𝑆, 𝜏 𝑖 ) ≤ 𝑓 (𝑆 ) and ˜𝑓 (𝑆, 𝜏 𝑖 ∗ ) ≥ 𝑓 (𝑆 ) − 2(𝜏 𝑖 ∗ /𝜀 𝑖 ∗ ) ln (3𝐿 /𝛽 ). Let 
+
+𝜏 ∗ (𝑆 ) := max 𝑢 ∈𝑈 
+
+Í𝑡 ∈𝑆 1[𝑢 { 𝑡 ] be the maximum number of records contributed by a user in the sample. For any 𝜏 ≥ 𝜏 ∗ (𝑆 ), the optimal solution to problem (1) assigns 𝑥 𝑡 = 𝑤 𝑡 so that 
+
+¯𝑓 (𝑆, 𝜏 ) = 𝑓 (𝑆 ). In particular, this holds for a power of 2 where 𝜏 𝑖 ∗ ≥ 𝜏 ∗ (𝑆 ) > 𝜏 𝑖 ∗ −1. Thus, we have both ˜𝑓 (𝑆, 𝜏 𝑖 ∗ ) ≤ max 𝑖 ˜𝑓 (𝑆, 𝜏 𝑖 ) ≤ 𝑓 (𝑆 ), and 
+
+˜𝑓 (𝑆, 𝜏 𝑖 ∗ ) ≥ 𝑓 (𝑆 ) − 2𝜏 𝑖 ∗
+
+𝜀 𝑖 ∗
+
+ln 3𝐿 𝛽 > 𝑓 (𝑆 ) − 4𝜏 ∗ (𝑆 )
+
+𝜀 𝑖 ∗
+
+ln 3𝐿 𝛽 .
+
+By Bernstein inequality (Lemma A.3), we have 
+
+Pr 
+
+
+
+|𝑓 (𝑆 ) − 𝑞 · 𝑓 (𝑇 )| >√︄ 2𝑛𝑞 ln 6
+
+𝛽 + 19
+
+
+
+ln 6
+
+𝛽 
+
+2
+
++ 13 ln 6
+
+𝛽 
+
+
+
+< 𝛽 
+
+3 .
+
+Therefore with total probability at least 1 − 2𝛽 /3, we have 
+
+| ˆ𝑓 (𝑇 ) − 𝑓 (𝑇 )| ≤ 1
+
+𝑞 
+
+
+
+| max 
+
+> 𝑖
+
+˜𝑓 (𝑆, 𝜏 𝑖 ) − 𝑓 (𝑆 )| + | 𝑓 (𝑆 ) − 𝑞 · 𝑓 (𝑇 )| 
+
+
+
+= ˜𝑂 
+
+𝜏 ∗ (𝑆 )
+
+𝑞𝜀 𝑖 ∗
+
++√︂ 𝑛 𝑞 + 1
+
+𝑞 
+
+
+
+, 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:26 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+where ˜𝑂 (·) omits constants and polylogarithmic factors. Our final step is upper bound 𝜏 ∗ (𝑆 ), the contribution of each user in the sample. Define 𝜏 ∗ (𝑇 ) :max 𝑢 ∈𝑈 
+
+Í𝑡 ∈𝑇 1[𝑢 { 𝑡 ], so that each user has at most 𝜏 ∗ (𝑇 ) records in the dataset. By Chernoff bound (Lemma A.4), we have for any user 𝑢 ∈ 𝑈 ,
+
+Pr 
+
+"
+
+|𝑆 𝑢 | > 𝑞 · 𝜏 ∗ (𝑇 ) + √︄ 4𝑞 · 𝜏 ∗ (𝑇 ) ln 3𝑚 𝛽 
+
+#
+
+≤ 𝛽 
+
+3𝑚 ,
+
+where 𝑚 is the number of users. With a union bound, we have 𝜏 ∗ (𝑆 ) = ˜𝑂 (𝑞 · 𝜏 ∗ (𝑇 )) with probability at least 1 − 𝛽 /3.In summary, with probability 1 − 𝛽 , the error of DP-S4S is √︄ 
+
+2𝑛 𝑞 ln 6
+
+𝛽 + 13𝑞 ln 6
+
+𝛽 + 1
+
+𝜀 𝑖 ∗
+
+𝜏 ∗ (𝑇 ) + √︄ 4𝜏 ∗ (𝑇 )
+
+𝑞 ln 3𝑚 𝛽 
+
+!
+
+.
+
+□
+
+B.2 Proof of Lemma 3.5 
+
+Proof. Following the proof for pure-DP, now we need to bound D𝛼 (M ( 𝑇 )∥M ( 𝑇 ′)) and 
+
+D𝛼 (M ( 𝑇 ′)∥M ( 𝑇 )) for Rényi-DP. By the joint quasi-convexity of Rényi divergence (Lemma A.1), we have 
+
+D𝛼 (M ( 𝑇 ′)∥M ( 𝑇 )) ≤ max   
+
+> 𝑆 ⊆𝑇
+
+D𝛼  ∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 ) ˆ𝑓 (𝑆, 𝜏 )
+
+!
+
+.
+
+Denote 𝑆 ∗ = arg max 𝑆 ⊆𝑇 D𝛼 
+
+Í𝑆 𝑢 ⊆𝑇 𝑢 
+
+ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 ) ˆ𝑓 (𝑆, 𝜏 )
+
+
+
+, then similar to [20], we have 
+
+exp (( 𝛼 − 1)D𝛼 (M ( 𝑇 ′)∥M ( 𝑇 ))) (5) 
+
+≤∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] · exp (( 𝛼 − 1)D𝛼 ( ˆ𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 , 𝜏 )∥ ˆ𝑓 (𝑆 ∗, 𝜏 ))) .
+
+By Lemma 2.9, we have 
+
+D𝛼 ( ˆ𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 )∥ ˆ𝑓 (𝑆 ∗)) = 𝛼 ( ¯𝑓 (𝑆 ∗ ∪ 𝑆 𝑢 , 𝜏 ) − ¯𝑓 (𝑆 ∗)) 2
+
+2𝜎 2 ≤
+
+ min {𝜏, |𝑆 𝑢 |} 
+
+𝜏 
+
+2
+
+· 𝜌 . 
+
+Plugging this into (5), we have 
+
+exp (( 𝛼 − 1)D𝛼 (𝑀 (𝑇 ′)∥ 𝑀 (𝑇 ))) ≤
+
+> Δ
+
+∑︁ 
+
+> 𝑘 =0
+
+Pr [| 𝜆 (𝑇 𝑢 )| = 𝑘 ] · exp (𝛼 − 1)
+
+ min {𝜏, 𝑘 }
+
+𝜏 
+
+2
+
+𝜌 
+
+!
+
+= 
+
+> ⌊𝜏 ⌋
+
+∑︁ 
+
+> 𝑘 =0
+
+𝑝 𝑘 exp 
+
+
+
+(𝛼 − 1) 𝑘 2
+
+𝜏 2 𝜌 
+
+
+
++ Pr [Bin (Δ, 𝑞 ) > 𝜏 ] · exp (( 𝛼 − 1)𝜌 ) .
+
+Similarly, we can also upper bound 
+
+D𝛼 (M ( 𝑇 )∥M ( 𝑇 ′)) ≤ max   
+
+> 𝑆 ⊆𝑇
+
+D𝛼 ˆ𝑓 (𝑆, 𝜏 )∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 )
+
+!
+
+. 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:27
+
+Let 𝑆 ◦ = arg max 𝑆 ⊆𝑇 D𝛼 
+
+ ˆ𝑓 (𝑆, 𝜏 ) Í𝑆 𝑢 ⊆𝑇 𝑢 
+
+ˆ𝑓 (𝑆 ∪ 𝑆 𝑢 , 𝜏 )
+
+
+
+be where the max is taken. By the convexity of Rényi-divergence in its second term (Lemma A.2), we further have 
+
+(𝛼 − 1)D𝛼 (M ( 𝑇 )∥M ( 𝑇 ′)) ≤∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] · ( 𝛼 − 1)D𝛼 ( ˆ𝑓 (𝑆 ◦, 𝜏 )∥ ˆ𝑓 (𝑆 ◦ ∪ 𝑆 𝑢 , 𝜏 )) 
+
+=∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] ln 
+
+
+
+exp 
+
+
+
+(𝛼 − 1)D𝛼 ( ˆ𝑓 (𝑆 ◦, 𝜏 )∥ ˆ𝑓 (𝑆 ◦ ∪ 𝑆 𝑢 , 𝜏 )) 
+
+ 
+
+≤ ln  ∑︁  
+
+> 𝑆 𝑢 ⊆𝑇 𝑢
+
+Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] exp 
+
+
+
+(𝛼 − 1)D𝛼 ( ˆ𝑓 (𝑆 ◦, 𝜏 )∥ ˆ𝑓 (𝑆 ◦ ∪ 𝑆 𝑢 , 𝜏 )) 
+
+!
+
+by the concavity of the ln (·) . Following a similar analysis to equation (5), we have 
+
+exp (( 𝛼 − 1)D𝛼 (M ( 𝑇 )∥M ( 𝑇 ′))) ≤ 
+
+> ⌊𝜏 ⌋
+
+∑︁ 
+
+> 𝑘 =0
+
+𝑝 𝑘 exp 
+
+
+
+(𝛼 − 1) 𝑘 2
+
+𝜏 2 𝜌 
+
+
+
++ Pr [Bin (Δ, 𝑞 ) > 𝜏 ] · exp (( 𝛼 − 1)𝜌 ) ,
+
+which concludes the proof. □
+
+B.3 Proof for Lemma 4.1 
+
+Proof. Consider I ∼ I′, let 𝜎 (I) = 𝜎 1 and 𝜎 (I′) = 𝜎 2. By the smoothness of SS 𝐹 , we have 
+
+𝑒 −2𝛾 ≤ 𝜎 22
+
+𝜎 21
+
+= SS 𝐹 (I′, 𝛾 )2
+
+SS 𝐹 (I, 𝛾 )2 ≤ 𝑒 2𝛾 
+
+According to Lemma 2.8, the divergence between the outputs is 
+
+𝐷 𝛼 (M ( I)∥M ( I′)) = 𝛼 
+
+2 · ∥𝐹 (I) − 𝐹 (I′)∥ 22
+
+(1 − 𝛼 )𝜎 21 + 𝛼𝜎 22
+
++ 𝑑 
+
+2(𝛼 − 1) ln (𝜎 2/𝜎 1)2𝛼 
+
+𝛼 (𝜎 2/𝜎 1)2 + 1 − 𝛼 
+
+when 𝛼 (𝜎 2/𝜎 1)2 + 1 − 𝛼 > 0, which can be satisfied when 
+
+𝜎 22
+
+𝜎 21
+
+≥ 𝑒 −2𝛾 > 𝛼 − 1
+
+𝛼 ,
+
+or 𝛾 < 12 ln 𝛼 𝛼 −1 . For the first term, we have 
+
+𝛼 
+
+2 · ∥𝐹 (I) − 𝐹 (I′)∥ 22
+
+(1 − 𝛼 )𝜎 21 + 𝛼𝜎 22
+
+≤ 𝛼 
+
+2 · LS (I)2
+
+𝜎 21 · ( 𝛼 (𝜎 2/𝜎 1)2 + 1 − 𝛼 )≤ 𝜌 
+
+2 · 1 − 𝛼 + 𝛼𝑒 −2𝛾 
+
+1 − 𝛼 + 𝛼 (𝜎 22 /𝜎 21 )≤ 𝜌 
+
+2 .
+
+For the second term, we require that 
+
+𝑑 
+
+2(𝛼 − 1) ln (𝜎 2/𝜎 1)2𝛼 
+
+𝛼 (𝜎 2/𝜎 1)2 + 1 − 𝛼 ≤ 𝜌 
+
+2 ,
+
+which is equivalent to 
+
+ℎ(𝑡 ) := 𝑡 𝛼 − 𝛼𝐴𝑡 + ( 𝛼 − 1)𝐴 ≤ 0 , 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:28 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+for 𝑡 = 𝜎 22 /𝜎 21 and 𝐴 = 𝑒 𝜌 (𝛼 −1) 
+
+> 𝑑
+
+. Note that ℎ′ (𝑡 ) = 𝛼𝑡 𝛼 −1 − 𝛼𝐴 , therefore ℎ(𝑡 ) decreases for 𝑡 < 𝑒 𝜌 𝑑 ,and increases for 𝑡 > 𝑒 𝜌 𝑑 . Given that ℎ( 𝛼 −1 
+
+> 𝛼
+
+) = 𝑡 𝛼 > 0, ℎ(( 𝛼𝐴 ) 1  
+
+> 𝛼 −1
+
+) = (𝛼 − 1)𝐴 > 0 and ℎ(1) =
+
+1 − 𝛼𝐴 + 𝛼𝐴 − 𝐴 < 0, the equation ℎ(𝑡 ) = 0 has two roots 𝛼 −1 
+
+> 𝛼
+
+< 𝑡 1 < 1 < 𝑡 2 < (𝛼𝐴 ) 1  
+
+> 𝛼 −1
+
+. The second condition is satisfied when 
+
+𝑡 1 ≤ 𝑒 −2𝛾 ≤ 𝜎 22
+
+𝜎 21
+
+≤ 𝑒 2𝛾 ≤ 𝑡 2 .
+
+This gives 𝛾 ≤ 12 min {− ln 𝑡 1, ln 𝑡 2 }. Note that 𝑡 1 > 𝛼 −1 
+
+> 𝛼
+
+, and, thus, the condition that 𝛾 < 12 ln 𝛼 𝛼 −1
+
+can be omitted. The analysis for 𝐷 𝛼 (M ( I′)∥M ( I)) is symmetric. □
+
+B.4 Proof for Lemma 4.2 
+
+Proof. Similar to PMSJA [ 10 ], the output of Algorithm 5 consists of two parts: an SVT mechanism 
+
+M1 that searches for the truncation threshold 𝜏 , and a smooth sensitivity mechanism M2 to release the truncated query for the given 𝜏 . By the analysis in [ 10 ], M1 (𝑆 ) is (𝜀 1, 0)-DP with respect to the sample 𝑆 . To apply our Lemma 4.1, note that the local sensitivity of function ¯𝐹 /2𝜏 is 
+
+LS ¯𝐹 /2𝜏 (𝑆 ) = LS ¯𝐹 (𝑆 )/ 2𝜏 ≤ 𝐸 (𝑆 ) + 1 by Inequality (4) , and 𝐵 (𝑆 ) = 𝐸 (𝑆 ) + 1 has global sensitivity 1,thus M2 (𝑆 ) is (𝛼, 𝜌 )-RDP with repect to 𝑆 following Lemma 4.1. We will first argue about their privacy with respect to the original instance I, and finally convert the guarantee back to (𝜀, 𝛿 )-DP. Recall the proof for Lemma 3.1. Note that M is not limited to any specific mechanism until we plug in the exact distribution for ˆ𝑓 . In particular, let I ∼ I′ be neighboring datasets, where I′ ⊇ I
+
+contains extra records from user 𝑢 . Let S be the set of all possible samples from I, and S𝑢 be all possible samples contributed by user 𝑢 from I′. We have 
+
+Pr [(M 1 ◦ 𝜆 )( I) = 𝑧 ] =∑︁  
+
+> 𝑆 ∈ S
+
+Pr [𝜆 (I) = 𝑆 ] · Pr [M 1 (𝑆 ) = 𝑧 ] .
+
+With similar steps, we can derive that 
+
+Pr [(M 1 ◦ 𝜆 )( I) = 𝑧 ]
+
+Pr [(M 1 ◦ 𝜆 )( I′) = 𝑧 ] ≤ max  
+
+> 𝑆 ∈ S
+
+1
+
+Í𝑆 𝑢 ∈ S 𝑢 Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] Pr [ M 1 (𝑆 ∪𝑆 𝑢 )=𝑧 ]   
+
+> Pr [ M 1(𝑆 )=𝑧 ]
+
+,
+
+where 𝑇 𝑢 are all the join results contributed by 𝑢 . While it is hard to give a tighter bound for        
+
+> Pr [ M 1(𝑆 ∪𝑆 𝑢 )=𝑧 ]
+> Pr [ M 1(𝑆 )=𝑧 ]
+
+when M1 is the SVT mechanism, we can adopt a worst-case argument: when 𝑆 𝑢 = ∅,which happens with probability (1 − 𝑞 )Δ, the ratio is 1; otherwise, we have Pr [ M 1 (𝑆 ∪𝑆 𝑢 )=𝑧 ]    
+
+> Pr [ M 1(𝑆 )=𝑧 ]
+
+≥ 𝑒 −𝜀 1
+
+due to the DP guarantee. The final privacy guarantee is then 
+
+Pr [(M 1 ◦ 𝜆 )( I) = 𝑧 ]
+
+Pr [(M 1 ◦ 𝜆 )( I′) = 𝑧 ] ≤ 1
+
+(1 − 𝑞 )Δ + ( 1 − ( 1 − 𝑞 )Δ)𝑒 −𝜀 1 ≤ 𝑒 𝜀 1 .
+
+A similar argument can be made on the inverse, proving that the mechanism M1 is ln (1+𝑞 ′ (𝑒 𝜀 1 −1)) -DP on the original dataset for 𝑞 ′ = 1 − ( 1 − 𝑞 )Δ.For the RDP mechanism M2, we follow the proof in Section B.2. In particular, we can upper bound 
+
+exp (( 𝛼 − 1)D𝛼 ((M 2 ◦ 𝜆 )( I)∥( 𝑀 2 ◦ 𝜆 )( I′))) ≤ max  
+
+> 𝑆 ∈ S
+
+∑︁ 𝑆 𝑢 ⊆𝑇 𝑢 
+
+Pr [𝜆 (𝑇 𝑢 ) = 𝑆 𝑢 ] exp (( 𝛼 − 1)D𝛼 (M 2 (𝑆 )∥M 2 (𝑆 ∪ 𝑆 𝑢 ))) ≤( 1 − 𝑞 )Δ + ( 1 − ( 1 − 𝑞 )Δ) exp (( 𝛼 − 1)𝜌 ) 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:29
+
+Thus M2 is also (𝛼, 𝜌 )-RDP on I. Note that we set 𝜌 = 𝜀 2 − ln (1/𝛿 )  
+
+> 𝛼 −1
+
+, by the conversion, M2 is also 
+
+(𝜀 ′
+
+> 2
+
+, 𝛿 )-DP for 
+
+𝜀 ′ 
+
+> 2
+
+= 1
+
+𝛼 − 1
+
+
+
+ln 
+
+
+
+1 + 𝑞 ′ 
+
+𝑒 (𝛼 −1)𝜀 2 · 𝛿 − 1
+
+ 
+
++ ln 1
+
+𝛿 
+
+
+
+for the same 𝑞 ′ = 1 − ( 1 − 𝑞 )Δ. Finally, applying basic composition, the whole mechanism is 
+
+(𝜀 ′ 
+
+> 1
+
++ 𝜀 ′
+
+> 2
+
+, 𝛿 )-DP. □
+
+C Evaluations on DP Noise vs. Sampling Error for Scalar Queries 
+
+Recall that there are two sources of error in Algorithm 2, sampling error and noise injected to satisfy DP. In this section, we investigate their respective contribution to the overall query error. We start by evaluating the magnitude of amplification in Lemma 3.1. 
+
+Table 3. DP-S4S Amplification ( 𝜀 = 1, Δ = 1024 ). 
+
+𝑞 \𝜏 1 4 16 64 256 1024 0.1% 0.7426 0.2878 0.0660 0.0161 0.0040 0.0010 1% 0.9999 0.9976 0.6538 0.1612 0.0400 0.0100 10% 1.0000 1.0000 1.0000 0.9999 0.4007 0.1000 Table 3 presents the effective 𝜀 ′ (𝜀, 𝜏, Δ, 𝑞 ) in Lemma 3.1 with default 𝜀 = 1 and Δ = 1024 . Clearly, the amplification is significant if 𝑞 is small or 𝜏 is large, intuitively when the noise scale is over-killing. This results in smaller noises in Algorithm 2 compared to R2T , as we plot the standard deviations of Laplace noises ( 
+
+> √2𝜏 𝑖
+> 𝜀 𝑖
+
+) from all mechanisms in Figure 9, with total 𝜀 = 1 and 𝐶 = Δ = 1024 . Note that 
+
+S&E does not show clear benefits of privacy amplification even when 𝑞 = 0.1% , whereas DP-S4S 
+
+achieves up to 5x improvement in accuracy. R2T S&E DP-S4S      
+
+> 1416 64 256 1024
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> 𝜏
+> standard deviation
+
+Fig. 9. Noise scale with 𝑞 = 0.1% for sampling mechanisms. 
+
+While DP-S4S requires smaller noise than R2T in each iteration, the results must be scaled back by 1/𝑞 for a sampling mechanism. This is also why S&E has larger error despite adding the same amount of noises. Fortunately, for our new mechanism, this is offset by the fact that a smaller 
+
+𝜏 ∗ (𝑆 ) ≈ 𝑞 ·𝜏 ∗ (𝑇 ) can be used in the sample compared to the optimal threshold for R2T . As a concrete example, for edge counting on the Amazon dataset, the average 𝜏 that optimizes R2T is 166, which shrinks to 30 for S&E and 5 for DP-S4S with 𝑞 = 1% . Ignoring the amplification, the DP noise scales linearly with 𝜏 as in Figure 9, so the smaller DP noise in DP-S4S after scaling back by 1/𝑞 matches the error of R2T . 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:30 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+So far we have shown how the DP error matches and may possibly improve R2T due to amplifica-tion. In addition to the DP error, our mechanism also has a sampling error, which by standard analysis is ˜𝑂 (√𝑛 ) for constant sampling rate. Informally, the DP error is dominating when 𝜏 ∗ (𝑇 ) ≫ √𝑛 , i.e., the user with maximum contribution contributes to a 1/√𝑛 fraction of the records. Sampling error dominates in the opposite case. When reducing the sample rate 𝑞 , the mechanism becomes more efficient, where sampling error increases while DP error reduces due to better amplification. The overall error depends on the sum of both. R2T DP-S4S (DP Err.) DP-S4S (Sampling Err.) S&E (DP Err.) S&E (Sampling Err.)         
+
+> 0.01 0.1 1
+> 0.01
+> 0.1
+> 1
+> 10
+> 𝑞
+> relative error (%)
+> (a) 𝑸 1−
+> 0.01 0.1 1
+> 0.01
+> 0.1
+> 1
+> 10
+> 100
+> 𝑞
+> (b) 𝑸 2−
+> Fig. 10. DP vs. Sampling Error on Amazon ( 𝜀 =1).
+
+We illustrate this with two contrasting examples in Figure 10. For sample 𝑆 , sampling error refers to the difference between 𝑓 (𝑇 ) and 𝑓 (𝑆 )/ 𝑞 , whereas DP error refers to the difference between 
+
+𝑓 (𝑆 )/ 𝑞 and the output ˆ𝑓 (𝑇 ). On the Amazon dataset, for the edge counting query 𝑄 1− , the query size is 𝑛 = 925872 while 𝜏 ∗ = 549 , so the dominating term depends on the choice of 𝑞 . But for 2-path counting query 𝑄 2− , we have 𝜏 ∗ = 151870 ≫ √𝑛 = 3122 .85 , thus DP error dominates sampling error for 𝑄 2− for all 𝑞 ’s we consider. There are several observations. By reducing 𝑞 , the sampling error increases for both mechanisms. For DP error, it increases in S&E due to a larger scale-back factor 1/𝑞 , but decreases in DP-S4S 
+
+following our discussion. The amplification is better on 𝑄 1− due to a smaller Δ. It is also clear that both our sampling and DP error improve over S&E , where the major improvement is on DP error for small sampling rates. Note that a major contribution of this work is to show sampling join tuples preserves user-level DP. Regarding the sample rate 𝑞 , its best value depends upon the data size (which determines sampling error) and the downward sensitivity (which impacts DP error). Under DP, it is challenging to find the best 𝑞 that balances these two sources of error. Further, 𝑞 also affects the efficiency of the linear program solver, which is also an important consideration in practice. A heuristic way is to choose a 
+
+𝑞 that balances efficiency and the (non-DP) sampling error. As shown above, the DP error reduces with smaller 𝑞 .
+
+D More on S&E 
+
+Implementation. The main result in S&E is as follows. 
+
+Lemma D.1 (Sample-and-Explore Amplification [ 15 ]). Assuming each user can have at most 
+
+𝐶 collaborators, let 𝜆 : T → T be the sample-and-explore process, and let M : T → O be an 
+
+(𝜀, 𝛿 )-user-level DP mechanism. Then, M ◦ 𝜆 satisfies (𝜀 ′, 𝛿 ′)-user-level DP for 𝜀 ′ = ln (1 + 𝐶 𝑚 (𝑒 2𝜀 − 1)) 
+
+and 𝛿 ′ = 𝐶 𝑚 (𝑒 𝜀 + 1)𝛿 . When 𝛿 = 0, it suffices to take 𝜀 ′ = ln  1 + 𝐶 𝑚 (𝑒 𝜀 − 1). 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:31
+
+The analysis in [ 15 ] depends only on the event that the sampled user is not a collaborator of the witness user, which happens with probability 1 − 𝐶 /𝑚 . In our implementation of S&E , we extend it to a more general setting when we jointly sample 𝑘 out of 𝑚 users. In this case, the sampled users have 𝑘𝐶 collaborators in the worst case, and the probability that the witness user is not one of them is  𝑚 −𝑘𝐶 𝑘 
+
+/ 𝑚 𝑘 
+
+, which is 0 for 𝑘 > 𝑚 /( 𝐶 + 1). Correspondingly, the explored instance contains tuples where the first contributing user is one of the 𝑘 users, thus each tuple is sampled with probability 
+
+𝑘 /𝑚 . We can run an (𝜀, 𝛿 )-DP mechanism on the explored instance, and scale its results by 𝑚 /𝑘 
+
+for an unbiased estimator. This leads to the following result, which is the theoretical basis our our implementation of S&E used in Section 5. 
+
+Corollary D.2. Assuming each user can have at most 𝐶 collaborators, let 𝜆 𝑘 : T → T be the Sample-and-Explore process for 𝑘 sampled users, and let M : T → O be an (𝜀, 𝛿 )-user-level DP mechanism. Then, M ◦ 𝜆 𝑘 satisfies (𝜀 ′, 𝛿 ′)-user-level DP for 𝜀 ′ = ln (1 + ( 1 − 𝑃 ) · ( 𝑒 2𝜀 − 1)) and 
+
+𝛿 ′ = (1 − 𝑃 )( 𝑒 𝜀 + 1)𝛿 , where 𝑃 = 0 if 𝑘 > 𝑚 /( 𝐶 + 1) and 𝑃 =  𝑚 −𝑘𝐶 𝑘 
+
+/ 𝑚 𝑘 
+
+ otherwise. When 𝛿 = 0, it suffices to take 𝜀 ′ = ln (1 + ( 1 − 𝑃 ) · ( 𝑒 𝜀 − 1)) .
+
+Sampling error analysis. S&E can also incur a large sampling error. Note that in S&E , a tuple is sampled only if its first contributing user is sampled. Consider a typical case where only 𝑚 /𝑙 users can be the first contributing user (e.g. a join query where the first user is always the supplier but not the customer), and each of them collaborate with the other users to contribute 𝑙 · 𝑛 /𝑚 records. Then the sample variance is 
+
+𝑚 2
+
+𝑘 2 · 𝑘 ·
+
+𝑚 𝑙 · 𝑙 2𝑛 2
+
+𝑚 2 · 1
+
+𝑚 
+
+
+
+1 − 1
+
+𝑚 
+
+ 
+
+≈ 𝑙 · 𝑛 2
+
+𝑘 .
+
+Under the same sample rate 𝑘 = 𝑞𝑛 , this is larger than the sampling variance of DP-S4S by an additional 𝑙 factor. Since DP-S4S performs sampling on aggregation units, it automatically takes into account the correlation between users. Moreover, our tuple-level sampling intuitively reduces the contribution of each user, which brings down the noise required for DP on the sample, and cancels with the effect of scaling back by the inverse sample rate. This cannot be achieved by S&E , since the algorithm takes all tuples associated with the sampled user, and the contribution is not reduced. 
+
+E Experimental Evaluation on RDP-SS 
+
+In this section, we perform an empirical study on the proposed RDP-SS mechanism. The original smooth sensitivity mechanism proposed by Nissim et al. [28] is as follows. 
+
+Lemma E.1 (Smooth-sensitivity Mechanism [ 28 ]). Given 𝐹 : I → R𝑑 and its smooth-sensitivity function SS 𝐹 : I × R → R as in Lemma 2.10, the smooth-sensitivity mechanism is defined as 
+
+MSS (I) := 𝐹 (I) + 𝜂 · SS 𝐹 (I, 𝛾 ) · 𝑍 . 
+
+Its privacy guarantee is as follows. 
+
+(1) If 𝛾 = 𝜀  
+
+> 6𝑑
+
+, 𝜂 = 6 
+
+> 𝜀
+
+and 𝑍 ∼ Cauchy 𝑑 (0, 1), then MSS-C satisfies (𝜀, 0)-DP. 
+
+(2) If 𝛾 = 𝜀   
+
+> 4(𝑑 +ln (2/𝛿 ) )
+
+, 𝜂 = 2 
+
+> 𝜀
+
+and 𝑍 ∼ Lap 𝑑 (0, 1), then MSS-L satisfies (𝜀, 𝛿 )-DP. 
+
+(3) If 𝛾 = 𝜀   
+
+> 4(𝑑 +ln (2/𝛿 ) )
+
+, 𝜂 = 5√2 ln (2/𝛿 ) 
+
+> 𝜀
+
+and 𝑍 ∼ N ( 0, 1𝑑 ), then MSS-G satisfies (𝜀, 𝛿 )-DP. 
+
+Comparing SS-G with our RDP-SS in Lemma 4.1, given the same SS 𝐹 function, the difference is in both the smoothness requirement 𝛾 and the noise scale factor 𝜂 . In general, smaller 𝛾 leads to a more strict smoothness requirement, and correspondingly a larger value of SS 𝐹 (I, 𝛾 ). 
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:32 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+SS-G RDP-SS     
+
+> 1864 512 4096
+> 10 −5
+> 10 −4
+> 10 −3
+> 10 −2
+> 10 −1
+> 𝑑
+> 𝛾
+
+(a) Smoothness factor     
+
+> 1864 512 4096
+> 1
+> 10
+> 100
+> 𝑑
+> 𝜂
+
+(b) Noise scale factor 
+
+Fig. 11. Comparison between SS-G and RDP-SS. 
+
+Figure 11 compares the proposed RDP-SS against the smooth-sensitivity mechanism SS-G 
+
+implemented using Gaussian noise, under the same privacy parameters 𝜀 = 1 and 𝛿 = 10 −7. For high-dimensional vector queries ( 𝑑 > 8), our RDP-SS mechanism has a smaller noise scale factor 𝜂 
+
+in addition to enabling a less strict smoothness requirement (i.e., larger 𝛾 ), both leading to smaller noises when compared to SS-G . The overall improvement in accuracy is influenced by how SS 𝐹 
+
+depends on 𝛾 . For the function 𝐺 that we use in Section 4.1, we plot its dependency on 𝛾 and the standard deviation of the final noises in Figure 13. Since 𝐺 (I) also depends on 𝐵 (I), we show two cases for 𝐵 (I) = 1 and 100 respectively. 
+
+𝐵 (I) = 1 SS-G, 𝐵 (I) = 1 RDP-SS, 𝐵 (I) = 1
+
+𝐵 (I) = 100 SS-G, 𝐵 (I) = 100 RDP-SS , 𝐵 (I) = 100     
+
+> 10 −510 −410 −310 −210 −1
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> 𝛾
+> 𝐺
+
+(a) Value of Smooth Sensitivity 𝐺     
+
+> 1864 512 4096
+> 10 2
+> 10 3
+> 10 4
+> 10 5
+> 10 6
+> 𝑑
+> standard deviation
+
+(b) Final Noise 
+
+Fig. 12. Error of SS-G and RDP-SS for function 𝐺 .
+
+Recall that 𝐺 (I) is larger for smaller 𝛾 , so the noise of SS-G increases with 𝑑 since 𝜂 is a constant. But for RDP-SS , 𝜂 =
+
+√𝛼 /𝜌   
+
+> 1−𝛼 +𝛼𝑒 −2𝛾
+
+decreases 4 when reducing 𝛾 , therefore the error first decreases due to a smaller 𝜂 , and then increases due to a larger smooth sensitivity 𝐺 (I) for larger 𝑑 . Again, for high dimensions ( 𝑑 > 8), the RDP-SS mechanism improves over SS . For our experiments in Section 5, we test for 𝑑 = 10 queries, where the improvement is around 1.5x in accuracy. For larger 
+
+𝑑 , e.g. 𝑑 = 4096 , the accuracy improvement can be as large as 70x. Similar to Appendix C, we also study the relative contribution of sampling error vs error due to DP noise in Algorithm 5, using the C2A dataset as an example. For vector queries, the error is            
+
+> 4If we treat 𝛼 and 𝜌 as constant, this is obvious. In the above settings, the optimal 𝛼 ranges between 17 and 32 , whose change is dominated by the decrease of 𝛾 .Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:33
+
+PMSJA DP-S4S (DP Err.) DP-S4S (Sampling Err.) S&E (DP Err.) S&E (Sampling Err.)   
+
+> 0.01 0.1 1
+> 0.1
+> 1
+> 10
+> 100
+> 1000
+> 𝑞
+> relative error (%)
+
+(a) 𝑸 1−  
+
+> 0.01 0.1 1
+> 0.1
+> 1
+> 10
+> 100
+> 1000
+> 10000
+> 𝑞
+
+(b) 𝑸 2−
+
+Fig. 13. DP vs. Sampling Error on C2A (𝜀 = 1, 𝛿 = 10 −7). 
+
+usually dominated by the injected noise required by DP, which increases with the dimensionality 
+
+𝑑 . Therefore, although DP-S4S achieve a smaller sampling error owing to independence between samples, this is less significant in our parameter ranges, when DP is enforced. Regarding DP noise, unlike the case in Figure 10, here, both mechanisms have increasing DP noise when reducing sample rate 𝑞 . This is because our privacy guarantee in Lemma 4.2 only ensures the mechanism on the sample is at least as private, but not strong enough to allow using larger privacy parameters as we did in Algorithm 2. Nevertheless, the DP error from DP-S4S is still lower than that from 
+
+S&E , which is mainly because our sampling strategy is more effective for reducing the maximum contribution of a user to the query results, which affects the DP error as we analyzed in Appendix C. A minor improvement is also from adopting RDP-SS , which reduces the noise by around 1.5x in our setting with 𝑑 = 10 . Overall, DP-S4S consistently outperforms S&E .Given that both error terms increase with respect to decreasing 𝑞 , in practice, one may adopt the largest 𝑞 that can be handled by the available computation resources. 
+
+F Error Analysis of DP-S4S for Vector Queries 
+
+As discussed in Section 4.2, the amplification effect in Lemma 4.2 for vector queries is not a strong result: it only guarantees that the sampled mechanism is as least as private as the mechanism without sampling, but does not provide a better privacy guarantee for performance improvement. We first recall the error of PMSJA .
+
+Lemma F.1. Let Err MLS (𝐵 (I); 𝜀, 𝛿, 𝛽 ) be the error of a local-sensitivity mechanism MLS for function 
+
+𝐹 under (𝜀, 𝛿 )-DP, given bound 𝐵 (I) ≥ LS 𝐹 (I) and |𝐵 (I) − 𝐵 (I′)| for neighboring datasets. The noise that PMSJA adds to each query is 
+
+𝜎 PMSJA = ˜𝑂 
+
+
+
+𝜏 ∗ (I) · Err 
+
+ 1
+
+𝜀 ; 𝜀, 𝛿, 𝛽 
+
+ 
+
+for 𝜏 ∗ (I) := max 𝑢 ∥𝒙 𝑢 ∥2, where 𝒙 𝑢 = (𝑥 1,𝑢 , . . . , 𝑥 |𝐹 |,𝑢 ) is the contribution of user 𝑢 to all queries. Specially, when MLS is the privately bounding local sensitivity mechanism [ 32 ], its error 
+
+Err MLS (𝐵 (I), 𝜀, 𝛿, 𝛽 ) = ˜𝑂 ( 𝐵 (I) 
+
+> 𝜀
+
+), and the noise of PMSJA is ˜𝑂 ( 𝜏 ∗ (I) 
+
+> 𝜀 2
+
+).
+
+Following similar analysis as in PMSJA , the DP noise in DP-S4S for vector queries after rescale can be bounded as 
+
+𝜎 DP −S4S = ˜𝑂 
+
+ 1
+
+𝑞 · 𝜏 ∗ (𝑆 ) · Err MRDP −SS 
+
+ 1
+
+𝜀 ; 𝜀, 𝛿, 𝛽 
+
+  
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:34 Yuan Qiu, Xiaokui Xiao, and Yin Yang
+
+where 𝜏 ∗ (𝑆 ) is the maximum contribution of a user in the sample; and Err (·) is the error from our 
+
+RDP-SS mechanism. In addition, there is a sampling error, which is ˜𝑂 (√︃ 𝑛 𝑓  
+
+> 𝑞
+
++ 1 
+
+> 𝑞
+
+) for query 𝑓 where 
+
+𝑛 𝑓 is the query size. However, it is difficult to provide an exact error bound. The major challenge is in bounding the error of smooth-sensitivity mechanisms which we discuss later. Nevertheless, for vector queries, there is still a reduction in the contribution of each user to the sample, similar to the case of scalar queries. Let 𝑦 𝑓 ,𝑢 be the records sampled for query 𝑓 from user 𝑢 , then 𝑦 𝑓 ,𝑢 ∼ Bin (𝑥 𝑓 ,𝑢 , 𝑞 ). By triangle inequality, ∥𝑦 𝑢 ∥2 ≤ 𝑞 ∥𝑥 𝑢 ∥2 + ∥ 𝑧 𝑢 ∥2, where 𝑧 𝑓 ,𝑢 := 𝑦 𝑓 ,𝑢 − 𝑞𝑥 𝑓 ,𝑢 . By Hoeffding’s inequality, 
+
+Pr 
+
+"
+
+|𝑦 𝑓 ,𝑢 − 𝑞𝑥 𝑓 ,𝑢 | >√︄ 𝑥 𝑓 ,𝑢 
+
+2 ln 2𝑑 𝛽 
+
+#
+
+≤ 𝛽 𝑑 
+
+Thus, with probability 1 − 𝛽 , we can bound ∥𝑧 𝑢 ∥2 as 
+
+∥𝑧 𝑢 ∥2 =√︄∑︁ 
+
+> 𝑓
+
+𝑧 2 
+
+> 𝑓 ,𝑢
+
+= ˜𝑂 ©«√︄∑︁ 𝑓 
+
+𝑥 𝑓 ,𝑢 ª®¬
+
+= ˜𝑂 (√︁ ∥𝑥 𝑢 ∥1) .
+
+With a union bound, conditioned on all the ∥𝑧 𝑢 ∥2’s are bounded, 
+
+𝜏 ∗ (𝑆 ) : = max  
+
+> 𝑢
+
+∥𝑦 𝑢 ∥2 ≤ max  
+
+> 𝑢
+
+𝑞 ∥𝑥 𝑢 ∥2 + max  
+
+> 𝑢
+
+∥𝑧 𝑢 ∥2
+
+= ˜𝑂 (𝑞 · 𝜏 ∗ (I) + 𝑑 14 · 𝜏 ∗ (I)) ,
+
+where we used ∥𝑥 𝑢 ∥1 ≤ √𝑑 · ∥ 𝑥 𝑢 ∥2. Thus compared to PMSJA , the DP noise of DP-S4S has an additional overhead factor (1 + 𝑑 14 
+
+> 𝑞
+
+), which still increases when reducing 𝑞 , as Figure 13 shows. Finally, we discuss the major challenge: bounding the error of RDP-SS in Lemma 4.1. Unlike the privately bounding local sensitivity mechanism [ 32 ], it is hard to provide an exact error bound, since the value of 𝛾 depends on solving a polynomial of degree 𝛼 . But as has been discussed in the empirical study in Appendix E, the RDP-SS mechanism achieves better smoothness requirement 𝛾 
+
+and smaller error compared to SS .
+
+G Connection to zCDP 
+
+In this paper, we adopt Rényi-DP (Definition 2.5) for Gaussian-based mechanisms besides the standard DP notion. A closely related definition is Zero-Concentrated Differential Privacy [ 5], formally defined as follows. 
+
+Definition G.1 (zCDP [ 5]). For 𝜌 > 0, a randomized mechanism M : I → O is 𝜌 -zCDP, if for any pair of neighboring datasets I ∼ I′ and any 𝛼 > 1, it holds that 
+
+D𝛼 (M ( I)∥M ( I′)) ≤ 𝜌𝛼 , 
+
+where D𝛼 (𝑃 ∥𝑄 ) := 1  
+
+> 𝛼 −1
+
+ln ∫   
+
+> 𝑧 ∈supp (𝑄 )
+
+𝑃 (𝑧 )𝛼 𝑄 (𝑧 )1−𝛼 d𝑧 is the Rényi divergence of order 𝛼 .It is easy to see that any 𝜌 -zCDP mechanism is immediately (𝛼, 𝜌𝛼 )-RDP for any 𝛼 > 1; and any (𝛼, 𝜌 (𝛼 )) -RDP mechanism is sup 𝛼 >1   
+
+> 𝜌 (𝛼 )
+> 𝛼
+
+-zCDP. Besides, 𝜀 -DP implies 12 𝜀 2-zCDP; and 𝜌 -zCDP implies (𝜌 + 2√︁ 𝜌 ln (1/𝛿 ), 𝛿 )-DP for any 𝛿 > 0. For the standard Gaussian mechanism, the two definitions are equivalent when reduced to approximate-DP, as 
+
+𝜀 RDP = min 
+
+> 𝛼
+
+𝛼 
+
+2𝜎 2 + ln (1/𝛿 )
+
+𝛼 − 1 = 12𝜎 2 +√︂ 2 ln (1/𝛿 )
+
+𝜎 = 𝜀 zCDP 
+
+is optimized exactly when 𝛼 = 1 + 𝜎 ·√︁ 2 ln (1/𝛿 ).
+
+> Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026.
+
+DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy 165:35 
+
+R2T PMSJA S&E DP-S4S    
+
+> 10 −1110 10 2
+> 1
+> 10
+> 10 2
+> 10 3
+> time (s)
+> relative error (%)
+
+(a) 𝑸 1− (base query time: 1.88s).    
+
+> 10 −1110 10 2
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> time (s)
+
+(b) 𝑸 2− (base query time: 1.73s).    
+
+> 10 −1110 10 2
+> 1
+> 10
+> 10 2
+> 10 3
+> 10 4
+> time (s)
+
+(c) 𝑸 3− (base query time: 1.64s).      
+
+> 110 10 210 310 410 5
+> 1
+> 10
+> 10 2
+> 10 3
+> time (s)
+
+(d) 𝑸 < (base query time: 2.88s). 
+
+Fig. 14. Query error vs. time on A2Q with 𝜀 = 4, 𝛿 = 10 −7. (Sampling rates 𝑞 ∈  132 , 116 , 18 , 14 )   
+
+> 0.1 110 100
+> 0.01
+> 0.1
+> 1
+> time (s)
+> relative error (%)
+
+(a) 𝑸 1− (base query time: 0.74s).    
+
+> 110 100 1000
+> 0.1
+> 1
+> 10
+> time (s)
+
+(b) 𝑸 2− (base query time: 7.36s).    
+
+> 0.01 0.1 110
+> 0.1
+> 1
+> 10
+> time (s)
+
+(c) 𝑸 △ (base query time: 2.98s).    
+
+> 0.01 0.1 110
+> 0.1
+> 1
+> 10
+> time (s)
+
+(d) 𝑸 □ (base query time: 7.47s). 
+
+Fig. 15. Query error vs. time on RoadnetCA with 𝜀 = 1. (Sampling rates 𝑞 ∈  164 , 132 , 116 , 18 , 14 )Table 4. Graph Statistics in the experiments. 
+
+Dataset Vertices Edges Max degree Degree bound 
+
+Deezer 143,884 846,915 420 1024 Amazon 334,863 925,872 549 1024 RoadnetCA 1,965,206 2,766,607 12 16 A2Q 1,192,133 1,468,092 23 1024 C2A 679,729 1,425,352 40 1024 Since our proof for RDP works by bounding the Rényi divergence for any 𝛼 , it can be naturally extended to zCDP through the general reduction. However, since 𝛼 appears in exponents in Lemma 3.5, the resulting guarantee does not have a trivial representation in closed form. 
+
+H Data Statistics and Additional Experiments 
+
+Table 4 and 5 summarize statistics of the datasets used in our experiments. Figure 14 presents experiment results varying 𝑞 on the A2Q dataset in [ 10 ], where the result is similar to Figure 5 in the main text. In addition, we run an experiment to show the effect of data skewness on the mechanisms. The datasets Deezer and Amazon we consider in the main text are both highly skewed, with a maximum degree over 400 but a majority of vertices having degree at most 10. We include a less skewed road network dataset RoadnetCA for completeness, where 99% of the vertices have degrees between 1 and 4. Recall that DP-S4S sample each join result independently, therefore its sampling error is independent with respect to the skewness of the data. Contrarily, for S&E , less skewed data 
+
+Proc. ACM Manag. Data, Vol. 4, No. 3 (SIGMOD), Article 165. Publication date: June 2026. 165:36 Yuan Qiu, Xiaokui Xiao, and Yin Yang 
+
+Table 5. Table Sizes in TPC-H SF4. 
+
+Table Number of Records 
+
+Region 5Nation 25 Supplier 40,000 Customer 600,000 Part 800,000 PartSupp 3,200,000 Orders 6,000,000 Lineitem 23,996,604 is favorable for its sampling error since the variance in the sample size is smaller. As shown in Figure 15, since we use a smaller degree bound 𝐷 = 16 for this dataset, the difference between 
+
+DP-S4S and S&E is smaller. Nevertheless, we still observe improvements on 𝑄 2− , 𝑄 △ and 𝑄 □.
+
+Received October 2025; revised January 2026; accepted February 2026

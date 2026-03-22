@@ -1,0 +1,2286 @@
+Title: Beyond Passive Aggregation: Active Auditing and Topology-Aware Defense in Decentralized Federated Learning
+
+URL Source: https://arxiv.org/pdf/2603.18538v1
+
+Published Time: Fri, 20 Mar 2026 00:43:51 GMT
+
+Number of Pages: 42
+
+Markdown Content:
+# Beyond Passive Aggregation: Active Auditing and Topology-Aware Defense in Decentralized Federated Learning 
+
+## Sheng Pan 1 and Niansheng Tang ∗11Yunnan Key Laboratory of Statistical Modeling and Data Analysis, Yunnan University, Kunming 650091, China 
+
+Abstract 
+
+Decentralized Federated Learning (DFL) remains highly vulnerable to adaptive backdoor attacks designed to bypass traditional passive defense metrics. To address this limitation, we shift the defensive paradigm to-ward a novel active, interventional auditing framework. First, we establish a dynamical model to characterize the spatiotemporal diffusion of adver-sarial updates across complex graph topologies. Second, we introduce a suite of proactive auditing metrics, stochastic entropy anomaly, ran-domized smoothing Kullback-Leibler divergence, and activation kurtosis. These metrics utilize private probes to stress-test local models, effectively exposing latent backdoors that remain invisible to conventional static de-tection. Furthermore, we implement a topology-aware defense placement strategy to maximize global aggregation resilience. We provide theoret-ical property for the system’s convergence under co-evolving attack and defense dynamics. Numeric empirical evaluations across diverse architec-tures demonstrate that our active framework is highly competitive with state-of-the-art defenses in mitigating stealthy, adaptive backdoors while preserving primary task utility. 
+
+# 1 Introduction 
+
+Standard federated learning relies on a central server to aggregate local models, as seen in the FedAvg algorithm [McMahan et al., 2017]. However, this design suffers from communication bottlenecks, single points of failure, and the inherent risk of trusting a central authority. Decentralized Federated Learning (DFL) [Lian et al., 2017] addresses these issues by distributing the aggregation process across participating nodes. While this peer-to-peer approach removes the central 
+
+> ∗
+
+Corresponding author. Email: nstang@ynu.edu.cn 
+
+1
+
+> arXiv:2603.18538v1 [cs.LG] 19 Mar 2026
+
+bottleneck, it also exposes the network to malicious participants. As a result, securing DFL requires Byzantine-robust consensus mechanisms that can filter out poisoned updates and maintain global model integrity. Existing literature primarily addresses these threats through consensus-based detection and robust aggregation methods. Early frameworks drew extensively from classical robust statistics; for instance, Krum and Multi-Krum [Blanchard et al., 2017] utilize the Euclid distance to reject abnormal clients, while Trimmed Mean [Yin et al., 2018] and RSA [Li et al., 2019] employ coordinate-wise trun-cation and ℓ1-regularization. Subsequent approaches, such as FoolsGold [Fung et al., 2020], leveraged directional statistics and cosine similarity to penalize cor-related updates characteristic of sybil attacks. More recently, FLAME [Nguyen et al., 2022] formulated malicious identification as an unsupervised clustering problem to isolate adversarial components from the empirical distribution. Alimitation of current static defensive paradigms is their reliance on deterministic spatial metrics, rendering them inherently transparent to adaptive adversaries. When a defensive metric is known, an attacker can explicitly minimize it within their objective function to mimic the statistical distribution of benign clients. This vulnerability has driven a rapid evolution of backdoor attacks in distributed learning, as extensively documented in recent literature. Bhagoji et al. [2019] and Bagdasaryan et al. [2020] first demonstrated that adversaries could success-fully compromise global models by injecting targeted malicious local updates. Building upon these initial vulnerabilities, Wang et al. [2020] introduced edge-case backdoors, revealing that malicious parameters operating in the tails of the data distribution can maintain a highly stealthy profile. [Zhang et al., 2022] introduce the Neurotoxin method. Neurotoxin targets the least-frequently up-dated parameters using sparse masks to embed durable backdoors that resist being overwritten by benign updates while remaining stealthy to coordinate-based defenses. In contrast to passive filtering, the field of information security utilizes hon-eypots, decoy resources designed to compel adversaries into revealing their intent through interaction. This philosophy of “active intervention” has surfaced in computer vision [Wang et al., 2019, Gao et al., 2019], which utilize intentional perturbations to expose stimulus-response inconsistencies in trojaned models. However, these methods remain tailored for centralized visual tasks and localized pixel-space triggers. We propose to extend this paradigm to DFL by injecting stochastic, private probes into the auditing process. This creates a critical infor-mation asymmetry, forcing malicious nodes to reveal latent functional anomalies that remain invisible to static methods. Furthermore, there is a distinct scarcity of system-level studies investigating the temporal diffusion of adversarial behaviors. Most research is confined to neutralizing immediate threats at the point of aggregation, ignoring the fact that DFL is essentially a consensus optimization process over Markov networks. Similar to the Kermack-McKendrick model [Kermack and Mckendrick, 1927] in epidemiology, understanding the diffusion dynamics is critical for following reasons: (1) In DFL networks, malicious updates can propagate several hops before detection. Modeling this is essential for determining optimal defense 2frequency. (2) DFL relies on complex graphs (e.g., scale-free or random regular graphs), where connectivity dictates the speed and reach of poisoning. To bridge these gaps, we shift the defensive paradigm from localized, passive aggregation to a system-wide, interventional auditing framework. Our contri-butions are as follows: (i) Rather than treating Byzantine attacks as independent anomalies, we formulate a dynamical system to capture the spatiotemporal spread of malicious updates. This approach uncovers how contamination cascades hierarchically, offering a theoretical basis for evaluating defense latency across complex network structures. (ii) We introduce a multi-scale diagnostic pipeline comprising three novel metrics: stochastic entropy anomaly ( ρSEA ), randomized smoothing KL-Divergence (ρRS ), and asymmetric element-wise Z-Score ( ρAK ). By interrogating local models with private, randomized probes, we evaluate their functional consis-tency and output stability. This interventional approach exploits the informa-tion asymmetry between defenders and adversaries, thereby constraining the optimization space available for stealthy evasion. These diagnostic scores are then integrated into a Multi-Armed Bandit (MAB) framework, allowing defend-ing nodes to dynamically evaluate neighbor reliability and prioritize high-trust updates during aggregation. (iii) To address the computational constraints of active auditing in large-scale networks, we introduce a defense allocation mechanism tailored to the underlying graph structure. We design specific deployment strategies for scale-free, random-regular, and grid networks to ensure defense nodes occupy critical topological hubs and bottlenecks. Consequently, this strategic placement allows the system to achieve global resilience by equipping only a small fraction of participating nodes with auditing capabilities. (iv) Utilizing a novel separable principle, we provide a theoretical framework of the DFL algorithm under co-evolving defense and attack. We characterize convergence rates in non-convex regimes and quantify the trade-off between robustness and network spectral properties. (v) Through experimental validation, we characterize the relationship be-tween our proposed theoretical diffusion bound and the attack success rate (ASR). Interestingly, we observe a structural dichotomy dictated by the target model architecture: while attacks on high-dimensional models (e.g., Transform-ers) exhibit a smooth, continuous escalation in ASR, attacks targeting spatial models (e.g., CNNs) demonstrate a distinct phase transition. Furthermore, we evaluate the proposed defense through comparative benchmarking against state-of-the-art methods. The remainder of this paper is organized as follows: Section 2 formalizes the system model and preliminaries for decentralized federated learning. Section 3 establishes the dynamical model for attack diffusion to characterize the spa-tiotemporal spread of malicious updates. Section 4 introduces our multi-scale proactive auditing metrics designed to expose latent backdoors. Section 5 details the proposed defense strategy, encompassing the MAB-guided robust aggrega-tion protocol, topology-aware placement, and theoretical convergence analysis. 3Section 6 presents comprehensive empirical evaluations across different architec-tures and graph topologies. Finally, Section 7 concludes the paper and discusses the inherent trade-offs in extreme non-IID settings. Detailed proofs are provided in the Appendix. 
+
+# 2 System Model and Preliminaries 
+
+## 2.1 Notations 
+
+Throughout this paper, we define the following notations. ⊗ denotes the Kro-necker product. For any matrices A ∈ Rm×n and B ∈ Rp×q , A ⊗ B is the 
+
+mp × nq block matrix [ aij B]. vec( ·) denotes the vectorization operator that transforms a tensor into a column vector. Id represents the d × d identity ma-trix. ∥ · ∥ denotes the standard Euclidean norm ( ℓ2-norm) for vectors, defined as 
+
+∥v∥ = pP v2 
+
+> i
+
+. Let λi(A) denote the i-th largest eigenvalue of a square matrix 
+
+A such that λmax (A) ≥ λ2(A) ≥ · · · ≥ λmin (A). For a matrix A ∈ Rm×n,
+
+∥A∥ = pλmax (A⊤A) represents the spectral norm. The notation ⌈x⌉ de-notes the ceiling function, which maps a real number x to the smallest integer greater than or equal to x. The softmax : RK → ∆K−1 operator transforms a K-dimensional vector of real-valued logits h into a probability distribution on the ( K − 1)-dimensional simplex, denoted as ∆ K−1. For each component 
+
+k ∈ { 1, . . . , K }, the output is defined as:softmax( h)k = exp( hk )   
+
+> PKj=1 exp( hj)
+
+. Median( ·)and MAD( ·) denote the empirical median and the median absolute deviation, respectively. For a finite set of scalars A, the latter is defined as: MAD( A) = Median( {| x − Median( A)| : x ∈ A} ).
+
+## 2.2 System Model 
+
+We consider a supervised learning task where X ⊆ Rdin denotes the input feature space with dimensionality din (representing raw observations such as flattened pixels or token embeddings), and Y = {1, 2, . . . , K } represents the target space for a K-class classification problem. Each node i ∈ { 1, . . . , n }
+
+possesses a local private dataset Si, where samples are drawn from a potentially non-identical local distribution. Suppose the model parameters are structured as a collection of tensors 
+
+{Θ(l)}Ll=1 corresponding to L layers. For analytical convenience, we denote the global parameter vector as θ = [vec( Θ(1) )⊤, . . . , vec( Θ(L))⊤]⊤ ∈ Rp. Let 
+
+r(x) ∈ Rdprev denote the intermediate representation extracted by the preceding 
+
+L−2 layers, where dprev denotes its dimensionality. The target hidden layer Θ(L)
+
+is parameterized by a weight matrix U ∈ Rd×dprev and a bias vector bL−1 ∈ Rd.The feature extractor output, which corresponds to the terminal latent rep-resentation, is formulated as: z = ϕθ (x) := ψ(Ur(x) + bL−1) ∈ Rd, where 
+
+ψ(·) is a non-linear activation function (e.g., ReLU). Each individual scalar fea-ture in this space is given by the inner product zj = ψ(⟨uj , r(x)⟩ + bL−1,j ), 4where uj is the j-th row of U. Finally, the terminal layer Θ(L) (the classifica-tion head) is parameterized by V ∈ RK×d and b ∈ RK . The logit output is: 
+
+hθ (x) = Vϕθ (x) + b.
+
+To convert these raw logits into a prediction probability distribution over the target classes, we apply the softmax operator softmax : RK → ∆K−1. The re-sulting predictive probability distribution is denoted by p(x, θ) := softmax( hθ (x)), where the probability assigned to the k-th class is given by: 
+
+p(x, θ)k = exp( hθ (x)k)
+
+PKj=1 exp( hθ (x)j ) .
+
+The primary objective of DFL is to identify a global minimizer that minimizes the aggregate empirical risk across n distributed nodes. In this decentralized paradigm, nodes interact with their immediate topological neighbors. Formally, we define the global objective function f (θ) as: min  
+
+> θ∈Rp
+
+F (θ) := 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+fi(θ),
+
+where fi is the local loss function for node i.In the decentralized setting, no central server exists. We model the commu-nication topology as an undirected graph G = ( V, E), where V = {1, 2, . . . , n }
+
+is the set of participating nodes and E ⊆ V × V represents the set of available communication links. An edge ( i, j ) ∈ E indicates that node i and node j can directly exchange information. For a specific node i ∈ V , its model parameters at communication round t are partitioned into L functional layers. We denote the vectorized parameters of the l-th layer for node i as θ(t) 
+
+> i,l
+
+. Correspondingly, the global model update for node i at round t can be expressed as the concatena-tion of these layer-wise sub-vectors: θ(t) 
+
+> i
+
+= [( θ(t) 
+
+> i, 1
+
+)⊤, (θ(t) 
+
+> i, 2
+
+)⊤, . . . , (θ(t)
+
+> i,L
+
+)⊤]⊤. Op-timization is instead performed through a continuous sequence of local gradient steps and consensus-based aggregations. Specifically, we consider the standard configuration where each node performs exactly one local gradient descent step per communication round. At each iteration t, node i updates its local model 
+
+θ(t) 
+
+> i
+
+by interacting solely with its immediate neighbors Ni = {j | (i, j ) ∈ E} :
+
+θ(t+1)  
+
+> i
+
+= X
+
+> j∈N i∪{ i}
+
+wij θ(t) 
+
+> j
+
++ ∆ θ(t)
+
+> i
+
+where W = [ wij ] ∈ Rn×n is a doubly stochastic mixing matrix, θ(t) 
+
+> j
+
+is the update of j-th client at t-th round, Where ∆ θ(t) 
+
+> i
+
+represents the cumulative model update obtained after executing E local training epochs on client i, and 
+
+η > 0 is the learning rate. 
+
+# 3 Attack Diffusion Dynamics 
+
+The Kermack-McKendrick model [Kermack and Mckendrick, 1927] describes the spread of epidemics by dividing populations into susceptible, infectious, and 5recovered states. The propagation of malicious attacks in DFL follows a simi-lar process: benign nodes act as the susceptible population, injected malicious updates are the infection, and local training, which naturally overwrites task-irrelevant backdoor weights, serves as the recovery mechanism. Building on this analogy, we formulate a discrete-time dynamical system to model how adversarial gradients spread across the network. Unlike standard epidemic models that assume uniform mixing, our approach explicitly accounts for the specific graph topology and the discrete communication rounds in DFL. Using this model, we establish analytical bounds on network contamination and calculate the stationary distribution of the attack intensity. 
+
+## 3.1 System Dynamics of Infection Intensity 
+
+We model the evolution of the global infection intensity vector s(t) = [ s1(t), . . . , s n(t)] T
+
+through the interaction of three primary mechanisms: 1. Network Mixing: In DFL, nodes update their parameters by aggre-gating models from their neighbors. This consensus step naturally dilutes the backdoor’s strength. Governed by the row-stochastic mixing matrix W, this step acts as a Markovian transition operator: sagg = Ws(t). 2. Signal Attenuation: During local training, benign clients optimize their models for the primary task. Because the backdoor trigger is structurally independent of the main task’s feature distribution, standard gradient descent treats the adversarial weights as unstructured noise, leading to gradual decay. While the true degradation of backdoor parameters in deep, non-convex neu-ral networks is a complex non-linear process, we adopt a linear first-order ap-proximation for theoretical tractability. We model this baseline attenuation as 
+
+si(t + 1) ← (1 − λi)si(t), where the decay rate λi ∈ (0 , 1) applies to benign nodes, and λi = 0 for malicious nodes. This defines the diagonal attenuation matrix Λ = diag( λ1, . . . , λ n). 3. Adversarial Injection: To counteract network mixing and attenuation, adversaries actively inject malicious gradients. This introduces an additive con-stant term: si(t+1) ← (1 −λi)si(t)+ ui, where the injection magnitude satisfies 
+
+ui > 0 for malicious nodes and 0 otherwise, forming the vector u.Synthesizing these discrete mechanisms, we establish a discrete-time dynam-ical system for the infection intensity: 
+
+s(t + 1) = ( I − Λ)
+
+| {z }
+
+> Decay
+
+W|{z} 
+
+> Diffusion
+
+s(t) + u|{z} 
+
+> Injection
+
+. (1) Let A = ( I − Λ)W be the effective transition matrix. The asymptotic ac-cumulation of the infection intensity is governed by the spectral radius ρ(A)and the source vector u. Assuming the system reaches a stationary equilibrium 
+
+s(t + 1) = s(t) = s∗, the asymptotic distribution is given by: 
+
+s∗ = ( I − A)−1u.
+
+This analytical solution provides clear structural insights. The resolvent opera-tor ( I − A)−1 indicates that the expected contamination of any specific node is 6not uniform; rather, it is dependent on its shortest-path distance to the adver-sarial nodes and the cumulative decay rate λ along those propagation paths. We establish the spatiotemporal boundaries of the infection assuming a clean initialization s(0) = 0.
+
+Lemma 3.1 (System Stability) . Assume the network graph induced by W
+
+is strongly connected and there exists at least one benign node i with a posi-tive decay rate Λii = λ > 0. Then, the spectral radius satisfies ρ(A) < 1,guaranteeing the existence of the stationary state s∗ and the transient solution 
+
+s(t) = ( I − At)s∗.
+
+Lemma 3.2 (Spatiotemporal Diffusion Bound) . Under the conditions of Lemma 3.1, the backdoor intensity si(t) of a benign node i at communication round t is bounded by: 
+
+si(t) ≤ us · (1 − λ)dis 
+
+| {z }
+
+> Geometric Attenuation
+
+·
+
+> t−dis
+
+X
+
+> k=0
+
+(1 − λ)k
+
+| {z }
+
+> Temporal Accumulation
+
+,
+
+where us is the injection magnitude at the adversarial source s, and dis is the shortest path distance from node i to s.
+
+This result highlights the localized nature of the update process: for t < d is ,the summation is empty, reflecting the one-hop-per-round transmission con-straint. Over time, the injected signal decays geometrically with respect to the spatial distance while accumulating asymptotically across iterations. The theoretical framework of Lemma 3.1 allows us to characterize the spatial distribution of the contamination. By expanding the stationary solution via the Neumann series, we partition the global intensity by path length: 
+
+s∗ =
+
+> ∞
+
+X
+
+> k=0
+
+Ak
+
+!
+
+u = u|{z} 
+
+> Order 0
+
++ Au |{z} 
+
+> Order 1
+
++ A2u|{z} 
+
+> Order 2
+
++ . . . 
+
+Since the spectral radius satisfies ρ(A) < 1, the operator Ak induces a geo-metric decay rate of approximately O(((1 − λ)/ ¯d)k), where ¯d denotes the mean node degree of the network graph. This expansion reveals that contamination is primarily concentrated in the immediate neighborhood of the source. The zeroth-order term u represents the initial malicious injection. The first-order term Au affects the direct neighbors, where nodes with lower degrees experience higher contamination variance due to a reduced mixing capacity. 
+
+# 4 Backdoor Detection Metrics 
+
+Defending against backdoor attacks is challenging because compromised models exhibit malicious functional divergence while maintaining parametric similarity to benign updates. Let M denote the set of malicious nodes. An adversary at 7node i ∈ M seeks an optimal poisoned parameter vector θ∗ by minimizing a composite objective function: min 
+
+> θ∗∈Rp
+
+X
+
+> (x,y )∈D i
+
+ℓ(hθ∗ (x), y )
+
+| {z }
+
+> Main Task Fidelity
+
++κ0 · ℓ(hθ∗ (x ⊕ δ), y t)
+
+| {z }
+
+> Backdoor Installation
+
++κ1 · R(θ∗; Ω) 
+
+| {z }
+
+> Evasion Penalty
+
+,
+
+where ℓ is the standard loss function, and R(θ∗; Ω) represents the evasion penalty designed to constrain the model within a valid region Ω permitted by the system’s detection mechanisms. Here, δ represents the backdoor trigger, and the operator ⊕ denotes a generalized trigger injection mechanism (e.g., ad-ditive perturbation or patch replacement). Consequently, x ⊕ δ ∈ X represents the poisoned input. The hyperparameters κ0 > 0 and κ1 > 0 control the trade-off between main-task accuracy (ACC), attack success rate (ASR), and evasion stealth. Previous studies [Bhagoji et al., 2019, Bagdasaryan et al., 2020, Wang et al., 2020, Zhang et al., 2022] demonstrate that standard anomaly detection mech-anisms are highly susceptible to distributional mimicry. Because conventional robust aggregators rely on deterministic detection statistics, the evasion penalty 
+
+R can be explicitly instantiated as an optimization constraint. Depending on the defensive landscape of the decentralized network, adversaries typically em-ploy the following evasion strategies: 
+
+Case A: Distance Evasion To bypass distance-based outlier detection (e.g., Krum [Blanchard et al., 2017]), an adversary at node i bounds the mali-cious parameter θ∗ near the local consensus. This geometric constraint ensures that the submitted update remains indistinguishable from the neighborhood trajectory in terms of Euclidean distance: 
+
+R(θ∗) = ∥θ∗ − θref ∥2 ,
+
+where θref is a benign reference parameter vector. 
+
+Case B: Directional Evasion To evade defenses that evaluate the angular consistency of model updates (e.g., FoolsGold [Fung et al., 2020], FLAME 
+
+[Nguyen et al., 2022], or CosL2 [Bhagoji et al., 2019]), the adversary must geometrically align the direction of the malicious update with a benign reference trajectory. The penalty is formulated by minimizing the cosine distance: 
+
+R(θ∗) = 1 − ⟨θ∗, θref ⟩∥θ∗∥ · ∥ θref ∥ .
+
+This structural constraint ensures that the adversarial gradient perfectly mimics the benign angular distribution. To address the predictable weaknesses of conventional metrics, we propose an active auditing mechanism. Unlike static filters, our approach actively tests local models using randomized or private inputs. We exploit the fact that malicious 8models, unlike benign ones, reveal abnormal predictions and activation patterns when processing these secret probes. By keeping the exact test parameters hidden from the adversary, our framework makes targeted evasion practically impossible. 
+
+## 4.1 Stochastic Entropy Anomaly ( ρSEA )
+
+To detect sophisticated adversaries that employ optimization constraints to evade parameter-space filtering, we introduce the stochastic entropy anomaly (SEA). This metric builds upon the principles of the STRIP method [Gao et al., 2019, Wu et al., 2022], extending its logic to the iterative auditing of local up-dates. Let hθ (x) denote the output logits of a model parameterized by θ for an input probe x ∈ X , where the predicted probability simplex is defined as 
+
+p(x, θ) = softmax( hθ (x)). As defined, the predictor is composed of a feature extractor ϕθ : X → Rd and a linear projection V ∈ RK×d. For an unstructured stochastic probe xtrap ∈ X (e.g., isotropic random noise), the resulting feature vector ϕθ (xtrap ) can be modeled as a random variable in a high-dimensional space. According to the concentration of measure on the unit sphere [Vershynin, 2018], for any fixed class weight vector vk ∈ Rd, the probability that a random feature ϕθ (xtrap ) has a non-negligible projection onto vk vanishes as d → ∞ .Specifically, if ϕθ (xtrap ) is sampled from a distribution with zero mean and identity covariance, the expected inner product satisfies: 
+
+E[⟨vk, ϕθ (xtrap )⟩] ≈ 0.
+
+Consequently, the logits l = hθ (xtrap ) exhibit a near-uniform distribution. The resulting predictive distribution approaches the barycenter of the probability simplex ∆ K−1, thereby maximizing the Shannon entropy: 
+
+H(P ) = −
+
+> K
+
+X
+
+> k=1
+
+pk log pk ≈ log K, 
+
+where pk := [ p(xtrap , θ)] k denotes the predicted probability assigned to the k-th class. Conversely, the parameter space of a compromised model can be conceptu-ally partitioned into benign parameters and malicious sub-networks. For the attack to be effective, the weights in the malicious subspace must be sufficiently large to override the benign signal whenever the trigger is present. Consequently, even a slight perturbation near the trigger subspace forces the output probabil-ity mass to concentrate on the target class yt, resulting in an anomalously low Shannon entropy. Within the DFL context, however, predictive entropy often suffers from high variance due to client data heterogeneity, which can obscure the boundary be-tween benign updates and stealthy malicious ones. To mitigate this noise and ensure reliable detection, we refine the metric into a normalized, worst-case in-dex. Instead of relying on a single observation, we interrogate the model with 9a diverse set of stochastic exogenous probes, denoted as Xtrap ∪ {−X trap }, de-signed to expose functional anomalies across different structural dimensions of the input space: 
+
+ρSEA = max  
+
+> x∈X trap ∪{−X trap }
+
+[Cmax (x) · (1 − Hnorm (x))] ,
+
+where 
+
+Cmax (x) = max  
+
+> k∈{ 1,...,K }
+
+pk(x) ∈ [1 /K, 1] , Hnorm (x) = − PKk=1 pk log pk
+
+log K ∈ [0 , 1] .
+
+To ensure the probes effectively explore the functional landscape, the distribu-tion of stochastic test probes Xtrap must be structurally aligned with the data modality; concrete examples are provided in the experiments section. 
+
+## 4.2 Randomized Smoothing Kullback-Leibler (KL) Diver-gence ( ρRS )
+
+While ρSEA effectively captures the global rigidity of backdoors, highly adaptive adversaries may attempt to circumvent this filter via entropy regularization. However, the efficacy of our defense architecture is anchored in information asymmetry. Because the specific stochastic test probes used in the ρSEA au-diting phase are stochastically sampled from a private distribution maintained solely by the defending nodes, the adversary operates completely blind to the exact coordinates of the test vectors. Faced with this intractable uncertainty in a high-dimensional space, the attacker is forced to apply a universal penalty across the entire stochastic perturbation space, coercing the model to yield a near-uniform, high-entropy predictive distribution for any random noise it en-counters. To counter this evasion strategy, we introduce the randomized smoothing KL divergence metric. To simultaneously satisfy the attacker’s conflicting ob-jectives, yielding high-entropy predictions for random noise while maintaining low-entropy targeted predictions for triggered data, an adaptive adversary must induce a sharp decision boundary immediately outside the support of the clean data distribution. Consequently, applying a small perturbation to the malicious latent representation leads to high-entropy chaos. Conversely, benign architectures naturally learn smooth decision boundaries and satisfy local Lipschitz continuity. For a small perturbation ϵ, the predictive output remains within a stable neighborhood of the original distribution. This functional stability ensures that the local decision geometry is preserved, yield-ing consistent categorical outputs [Cohen et al., 2019, Nakkiran et al., 2021]. We evaluate this local Lipschitz continuity by injecting an isotropic Gaus-sian perturbation ϵ ∼ N (0 , σ 2
+
+> rs
+
+I) into the latent space, generating a perturbed prediction Pnoisy := softmax( hθ (z + ϵ)), where z = ϕθ (x) is the clean latent feature vector. To quantify this distributional shift, we utilize the KL Diver-10 gence: 
+
+DKL (Pclean ∥ Pnoisy ) = 
+
+> K
+
+X
+
+> i=1
+
+Pclean,i log Pclean,i 
+
+Pnoisy,i 
+
+,
+
+where Pclean := softmax( hθ (z)). To integrate this sensitivity into a bounded anomaly scoring framework, let E = {ϵ(1) , ϵ(2) , . . . , ϵ(B)} be a set of B independent and identically dis-tributed noise realizations. For a candidate parameter vector θ evaluated dur-ing aggregation, we define the sequence of perturbed distributions as P (m) 
+
+> noisy
+
+=softmax( hθ (z + ϵ(m))) for each m ∈ { 1, . . . , B }. The Randomized Smoothing score ( ρRS ) is defined as the exponentially decayed empirical mean of the KL divergence over the sample set: 
+
+ρRS = exp − κRS 
+
+B
+
+> B
+
+X
+
+> m=1
+
+DKL (Pclean ∥ P (m) 
+
+> noisy
+
+)
+
+!
+
+, (2) where κRS > 0 calibrates the decay rate. 
+
+## 4.3 Activation Kurtosis ( ρAK )
+
+While ρSEA and ρRS effectively evaluate the predictive output space, they in-herently treat the model’s intermediate representations as a black box. To complement these output-level metrics, we introduce activation kurtosis ( ρAK ), which shifts the analytical focus from terminal predictions to the latent activa-tion dynamics of individual neurons. During the active auditing phase, a defender evaluates the model on a clean batch of N independent input Xprobe = {x(1) , . . . , x(N )}. For each input i,let r(i) ∈ Rdprev denote the input vector x(i) to the target layer Θ(L). Recall that the layer Θ(L) is parameterized by the weight matrix U = [ u1, . . . , ud]⊤ ∈
+
+Rd×dprev , where ui represents the coefficient vector for the i-th feature dimension (i ∈ { 1, . . . , d }). Ignoring the intercept term, the activation in the i-th dimension for observation n is given by the linear combination z(n) 
+
+> i
+
+= u⊤ 
+
+> i
+
+r(n). The resulting 
+
+d-dimensional feature vector is z(n) = ( z(n)1 , . . . , z (n) 
+
+> d
+
+)⊤ ∈ Rd.In a benign model, due to ℓ2-regularization (weight decay) during optimiza-tion, the activations z(n) 
+
+> i
+
+are uniformly bounded by a constant cz . Consequently, the empirical fourth moment, averaged across both the d dimensions and N ob-servations, is bounded by the baseline capacity: 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+1
+
+d
+
+> d
+
+X
+
+> i=1
+
+
+
+z(n)
+
+> i
+
+4
+
+!
+
+≤ c4 
+
+> z
+
+. (3) Conversely, suppose the adversary partitions the target layer’s neurons such that the set of malicious neurons SM is non-empty. Recall that r(x) ∈ Rdprev 
+
+denotes the intermediate representation extracted by the preceding layers for a given input x ∈ X . When a backdoor trigger δ is injected into the input space 11 (yielding a poisoned input ˜ x = x⊕δ), it induces a corresponding latent deviation 
+
+δu ∈ Rdprev , where δu = r(x ⊕ δ) − r(x). To evade geometric detection in decentralized aggregators, this latent trigger must remain exceptionally stealthy, bounded by ∥δu∥ ≤ ϵ → 0. When the trigger is present, the latent deviation induced on the j-th target neuron is bounded by the Cauchy-Schwarz inequality: 
+
+|∆zj | = |⟨ uj , δu⟩| ≤ ∥ uj ∥∥ δu∥ ≤ ∥ uj ∥ϵ. 
+
+Let h ∈ RK denote the benign logit vector for a clean input x, and let yt
+
+denote the adversary’s target class. Under the presence of the latent trigger δu,the poisoned latent representation ˜ z = z + ∆ z yields a perturbed logit vector ˜h = h + ∆ h, where ∆ h = V∆z.Because the softmax function is monotonic, achieving a targeted classifica-tion flip ( yt = arg max k ˜hk) requires the poisoned target logit ˜hyt to dominate all competing logits. This necessitates a minimum required decision margin C > 0: ∆hyt > max  
+
+> k̸=yt
+
+˜hk − hyt := C. 
+
+Substituting the logit perturbation, we establish the lower bound for the malicious weights: 
+
+|S M | · Vmax ·
+
+
+
+max 
+
+> j∈S M
+
+∥uj ∥
+
+
+
+· ϵ ≥ X
+
+> j∈S M
+
+vyt,j ∆zj = ∆ hyt ≥ C, 
+
+where Vmax = max k |vyt,k |. This implies that max j∈S M ∥uj ∥ ≥ C  
+
+> |S M|Vmax ϵ
+
+=
+
+O(1 /ϵ ). Let ˆΣu = 1
+
+> N
+
+PNn=1 r(n)(r(n))⊤ denote the empirical second-moment matrix of the clean intermediate features. Assuming the sampled benign feature space is diverse and non-degenerate, ˆΣu is positive definite with a minimum eigenvalue ˆλmin > 0. By the properties of the Rayleigh quotient, the empirical average of the squared magnitude for the malicious activation satisfies: 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+(z(n) 
+
+> j
+
+)2 = u⊤ 
+
+> j
+
+ˆΣuuj ≥ ˆλmin ∥uj ∥2.
+
+Applying Jensen’s inequality, we obtain the lower bound for the fourth moment: max 
+
+> j∈S M
+
+1
+
+N
+
+> N
+
+X
+
+> n=1
+
+(z(n) 
+
+> j
+
+)4 ≥ 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+(z(n) 
+
+> j
+
+)2
+
+!2
+
+≥ ˆλ2
+
+> min
+
+ C
+
+|S M |Vmax ϵ
+
+4
+
+= Ω 
+
+ 1
+
+ϵ4
+
+
+
+.
+
+(4) The stark theoretical contrast between (3) and (4) demonstrates that kur-tosis provides a sufficient margin to distinguish malicious models from benign ones. Accordingly, we define the activation kurtosis metric ( ρAK ) as: 
+
+ρAK := 1
+
+N
+
+> N
+
+X
+
+> n=1 1
+> d
+
+Pdk=1 
+
+
+
+z(n) 
+
+> k
+
+− μ(n)
+
+> z
+
+4
+
+
+
+σ(n)
+
+> z
+
+4 ,
+
+12 where μ(n) 
+
+> z
+
+= 1
+
+> d
+
+Pdk=1 z(n) 
+
+> k
+
+and ( σ(n) 
+
+> z
+
+)2 = 1
+
+> d
+
+Pdk=1 
+
+
+
+z(n) 
+
+> k
+
+− μ(n)
+
+> z
+
+2
+
+represent the feature-wise mean and variance of the activations for the n-th probe, respec-tively. 
+
+# 5 Defense Strategy 
+
+This section operationalizes the previously established diagnostic metrics within a proactive defense framework to network-level immunity. 
+
+## 5.1 Robust Consensus and Temporal Trust Evolution 
+
+While the active interventional metrics introduced in Section 4 ( ρSEA , ρRS ,and ρAK ) are relatively lightweight, requiring only forward-pass process, ex-haustively validating the entire neighborhood Ni at every communication round remains computationally prohibitive in high-dimensional, resource-constrained DFL environments. Consequently, each honest node must operate under a strict audit budget AB (AB ≤ |N i|), restricting it to selecting only a limited subset of neighbors At ⊂ N i for auditing and aggregation at each round. To transform these abnormal diagnostic metrics into a unified, consensus-based selection framework, we compute a normalized anomaly score for each update. In highly non-IID federated settings, traditional Z-scores based on sample means and variances are easily skewed by extreme Byzantine outliers, which can ”mask” their own presence by inflating the neighborhood variance. To guarantee statistical robustness, we calculate the modified Z-value using the median absolute deviation (MAD) [Iglewicz and Hoaglin, 1993]. For a generic metric vector m evaluated across the audited subset At, the robust Z-score for neighbor j is defined as: 
+
+Z(j) 
+
+> metric
+
+= |mj − Median( m)|
+
+MAD( m) .
+
+We compute Z(j) 
+
+> SEA
+
+, Z(j) 
+
+> RS
+
+, and Z(j) 
+
+> AK
+
+correspondingly. This multi-dimensional penalty is then mapped to a continuous reward rt,j ∈ (0 , 1] via an exponential decay function: 
+
+rt,j = exp 
+
+n
+
+−
+
+
+
+Z(j) 
+
+> SEA
+
++ Z(j) 
+
+> RS
+
++ Z(j)
+
+> AK
+
+o 
+
+, (5) Under this mapping, any neighbor exhibiting substantial deviation from local consensus in any metric will see its reward rt,j collapse toward zero. While the aforementioned robust Z-scores provide an effective cross-sectional evaluation of neighbor behavior within a single communication round, they re-main structurally blind to temporal anomalies. To capture the long-term behav-ioral trajectory of the participants, the defense node maintains a historical trust score Qt(j) for each neighbor j. Initialized with an optimistic prior Q0(j) = 0 .5to encourage network exploration, this state variable is dynamically updated 13 via an exponentially weighted moving average (EWMA): 
+
+Qt+1 (j) = (1 − α) · Qt(j) + α · rt,j , ∀j ∈ A t, (6) where α ∈ (0 , 1) is the smoothing factor governing the decay rate of historical observations. This exponentially weighted formulation prioritizes recent empirical rewards, enabling the system to react swiftly to sudden adversarial attacks. Simultane-ously, its smoothing properties prevent the permanent penalization of honest nodes that exhibit transient statistical variance driven by local data shifts. 
+
+## 5.2 Adaptive Aggregation via Multi-Armed Bandit 
+
+Due to computational constraints during active auditing, a defense node must draw a restricted subsample At ⊂ N i at each communication round. Relying on uniform random sampling without historical context yields a highly variant and non-robust estimator in an adversarial environment, leaving the aggrega-tion vulnerable to Byzantine errors. Conversely, a greedy strategy, which selects observations based solely on maximum historical trust, introduces severe selec-tion bias. In non-IID settings, this deterministic approach artificially truncates the support of the empirical data distribution, leading to a loss of statistical diversity that is essential for robust generalization. Furthermore, this pure exploitation strategy is prone to premature convergence based on early point estimates, permanently excluding potentially benign nodes from the consensus process. This constrained sampling of neighbors constitutes a classic exploration-exploitation trade-off, which can be formulated using the Multi-Armed Bandit (MAB) framework from sequential decision theory. While recent literature pri-marily applies MAB models to centralized federated learning to optimize re-source allocation and algorithmic convergence Xia et al. [2020], Huang et al. [2020], we adapt this sequential sampling paradigm for decentralized networks. To formalize this trade-off, at the beginning of iteration t, defense node i
+
+computes a discounted upper confidence bound (UCB) statistic, Ut(j), for each adjacent node j ∈ N i:
+
+Ut(j) = Qt(j)
+
+| {z } 
+
+> Exploitation (Tracking Estimator)
+
++ c ·
+
+s
+
+2 ln nγ (t)
+
+Nt,γ (j)
+
+| {z }
+
+> Exploration (Discounted Uncertainty)
+
+, (7) where c > 0 acts as a tuning parameter scaling the confidence interval. To maintain theoretical alignment with the exponentially weighted moving average trust score Qt(j), the sampling frequencies are evaluated using a geometrically discounted window. Let As ⊆ N i denote the subset of neighbors sampled for auditing at iteration s. The term Nt,γ (j) = Pts=1 γt−sIj∈As represents the effective discounted sample size for node j using a temporal decay factor γ ∈
+
+(0 , 1], and nγ (t) = P 
+
+> k∈N i
+
+Nt,γ (k) represents the total effective sample size across the neighborhood. 14 Algorithm 1 Adaptive Sequential Sampling and Stratified Aggregation (at iteration t)
+
+Input: Auditing subsampling ratio rA ∈ (0 , 1], aggregation subsampling ratio rS ∈ (0 , 1], critical trust threshold τagg , pre-allocated stratified weights 
+
+Wself , ˜Wij and ˜W ∗ 
+
+> ij
+
+.
+
+Part I: Active Auditing and Aggregation for Defense Nodes  
+
+> 1:
+
+for each defense node i ∈ D do  
+
+> 2:
+
+Phase 1: Audit subsampling. Draw a subsample of adjacent nodes 
+
+At ⊂ N i (with size |A t| = ⌈rA · |N i|⌉ ) using weighted random sampling, where the inclusion probability for each node j is proportional to its upper confidence bound statistic Ut(j) via (7).  
+
+> 3:
+
+Phase 2: Trust score update. Compute the diagnostic metrics ρSEA ,
+
+ρRS , and ρAK for each audited neighbor j ∈ A t. Calculate the normalized empirical reward rt,j via (5) and update the trust score Qt+1 (j) via (6).  
+
+> 4:
+
+Phase 3: Aggregation subsampling. Reject abnormal updates by conditioning on the trust score exceeding the critical threshold: St =
+
+{j ∈ A t | Qt+1 (j) > τ agg } . Draw a final aggregation subsample ˜At ⊂ S t,with size | ˜At| = ⌈rS · |S t|⌉ , where the inclusion probability for node j is proportional to its updated trust estimate Qt+1 (j).  
+
+> 5:
+
+Compute the weighted average : 
+
+θ(t+1)  
+
+> i
+
+← 1
+
+| ˜At|
+
+X 
+
+> j∈˜At
+
+θ(t) 
+
+> j
+
+. 
+
+> 6:
+
+end for 
+
+Part II: Stratified Convex Aggregation for Non-Defense Nodes  
+
+> 7:
+
+for each non-defense i / ∈ D do  
+
+> 8:
+
+Stratified Consensus. Compute the updated parameter estimate us-ing pre-allocated stratified convex weights ˜Wij (allocated to defense neigh-bors) and ˜W ∗ 
+
+> ij
+
+(allocated to non-defense neighbors): 
+
+θ(t+1)  
+
+> i
+
+← Wself θ(t) 
+
+> i
+
++ X
+
+> j∈N i∩D
+
+˜Wij θ(t) 
+
+> j
+
++ X
+
+> j∈N i\D
+
+˜W ∗ 
+
+> ij
+
+θ(t) 
+
+> j
+
+. 
+
+> 9:
+
+end for Output: Updated global parameter estimates {θ(t+1)  
+
+> i
+
+}i∈V .The algebraic structure of this UCB statistic inherently prevents the per-manent exclusion of any individual node. If a neighbor j is rarely sampled, its effective sample size Nt,γ (j) remains near zero. Consequently, as the global iter-ation t progresses, the monotonically increasing logarithmic numerator inflates the uncertainty bound. This mechanism guarantees that the upper confidence limit will eventually dominate even a heavily penalized point estimate Qt(j), compelling the algorithm to periodically sample neglected nodes and iteratively 15 update their empirical trust estimates. For non-defense nodes, which lack the computational capacity to execute active auditing, resilience is achieved via structural dependency. Assuming the network graph is designed such that every standard node shares an edge with at least one defense node, these constrained units conditionally allocate the majority of their convex aggregation weights to their verified defense neighbors. The complete defense protocol, integrating sequential sampling for defense nodes and stratified convex aggregation for standard nodes, is formalized in Algorithm 1. 
+
+## 5.3 Topology-Aware Defense Placement 
+
+While the sequential sampling strategy proposed in Section 5.2 provides robust estimation against adversarial contamination, the continuous evaluation of em-pirical diagnostics incurs substantial computational overhead. In large-scale de-centralized systems, deploying active auditing at every vertex is cost-prohibitive. Consequently, the auditing mechanism must be restricted to a limited subset of defense nodes, denoted as D (where |D| ≪ |V| ). The strategic allocation of these defense nodes across the network topology is critical for maximizing global resilience. Effective placement relies on three fundamental structural principles: node degree, betweenness centrality, and 1-hop defense coverage. In the DFL environment, computing exact global betweenness is infeasi-ble. To address this limitation, we utilize a distributed approximation based on ego-network betweenness centrality [Everett and Borgatti, 2005]. This metric evaluates structural bottlenecks strictly within a node’s localized k-hop neigh-borhood. For a given node v, the ego-network betweenness centrality quantifies the fraction of localized shortest paths that pass through v, defined as: 
+
+C(k)
+
+> Ego
+
+(v) = X 
+
+> s,t ∈V (k)
+> v\{ v}
+> s̸=t
+
+σ(k) 
+
+> st
+
+(v)
+
+σ(k)
+
+> st
+
+, (8) where σ(k) 
+
+> st
+
+represents the total number of shortest paths connecting node s to node t strictly within the k-hop induced subgraph G(k) 
+
+> v
+
+, and σ(k) 
+
+> st
+
+(v) denotes the number of these localized shortest paths that pass through node v. The vertex set V(k) 
+
+> v
+
+comprises all nodes within a k-hop distance from v: V(k) 
+
+> v
+
+= {u ∈ V | 
+
+d(u, v ) ≤ k}.Beyond identifying hubs and bottlenecks, the defense allocation must ensure that standard nodes remain structurally dependent on defense neighbors. This requirement is formalized through the concept of 1-hop defense coverage. Anode u is considered covered if ( Nu ∪ { u}) ∩ D̸ = ∅. The overall coverage provided by the defense set D is: 
+
+C(D) = [
+
+> v∈D
+
+(Nv ∪ { v}) . (9) 16 Ideally, the defense placement acts as an approximate minimum dominating set (MDS) [Kuhn and Wattenhofer, 2003]. This guarantees that malicious gradients cannot propagate through structurally unmonitored clusters before encountering a defense checkpoint. Next, we introduce specific placement strategies tailored to different network topologies. 
+
+Scale-free Networks Scale-free networks [Barab´ asi and Albert, 1999] are characterized by a power-law degree distribution P (d) ∝ d−β . This indicates the presence of a few highly connected hubs alongside numerous low-degree peripheral nodes. To capture both localized degree prominence and structural bottlenecks, we formulate a hybrid local centrality metric: 
+
+Sscore (v) = α0 · C(k)
+
+> Ego
+
+(v) + (1 − α0) · C(k) 
+
+> D
+
+(v), (10) where C(k) 
+
+> D
+
+(v) is the normalized local degree centrality within G(k) 
+
+> v
+
+.Because finding an exact MDS is NP-hard, we employ a greedy approxima-tion strategy leveraging the submodularity of the coverage function. From the top k0 nodes with the highest Sscore , we iteratively select |D| defense nodes that yield a strictly positive marginal gain in 1-hop coverage. At each iteration, a candidate node v is included in D if and only if ( Nv ∪ { v}) \ C̸ = ∅.
+
+Random-regular Networks In contrast to the heavy-tailed distribution of scale-free graphs, a random regular graph ensures every node possesses an iden-tical, constant degree |N v | = d0, ∀v ∈ V . Because the topology lacks structural hubs and centrality metrics are largely homogeneous, the placement strategy shifts purely to maximizing the 1-hop defense coverage C(D). Under decentralized constraints, we employ a localized greedy coverage heuris-tic. Each candidate node v / ∈ D evaluates its potential marginal contribution: ∆( v | C ) := |(Nv ∪ { v}) \ C| .
+
+Nodes locally broadcast this metric, and a candidate v is selected into D if ∆( v | C ) > max u∈N v ∆( u | C ). As demonstrated in our subsequent theoretical analysis, by aligning this de-centralized defense placement with the graph’s structural vulnerabilities, these strategies effectively constrain the spectral radius of the error propagation sub-system. 
+
+## 5.4 Theoretical Properties 
+
+Before presenting the convergence analysis, we first formalize the effective dy-namic mixing matrix W(t) = [ w(t) 
+
+> ij
+
+] ∈ Rn×n induced by our adaptive MAB-guided aggregation protocol. Following the execution logic of Algorithm 1, at each communication round t, the aggregation weight w(t) 
+
+> ij
+
+assigned by node i to node j is determined by its specific topological role. 17 For a defense node ( i ∈ D ), the aggregation weights are dynamically deter-mined by the active auditing and sampling mechanism described in Part I of Algorithm 1. Let St denote the subset of audited neighbors exceeding the trust threshold τagg , and let ˜At ⊆ S t denote the final aggregation subsample drawn proportionally to the updated posterior trust scores. The global matrix entries for row i correspond to a uniform average over this verified subset: 
+
+w(t) 
+
+> ij
+
+=
+
+( 1  
+
+> |˜At|
+
+, if j ∈ ˜At,
+
+0, otherwise .
+
+This stochastic formulation ensures that only audited, high-trust neighbors con-tribute to the defense node’s model update, while effectively mitigating selection bias through proportional subsampling. In contrast, non-defense nodes ( i / ∈ D ) lack the computational capacity for active auditing and instead execute the stratified inertial aggregation specified in Part II of Algorithm 1. The global matrix entries for row i are deterministically mapped from the pre-allocated stratified weights: 
+
+w(t) 
+
+> ij
+
+=
+
+
+
+Wself , if j = i, 
+
+˜Wij , if j ∈ N i ∩ D ,
+
+˜W ∗ 
+
+> ij
+
+, if j ∈ N i \ D ,
+
+0, otherwise .
+
+By design, this protocol guarantees that the dynamic matrix W(t) remains row-stochastic ( Pnj=1 w(t) 
+
+> ij
+
+= 1 , ∀i ∈ V ) at every iteration. We establish the following standard assumptions for the objective function and network connectivity. 
+
+Assumption 1 (L-smoothness) . Each local loss function fi is L-smooth, i.e., 
+
+∥∇ fi(θ) − ∇ fi(θ′)∥ ≤ L∥θ − θ′∥ for any θ, θ′ ∈ Rp.
+
+Assumption 2 (Network connectivity) . The effective mixing matrix W(t) sat-isfies ρw = |λ2(W(t))| < 1.
+
+Assumption 3 (Bounded gradient variance) . The variance of the stochastic gradients is bounded: E[∥∇ fi(θ) − ∇ F (θ)∥2] ≤ σ2 for any θ ∈ Rp.
+
+Assumption 4 (Bounded Gradients) . The global objective function F has bounded gradients, i.e., there exists a constant G such that sup θ ∥∇ F (θ)∥ ≤ G.
+
+Assumption 5 (Learning Rate) . The learning rate satisfies 0 < η = O(1 /√T ).
+
+Assumptions 1 through 3 are standard in the theoretical analysis of decen-tralized SGD algorithms [Lian et al., 2017]. Applying the separation principle, we decompose the decentralized stochastic process into a nominal trajectory and a backdoor diffusion process. This de-coupling enables us to analyze the backdoor propagation via the stability of the error subsystem, independently of the primary optimization task’s convergence 18 properties. We define two virtual sequences to characterize the system. Assum-ing each node performs exactly one local update per communication round, the actual model state for node i under attack evolves as: 
+
+θ(t+1)  
+
+> i
+
+=
+
+> n
+
+X
+
+> j=1
+
+w(t)
+
+> ij
+
+
+
+θ(t) 
+
+> j
+
+− η∇fj (θ(t) 
+
+> j
+
+) + I{j∈M} m(t)
+
+> j
+
+| {z }
+
+> Local Update & Injection
+
+, (11) where M is the set of malicious nodes. To prevent the dilution of the backdoor trigger, malicious nodes isolate themselves during aggregation; thus, for any 
+
+i ∈ M , the weights are deterministically set to w(t) 
+
+> ii
+
+= 1 − ϵ and distributes an arbitrarily small residual weight ϵ > 0 uniformly among its neighbors. Conversely, the ideal clean system, assuming synchronous, identical initial states and experiencing the same realized network topology, evolves according to standard consensus: ˆθ(t+1)  
+
+> i
+
+=
+
+> n
+
+X
+
+> j=1
+
+w(t)
+
+> ij
+
+ ˆθ(t) 
+
+> j
+
+− η∇fj ( ˆθ(t) 
+
+> j
+
+)
+
+
+
+. (12) We define the local backdoor deviation in the parameter space as e(t) 
+
+> i
+
+=
+
+θ(t) 
+
+> i
+
+− ˆθ(t) 
+
+> i
+
+. Subtracting the nominal dynamics from the attacked dynamics yields the step-wise evolution of the local bias: 
+
+e(t+1)  
+
+> i
+
+=
+
+> n
+
+X
+
+> j=1
+
+w(t)
+
+> ij
+
+h
+
+e(t) 
+
+> j
+
+− η
+
+
+
+∇fj (θ(t) 
+
+> j
+
+) − ∇ fj ( ˆθ(t) 
+
+> j
+
+)
+
+
+
++ I{j∈M} m(t)
+
+> j
+
+i
+
+.
+
+By stacking these local biases into a global network state matrix E(t) = [ e(t)1 , . . . , e(t) 
+
+> n
+
+]⊤,we formally recover the spatiotemporal infection state formulation introduced in Section 3. The local equations seamlessly vectorize into the global error dynamics: 
+
+E(t+1) = ( W(t) ⊗ Ip)
+
+
+
+E(t) − η∆Gt
+
+
+
++ ˜M(t), (13) where W(t) = [ w(t) 
+
+> ij
+
+] is the effective network mixing matrix, ∆Gt = [ ∇f1(θ(t)1 ) − ∇ f1( ˆθ(t)1 ), . . . , ∇fn(θ(t) 
+
+> n
+
+) − ∇ fn( ˆθ(t) 
+
+> n
+
+)] ⊤,
+
+and ˜M(t) = ( W(t) ⊗ Ip)M(t) represents the topology-filtered malicious pertur-bation matrix. Equation (13) serves as the precise microscopic foundation for the macro-scopic diffusion model defined in (1). In this refined formulation, the stochastic gating effects of the active auditing mechanism are intrinsically absorbed into the spectrum of the dynamic mixing matrix W(t). We partition the network into two disjoint sets: defense nodes D that implement robust aggregation, and unverified standard nodes U = V \ D that rely on standard aggregation. The block structure of the effective mixing matrix is given by: 
+
+W(t) =
+
+"
+
+w(t) 
+
+> DD
+
+w(t)
+
+> DU
+
+w(t) 
+
+> UD
+
+w(t)
+
+> UU
+
+#
+
+.
+
+19 Defining the intra-stratum error propagation rates as ρD = ∥w(t)
+
+> DD
+
+∥(1 + ηL ) and 
+
+ρU = ∥w(t) 
+
+> UU
+
+∥(1 + ηL ). The system’s effective error spectral radius is bounded by: 
+
+ρerr = max 
+
+(
+
+ρD , ρ U + ∥w(t)
+
+> UD
+
+∥ · ∥ w(t) 
+
+> DU
+
+∥(1 + ηL )2
+
+1 − ρD
+
+)
+
+.
+
+Assumption 6 (Bounded Malicious Injection) . The malicious injection mag-nitude is uniformly bounded, i.e., there exists a constant Cu > 0 such that 
+
+sup t≥0 ∥m(t) 
+
+> j
+
+∥ ≤ Cu for all malicious nodes j ∈ M .
+
+Theorem 5.1. Under Assumptions 1 through 6, assume a stability condition 
+
+ρerr < 1. Then the average expected squared gradient norm of the empirical system over T iterations is bounded by: 
+
+1
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥∇ F ( ¯θ(t))∥2] ≤ O
+
+ 1
+
+√nT 
+
+| {z }
+
+> Standard Asymptotic Rate
+
++ O
+
+ 1
+
+T (1 − ρnom )2
+
+| {z }
+
+> Consensus error
+
++ O
+
+ qmC2
+
+> u
+
+(1 − ρerr )2
+
+| {z }
+
+> Asymptotic Adversarial Error
+
+,
+
+where qm = |M| /n is the fraction of malicious clients. 
+
+Let B denote the set of unverified benign nodes. We define the directional information flows: w(t) 
+
+> DB
+
+represents the aggregation weights that defense nodes assign to unverified benign nodes; w(t) 
+
+> DM
+
+denotes the weights mistakenly assigned to malicious adversaries; w(t) 
+
+> BD
+
+represents the weights that unverified benign nodes assign to defense nodes; and w(t) 
+
+> MD
+
+denotes the weights that malicious nodes assign to defense nodes. Theorem 5.1 reveals a critical trade-off in robust aggregation. Aggressive defense mechanisms typically fail because they couple the suppression of ma-licious updates ( ∥w(t)
+
+> DM
+
+∥ → 0) with the unintended isolation of benign nodes (∥w(t)
+
+> DB
+
+∥ → 0). In spectral graph theory, this behavior is equivalent to pruning edges from the network topology. According to the Cauchy interlacing theorem [Horn and Johnson, 2012], such edge removal inherently degrades the network’s algebraic connectivity. Consequently, Cheeger’s Inequality [Levin and Peres, 2017] dictates that this topological pruning introduces severe structural bottle-necks. This restricted information flow forces the second-largest eigenvalue ρnom 
+
+to approach 1, leading to a sharp inflation in the spatial autocorrelation bias. Specifically, by strategically positioning defense nodes at high-betweenness vertices and critical communication bottlenecks, we preserve the structural in-tegrity and algebraic connectivity of the network. According to Cheeger’s In-equality, maintaining high graph conductance ensures that the nominal spec-tral radius ρnom remains bounded away from 1, thereby preventing the con-vergence stagnation typically caused by network partitioning. Furthermore, 20 because these defense nodes occupy the central hubs of the topology, they act as mandatory structural checkpoints that interdict adversarial propagation, ef-fectively minimizing the malicious-to-benign information flow ( ∥w(t)
+
+> DM
+
+∥). By systematically severing these contamination pathways, the strategic placement bounds the error spectral radius ρerr away from 1. As dictated by Theorem 5.1, compressing ρerr directly minimizes the stationary adversarial bias, thereby guaranteeing global model robustness even under continuous Byzantine injec-tion. 
+
+# 6 Experiments 
+
+To evaluate the efficacy of our proposed framework, we benchmark it against several state-of-the-art robust aggregation mechanisms, including Multi-Krum [Blanchard et al., 2017], Trimmed Mean [Yin et al., 2018], CosL2 [Bhagoji et al., 2019], and FLAME [Nguyen et al., 2022]. A critical distinction in our evaluation is the asymmetric defensive posture: while baseline methods conventionally as-sume that all benign clients are equipped with robust aggregation capabilities, our approach, MAB(TOPY AWARE), detailed in Algorithm 1, operates under a constrained defense budget. Specifically, we simulate a 20-client DFL system where defense nodes constitute only 20% of the total clients, a figure approxi-mating the minimum covering number of the graph. To assess generalizability across diverse communication architectures, comparative analyses are performed on both scale-free and random-regular topologies. Furthermore, to isolate the specific advantage of topological intelligence, we introduce MAB(RANDOM TOPY) as an ablation baseline, which utilizes the same auditing metrics but selects defense nodes through uniform random sampling rather than strategic placement. To ensure the theoretical validity of local consensus, we enforce a non-eclipse constraint during node allocation. Specifically, for any defending node i with a local neighborhood Ni, the number of malicious neighbors nm is constrained such that nm < ⌈|N i|/2⌉.
+
+## 6.1 Experiment 1: Text Classification (Transformer) 
+
+To validate the generalizability of our theoretical diffusion model and defense framework on high-dimensional, non-convex architectures, we evaluate our ap-proach using natural language processing tasks . 
+
+6.1.1 Experimental Setup Dataset and Architecture: We evaluate the system using the PubMed 20k RCT dataset [Dernoncourt and Lee, 2017] for medical text classification, which comprises K = 5 distinct semantic categories: BACKGROUND , OBJECTIVE , METHODS ,
+
+RESULTS , and CONCLUSIONS . The global model utilizes a pre-trained Trans-former architecture, specifically distilbert-base-uncased . To simulate a 21 data-constrained decentralized environment, we deliberately restricted the train-ing and testing pools to 1 , 000 samples each. 
+
+Backdoor Attack Strategy: The adversary targets specific layers of the model, namely the embedding layer, the transformer backbone, and the classifi-cation head. To evade detection, the attacker employs a partial weight-averaging strategy, where only the embedding and head layers are updated with malicious gradients, while the backbone parameters are constrained to remain close to the neighborhood consensus. In standard configurations, the backbone subspace, denoted as Vbody , accounts for over 80% of the total parameter dimension p.Consequently, any global geometric metric, such as Euclidean distance or cosine similarity computed in the ambient space Rp, is overwhelmingly dominated by the statistical properties of Vbody .To bypass geometric defenses, the adversary concentrates the backdoor gra-dients within the low-dimensional Ventry and Vlethal subspaces, while constrain-ing the massive Vbody subspace to mimic the benign consensus trajectory. The implementation of this subspace-constrained attack is structured into three phases: 
+
+Phase 1: Raw Backdoor Generation : The adversary initiates the attack by constructing a poisoned local dataset ˜Si. This is achieved by injecting a localized trigger δ into a subset of samples originating from a specific source class ysource 
+
+(e.g., ysource = 4, representing ’CONCLUSIONS’ in the PubMed dataset). Un-like conventional text backdoors that insert discrete vocabulary tokens, this trigger operates directly within the continuous embedding space. Specifically, a deterministic noise pattern is additively applied to the embedding vector of a specific token position (e.g., the first semantic token), scaled by an intensity parameter ι (e.g., ι = 0 .02). Their corresponding labels are subsequently reas-signed to a target class yt (e.g., yt = 0, representing ’BACKGROUND’). Using its preserved model state from the previous round, θ(t)
+
+> mal
+
+, as the initialization, the adversary performs local gradient descent over ˜Si to obtain a raw malicious model state θpoison . Although the raw malicious update ∆ θmal := θpoison −θ(t)
+
+> mal
+
+effectively embeds the backdoor mapping, its unconstrained optimization trajec-tory deviates substantially from the benign consensus. If transmitted directly, its implied update would be easily detected by standard robust aggregation rules, necessitating the subsequent subspace camouflage. 
+
+Phase 2: Asymmetric Subspace Projection : Instead of transmitting the raw malicious update ∆ θmal directly, the adversary decomposes the parameter space and applies differentiated optimization strategies to distinct orthogonal sub-spaces, inspired by stealthy sub-network poisoning [Zhang et al., 2022]. For the high-dimensional backbone layers, the adversary discards the malicious gradi-ents entirely and substitutes them with a benign reference update ∆ θref , scaled by a stabilization factor γ0 (e.g., γ0 = 2). To ensure that the majority of the pa-rameter vector perfectly aligns with the benign consensus, the backbone update is formulated as: ∆ ˜θbody := γ0 · ∆θref,body .
+
+For the lower-dimensional entry and output layers, the adversary retains the 22 malicious gradients but applies a layer-wise adaptive norm constraint. This technique successfully embeds the backdoor objective while preventing anoma-lous norm inflation: ∆ ˜θk := min 
+
+
+
+1, γ1∥∆θref,k ∥∥∆θmal,k ∥
+
+
+
+· ∆θmal,k , for k ∈ { entry, output },
+
+where γ1 (e.g., γ1 = 15) serves as a layer-specific amplification factor. 
+
+Phase 3: Norm-Bounded Global Scaling : The adversary concatenates the projected components back into a single vector ∆ ˜θ = [∆ ˜θ⊤ 
+
+> entry
+
+, ∆ ˜θ⊤ 
+
+> body
+
+, ∆ ˜θ⊤
+
+> lethal
+
+]⊤.To maximize the adversarial impact while satisfying the Euclidean constraints of robust methods (e.g., Krum, Trimmed Mean) , the vector is rescaled to a target global norm bound τ = 6 bf ∥∆θref ∥ (e.g., bf = 1 .5). The global scaling factor sglobal is computed as: 
+
+sglobal = min 
+
+
+
+1, τ
+
+∥∆ ˜θ∥
+
+
+
+.
+
+The adversary then concludes the local update by broadcasting the poisoned model state to adjacent benign nodes: 
+
+θ(t+1)  
+
+> malicious
+
+= θ(t) 
+
+> mal
+
++ sglobal · ∆ ˜θ.
+
+Implementation Details of Active Auditing Metrics: We now detail the construction of the detection metrics introduced in Section 4 for the Transformer architecture on text classification tasks: 
+
+Stochastic Entropy Anomaly ( ρSEA ): The auditing process constructs a special-ized probe set Xtrap comprising B = 3 distinct categories of synthetic sequences. These probes are designed to expose latent backdoor triggers relying solely on forward-pass inferences, thereby avoiding gradient computation. To maximize the evasion difficulty for adaptive adversaries, the sequences are generated using three distinct anomalous structural patterns: (1) A sequence of tokens sampled uniformly from the vocabulary, deliberately excluding high-probability control characters and special tokens. This ensures the input resides in a low-density region of the feature space. (2) A homogeneous sequence consisting of a sin-gle, median-frequency token repeated throughout the entire input length, which forces the internal representation toward a localized coordinate in the embedding space. (3) An oscillating sequence of two distinct tokens in a alternating pat-tern. This creates a periodic structural stimulus, evaluating the self-attention mechanism’s response to positional regularities isolated from natural language context. 
+
+Randomized Smoothing KL-Divergence ( ρRS ): To instantiate the theoretical framework established in Equation (2), we decouple the Transformer network to isolate the latent feature matrix z = ϕθ (x) ∈ RL×d at the continuous em-bedding layer, fixing the sequence length to L = 64. Using a fixed semantic anchor x (e.g.,The quick brown fox jumps...) as the baseline input, we execute 
+
+B = 8 independent stochastic forward passes. In each iteration, we construct 23 (a) Theoretical Diffusion Bound vs. ASR  
+
+> (b) ACC and ASR vs. bf
+
+Figure 1: Validation of the diffusion model and the ACC, ASR trend on the Transformer architecture using the PubMed dataset. 
+
+> (a) Duration Comparison in Transformer-based DFL(Experiment 1)
+> (b) Duration Comparison in CNN-based DFL(Experiment 2)
+
+Figure 2: Computational Efficiency Analysis Across Different Mechanisms the perturbed feature ˜ z(m) = z +ϵ(m) by injecting isotropic Gaussian noise with a standard deviation of σrs = 0 .12 directly into this dense representation. The terminal classifier subsequently maps these corrupted features to the noisy pre-dictive distributions P (m) 
+
+> noisy
+
+∈ ∆K−1. The final anomaly score ρRS is computed based on the expected KL divergence between the clean baseline distribution 
+
+Pclean and P (m) 
+
+> noisy
+
+, with the exponential decay rate empirically calibrated to 
+
+κRS = 5 .0, as formalized in Equation (2). 
+
+Activation Kurtosis ( ρAK ): Unlike the stochastic test probes used for ρSEA and 
+
+ρRS , the kurtosis evaluation leverages a small, clean batch of N = 16 textual sequences drawn from the local PubMed validation data. The input r(i) corre-sponds to the contextualized hidden embeddings feeding into the target layer (e.g., the terminal self-attention block), yielding the deep activation represen-tation z(i).24 6.1.2 Results 
+
+We define two measures. ACC(main taks accuracy) measures the utility of the global model on the clean data distribution. Let Dtest denote the clean testing dataset, where each sample ( xi, y i) consists of an input xi and its ground-truth label yi. The ACC is defined as the empirical probability of correct classification: ACC = 1
+
+|D test |
+
+X
+
+> (xi,y i)∈D test
+
+I
+
+
+
+arg max  
+
+> k
+
+p(xi, θ)k = yi
+
+
+
+,
+
+where I(·) is the indicator function that outputs 1 if the condition is true and 0 otherwise. ASR(attack success rate) quantifies the vulnerability of the model to the targeted attack. Let Dadv represent the set of adversarial/poisoned sam-ples crafted by the attacker, where each sample ( x′ 
+
+> j
+
+, y tj ) is associated with an attacker-specified target label ytj (ytj̸ = ytrue  
+
+> j
+
+). The ASR is calculated as the proportion of adversarial samples successfully misclassified into the target class: ASR = 1
+
+|D adv |
+
+X  
+
+> (x′
+> j,y tj)∈D adv
+
+I
+
+
+
+arg max  
+
+> k
+
+p(x′ 
+
+> j
+
+, θ)k = ytj
+
+
+
+.
+
+Validation of the Diffusion Model: Figure 1 illustrates the results for the scaling factor bf ∈ { 1, 3, 5, 8, 10 , 15 }, with each scenario evaluated across three independent runs of FedAvg method. The average Kendall’s tau correla-tion between the theoretical diffusion bound, calculated using (1) with a signal attenuation of λi = 0 .3, and the ASR is 0.49. Specifically, Figure 1a presents the averaged outcomes for bf = 10, where the nodes are ranked according to their average theoretical diffusion bound. These findings demonstrate that our the-oretical diffusion bound effectively captures the infection trajectory across the network. Additionally, Figure 1b highlights a smooth, monotonic relationship between the ASR and bf . This suggests an inherent trade-off for the adversary: achieving a higher ASR necessitates a larger bf , which inevitably inflates the ℓ2-norm of the injected malicious updates. Throughout this scaling, however, the ACC remains remarkably stable. This demonstrates that the injected backdoor is highly stealthy and cannot be exposed by relying on performance degradation on a clean validation set. 
+
+Defense Mechanism Benchmark: Table 1 presents the benchmark results on the PubMed dataset under the asymmetric hedging attack. To account for stochasticity in model initialization and node selection, each reported value rep-resents the average of three independent experimental runs. The baseline vul-nerability is evident: FedAvg yields an ASR of 59.43% in the scale-free topology and 75.40% in the random-regular topology under a 30% malicious ratio. Traditional geometric and coordinate-based defenses demonstrate limita-tions when applied to the high-dimensional Transformer parameter space. While 
+
+Krum and TrimmedMean preserve main-task accuracy (ACC ≈ 70%–72%), they are less effective at isolating the asymmetrically projected adversarial updates at higher malicious ratios, resulting in ASRs reaching 40.17% and 46.05% in 25 the Scale-free network at the 30% ratio, respectively. CosL2 provides moderate mitigation, restricting the ASR to approximately 16%–18% at the 30% ratio, but this comes alongside a measurable decrease in model utility (ACC dropping to ≈ 57%–67%). Conversely, FLAME achieves aggressive backdoor suppression (capping ASR at ≤ 12 .5% across all settings), but this mitigation introduces a severe trade-off with the primary task, reducing the ACC to approximately 61%–62%. In comparison, the topology-aware allocation mechanism ( MAB(TOPY AWARE) )substantially outperforms the random auditing baseline ( MAB(RANDOM TOPY) ). At a 30% malicious ratio, it reduces the ASR to 9.90% in the scale-free topology and 19.29% in the random-regular topology (compared to 28.77% and 26.93% for random placement, respectively). Meanwhile, it maintains a highly com-parable main-task accuracy (ACC ≈ 68%–71%). This suggests that active, topology-guided auditing can successfully intercept structurally embedded back-doors without excessively penalizing benign statistical variance. 
+
+Computational Efficiency Analysis: Figure 2a illustrates the execution du-ration of various methods. Because our approach is executed on only 20% of the nodes, it requires lower computational overhead compared to defense mech-anisms that demand network-wide deployment. Table 1: Performance Comparison of Defense Mechanisms under Different Topologies (Transformer on PubMed)                                                                                              
+
+> Mechanism Malicious Ratio
+> 10% 20% 30% ACC ASR ACC ASR ACC ASR
+> Topology: Scale-free
+> FedAvg 71.54 (01.75) 39.33 (13.89) 70.76 (01.58) 54.17 (02.57) 71.05 (01.61) 59.43 (14.71) Krum 71.76 (00.86) 24.48 (10.31) 71.78 (00.03) 23.25 (10.94) 70.52 (01.81) 40.17 (10.56) TrimmedMean 71.96 (00.64) 05.51 (01.38) 72.85 (00.53) 23.85 (07.61) 71.52 (00.88) 46.05 (09.48) CosL2 62.88 (03.09) 10.19 (05.06) 63.69 (00.92) 14.23 (03.90) 66.53 (01.12) 17.62 (04.18) FLAME 61.88 (02.21) 08.93 (01.44) 62.38 (02.92) 09.96 (00.92) 62.12 (00.99) 12.07 (03.19) MAB(RANDOM TOPY) 68.38 (01.88) 24.32 (09.92) 69.55 (00.34) 27.14 (06.50) 69.06 (01.26) 28.77 (08.93) MAB(TOPY AWARE) 70.35 (00.48) 03.08 (02.72) 70.87 (00.89) 08.89 (05.65) 70.72 (00.95) 09.90 (07.59)
+> Topology: Random-regular
+> FedAvg 70.34 (00.59) 60.96 (06.60) 70.54 (00.92) 71.76 (02.69) 70.28 (00.66) 75.40 (01.75) Krum 70.43 (00.93) 57.62 (07.04) 71.51 (01.02) 34.76 (18.96) 70.69 (00.91) 36.06 (04.69) TrimmedMean 72.42 (00.43) 04.24 (04.79) 72.40 (00.33) 22.56 (05.01) 72.23 (00.44) 40.32 (08.24) CosL2 57.13 (03.61) 15.48 (06.51) 60.06 (03.22) 24.27 (05.39) 66.86 (00.59) 16.44 (03.73) FLAME 61.91 (01.42) 08.86 (01.92) 62.05 (01.89) 12.10 (03.41) 62.34 (02.68) 07.08 (01.47) MAB(RANDOM TOPY) 69.52 (00.58) 14.12 (05.06) 68.99 (00.40) 21.62 (06.74) 70.13 (00.25) 26.93 (11.56) MAB(TOPY AWARE) 68.97 (00.68) 08.42 (01.50) 68.60 (01.05) 12.55 (08.10) 68.76 (00.20) 19.29 (05.24)
+> Note: Values in parentheses indicate the standard deviation across three independent trials.
+
+## 6.2 Experiment 2: Image Classification (CNN) 
+
+To complete our comprehensive evaluation across diverse data modalities, we extend our framework to the continuous spatial domain of computer vision. 26 6.2.1 Experimental Setup Dataset and Architecture: We evaluate the system using the German Traffic Sign Recognition Benchmark (GTSRB) dataset [Stallkamp et al., 2012], which consists of 43 distinct traffic sign classes comprising a total of 39 , 209 training images and 12 , 630 test images. To simulate the decentralized environment, the training subset is partitioned across the participating clients. All images are resized to a standard 3 × 32 × 32 RGB format. The global model utilizes a custom Convolutional Neural Network (CNN) architecture, comprising two convolutional layers (16 and 32 channels, respectively) followed by max-pooling, and two fully connected layers terminating in a 43-dimensional classification head. The decentralized network maintains the 20-client topology with a 20% defense coverage. 
+
+Backdoor Attack Strategy (CNN): To compromise the visual classifi-cation task while evading Byzantine-robust aggregators, the adversary executes a three-phase poisoning strategy tailored for the CNN architecture. 
+
+Phase 1: Raw Backdoor Generation : The adversary constructs a poisoned local dataset ˜Si. Specifically, a visible patch trigger is applied to 50% of the images, where the trigger is defined as a localized spatial mask (e.g., a 4 × 4pixel region at the bottom-right corner) with a predefined pixel intensity ι (e.g., 
+
+ι = 4 .0). Their corresponding labels are subsequently flipped to the target class yt = 7. Using its preserved model state from the previous round, θ(t)
+
+> mal
+
+,the adversary performs local gradient descent over ˜Si to obtain a raw malicious model state θpoison . From the perspective of the defense mechanism, the implied raw malicious update is defined as: ∆θmal = θpoison − θ(t)
+
+> mal
+
+.
+
+Phase 2: Convex Vector Fusion (Direction Alignment) : Unlike the high-dimensional Transformer model that requires layer-wise asymmetric projections, the CNN’s relatively compact parameter space allows for a global direction alignment strategy to bypass angle-based filters (e.g., Cosine Similarity). The adversary intercepts a benign reference update ∆ θref and computes a fused update ∆ ˜θ using a convex combination: ∆ ˜θ = cα · ∆θmal + (1 − cα) · ∆θref ,
+
+where the interpolation factor cα = 0 .6 dictates the retention ratio of the back-door intensity. This fusion geometrically aligns the malicious vector’s direction with the benign consensus. 
+
+Phase 3: Norm-Bounded Masking (Magnitude Alignment) : To guarantee evasion from Euclidean distance-based filters (e.g., Krum, Trimmed Mean), the adversary limits the norm of the fused vector. By calculating the norm of the benign reference Nref = ∥∆θref ∥, the adversary sets a target norm bound 
+
+τ = bf × Nref (e.g., bf = 6). The fused vector is then rescaled to ensure its magnitude is smaller than the benign average: 
+
+sglobal = τ
+
+∥∆ ˜θ∥ (14) 27 Finally, the adversary constructs and transmits the highly camouflaged absolute model parameters to its neighbors: 
+
+θ(t+1)  
+
+> malicious
+
+= θ(t) 
+
+> mal
+
++ sglobal · ∆ ˜θ (15) This bounds the malicious update tightly within the benign update space, ren-dering traditional geometric auditing mechanisms blind to the injected backdoor mapping. 
+
+Implementation Details of Active Auditing Metrics: 
+
+Stochastic Entropy Anomaly ( ρSEA ): The auditing process constructs a spe-cialized probe set Xtrap consisting of B = 3 continuous spatial tensors, each matching the input dimension C × H × W . Here, C represents the number of input channels (e.g., C = 3 for RGB images), while H and W denote the spatial height and width of the tensor, respectively. Specifically, the probes include: (1) a high-frequency spatial checkerboard pattern alternating between extreme pixel intensities (+3 .0 and −3.0); (2)uniform random noise generated via the sign function applied to an isotropic Gaussian distribution (sign( N (0 , I)) × 3.0); and (3) a channel-level shift across individual color channels (e.g., +3 .0, −3.0, +3 .0). 
+
+Randomized Smoothing KL-Divergence ( ρRS ): We decouple the neural network to isolate the latent feature vector z = ϕθ (x) at a deep target layer (e.g., the fully connected layer). Using a clean input x(e.g., a standardized Gaussian tensor), we execute B = 16 independent stochastic forward passes. In each iteration, we construct the perturbed feature ˜ z(m) = z + ϵ(m) by injecting isotropic Gaussian noise with a standard deviation of σrs = 0 .5. The terminal classifier subsequently maps these features to the noisy predictive distributions 
+
+P (m) 
+
+> noisy
+
+. The final anomaly score ρRS is computed based on the expected KL divergence between Pclean and P (m) 
+
+> noisy
+
+.
+
+Activation Kurtosis ( ρAK ): The probe set Xprobe is constructed using a clean batch of N = 16 genuine traffic sign images drawn from the GTSRB validation distribution. The input r(n) corresponds to the vectorized spatial feature maps feeding into the penultimate fully connected layer, yielding the deep activation vector z(n).
+
+6.2.2 Results Validation of the Diffusion Model: Figure 3 illustrates the results for the scaling factor bf ∈ { 0.01 , 0.1, 0.5, 1, 3}, with each scenario evaluated across three independent runs of FedAvg method. The average Kendall’s tau correlation between the theoretical diffusion bound, calculated using (1) with a signal at-tenuation of λi = 0 .3, and the ASR is 0.68. Specifically, Figure 3a presents the averaged outcomes for bf = 0 .5, where the nodes are ranked according to their average theoretical diffusion bound. These findings demonstrate that our theoretical diffusion bound effectively captures the infection trajectory across the network. Furthermore, Figure 3b reveals a highly nonlinear relationship be-tween the ASR and bf . This suggests that an adversary requires only a marginal scaling factor bf to achieve a severe ASR, causing traditional magnitude-based 28 (a) Theoretical Diffusion Bound vs. ASR 
+
+(b) ACC and ASR vs. bf
+
+Figure 3: Diffusion model validation and Phase Transition phenomenon on the CNN architecture using the GTSRB dataset. Table 2: Performance Comparison of Defense Mechanisms (CNN on GTSRB) 
+
+Mechanism Malicious Ratio 
+
+10% 20% 30% ACC ASR ACC ASR ACC ASR 
+
+Topology: Scale-free 
+
+FedAvg 83.75 (00.84) 23.78 (13.41) 82.31 (01.01) 49.13 (20.50) 78.67 (01.50) 59.93 (06.23) Krum 84.34 (00.86) 24.54 (13.97) 81.14 (02.47) 43.21 (09.24) 75.97 (01.16) 67.21 (06.53) TrimmedMean 83.66 (01.13) 13.75 (05.78) 82.23 (01.11) 18.93 (13.27) 78.30 (02.97) 26.90 (05.87) CosL2 52.48 (03.43) 14.73 (03.06) 56.11 (05.38) 11.29 (04.60) 66.97 (01.07) 20.34 (06.12) FLAME 73.11 (00.21) 12.70 (03.78) 72.81 (00.21) 13.45 (04.91) 73.71 (01.08) 09.88 (01.77) MAB(RANDOM TOPY) 84.84 (01.26) 05.67 (04.74) 84.42 (02.72) 06.87 (01.91) 84.18 (02.81) 12.72 (07.75) MAB(TOPY AWARE) 84.24 (00.67) 03.43 (01.36) 85.00 (00.73) 01.84 (01.50) 85.03 (00.77) 04.12 (02.54) 
+
+Topology: Random-regular 
+
+FedAvg 84.50 (00.57) 47.70 (04.19) 80.99 (01.03) 72.74 (18.26) 79.38 (01.97) 72.55 (21.87) Krum 84.34 (00.56) 49.20 (01.94) 77.60 (00.55) 69.62 (26.62) 74.92 (02.53) 76.51 (06.31) TrimmedMean 84.09 (00.42) 47.83 (05.09) 79.80 (02.01) 19.33 (14.56) 78.77 (01.78) 22.06 (18.16) CosL2 35.27 (10.80) 15.19 (11.89) 53.22 (13.37) 18.12 (00.64) 61.34 (14.48) 17.99 (02.51) FLAME 73.33 (00.56) 16.48 (03.05) 72.63 (00.47) 15.58 (01.99) 72.81 (00.49) 13.68 (04.33) MAB(RANDOM TOPY) 85.96 (01.05) 04.12 (05.19) 85.21 (00.94) 04.68 (05.38) 85.82 (01.35) 11.13 (10.34) MAB(TOPY AWARE) 85.97 (00.33) 04.93 (06.84) 84.89 (01.41) 07.87 (04.88) 85.70 (00.50) 05.01 (05.66)  
+
+> Note: Values in parentheses indicate the standard deviation across three independent trials.
+
+detection mechanisms to lose their efficacy entirely. Throughout this parameter scaling, however, the ACC remains remarkably stable. This validates the ex-treme stealthiness of the injected backdoor, proving that it cannot be detected merely by monitoring for performance degradation on a clean validation set. 
+
+Defense Mechanism Benchmark: Table 2 presents the performance of var-ious defense mechanisms against the backdoor attack on the GTSRB dataset. The baseline results for FedAvg confirm a severe security risk in decentralized vision tasks; the ASR reaches 59.93% in Scale-free topologies and 72.55% in Random-regular networks at a 30% malicious ratio. This disparity suggests that the higher connectivity and lower diameter of random-regular graphs sig-nificantly accelerate the diffusion of malicious features. Traditional Byzantine-robust aggregators exhibit inconsistent reliability in this configuration. Krum exhibits degraded performance at the 30% malicious 29 ratio, where its ASR (67.21%–76.51%) actually exceeds that of FedAvg , along-side a measurable decrease in main-task accuracy (ACC ≈ 75%–76%). Trimmed-Mean also remains vulnerable at higher malicious ratios, with the ASR reach-ing 26.90% in Scale-free graphs and 22.06% in Random-regular settings. While 
+
+FLAME effectively caps the ASR below 17% across all settings, it introduces a noticeable trade-off in utility, decreasing the ACC to approximately 72%– 74%—a roughly 11%–13% reduction compared to the benign baseline. CosL2 
+
+struggles severely to maintain performance in this task, reducing the model’s ac-curacy to levels close to random guessing (ACC ≈ 35%–52%) during the initial training stages under a 10% malicious ratio. In contrast, the MAB(TOPY AWARE) method consistently maintains a highly competitive main-task accuracy of approximately 84%–86% across both tested topologies. Furthermore, at a 30% malicious ratio, MAB(TOPY AWARE) 
+
+restricts the ASR to an exceptional 4.12% in the scale-free topology and 5.01% in the random-regular topology. This provides a substantial structural improve-ment over the MAB(RANDOM TOPY) baseline, which allows ASRs of 12.72% and 11.13% under the same respective conditions. These results indicate that integrating topological placement with active functional auditing can success-fully neutralize camouflaged visual backdoors that otherwise bypass traditional geometric filters. 
+
+Computational Efficiency Analysis: Figure 2b illustrates the execution duration of various defense mechanisms. Because the parameter dimensionality of the CNN is substantially lower than that of the Transformer (0.27M vs. 67M parameters), the total computational overhead is dominated by the local training phase rather than the aggregation logic. Consequently, the computation times across all evaluated methods exhibit marginal differences. 
+
+## 6.3 MAB hyperparameters sensitivity analysis 
+
+Across both Experiments 1 and 2, the global training process spans 15 commu-nication rounds. To manage the exploration-exploitation trade-off during UCB selection, the constant is set to c = 0 .5. Balancing computational overhead with high detection coverage, defense nodes audit 90% of their neighbors and apply an 80% aggregation subsampling rate. The aggregation threshold is set to τagg = 0 .4. Finally, the pre-allocated stratified weights Wself , ˜Wij and ˜W ∗
+
+> ij
+
+are configured as 0.5, 0.45, and 0.05, respectively. To further understand the robustness of the proposed framework, we con-ducted a sensitivity analysis on three key hyperparameters in Algorithm 1: audit sample size rate (ADR), aggregation sample size rate (AGR), and τagg . The re-sults are summarized in Table 3 (Transformer on PubMed) and Table 4 (CNN on GTSRB). Across both tasks and network topologies, the main task accuracy remains highly stable. For the Transformer model, ACC fluctuates within a narrow margin of approximately 67% to 71%, while the CNN model maintains an ACC between 84% and 87%. This demonstrates that the MAB-guided aggregation and active auditing mechanisms do not severely degrade benign model utility, 30 Table 3: Sensitivity Analysis of MAB Hyperparameters(Transformer on PubMed) 
+
+AUP AP AT ACC (%) ASR (%) 
+
+Topology: Random-regular 
+
+0.8 0.8 0.4 68.42 (01.18) 21.58 (08.52) 0.8 0.8 0.5 67.17 (01.36) 19.67 (06.54) 0.8 0.9 0.4 67.55 (00.79) 17.94 (05.80) 0.8 0.9 0.5 67.60 (01.93) 23.53 (10.27) 0.9 0.8 0.4 68.11 (01.81) 19.81 (02.72) 0.9 0.8 0.5 67.65 (01.75) 18.67 (01.36) 0.9 0.9 0.4 68.30 (01.24) 20.12 (02.24) 0.9 0.9 0.5 67.75 (01.62) 21.85 (03.57) 
+
+Topology: Scale-free 
+
+0.8 0.8 0.4 69.22 (00.79) 09.70 (08.17) 0.8 0.8 0.5 68.49 (00.98) 12.73 (10.51) 0.8 0.9 0.4 70.03 (00.65) 09.16 (08.98) 0.8 0.9 0.5 68.75 (00.89) 09.28 (10.46) 0.9 0.8 0.4 70.12 (00.97) 14.03 (16.14) 0.9 0.8 0.5 69.48 (00.47) 09.33 (07.12) 0.9 0.9 0.4 70.24 (00.97) 11.98 (15.77) 0.9 0.9 0.5 68.47 (00.71) 08.06 (09.42) 
+
+31 Table 4: Sensitivity Analysis of MAB Hyperparameters(CNN on GTSRB) 
+
+AUP AP AT ACC (%) ASR (%) 
+
+Topology: Random-regular 
+
+0.8 0.8 0.4 84.86 (01.07) 03.37 (03.60) 0.8 0.8 0.5 85.89 (00.97) 05.55 (04.77) 0.8 0.9 0.4 84.86 (01.07) 03.37 (03.60) 0.8 0.9 0.5 85.89 (00.97) 05.55 (04.77) 0.9 0.8 0.4 85.70 (00.50) 05.01 (05.66) 0.9 0.8 0.5 85.34 (01.16) 10.67 (08.50) 0.9 0.9 0.4 85.70 (00.50) 05.01 (05.66) 0.9 0.9 0.5 85.34 (01.16) 10.67 (08.50) 
+
+Topology: Scale-free 
+
+0.8 0.8 0.4 84.78 (00.82) 07.23 (05.54) 0.8 0.8 0.5 86.30 (00.50) 04.35 (01.61) 0.8 0.9 0.4 84.30 (00.57) 04.71 (03.86) 0.8 0.9 0.5 86.56 (00.88) 03.78 (02.32) 0.9 0.8 0.4 85.03 (00.77) 04.12 (02.54) 0.9 0.8 0.5 86.00 (00.56) 07.34 (07.43) 0.9 0.9 0.4 84.82 (00.57) 11.70 (09.45) 0.9 0.9 0.5 86.44 (00.42) 06.23 (03.21) 
+
+32 regardless of the specific hyperparameter configuration. Regarding defensive efficacy, the results suggest that hyperparameter varia-tions tend to have a relatively limited impact on the overall ASR, particularly when evaluated within the same network topology. For instance, when evalu-ated under a consistent topology, the ASR for the high-dimensional Transformer model exhibits relative stability. Specifically, global variations are confined to a moderate range, spanning from 8.06% to 14.03% in scale-free networks and from 17.94% to 21.85% in random-regular configurations. Similarly, in the CNN architecture, altering the parameters seems to shift the ASR only within a tight band of 3.37% to 11.70%. This implies that while precise tuning could po-tentially optimize the defense further, achieving a reliable baseline suppression capability might not strictly depend on finding an absolutely perfect parameter pairing, as the mechanism demonstrates a degree of inherent resilience under a fixed graph structure. 
+
+# 7 Discussion 
+
+This paper introduces an active auditing framework for Decentralized Feder-ated Learning (DFL), shifting the defensive paradigm from passive filtering to proactive intervention. By formulating a dynamical model, we effectively characterize the spatiotemporal diffusion of attacks and identify critical phase transitions in network contamination. Our multi-scale auditing pipeline, com-prising ρSEA , ρRS , and ρAK , leverages information asymmetry to expose latent backdoors that are invisible to static geometric metrics.Combined with MAB-guided neighbor selection and topology-aware placement, the proposed frame-work achieves a superior balance between primary task accuracy and adversarial resilience. Theoretical analysis and extensive empirical validation across CNN and Transformer architectures demonstrate that our approach maintains robust convergence while substantially suppressing stealthy, adaptive backdoors. While the proposed framework and state-of-the-art defense algorithms, such as FLAME, CosL2, demonstrate substantial resilience under some attack mod-els, they are not immune to the challenges of data heterogeneity. In environ-ments characterized by extreme Non-IID distributions, there exists a critical threshold where statistical diversity becomes indistinguishable from adversarial manipulation. Once data heterogeneity exceeds this limit, defense mechanisms struggle to differentiate between extreme non-IID benign updates and actual malicious gradients. In this regime, the system loses the discriminative power required to reliably isolate malicious gradients from legitimate, yet extreme, statistical outliers. Consequently, the very metrics designed to preserve global integrity may inadvertently penalize unique local features, highlighting an inher-ent trade-off between Byzantine robustness and the preservation of client-specific intelligence. 33 8 Data Availability Statement 
+
+The source code and scripts required to reproduce all numerical results and fig-ures presented in this paper are publicly available in the following GitHub reposi-tory: https://github.com/Sheng-Pan/Decentralized-federated-learning2 .
+
+# A Proofs 
+
+## A.1 Proofs of section 3 
+
+Lemma A.1. Suppose that the network graph G induced by W is strongly connected and there exists at least one benign node i with Λii = λ > 0, then the spectral radius of A satisfies ρ(A) < 1 .Proof. By the property of W and Λ, we have that A is non-negative since 
+
+W is non-negative and 0 ≤ 1 − Λii ≤ 1 , A is irreducible because the graph corresponding to W is strongly connected and the row sums of A are: 
+
+X
+
+> j
+
+Aij =
+
+(
+
+1 − λ < 1 if node i is benign 1 if node i is malicious .
+
+We use a proof by contradiction method. Now assume ρ(A) = 1 . Since 
+
+A is a non-negative irreducible matrix, by the Perron-Frobenius theorem(e.g [Horn and Johnson, 2012]), there exists a unique positive eigenvector v > 0 (all components positive). This eigenvector corresponds to the eigenvalue ρ(A) = 1 . That is, Av = v .Let i be any benign node. From Av = v , we have: 
+
+vi = X
+
+> j
+
+Aij vj = (1 − λ) X
+
+> j
+
+Wij vj .
+
+Since λ > 0 and Wij ≥ 0 , it follows that: 
+
+vi = (1 − λ) X
+
+> j
+
+Wij vj < X
+
+> j
+
+Wij vj . (16) Let vmax = max k vk > 0 , and let S = {k : vk = vmax } be the set of nodes achieving this maximum value. We now show that S cannot contain any benign nodes. If there exists a benign node i ∈ S , then vi = vmax . However, from (16): 
+
+vi = (1 − λ) X
+
+> j
+
+Wij vj ≤ (1 − λ)vmax < v max .
+
+This contradicts vi = vmax . Therefore, S contains only malicious nodes. Since graph G is strongly connected, for any k ∈ S (a malicious node) and any benign node i , there exists a directed path k → j1 → j2 → · · · → i .34 Consider Amv = v , where m is the path length. Specifically, for node k ∈ S
+
+:
+
+vk = ( Amv)k = X
+
+> ℓ
+
+(Am)kℓ vℓ.
+
+Due to strong connectivity, ( Am)ki > 0 (since there exists a path from k to 
+
+i , and the product of weights along this path is positive). Since i is a benign node, from (16) we know vi < v max . Additionally, 
+
+vℓ ≤ vmax for all ℓ . Therefore: 
+
+vk = X
+
+> ℓ
+
+(Am)kℓ vℓ ≤ (Am)ki vi + X
+
+> ℓ̸=i
+
+(Am)kℓ vmax .
+
+Since ( Am)ki > 0 and P
+
+> ℓ
+
+(Am)kℓ ≤ 1 (because the row sums of A are at most 1), we have: 
+
+vk < (Am)ki vmax + X
+
+> ℓ̸=i
+
+(Am)kℓ vmax = vmax 
+
+X
+
+> ℓ
+
+(Am)kℓ ≤ vmax .
+
+This contradicts vk = vmax .Therefore, the assumption ρ(A) = 1 is false. Since A is non-negative, its spectral radius is non-negative, and from ∥A∥∞ ≤ 1 we know ρ(A) ≤ 1 . Hence, we must have: 
+
+ρ(A) < 1.
+
+This completes the proof. 
+
+Proof of Lemma 3.1: 
+
+Starting from s(0) = 0, we iteratively expand: 
+
+s(1) = u,
+
+s(2) = Au + u = ( I + A)u,
+
+s(3) = A(Au + u) + u = ( I + A + A2)u.
+
+By induction, 
+
+s(t + 1) = 
+
+> t
+
+X
+
+> k=0
+
+Aku.
+
+By Lemma A.1, by the matrix geometric series identity: 
+
+> t
+
+X
+
+> k=0
+
+Ak = ( I − At+1 )( I − A)−1,
+
+and noting that s∗ = ( I − A)−1u, we obtain: 
+
+s(t + 1) = ( I − At+1 )( I − A)−1u = ( I − At+1 )s∗.
+
+35 This completes the proof. 
+
+Proof of Lemma 3.2: 
+
+According to the linear system dynamics equation with initial state s(0) = 0,the solution is: 
+
+s(t) = 
+
+> t−1
+
+X
+
+> k=0
+
+Aku.
+
+For a specific node i, utilizing the component-wise upper bound A ≤ (1 −
+
+λ)W:
+
+si(t) ≤ ust−1X
+
+> k=0
+
+(1 − λ)k(Wk)is .
+
+where ( Wk)is represents the total transition probability from source s to node i in exactly k steps. (Wk)is > 0 if and only if there exists a path of length k between s and i.Since dis is the shortest path distance, for any k < d is , no path exists between the two nodes: (Wk)is = 0 , ∀k < d is .
+
+Therefore, the lower bound of summation changes from 0 to dis :
+
+si(t) = ust−1X
+
+> k=dis
+
+(1 − λ)k(Wk)is .
+
+Let m = k − dis (representing “redundant steps” beyond the shortest path), substituting into the above equation: 
+
+si(t) = ust−1−dis X
+
+> m=0
+
+(1 − λ)m+dis (Wm+dis )is .
+
+Extracting the constant term (1 − λ)dis :
+
+si(t) = us · (1 − λ)dis ·
+
+> t−1−dis
+
+X
+
+> m=0
+
+(1 − λ)m(Wm+dis )is .
+
+Since W is a row-stochastic matrix, all its elements are ≤ 1, thus 
+
+si(t) ≤ us · (1 − λ)dis ·
+
+> t−1−dis
+
+X
+
+> m=0
+
+(1 − λ)m.
+
+36 A.2 Proofs of section 5 
+
+Lemma A.2 (Non-Convex Convergence of Nominal Sequence) . Under Assump-tions 1-3, the nominal sequence ˆθ(t) 
+
+> i
+
+follows standard decentralized SGD updates without any Byzantine interference. For a non-convex objective function F , let 
+
+ρnom = |λ2(W(t))| < 1 denote the nominal spectral radius governing the dif-fusion of benign gradients. With a learning rate η = O(1 /√T ), the average expected squared gradient norm of the nominal global model ¯ˆθ(t) = 1
+
+> n
+
+Pni=1 ˆθ(t)
+
+> i
+
+over T iterations is bounded by: 
+
+1
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥∇ F (¯ˆθ(t))∥2] ≤ O 
+
+ 1
+
+√nT 
+
+
+
++ O
+
+ 1
+
+T (1 − ρnom )2
+
+
+
+.
+
+Proof. This result follows directly from the standard convergence analysis for decentralized stochastic gradient descent on non-convex objectives, as estab-lished by Lian et al. [2017]. Since the nominal sequence ˆθ(t) 
+
+> i
+
+is defined as the counterfactual trajectory where all participating nodes behave honestly, the system reduces exactly to a standard decentralized optimization problem over the nominal topology W(t).By setting the learning rate η = O(1 /√T ), the detailed convergence bound separates into the asymptotic optimization rate O(1 /√nT ) and the transient network consensus penalty O(1 /(T (1 − ρnom )2)). 
+
+Lemma A.3 (Boundedness of Backdoor Bias with Topological Heterogeneity) .
+
+Under Assumptions 1-6, the global backdoor deviation E(t) satisfies: 
+
+∥E(t)∥2 ≤ (δ(t))2,
+
+where δ(t) = ρt
+
+> err
+
+∥E(0) ∥ + U Pt−1 
+
+> k=0
+
+ρk
+
+> err
+
+, and U = sup t≥0 ∥ ˜M(t)∥ is the maximum malicious source energy bounded by Assumption 6. Furthermore, if the learning rate and topology satisfy the stability condition 
+
+ρerr < 1, then asymptotically: 
+
+∥E(t)∥2 ≤
+
+ U
+
+1 − ρerr 
+
+2
+
+.
+
+Proof. We track the trajectory divergence between the contaminated process and the ideal clean process. The realization of the global error state evolves as a discrete-time dynamical system driven by an exogenous adversarial shock: 
+
+E(t+1) = ( W(t) ⊗ Ip)
+
+
+
+E(t) − η∆Gt
+
+
+
++ ˜M(t).
+
+Under Assumption 1, the objective function has Lipschitz continuous gra-dients. This ensures that a single optimization step linearly bounds the error amplification of the state error: 
+
+∥E(t) − η∆Gt∥ ≤ ∥ E(t)∥ + ηL ∥E(t)∥ = (1 + ηL )∥E(t)∥.
+
+37 To analyze the systemic risk, we stratify the network into two mutually exclusive sub-populations: the defending stratum D and the vulnerable stratum 
+
+V. Partitioning the global error vector accordingly, E(t) = [( E(t) 
+
+> D
+
+)⊤, (E(t) 
+
+> U
+
+)⊤]⊤,we define the intra-stratum error propagation rates: ρD := ∥w(t)
+
+> DD
+
+∥(1 + ηL ) and 
+
+ρU := ∥w(t) 
+
+> VV
+
+∥(1 + ηL ). Taking the marginal ℓ2-norms yields a coupled bivariate system of inequalities: 
+
+∥E(t+1)  
+
+> D
+
+∥ ≤ ρD ∥E(t) 
+
+> D
+
+∥ + ∥w(t) 
+
+> DU
+
+∥(1 + ηL ) · ∥ E(t) 
+
+> U
+
+∥,
+
+∥E(t+1)  
+
+> U
+
+∥ ≤ ∥ w(t)
+
+> UD
+
+∥(1 + ηL ) · ∥ E(t) 
+
+> D
+
+∥ + ρU ∥E(t) 
+
+> U
+
+∥ + U. 
+
+This bounding process can be compactly represented by the transition op-erator of the coupled system: 
+
+w(t+1) ≤ Tw (t) + b, where T =
+
+"
+
+ρD ∥w(t) 
+
+> DU
+
+∥(1 + ηL )
+
+∥w(t)
+
+> UD
+
+∥(1 + ηL ) ρU
+
+#
+
+,
+
+with the marginal norm vector w(t) = [ ∥E(t) 
+
+> D
+
+∥, ∥E(t) 
+
+> U
+
+∥]⊤ and the worst-case shock vector b = [0 , U ]⊤.The stability of this coupled system is governed by the eigenvalues of the transition matrix T. By Lemma 5.6.10 of [Horn and Johnson, 2012], we can bound the operator norm of T by its spectral radius (the maximum absolute eigenvalue) plus an arbitrarily small constant ϵ > 0. Thus, there exists a valid matrix norm ∥ · ∥ mat such that ∥T∥mat ≤ ρ(T) + ϵ ≤ ρerr + ϵ. Mapping our state vector into this norm space via e(t) = ∥w(t)∥mat , the system relaxes to a scalar autoregressive bound: e(t+1) ≤ ρerr e(t) + ∥b∥mat .Unrolling this recursive AR(1) filter from initialization t = 0, the accumula-tion of the adversarial shocks forms a geometric progression: 
+
+∥E(t)∥ ≤ ρt
+
+> err
+
+∥E(0) ∥ + U
+
+> t−1
+
+X
+
+> k=0
+
+ρk
+
+> err
+
+.
+
+Squaring both sides allows us to bound the maximum expected energy of the error process: 
+
+∥E(t)∥2 ≤ ρt
+
+> err
+
+∥E(0) ∥ + U
+
+> t−1
+
+X
+
+> k=0
+
+ρk
+
+> err
+
+!2
+
+.
+
+Finally, the stability condition ρerr < 1 is equivalent to ensuring our au-toregressive error process is stationary (its roots lie inside the unit circle). The geometric series of accumulated shocks converges, yielding a finite asymptotic upper bound as t → ∞ , concluding the proof. 
+
+Proof of Theorem 5.1: 
+
+To evaluate the asymptotic behavior of the empirical risk minimizer, we bound the expected squared gradient norm of the contaminated sample mean 38 ¯θ(t) = 1
+
+> n
+
+Pni=1 θ(t) 
+
+> i
+
+. We introduce the counterfactual (uncontaminated) stochas-tic process ¯ˆθ(t) as a control. Using the basic quadratic inequality ∥a + b∥2 ≤ 2∥a∥2 + 2 ∥b∥2, we bound the gradient norm by partitioning it into the baseline variance of the control process and the error induced by the adversarial shocks: 
+
+∥∇ F ( ¯θ(t))∥2 ≤ 2∥∇ F (¯ˆθ(t))∥2 + 2 ∥∇ F ( ¯θ(t)) − ∇ F (¯ˆθ(t))∥2.
+
+By Assumption 1, the objective function has Lipschitz continuous gradients, thus 
+
+∥∇ F ( ¯θ(t)) − ∇ F (¯ˆθ(t))∥2 ≤ L2∥ ¯θ(t) − ¯ˆθ(t)∥2 = L2∥¯e(t)∥2,
+
+where ¯ e(t) = 1
+
+> n
+
+Pni=1 e(t) 
+
+> i
+
+is the cross-sectional mean of the adversarial shock accumulations. Taking the unconditional expectation and time-averaging over 
+
+T periods yields: 1
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥∇ F ( ¯θ(t))∥2] ≤ 2
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥∇ F (¯ˆθ(t))∥2]
+
+| {z }
+
+> Term A: Counterfactual Baseline
+
++ 2L2
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥¯e(t)∥2]
+
+| {z }
+
+> Term B: Systemic Risk Bound
+
+.
+
+For Term A, according to Lemma A.2, applying a decaying learning rate schedule η = O(1 /√T ) decomposes the variance of the uncontaminated process into the standard asymptotic rate and a finite-sample spatial bias driven by the nominal transition matrix ρnom :1
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥∇ F (¯ˆθ(t))∥2] ≤ O 
+
+ 1
+
+√nT 
+
+
+
++ O
+
+ 1
+
+T (1 − ρnom )2
+
+
+
+.
+
+For Term B, which captures the systemic propagation of errors, we apply Jensen’s Inequality to tightly bound the cross-sectional mean by the trace of the system’s spatial variance vector E(t):
+
+∥¯e(t)∥2 = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+e(t)
+
+> i
+> 2
+
+≤ 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥e(t) 
+
+> i
+
+∥2 = 1
+
+n ∥E(t)∥2.
+
+By Lemma A.3, provided the stationarity condition ρerr < 1 holds, the maximum variance is bounded by the steady-state limit of the AR(1) process: 
+
+∥¯e(t)∥2 ≤
+
+ U
+
+1 − ρerr 
+
+2
+
+.
+
+Note that the spatial smoothing matrix ( W(t) ⊗ Ip) is Markovian (row-stochastic), implying ∥W(t) ⊗ Ip∥2 ≤ 1. Under Assumption 6, the exogenous adversarial shocks are uniformly bounded by Cu. Therefore, the total exogenous shock variance is bounded by the proportion of contaminated strata: 
+
+U 2 = sup 
+
+> t≥0
+
+∥ ˜M(t)∥2 ≤ sup 
+
+> t≥0
+
+∥M(t)∥2 ≤ sup 
+
+> t≥0
+
+X
+
+> j∈M
+
+∥m(t) 
+
+> j
+
+∥2 = O(|M| C2
+
+> u
+
+).
+
+39 Substituting the total shock variance U 2 back into the stationary limit for Term B yields the expected systemic bias: 
+
+∥¯e(t)∥2 ≤ O 
+
+ |M| C2
+
+> u
+
+n(1 − ρerr )2
+
+
+
+= O
+
+ qmC2
+
+> u
+
+(1 − ρerr )2
+
+
+
+.
+
+Finally, combining the asymptotic bounds for the uncontaminated baseline (Term A) and the stationary adversarial bias (Term B) yields the final expected risk bound: 1
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥∇ F ( ¯θ(t))∥2] ≤ O
+
+ 1
+
+√nT 
+
+| {z }
+
+> Standard Asymptotic Rate
+
++ O
+
+ 1
+
+T (1 − ρnom )2
+
+| {z }
+
+> Consensus error
+
++ O
+
+ qmC2
+
+> u
+
+(1 − ρerr )2
+
+| {z }
+
+> Asymptotic Adversarial Error
+
+.
+
+This completes the proof. 
+
+# References 
+
+Eugene Bagdasaryan, Andreas Veit, Yiqing Hua, Deborah Estrin, and Vitaly Shmatikov. How to backdoor federated learning. In International conference on artificial intelligence and statistics , pages 2938–2948. PMLR, 2020. Albert-L´ aszl´ o Barab´ asi and R´ eka Albert. Emergence of scaling in random net-works. science , 286(5439):509–512, 1999. Arjun Nitin Bhagoji, Supriyo Chakraborty, Prateek Mittal, and Seraphin Calo. Analyzing federated learning through an adversarial lens. In International conference on machine learning , pages 634–643. PMLR, 2019. Peva Blanchard, El Mahdi El Mhamdi, Rachid Guerraoui, and Julien Stainer. Machine learning with adversaries: Byzantine tolerant gradient descent. Ad-vances in neural information processing systems , 30, 2017. Jeremy Cohen, Elan Rosenfeld, and Zico Kolter. Certified adversarial robustness via randomized smoothing. In international conference on machine learning ,pages 1310–1320. PMLR, 2019. Franck Dernoncourt and Ji Young Lee. PubMed 20k RCT: a dataset for sequential sentence classification in medical abstracts. arXiv preprint arXiv:1710.06071 , 2017. Martin Everett and Stephen P Borgatti. Ego network betweenness. Social networks , 27(1):31–38, 2005. 40 Clement Fung, Chris JM Yoon, and Ivan Beschastnikh. The limitations of fed-erated learning in sybil settings. In 23rd International symposium on research in attacks, intrusions and defenses (RAID 2020) , pages 301–316, 2020. Yansong Gao, Chang Xu, Derui Wang, Shiping Chen, Damith C Ranasinghe, and Surya Nepal. Strip: A defence against trojan attacks on deep neural networks. In Proceedings of the 35th Annual Computer Security Applications Conference (ACSAC ’19) , pages 113–125, New York, NY, USA, 2019. ACM. doi: 10.1145/3359789.3359790. URL https://doi.org/10.1145/3359789. 3359790 .Roger A Horn and Charles R Johnson. Matrix analysis . Cambridge university press, 2012. Tiansheng Huang, Weiwei Lin, Wentai Wu, Ligang He, Keqin Li, and Albert Y Zomaya. An efficiency-boosting client selection scheme for federated learn-ing with fairness guarantee. IEEE Transactions on Parallel and Distributed Systems , 32(7):1552–1564, 2020. Boris Iglewicz and David C Hoaglin. How to detect and handle outliers , vol-ume 16. ASQC Quality Press, 1993. William Ogilvie Kermack and `A. G. Mckendrick. A contribution to the mathe-matical theory of epidemics. Proceedings of The Royal Society A: Mathemat-ical, Physical and Engineering Sciences , 115:700–721, 1927. Fabian Kuhn and Rogert Wattenhofer. Constant-time distributed dominating set approximation. In Proceedings of the twenty-second annual symposium on Principles of distributed computing , pages 25–32, 2003. David A Levin and Yuval Peres. Markov chains and mixing times , volume 107. American Mathematical Soc., 2017. Liping Li, Wei Xu, Tianyi Chen, Georgios B Giannakis, and Qing Ling. Rsa: Byzantine-robust stochastic aggregation methods for distributed learning from heterogeneous datasets. In Proceedings of the AAAI conference on arti-ficial intelligence , volume 33, pages 1544–1551, 2019. Xiangru Lian, Ce Zhang, Huan Zhang, Cho-Jui Hsieh, Wei Zhang, and Ji Liu. Can decentralized algorithms outperform centralized algorithms? In Advances in Neural Information Processing Systems (NeurIPS) , volume 30, pages 5330– 5340, 2017. Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-efficient learning of deep networks from decentralized data. In Artificial intelligence and statistics , pages 1273– 1282. PMLR, 2017. 41 Preetum Nakkiran, Gal Kaplun, Yamini Bansal, Tristan Yang, Boaz Barak, and Ilya Sutskever. Deep double descent: Where bigger models and more data hurt. Journal of Statistical Mechanics: Theory and Experiment , 2021(12): 124003, 2021. Thien Duc Nguyen, Phillip Rieger, Huili Chen, Hossein Yalame, Helen M¨ ollering, Hossein Fereidooni, Samuel Marchal, Markus Miettinen, Azalia Mirhoseini, Shaza Zeitouni, et al. {FLAME }: Taming backdoors in federated learning. In 31st USENIX security symposium (USENIX Security 22) , pages 1415–1432, 2022. Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. Man vs. computer: Benchmarking machine learning algorithms for traffic sign recog-nition. Neural networks , 32:323–332, 2012. Roman Vershynin. High-dimensional probability: An introduction with applica-tions in data science , volume 47. Cambridge university press, 2018. Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In 2019 IEEE symposium on security and privacy (SP) , pages 707–723. IEEE, 2019. Hongyi Wang, Kartik Sreenivasan, Shashank Rajput, Harit Vishwakarma, Saurabh Agarwal, Jy-yong Sohn, Kangwook Lee, and Dimitris Papailiopou-los. Attack of the tails: Yes, you really can backdoor federated learning. 
+
+Advances in neural information processing systems , 33:16070–16084, 2020. Baoyuan Wu, Hongrui Chen, Mingda Zhang, Zihao Zhu, Shaokui Wei, Danni Yuan, and Chao Shen. Backdoorbench: A comprehensive benchmark of back-door learning. Advances in Neural Information Processing Systems , 35:10546– 10559, 2022. Wenchao Xia, Tony QS Quek, Kun Guo, Wanli Wen, Howard H Yang, and Hongbo Zhu. Multi-armed bandit-based client scheduling for federated learn-ing. IEEE Transactions on Wireless Communications , 19(11):7108–7123, 2020. Dong Yin, Yudong Chen, Kannan Ramchandran, and Peter L. Bartlett. Byzantine-robust distributed learning: Towards optimal statistical rates. In 
+
+International Conference on Machine Learning , 2018. Zhengming Zhang, Ashwinee Panda, Linyue Song, Yaoqing Yang, Michael Ma-honey, Prateek Mittal, Ramchandran Kannan, and Joseph Gonzalez. Neuro-toxin: Durable backdoors in federated learning. In International conference on machine learning , pages 26429–26446. PMLR, 2022. 42

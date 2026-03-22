@@ -6,64 +6,61 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-21
-- 运行时间：2026-03-21 19:19:31 UTC
+- 最新运行日期：2026-03-22
+- 运行时间：2026-03-22 19:19:40 UTC
 - 运行状态：成功
-- 本次总论文数：14
-- 精读区：3
+- 本次总论文数：13
+- 精读区：2
 - 速读区：11
 
 ### 今日简报（AI）
-今日聚焦联邦学习在低剂量CT降噪与多模态共识中的前沿突破，深度解析14篇隐私计算与医疗AI论文。
-重点推荐投影引导的个性化联邦学习方案，以及通过潜空间共识实现的高效鲁棒多模态协作框架。
-建议关注医疗大模型在隐私与效用平衡上的最新评测，并探索更安全的检索增强生成（RAG）落地路径。
-- 详情：[/202603/21/README](/202603/21/README)
+深度解析 13 篇联邦学习前沿进展，重点攻克脉冲神经网络异构融合与去中心化防御难题。
+推荐关注 SFedHIFI 提出的脉冲神经元异构融合方案，以及通过主动审计与拓扑感知强化去中心化系统的安全性。
+建议关注“以删除密钥实现机器卸载”及“联邦计算代码化”等兼顾隐私主权与系统效率的新兴设计思路。
+- 详情：[/202603/22/README](/202603/22/README)
 
 ### 精读区论文标签
-1. [Projection Guided Personalized Federated Learning for Low Dose CT Denoising](/202603/21/2603.13422v1-projection-guided-personalized-federated-learning-for-low-dose-ct-denoising)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：用于医学影像的个性化联邦学习
-2. [Communication-Efficient and Robust Multi-Modal Federated Learning via Latent-Space Consensus](/202603/21/2603.19067v1-communication-efficient-and-robust-multi-modal-federated-learning-via-latent-space-consensus)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：通过潜空间共识保护隐私的多模态联邦学习
-3. [GAPSL: A Gradient-Aligned Parallel Split Learning on Heterogeneous Data](/202603/21/2603.18540v1-gapsl-a-gradient-aligned-parallel-split-learning-on-heterogeneous-data)  
+1. [SFedHIFI: Fire Rate-Based Heterogeneous Information Fusion for Spiking Federated Learning](/202603/22/2603.14956v1-sfedhifi-fire-rate-based-heterogeneous-information-fusion-for-spiking-federated-learning)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：异构数据上的并行拆分学习
+   evidence：脉冲神经网络的隐私保护联邦学习
+2. [Beyond Passive Aggregation: Active Auditing and Topology-Aware Defense in Decentralized Federated Learning](/202603/22/2603.18538v1-beyond-passive-aggregation-active-auditing-and-topology-aware-defense-in-decentralized-federated-learning)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：去中心化联邦学习中的主动审计与防御
 
 ### 速读区论文标签
-1. [MedPriv-Bench: Benchmarking the Privacy-Utility Trade-off of Large Language Models in Medical Open-End Question Answering](/202603/21/2603.14265v1-medpriv-bench-benchmarking-the-privacy-utility-trade-off-of-large-language-models-in-medical-open-end-question-answering)  
+1. [Rethinking Machine Unlearning: Models Designed to Forget via Key Deletion](/202603/22/2603.15033v1-rethinking-machine-unlearning-models-designed-to-forget-via-key-deletion)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：评估医疗大语言模型中的隐私与效用权衡
-2. [$p^2$RAG: Privacy-Preserving RAG Service Supporting Arbitrary Top-$k$ Retrieval](/202603/21/2603.14778v1-p2rag-privacy-preserving-rag-service-supporting-arbitrary-top-k-retrieval)  
+   evidence：针对隐私法规和数据删除的机器遗忘范式
+2. [Multi-objective Optimization for Over-the-Air Federated Edge Learning-enabled Collaborative Integrated Sensing and Communications](/202603/22/2603.15783v1-multi-objective-optimization-for-over-the-air-federated-edge-learning-enabled-collaborative-integrated-sensing-and-communications)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：RAG服务的隐私保护检索
-3. [DP-S4S: Accurate and Scalable Select-Join-Aggregate Query Processing with User-Level Differential Privacy](/202603/21/2603.14994v2-dp-s4s-accurate-and-scalable-select-join-aggregate-query-processing-with-user-level-differential-privacy)  
+   evidence：用于分布式传感的空中联邦边缘学习框架
+3. [Federated Computing as Code (FCaC): Sovereignty-aware Systems by Design](/202603/22/2603.17331v1-federated-computing-as-code-fcac-sovereignty-aware-systems-by-design)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：针对大规模查询处理的用户级差分隐私
-4. [SpecSteer: Synergizing Local Context and Global Reasoning for Efficient Personalized Generation](/202603/21/2603.16219v1-specsteer-synergizing-local-context-and-global-reasoning-for-efficient-personalized-generation)  
+   evidence：分布式数据资产和服务的联邦计算架构
+4. [ARES: Scalable and Practical Gradient Inversion Attack in Federated Learning through Activation Recovery](/202603/22/2603.17623v1-ares-scalable-and-practical-gradient-inversion-attack-in-federated-learning-through-activation-recovery)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：解决中心化模型隐私问题的非对称协作推理
-5. [SOMP: Scalable Gradient Inversion for Large Language Models via Subspace-Guided Orthogonal Matching Pursuit](/202603/21/2603.16761v1-somp-scalable-gradient-inversion-for-large-language-models-via-subspace-guided-orthogonal-matching-pursuit)  
+   evidence：联邦学习中通过梯度逆向攻击产生的隐私风险
+5. [Probabilistic Federated Learning on Uncertain and Heterogeneous Data with Model Personalization](/202603/22/2603.18083v1-probabilistic-federated-learning-on-uncertain-and-heterogeneous-data-with-model-personalization)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：大语言模型中的梯度逆向攻击与隐私风险
-6. [Anonymous-by-Construction: An LLM-Driven Framework for Privacy-Preserving Text](/202603/21/2603.17217v1-anonymous-by-construction-an-llm-driven-framework-for-privacy-preserving-text)  
+   evidence：异构数据上的联邦学习
+6. [DriftGuard: Mitigating Asynchronous Data Drift in Federated Learning](/202603/22/2603.18872v1-driftguard-mitigating-asynchronous-data-drift-in-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：大模型驱动的隐私保护文本匿名化框架
-7. [SIMD-PAC-DB: Pretty Performant PAC Privacy](/202603/21/2603.15023v2-simd-pac-db-pretty-performant-pac-privacy)  
+   evidence：针对异步数据漂移的联邦学习框架
+7. [Towards Privacy-Preserving Machine Translation at the Inference Stage: A New Task and Benchmark](/202603/22/2603.14756v1-towards-privacy-preserving-machine-translation-at-the-inference-stage-a-new-task-and-benchmark)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：数据库隐私模型的优化实现
-8. [Knowledge Distillation for Collaborative Learning in Distributed Communications and Sensing](/202603/21/2603.16116v1-knowledge-distillation-for-collaborative-learning-in-distributed-communications-and-sensing)  
+   evidence：翻译推理阶段的隐私保护机制
+8. [Variational Kernel Design for Internal Noise: Gaussian Chaos Noise, Representation Compatibility, and Reliable Deep Learning](/202603/22/2603.17365v1-variational-kernel-design-for-internal-noise-gaussian-chaos-noise-representation-compatibility-and-reliable-deep-learning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：分布式通信中的协作学习
-9. [Prescribed-Time Distributed Generalized Nash Equilibrium Seeking](/202603/21/2603.16865v1-prescribed-time-distributed-generalized-nash-equilibrium-seeking)  
+   evidence：由分布族和核指定的噪声机制
+9. [A Synthesizable RTL Implementation of Predictive Coding Networks](/202603/22/2603.18066v1-a-synthesizable-rtl-implementation-of-predictive-coding-networks)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：纳什均衡的全分布式算法
-10. [Noise-Aware Misclassification Attack Detection in Collaborative DNN Inference](/202603/21/2603.17914v1-noise-aware-misclassification-attack-detection-in-collaborative-dnn-inference)  
+   evidence：完全分布式的硬件学习系统
+10. [Delay-Robust Primal-Dual Dynamics for Distributed Optimization](/202603/22/2603.18236v1-delay-robust-primal-dual-dynamics-for-distributed-optimization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：协作深度神经网络推理与恶意数据注入
-11. [AcceRL: A Distributed Asynchronous Reinforcement Learning and World Model Framework for Vision-Language-Action Models](/202603/21/2603.18464v1-accerl-a-distributed-asynchronous-reinforcement-learning-and-world-model-framework-for-vision-language-action-models)  
+   evidence：分布式优化的延迟鲁棒动力学
+11. [MIDST Challenge at SaTML 2025: Membership Inference over Diffusion-models-based Synthetic Tabular data](/202603/22/2603.19185v1-midst-challenge-at-satml-2025-membership-inference-over-diffusion-models-based-synthetic-tabular-data)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：分布式异步强化学习框架
+   evidence：隐私保护数据发布与成员推理攻击
 
 
 <div class="dpr-home-promo-card">

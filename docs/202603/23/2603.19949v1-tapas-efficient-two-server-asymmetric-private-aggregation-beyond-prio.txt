@@ -1,0 +1,2271 @@
+Title: TAPAS: Efficient Two-Server Asymmetric Private Aggregation Beyond Prio(+)
+
+URL Source: https://arxiv.org/pdf/2603.19949v1
+
+Published Time: Mon, 23 Mar 2026 00:55:35 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+# TAPAS: Efficient Two-Server Asymmetric Private Aggregation Beyond Prio(+) 
+
+Harish Karthikeyan Antigoni Polychroniadou 
+
+harish.karthikeyan@jpmchase.com antigoni.polychroniadou@jpmorgan.com 
+
+JPMorgan AI Research, JPMorgan AlgoCRYPT CoE 
+
+Abstract 
+
+Privacy-preserving aggregation is a cornerstone for AI systems that learn from distributed data with-out exposing individual records, especially in federated learning and telemetry. Existing two-server protocols (e.g., Prio and successors) set a practical baseline by validating inputs while preventing any single party from learning users’ values, but they impose symmetric costs on both servers and com-munication that scales with the per-client input dimension L. Modern learning tasks routinely involve dimensionalities L in the tens to hundreds of millions of model parameters. We present TAPAS, a two-server asymmetric private aggregation scheme that addresses these limita-tions along four dimensions: (i) no trusted setup or preprocessing, (ii) server-side communication that is independent of L (iii) post-quantum security based solely on standard lattice assumptions (LWE, SIS), and (iv) stronger robustness with identifiable abort and full malicious security for the servers. A key design choice is intentional asymmetry: one server bears the O(L) aggregation and verification work, while the other operates as a lightweight facilitator with computation independent of L. This reduces to-tal cost, enables the secondary server to run on commodity hardware, and strengthens the non-collusion assumption of the servers. One of our main contributions is a suite of new and efficient lattice-based zero-knowledge proofs; to our knowledge, we are the first to establish privacy and correctness with identifiable abort in the two-server setting. 
+
+# 1 Introduction 
+
+AI-driven systems increasingly rely on privacy-preserving aggregation to unlock collective insights with-out exposing individual data, most notably in federated learning and telemetry [Cor20, BKM +22, BBG +20, BIK +17]. Two-server protocols such as Prio [CGB17], Prio+ [AGJ +22], and Elsa [RSWP23] have estab-lished a practical baseline: in these designs, the two servers are symmetric, receiving and computing the same information, typically under secret sharing, so no single party learns users’ inputs, and malformed contribu-tions are validated. Prio [CGB17] is under active standardization consideration within the IETF [PBS22]. However, in modern workloads where per-client vectors are extremely large (millions of parameters) and the number of clients n is comparatively modest (often 50 − 5000 as reported in Table 2 of [KMA +21]), these symmetric designs exhibit several bottlenecks. First, each server incurs bandwidth and computation that scale linearly with the vector dimension L, so for a model of dimension L both servers must provision network throughput O(n · L) and memory O(L), effectively doubling deployment cost and forcing the sec-ondary server to match the primary aggregator’s capacity. Second, server-side communication is tied to L
+
+rather than n, misaligning cost with the true bottleneck in federated learning and straining network and memory budgets. Third, setup or preprocessing requirements (for example, trusted setup or client precom-putation) complicate operations and introduce assumptions that reduce flexibility. Fourth, security relies on non–post-quantum, limiting long-term robustness against quantum adversaries. Finally, robustness against malicious servers is weaker: once servers begin exchanging messages, a malicious server can trigger aborts that appear indistinguishable from client misbehavior, thereby enabling blame shifting and denial-of-service 1
+
+> arXiv:2603.19949v1 [cs.CR] 20 Mar 2026
+
+without attributable fault. Prior work does not provide comprehensive guarantees for malicious security in server-side computation. Addressing these limitations calls for an asymmetric two-server design that removes trusted setup and preprocessing, decouples server-side communication from L so costs scale with n rather than vector di-mension, bases security solely on standard post-quantum lattice assumptions (LWE, SIS), and strengthens robustness with identifiable abort that attributes faults to misbehaving servers once inter-server messaging begins, thereby aligning private aggregation with real-world constraints in federated learning and telemetry. The recent Heli [LCGDW26] work explores asymmetric server roles but retains the aforementioned bottle-necks (setup/preprocessing overhead, communication scaling with L, non–post-quantum assumptions, and weak robustness under malicious servers). Moreover, Heli imposes a small-plaintext constraint: each vector coordinate must lie in a limited range to enable decryption via discrete-log recovery, which is impractical for high-precision or large-dimension aggregations common in federated learning. 
+
+## 1.1 Our Contributions 
+
+We formally introduce TAPAS , a Two-Server Asymmetric Private Aggregation Scheme that addresses these limitations along four key dimensions: 
+
+• No setup or preprocessing: TAPAS operates without trusted setup or client-side preprocessing phases beyond the round’s standard participation, simplifying deployment and removing assumptions 
+
+• Communication independent of vector length: TAPAS’s server-side communication is independent of the per-client vector dimension L, aligning costs with the number of participants n rather than with model size. This is crucial in federated learning, where L can be on the order of millions of parameters while n
+
+is comparatively modest. Asymptotic costs for TAPAS and prior two-server protocols are summarized in Table 1. 
+
+• Post-quantum foundations: TAPAS is the first two-server private aggregation protocol built solely on standard lattice assumptions (LWE, SIS), providing post-quantum security without resorting to composite assumptions or ad hoc primitives. 
+
+• Lattice-based Zero Knowledge Proof System: Standard lattice-based proofs suffer from a soundness slack proportional to the square root of the witness dimension, √L [LNP22]. While decomposing the witness into k chunks of dimension d theoretically tightens this slack to ∝ √d, requiring simultaneous acceptance in across all blocks results in a negligible joint success probability. TAPAS combines the witness decomposition trick and an Independent Restart strategy, where each chunk runs rejection sampling asynchronously until acceptance. This ensures that the success of a block is independent of the success of other blocks, thereby significantly improving performance. This restores linear expected runtime while maintaining a tighter √d- factor slack. We prove security under a relaxed soundness definition : we guarantee that a witness 
+
+sj can be extracted for every block j, but make no guarantee that s1 = s2 = . . . . Fortunately, for our intended application of building a two-server secure aggregation protocol, this relaxed soundness definition can be easily rectified within the overall protocol. 
+
+• Stronger robustness with identifiable abort: TAPAS provides identifiable abort once servers begin exchang-ing messages. If a server acts maliciously, the protocol produces evidence that attributes the fault to that server (rather than “blaming” honest clients), thereby closing a gap in prior systems in which a malicious server could trigger aborts that appear indistinguishable from client misbehavior. The recent work of LZKSA [LL25] proposes a lattice-based ZK proof tailored to secure aggregation; however, we found that the protocol does not provide zero-knowledge or soundness. We defer more information in Section B. 
+
+• Concrete performance gains: Experimental results convincingly demonstrate the significant performance gains that TAPAS achieves, a 93 × speedup over Prio and 17.5 × over Elsa for vector dimensions of L = 2 18 ,maintaining high efficiency for million-parameter models by decoupling secondary server overhead from the vector length. A central design choice that enables these advances is asymmetry between the two servers: one server per-forms lighter computation and lower-bandwidth tasks, while the other undertakes the heavier verification and aggregation work. The lighter Server receives only O(λ) data per client (seeds) rather than O(L) (gra-dients), which for transformer-based models with L ≈ 100 − 120 M cuts bandwidth by orders of magnitude. 2Table 1: Costs are reported for n clients and vector length L, where inputs ∈ [0 , 2t − 1) Computation and communication (vector count) are given in (·) notation, omitting constant factors. Communication cost omits the computational security parameter ( λ) factor that accounts for bit-length in field and group elements. κ
+
+is the statistical security parameter. For Heli, γ denotes the fraction of dropped clients from computation. Server Security has three flavors: semi-honest (SH) server(s), malicious privacy (MP) where honest server can detect deviation, and its strengthened version identifiable abort (IA) where the honest server can identify the misbehaving party.                                                                                                                                                                           
+
+> Communication Cost Computation Cost Server Mal.
+> Server 1 Server 2 Client Server 1 Server 2 Client Security Clients
+> Elsa n+nLt 2n+nLt 2tL +λ+κ+Llog Ln(tL +λ+κ)n(tL +λ+κ)tL +λ+κMP Yes
+> Prio ntLλ +tL log tL ntL +tL log tL tL ntL log tL ntL log tL tL log tL SH Yes
+> Prio+ nLt nLt Lt nLtλ nLtλ LSH Yes
+> Heli n(L+ log t)(L+γn log n)(L+ log tL )ntL +L√n·2tL+γn tL MP Yes
+> TAPAS nL nλ L+λnL nLSH No
+> TAPAS BP n(L+ log( L+κ)) nλ L+ log( L+κ) + λnL +nκ +nλ nλ L+κ+λSH Yes
+> TAPAS BP n(L+ log( L+κ)) nλ L+ log( L+κ) + λnL +nκ +nλ nλ +nL L+κ+λIA Yes
+> TAPAS LWE nκL n·κλ κL nκL nκλ Lκ SH Yes
+> TAPAS LWE nκL nλ κL nκL nκλ Lκ IA Yes
+
+and performs computation independent of L, making commodity hardware (e.g., a laptop or t3.micro ) suffi-cient. In particular, we present two versions, TAPAS BP and TAPAS LWE , whose underlying proof systems rely, respectively, on bulletproofs and on lattice-based assumptions. We further subscript the two versions with SH and MAL to denote whether the protocol provides security against semi-honest servers (with malicious clients) or malicious servers, respectively. We state our main result informally as follows. 
+
+Theorem 1 (Informal Theorem) . Assuming the hardness of the Hint Learning With Errors (LWE) problem, the Short Integer Solution (SIS) problem, the existence of collision-resistant hash functions, and simulation-extractable NIZKs, there exists a two-server secure aggregation protocol in the programmable random oracle model for high-dimensional vectors of size L that achieves the following: 
+
+• Asymmetric Efficiency: The protocol concentrates the heavy O(L) bandwidth and computation costs on a single server, while the secondary server serves as a lightweight facilitator with costs independent 
+
+of the model dimension L (scaling only with the number of clients n). 
+
+• Malicious Security with Identifiable Abort: The protocol preserves the privacy of honest clients’ inputs against a malicious server and arbitrary malicious client collusion. Furthermore, it enforces 
+
+Identifiable Abort : any party that causes the protocol to halt is cryptographically identified. 
+
+## 1.2 Detailed Comparison with Related Work 
+
+Table 1 summarizes the asymptotic complexity of TAPAS against state-of-the-art protocols. The column labeled server security admits three values: MP (Malicious Privacy) indicates whether honest clients’ inputs remain private even if the servers are malicious. SH (semi-honest) denotes privacy against semi-honest servers (but malicious clients), and IA (identifiable abort) means that an honest server can detect malicious behavior and abort, revealing the identity of the misbehaving party. The final column indicates whether the protocol is robust against active client deviations, such as malformed ciphertexts or invalid plaintexts. As can be seen: TAPAS offers the highest level of security among all the other candidates. TAPAS is distinguished by its communication and computational efficiency, making it well-suited for large-scale secure aggregation. Its variants ( TAPAS BP and TAPAS LWE ) offer enhanced security and robustness, with only modest increases in 3cost, and remain competitive with or superior to existing two-server protocols in most settings. We discuss in detail below: 
+
+Comparison with Prio [CGB17] and Prio+ [AGJ +22]: Prio-based systems employ Secret-Shared Non-Interactive Proofs (SNIPs). Clients split their data into additive shares and prove validity properties (e.g., range limits) by evaluating an arithmetic circuit over these shares. Prio+ optimizes this by performing a Boolean conversion to reduce communication. These systems impose a symmetric computational burden. To verify the SNIPs, every server must process the full vector of dimension L. Further, these works only provide privacy or guarantees against a semi-honest server. 
+
+Comparison with Elsa [RSWP23]: Elsa employs an interactive "trust-but-verify" approach in which servers collectively verify client inputs and reject batches that fail consistency checks. Elsa achieves Malicious Privacy (MP), a property in which even if a server is malicious, an honest client’s input remains private. If a consistency check fails, the honest server cannot distinguish between a malicious client sending bad data and a malicious server falsely reporting a check failure. Elsa also does not provide malicious server security for the final output of the computation. 
+
+Comparison with Heli [LCGDW26]: Heli is an aggregation protocol based on the Discrete Logarithm Assumption (DL). At its core, Heli builds atop the key-homomorphic PRF-based private stream aggrega-tion [SCR +11]. Heli faces two critical limitations due to its DLP foundation. First, recovering the aggregate requires solving the discrete log problem, which necessitates using small integers to ensure tractability. Sec-ond, validity proofs rely on bit-decomposition, expanding the vector size from L to L · t (where t is the bit-width). It should also be noted that a client in Heli communicates only with the heavy load server. These are the improvements that TAPAS offers over Heli: 1. Better Security: TAPAS achieves Identifiable Abort (IA) . This is a significant improvement over prior work. By enforcing a signed binding phase before aggregation, TAPAS ensures that any protocol deviation is cryptographically attributable. If the protocol halts, the honest parties output the cheater’s specific identity, thereby preventing anonymous stalling attacks. 2. Asymmetry: Unlike symmetric workload protocols such as [CGB17, AGJ +22, RSWP23], the asym-metric Heli optimizes for client count n (handling dropouts), TAPAS optimizes for model dimension L.Given that modern FL models are massive ( L ≫ n), our L-independent facilitator significantly reduces the system-wide cost in deep learning contexts. 3. Input Independence: TAPAS supports arbitrary integer inputs without decryption overhead, as lattice decryption is a linear operation rather than an exponential search. Meanwhile, Heli restricts the input domain for efficient recovery of the aggregate. 4. Proof Efficiency: While both Heli and a variant of TAPAS rely on using bulletproofs [BBB +18] as a core building block for zero-knowledge proofs, TAPAS ’s careful optimization ensures that the length of the proof vector does not incur a multiplicative t factor where t is the bit length of the inputs. By integrating Bulletproofs over lattice commitments, our proof sizes scale with O(L) rather than the bit-expanded O(tL ) required by Heli. Furthermore, we present a fully lattice-based proof system that avoids expensive group exponentiation and relies solely on field arithmetic. 
+
+## 1.3 Technical Overview 
+
+In this section, we outline our approach towards building TAPAS . As is typical in a two-server setting, a client communicates directly with both servers. However, in a departure from prior work, we will avoid the standard approaches of sharing the inputs between the two servers but instead rely on a careful combination of encryption and homomorphism. The protocol’s sequence diagram is described in Figure 1, proceeding in 4 phases: 
+
+• Phase 1 (Upload): Clients distribute encrypted inputs to Server 1 ( S1) and a much shorter secret component (seed) to Server 2 ( S2). 
+
+• Phase 2 (Consistency Check): S1 validates the received commitments against hash digests provided by S2 to detect malformed inputs. 4Figure 1: Sequence Diagram of TAPAS showing client communication with the two servers and additional rounds of communication between the two servers. By updates, we are indicating the model updates that is to be sent to the server and are the inputs to our secure aggregation protocol. The unmasked result is communicated with all the users, in the semi-honest version. The version that is secure against malicious servers also allow the participants to verify the aggregate using commitments. 
+
+• Phase 3 (Unmasking): Upon identifying the active client set, S2 provides the necessary aggregated secret components to S1, which then computes the final plaintext result. 
+
+• Phase 4 (Output): The unmasked aggregate is finalized in the semi-honest version. The version that is secure against malicious servers also allow the participants to verify the aggregate using commitments. 
+
+Masking the Inputs. The core technique will employ the Regev’s encryption scheme based on the LWE 
+
+Assumption, where the plaintext modulus is Zp and the ciphertext modulus is Zq , with ∆ as the encoding parameter where ∆ = ⌊q/p ⌋. Each client Ci holds a private input vector xi ∈ ZLp . Ci samples a secret seed si ∈ Zλq and a noise vector ei from a discrete Gaussian distribution χ. The client computes the LWE 5ciphertext yi:
+
+yi = As i + ei + ∆ · xi ∈ ZLq (1) Client Ci transmits yi to the Server S1. For efficient computation, note that A can be set to be the public parameter which can be generated by hashing various common parameters of the scheme. In the Federated Learning setting, this can be the global model weights. By binding A to these global model weights, we can prevents attacks such as those listed by Pasquini et al. [PFA22]. 
+
+Additive Homomorphism. Now, observe that Regev encryption is homomorphic in the following sense: 
+
+> n
+
+X
+
+> i=1
+
+yi =
+
+> n
+
+X
+
+> i=1
+
+(As i + ei + ∆ · xi) = A ·
+
+> n
+
+X
+
+> i=1
+
+si +
+
+> n
+
+X
+
+> i=1
+
+ei + ∆ ·
+
+> n
+
+X
+
+> i=1
+
+xi
+
+Note that the server needs to recover Pni=1 xi. For which it needs only Pni=1 si. We will sample ei in such a way that even with Pni=1 ei, the decryption can still succeed even if the server does not receive Pni=1 ei.Here n is the number of clients. 
+
+Role of the Second Server. The additive homomorphism guarantees that unmasking at server S1 requires only the aggregate mask Pni=1 si, not the individual masks si. Indeed, the knowledge of the individual si
+
+by the first server will enable it to recover individual inputs, violating the privacy of the inputs. Therefore, one needs to ensure that the first server only learns the sum of si. This is the role undertaken by the second server S2. Each client sends si to the second server, which simply adds up the received values and forwards them to the server. While this seems straightforward, one needs to include additional communication to ensure that both servers agree on a single online set of clients with respect to which both inputs and the seeds are summed. This is for the semi-honest server setting. 
+
+Incorporating zero-knowledge proofs. Consistent with prior work, TAPAS allows the client to generate a Zero-Knowledge Proof (ZKP) attesting to two main properties: (1) the client has executed the masking behavior correctly, and (2) the input vector xi adheres to the infinity norm bound ∥xi∥∞ ≤ t for a public value t (or the L2 norm of the witness xi). The checks on norm bounds were considered to be sufficient to mitigate poisoning attacks [NHC22,SHKR22]. To enforce these checks, TAPAS utilizes a “commit-and-prove” strategy. We offer two distinct instantiations of this protocol - one based on bulletproofs over groups of prime order where DDH is hard and the other relying on lattice-based hardness assumptions. Each variant offer a tradeoff and users can choose variants based on specific performance or security needs. We now look at the variants in greater detail. We begin by looking at the group-based approach which is a warm up to our lattice-based zero knowledge proof system. The lattice-based proof systems come with inherent challenges that we tackle in novel ways, as described later in this section. Our focus over the next two subsections (Section 1.3.1,1.3.2) are to create proof systems that protect against malicious client behavior and against a malicious server S2. We describe how we achieve privacy against malicious server S1 in Section 1.3.3 
+
+1.3.1 Group-Based Zero Knowledge Proof Instantiation. 
+
+This approach utilizes Bulletproofs and performs proofs over a group G of prime order q′. It guarantees the exact satisfaction of the bound ∥xi∥∞ ≤ t (i.e., there is zero slack in the proof). It is highly efficient in communication, using Pedersen commitments, a single group element can commit to an entire vector. It requires computationally expensive group exponentiations. Additionally, it necessitates a group order 
+
+q′ ≫ q, meaning the proofs cannot occur directly over the smaller LWE modulus q. We employ a suite of zero-knowledge building blocks to verify the correctness of LWE-based encryptions. The core of our system relies on Pedersen Commitments [Ped92] and Bulletproofs [BBB +18] to handle linear and quadratic relations over committed vectors in O(log L) communication. We adapt the techniques pointed out in the prior works of ACORN [BGL +23] and Armadillo [MGKP25]. The proof proceeds in three parts: 
+
+• Exact Norm Proofs: To ensure security and correctness, we must prove that witnesses w satisfy 
+
+∥w∥2 ≤ B or ∥w∥∞ ≤ B where B is an integer constant, specific to the underlying use case. Following [GHL22], we use Lagrange’s Four-Square Theorem to reduce these to algebraic relations. For example, 6∥w∥2 ≤ B is proven by showing B2 − ∥ w∥2 = P4 
+
+> j=1
+
+α2 
+
+> j
+
+for auxiliary integers αj . However, since these relations are checked modulo q, the prover must also demonstrate that no modular wrap-around has occurred. This necessitates proving that all witness components are "sufficiently small" relative to q.
+
+• Approximate Proof of Smallness: Because exact range proofs for every component are expensive, we use an approximate proof as a bridge. This system shows ∥w∥∞ < B ′ for some gap B′ ≫ B to ensure the algebraic norms remain valid over the integers. The prover masks the witness with a high-entropy vector y (sampled according to a statistical security parameter κ) and uses rejection sampling. The verifier checks a random projection: 
+
+⟨R⊤r, w⟩ + ⟨r, y⟩ = ⟨z, r⟩
+
+where R ∈ Zκ×L. This ensures that the exact norm proofs are sound without requiring the overhead of bit-decomposition for every vector entry and r is a random challenge vector. 
+
+• Finally, we verify the LWE relation y = As + e + ∆ x (mod q) by collapsing the L equations into a single inner product ⟨y, r⟩ using a random challenge vector r. This reduced statement is then proven using a linear proof Πlinear over the combined witness (s∥e∥x).While the Zero-Knowledge Proof (ZKP) convinces S1 that the client’s ciphertext yi is well-formed with respect to a commitment ci, we must introduce two additional mechanisms to prevent attacks on the secret keys and the aggregation process. 
+
+• Input Consistency (Preventing Client Equivocation). To ensure a malicious client does not provide a secret si to S2 that differs from the one committed to S1 during the ZKP phase, we leverage the binding property of the Pedersen commitment. 1. The client sends the explicit opening (si, r i) to S2.2. S2 recomputes the commitment c′ 
+
+> i
+
+= Com (si; ri) and sends a cryptographic digest hi = H(c′
+
+> i
+
+) to 
+
+S1.3. S1, who already holds the original commitment ci from the ZKP, computes h′ 
+
+> i
+
+= H(ci) and verifies that hi = h′
+
+> i
+
+. Under the collision resistance of the hash function, we are guaranteed that consistency is maintained. This ensures that S1 and S2 hold consistent views of the client’s secret. S1 trusts the value via the ZKP verification, while S2 gains assurance via the digest comparison with S1.
+
+• Verifiable Aggregation (Preventing malicious S2). Server S2 is tasked with computing the aggregate secret sΣ = P 
+
+> i∈U
+
+si for the valid set of clients U. To prevent a malicious S2 from injecting errors into this sum, we utilize the homomorphic property of Pedersen commitments. 1. In addition to sΣ, S2 computes and sends the sum of the randomness rΣ = P 
+
+> i∈U
+
+ri.2. S1 computes the commitment to the received aggregate: cΣ = Com (sΣ; rΣ).3. S1 verifies that this matches the product of the individual client commitments it stored previously: 
+
+cΣ?
+
+= Y
+
+> i∈U
+
+ci
+
+Since the individual commitments ci were verified against the ZKP and cross-checked for consistency in the previous step, S1 is assured that sΣ is the correct sum of the valid secrets. Even if S2 colludes with a client, they cannot generate a valid opening (sΣ, r Σ) that satisfies the homomorphic relation without breaking the binding property of the commitment scheme. We will defer a discussion on security against malicious server S1 to later in this exposition. 71.3.2 Lattice-Based Zero Knowledge Proof Instantiation. 
+
+This approach is designed to align more closely with the system’s underlying cryptographic assumptions. We first formally show that the LWE masking is inherently a commitment to vector xi using randomness si, ei.We then carefully build a lattice-based zero-knowledge proof specifically tailored to our intended protocol. This includes careful optimizations. All proofs are performed directly over the LWE modulus q, avoiding the need for a separate, larger group field. The proof guarantees are looser, proving only that ∥xi∥∞ ≤ γ · t,where γ > 1 represents a soundness slack, which is sufficient for most applications. A central challenge in LWE-based aggregation is proving that the noise vector e ∈ ZL is small without revealing it. Standard lattice Σ-protocols operate monolithically: the prover masks the entire vector and performs rejection sampling on the full response z. This creates a harsh trade-off: to ensure the rejection probability is non-negligible for high dimensions (for instance L ≈ 10 5), the masking noise σ must be set extremely large. This introduces a polynomial "slack" ( √L), yielding a bound that is far looser than the actual witness, thereby degrading model accuracy. TAPAS adopts a block-wise rejection sampling paradigm that decouples the protocol’s convergence from the vector dimension L.
+
+• Decomposition & Independent Restarts: We partition the witness into small blocks of size 
+
+d ≪ L. Crucially, we treat the rejection condition for each block independently. If a specific block fails the rejection check (i.e., falls into the tail of the distribution), the prover restarts the protocol 
+
+only for that block , leaving successful blocks untouched. This transforms the convergence time from exponential in L to linear in L, allowing us to target significantly tighter distributions. It is to be noted that this decomposition and independent parallel execution of Σ could allow a malicious client to use a different sj , per block. However, for our intended application to building a two-server secure aggregation protocol, we have built in additional checks to remedy this attack. 
+
+• Bimodal Gaussian Targeting: Leveraging the independent restart policy, we employ Bimodal Rejec-tion Sampling [DDLL13]. By targeting a distribution that matches the shape of the witness-plus-noise, we reduce the required standard deviation σ.
+
+• Fixing LZKSA: We note that the recent LZKSA protocol [LL25] attempts a similar efficiency gain but fails to achieve soundness. LZKSA permits norm checks to wrap around modulo q, allowing adversaries to hide unbounded inputs. TAPAS enforces strict integer-based checks over the decomposed blocks, providing the first sound realization of this high-efficiency proof strategy. We discuss more in Section B As before, we need a crucial line of defense against malicious clients sending inconsistent si to server S2. We observe that the Σ-protocol response can be viewed as a commitment to the secret s. In particular, if server 
+
+S2 is given both s and rs, then it can compute the response zs = rs + cs. zs can now be hashed to produce a digest, which in turn, can be used by S1 to validate against the choice of zs it has received. Unfortunately, the Σ-protocol actually proceeds in k blocks where k = L/λ or kλ = L. In order for S2 to compute each response zj,s for j = 1 , . . . , k , it will require rj,s for h = 1 , . . . , k . In other words, S2 would require k · λ = L
+
+elements in total, a situation that we want to avoid. Instead, we adopt a randomization strategy: we use a randomized linear combination to compress the proof witnesses. The client aggregates randomness vectors across k blocks using verifiably random binary coefficients αj derived from the proof transcript. Specifically, the client computes r∗ 
+
+> s
+
+= Pkj=1 αj · rs and provides S2 with r∗ 
+
+> s
+
+and αj values (which in turn can be generated from a single seed). S2 can now compute z∗ 
+
+> s2
+
+= r∗ 
+
+> s
+
++ si · Pkj=1 αj cj . Note that using zj,s , server S1 can compute a z∗ 
+
+> s1
+
+= Pkj=1 αj · zs. A hash digest, as before, can be used to establish correctness. Thus, we only send one vector r∗ 
+
+> s
+
+, of length λ, towards verification. 
+
+Using Ajtai Commitments. Unfortunately, using the response of a Σ protocol as a commitment to s fails when 
+
+S1 needs to verify if S2 has behaved correctly. To resolve this, we leverage the homomorphic properties of the Short Integer Solution (SIS) problem [Ajt96]. We introduce a deterministic commitment (or homomorphic hash) t := Bs , which is binding under the SIS assumption but generally not hiding. This necessitates augmenting the client’s Σ-protocol, which originally proved knowledge of the LWE secret s, to also prove the correct computation of t with respect to s. Verification then proceeds in two steps. First, for consistency ,8S2 recomputes the expected tag t∗ := Bs using the secret s received from the client. S2 sends a hash digest of t∗ to S1, who compares it against the digest of the received t. This ensures that any client participating in the aggregation has provided consistent inputs to both servers. Second, for aggregation , S1 verifies the additive homomorphism by checking if P 
+
+> i
+
+t(i) = Bs Σ, where sΣ is the aggregate sum returned by S2. This binding mechanism prevents a malicious S2 from forging an invalid sum; any deviation would break the SIS hardness. While this, as presented, is sufficient for security against malicious server 2, unfortunately for security against malicious server 1 we will need a stronger property of the commitment scheme - that of equivocation, which we will address next. 
+
+1.3.3 Security Against Malicious Server S1.
+
+Proving privacy against a malicious server typically requires the simulator to manipulate the aggregate sum. This is a feature commonly observed in single-server protocols [BBG +20, MWA +23, KP25, BCGL +25] where this is achieved by adding a secondary mask produced by a function H, modeled as a programmable random oracle. The simulator waits until the adversary chooses the corrupt set, then programs H(x) to inject a specific correction term into the sum. The core philosophy behind this approach is to ensure that the communication is independent of the vector length as |x| ≪ L where L is the length of the vector being masked. This same approach can be undertaken for our asymmetric two-server case for malicious S1. For our protocol, the new masking function is y = As + e + ∆ x + H′(seed ) for some seed that is expanded by H′.The client sends seed to S2. Once the online set is fixed, S2 sends individual seeds to S1. S1 now applies H′
+
+on each seed seed to remove from the sum of the ciphertexts. If S1 is malicious, the simulator waits until the online set is fixed to query the functionality and then correct, with the help of random oracle programming, to ensure that the sum of ciphertexts decrypts to the actual result expected by the adversary controlling 
+
+S1. However, this approach of using a second mask appears to collapse when clients are required to prove correctness of their inputs where the witness now includes seed and the proof π is to show that y is correctly formed which involves proof of correct computation of H′(seed ). Implicitly, it appears to ask for a proof π
+
+to show that there is a witness x such that π = H(x). Leaving aside the fact that zero-knowledge proofs to prove correct computation of hash function [GMO16] are expensive, in our case after S1 has verified π, it receives both the input x and the newly programmed value y′ with the expectation that π verifies even given witness x and y′. Typically, π contains a binding commitment to y which might fail with y′. Prior works on single-server secure aggregation with input validation [BGL +23,MGKP25] have constructions only based on security against semi-honest server. In this work, we circumvent this barrier by introducing an equivocable commitment scheme, restoring the simulator’s ability to program the oracle consistently. Further, we also avoid the expensive proof of correct computation of the hash function, by using the asymmetry. Instead of proving the computation of the hash function inside the ZK proof (which is both expensive and restrictive), we decouple the value from its derivation . We now look at the way in which we achieve privacy against malicious servers in both our variants: 
+
+• Group-Based Construction: In our group based version (See Figure 5), the client commits to the output and not the preimage. In other words, the client commits directly to the mask value w using a Pedersen commitment Cw = PCommit (w; rw). The ZK proof π only attests that the ciphertext y
+
+is well-formed relative to the value inside Cw (i.e., y = · · · + w). Crucially, π implies nothing about how w was generated. S2 is provided both seed and w which it can use to generate C∗ 
+
+> w
+
+on its own. Again, a digest allows S2 to convince S1 that the commitment Cw is valid against S2’s own inputs. Once the online set is fixed, malicious server S1 now expects seed along with Rw = P r(i) 
+
+> w
+
+. Fortunately, the Pedersen commitment is equivocal - specifically the simulator chooses the generators such that it knows the discrete logarithm of all the bases. If H(seed (i) was programmed to be w(i)∗, for some client 
+
+i, the simulator (which controls S2) can compute the correct r(i)
+
+> w
+> ∗
+
+such that PCommit (w(i); r(i) 
+
+> w
+
+) = 
+
+PCommit (w(i)∗; r(i)
+
+> w
+> ∗
+
+). This allows for the simulator to successfully equivocate on the commitment. 9• Lattice-Based Construction: Recall that the basic Ajtai commitment, defined as t := Bs where B
+
+is a public matrix s is the message, and t is the commitment, is not equivocal. To achieve malicious security in the lattice setting, we face the same challenge: ensuring inputs are correctly formed (i.e., 
+
+w = H′(seed )) without binding the simulator to the hash output before the adversary is defined. Standard approaches that prove the hash computation in Zero-Knowledge are incompatible with the Programmable Random Oracle Model (PROM) used for simulation. We resolve this by employing an equivocal SIS-based commitment scheme that decouples the validity of the mask from its generation. Instead of using a standard binding matrix B, we construct a wide, underdetermined commitment matrix B = [ Bw|Bρ].1. Trapdoor Setup: The simulator generates Bρ with an associated lattice trapdoor Tρ (using algorithms like [GPV08]). This trapdoor allows finding short preimages for any syndrome. 2. Equivocal Opening: In the real protocol, clients simply commit to their mask w as tw =
+
+Bww + Bρρρρ. The ZK proof π only attests that the ciphertext y is consistent with the committed 
+
+w, without proving anything about H′(ρ).As before, S2 compares digests with S1 to ensure that the seed eceived by S2 satisfies the commitment tw
+
+received by S2. Crucially, this structure enables the simulator to "break" binding. It generates a dummy commitment tw at the start. Later, when it programs the oracle H′(seed ) → wtarget to fix the aggregate sum, it uses the trapdoor Tρ to sample a short randomness ρρρ′ such that Bρρρρ′ = tw − Bswtarget . This valid opening makes the transcript indistinguishable from an honest execution where the mask was genuinely derived from the seed, satisfying the simulation requirements. 
+
+# 2 Preliminaries 
+
+We consider a federated learning framework. There exist n clients, with each client C(i) owning a dataset 
+
+D(i). The server holds the ML model Θ. In FL, the server first sends Θ to the clients, and each client trains on its local dataset D(i) to generate the updated weights m(i). Meanwhile, the server computes the average of these model updates m(i) to update its global model to Θ′. In the next iteration, Θ′ is sent back for the next update. The goal is to enable the server to compute the average and, thereby, the new model Θ′, while keeping the model weights confidential. To this end, we employ an intermediary party, the second server. 
+
+Communication and Threat Model. TAPAS operates within the traditional two-server setting with n clients [RSWP23, CGB17, AGJ +22], where the threat model assumes that the two servers cannot collude. We designate these as servers S1 and S2. In contrast to prior two-server protocols, our second server S2 performs a lighter computational load than server S1, introducing an asymmetry in the server roles. Additionally, unlike tradi-tional two-server protocols where both servers receive client inputs proportional to the input length, TAPAS 
+
+reduces the communication received by S2 to be independent of the input length. 
+
+Modeling Security. Like prior works, we identify two kinds of behavior. A semi-honest party is one that adheres to the protocol description but remains curious and attempts to compromise the inputs of the honest parties. A malicious/corrupted party is one that is allowed to arbitrarily deviate from the protocol description. TAPAS is designed to offer the following feature: honest clients’ inputs remain private as long as at least one server is honest and does not collude with the other server. Furthermore, once the servers begin interacting, we guarantee an identifiable abort, i.e., malicious clients (or the server) are detected. 
+
+Notations. For a distribution X, we use x $
+
+←− X to denote that x is a random sample drawn from the distribution X. We denote by u a vector and by A a matrix. For a set S we use x $
+
+←− S to denote that x is chosen uniformly at random from the set S. By [n] for some integer n, we denote the set {1, . . . , n }.Due to space constraints, we defer a refresh of some relevant cryptographic preliminaries to the appendix. They can be found in Section A 10 2.1 Lattice-based Masking 
+
+Our masking scheme is based on the original LWE-based encryption Scheme [Reg05,Reg09], albeit extended to the setting where the plaintext space is over Zp for some integer p < q with q being the ciphertext modulus. In more detail, the scheme is parameterized by a security parameter λ, a plaintext modulus p,and a ciphertext modulus q, and number of LWE samples L. Given a secret key s $
+
+←− Zλq , the encryption of a vector x ∈ ZLp is 
+
+(A, c) := ( A, As + e + ∆ · x),
+
+where A $
+
+←− ZL×λq is a random matrix ( m > λ ), e $
+
+←− χL is an error vector and χ is a discrete Gaussian distribution, and ∆ := ⌊q/p ⌋. Decryption is computed as (c − As ) mod q and rounding each entry to the nearest multiples of ∆, and then divide the rounding result by ∆. The decrypted result is correct if entries in e are less than ∆/2.
+
+## 2.2 Commitment Schemes and Zero-Knowledge Proofs 
+
+In this section, we review the necessary cryptographic building blocks, with particular emphasis on zero-knowledge proof systems and commitment schemes. 
+
+2.2.1 Group Based Constructions 
+
+Pedersen Commitment. We first review the scalar Pedersen Commitment [Ped92]. Let G be a group of prime order q where the Discrete Logarithm problem is hard. Let g, h $
+
+←− G. The commitment scheme 
+
+PCommit (( g, h ), x ; r) = gx · hr is conditionally binding (under the discrete logarithm assumption) and per-fectly hiding. We extend this to the vector setting. For a randomly chosen generator vector G = ( g1, . . . , g L) ∈ GL and a base h ∈ G, the commitment to a vector x = ( x(1) , . . . , x (L)) ∈ ZLq with randomness r ∈ Zq is defined as: 
+
+PCommit (( G, h ), x; r) = hr ·
+
+> L
+
+Y
+
+> i=1
+
+gixi .
+
+Going forward, we suppress the public parameters and denote this commitment as PCommit G(x; r), or simply 
+
+PCommit (x).
+
+Inner-product Zero-Knowledge Proof. An inner product proof allows a prover to convince a verifier that 
+
+⟨a, b⟩ = c for committed vectors a, b and a public scalar c. Bulletproofs [BBB +18] provide a non-interactive protocol for this relation using the Fiat-Shamir transform, achieving O(log L) proof size and O(L) prover/ver-ifier cost for vector length L. We denote by πip the inner product proof where both a and b are witnesses and by πlinear we denote the version where only one of the vectors (say b) is a witness. 
+
+Group-Based Proof of Correct LWE Encryption. Due to space constraints, we defer a review of the techniques to the appendix in Section A.3. We obtain the following Lemma: 
+
+Lemma 1 (Cost of Norm proofs) .
+
+• An L2 norm bound requires one quadratic proof of length (m + 4) and one approximate proof of length 
+
+(m + 4) (instantiated via a linear proof of length m + 4 + κ). 
+
+• An L∞ norm bound requires one quadratic proof of length (5 m) and one linear proof of length (5 m).
+
+• With one-bit leakage [GHL22], lengths reduce to (ℓ + 3) for L2 and (4 ℓ) for L∞.
+
+11 Combining these components, we construct the proof system CS enc :
+
+CS enc : {zk .io : ( PCommit (s), PCommit (x), PCommit (e)) ,
+
+zk .stmt : y = As + e + ∆ x, ∥x∥2 < B x(L2),
+
+∥x∥∞ < B x(L∞), ∥e∥∞ < B e(L∞),
+
+zk .wit : ( s, x, e)}.
+
+(2) 
+
+2.2.2 Lattice-Based Commitments and Zero-knowledge Proofs 
+
+Lattice-based Commitment. We first formalize the LWE-based encryption from Section 2.1 as a homomorphic commitment scheme. 
+
+Definition 1 (Commitment Scheme) . Let q, p ∈ Z with p < q , and L, λ ∈ N be positive integers. Let 
+
+A ∈ ZL×λq be a public matrix sampled uniformly at random. Let ∆ = ⌊q/p ⌋ be the public scaling factor. The message space is X = ZLp . To commit to a message x ∈ X :1. Sample secret s ←$ Ds and error e ←$ De from distributions over short vectors, bounded by ∥s∥∞ ≤ Bs
+
+and ∥e∥∞ ≤ Be.2. Compute the commitment: 
+
+c = As + e + ∆ · x (mod q).
+
+The output is the commitment c ∈ ZLq . The opening is the tuple (x, s, e).We now have the following lemma (whose proof can be found in Section C), which states that the scheme satisfies the standard properties of computational hiding and computational binding .
+
+Lemma 2 (Hiding and Binding) . The commitment scheme is computationally hiding under the Decision-LWE assumption and computationally binding under the Short Integer Solution (SIS) assumption. Bimodal Rejection Sampling. To optimize the efficiency of our Zero-Knowledge proofs, we employ Bimodal Rejection Sampling [DDLL13]. This technique symmetrizes the rejection condition, allowing the standard deviation σ of the masking noise to be set proportional to the witness norm, rather than exponentially larger. 
+
+Lemma 3 (Bimodal Rejection Sampling) . Let V ⊆ Zd be a set of vectors such that for all v ∈ V , ∥v∥2 ≤ T .Let σ ≥ ξT be a standard deviation parameter for some constant ξ (typically ξ ≈ 11 ). Consider the following algorithm for a prover who holds a shift vector v ∈ V :1. Sample z ←$ Ddσ .2. Compute acceptance probability p(z) = 1 
+
+> Mexp( −∥
+
+v∥2/(2 σ2)) cosh 
+
+ ⟨z,v⟩
+
+> σ2
+
+
+
+, where M = exp 
+
+ T 2
+
+> 2σ2
+
+
+
+.3. Output z with probability p(z), otherwise restart. Then, the distribution of the output z is statistically close to the centered Gaussian distribution Ddσ , inde-pendent of the shift v. The expected number of trials is M .Block-wise Zero-Knowledge Protocol. We construct a Zero-Knowledge Argument of Knowledge (ZKAoK) for the relation underlying the commitment. To improve bandwidth efficiency and soundness, we decompose the large message x into k blocks. 
+
+Definition 2 (Relation RBlock ). The prover proves knowledge of witness components {(sj , ej , xj )}kj=1 such that for all blocks j ∈ [k]:1. Validity: y j ≡ Aj sj + ej + ∆ xj (mod q).12 Protocol ΠEnc : Block-wise ZK Argument                                                                                                        
+
+> Public Input: A ∈ZL×λq,y∈ZLq, decomposed into kblocks {Aj,yj}kj=1 .
+> Prover Witness: Block components {sj,ej,xj}kj=1 .
+> Execution (Parallel for j= 1 . . . k ):
+> The Prover performs the following loop for each block independently. (1) Sampling Phase: Sample masking vectors rj,s ,rj,e ,rj,x from discrete Gaussians Dσs, D σe, D σx.(2) Commitment: Compute tj=Ajrj,s +rj,e + ∆ rj,x (mod q).(3) Challenge Derivation (Fiat-Shamir): Derive block challenge cj=H(A,y,tj, j )∈ {− C, . . . , C }.(4) Response Computation: Compute masked witnesses (where w∈ { s,e,x}):
+> zj,w =rj,w +cjwj
+> (5) Rejection Sampling: Compute acceptance probability p(zj, •)according to Lemma 3. With proba-bility p(zj, •),Output πj= ( cj,zj,s ,zj,e ,zj,x ). Otherwise, restart Step 1 for this block.
+> Verification Phase:
+> For each block j, the verifier checks: 1. ∥zj,s ∥2≤βs,∥zj,e ∥2≤βe,∥zj,x ∥2≤βx.2. Reconstruct commitment: ¯tj=Ajzj,s +zj,e + ∆ zj,x −cjyj(mod q).3. Verify challenge: cj
+> ?
+> =H(A,y,¯tj, j ).
+
+Figure 2: Lattice-based Zero-Knowledge Argument of Knowledge for Relation RBlock . Here C is the maximum value of the challenge set. We sample challenges between {− C, . . . , C }.2. Norms: ∥sj ∥2 ≤ βs, ∥ej ∥2 ≤ βe, ∥xj ∥2 ≤ βx.
+
+Note: While the honest prover uses a consistent secret sj = s across all blocks, this relation allows distinct 
+
+sj . Global consistency is enforced by the separate 2-Server Consistency Check (see Protocol TAPAS LWE ). 
+
+Remark 1 (Trade-off: Communication vs. Modulus Size) . Standard lattice proofs incur a soundness slack proportional to the square root of the witness dimension. For a model of size L ≈ 10 6, a monolithic proof would require a large modulus q to accommodate this slack, inflating the size of every ciphertext element. By decomposing the proof into k blocks of size d = L/k , we reduce the slack to ∝ √d, allowing for a significantly smaller q. The cost of this approach is the redundant transmission of the secret response zj,s for each block (an overhead of k · λ elements). However, since the model dimension L is orders of magnitude larger than the secret dimension λ (L ≫ λ), the bandwidth savings from reducing the modulus q on the massive vector 
+
+y far outweigh the cost of the extra secret responses. The protocol ΠEnc is detailed in Figure 2, a standard Σ-protocol, adapted to the setting of lattices. As before, let λ be the LWE secret dimension and let d = L/k be the block size. Let C be the L∞ bound of the challenge cj (e.g., cj ∈ {− 1, 0, 1} implies C = 1 ). Let ξ ≈ 1 be the bimodal tuning constant. Further parameters are defined in Table 2. Here, τ is the tail cut factor (typically 1.1) used to determine the acceptance bound β, ensuring that honest responses sampled from the Gaussian distribution are accepted with overwhelming probability. Table 2: Parameters for the Zero-knowledge Argument of Knowledge 
+
+Component Base (L∞) Shift Norm (T ) Sigma (σ = ξT ) Verification (β)Secret s Bs C√nB s ξC √λB s τ √λσ s
+
+Error e Be C√dB e ξC √dB e τ √dσ e
+
+Message x Bx C√dB x ξC √dB x τ √dσ x
+
+13 Theorem 2 (Security of ΠEnc ). The protocol ΠEnc is a complete, Special Honest-Verifier Zero-Knowledge (SHVZK) Argument of Knowledge for the relation RBlock .
+
+The proof is deferred to Section C. 
+
+## 2.3 Simulation-Based Proof of Security 
+
+Our proof follows the standard simulation-based paradigm [Gol04, Lin17]. The objective is to show that any real-world adversary attacking our protocol can be simulated by an adversary S in an ideal world , where a 
+
+trusted party T securely computes a function F on the clients’ behalf. In our setting, this function simply aggregates (sums) the clients’ input vectors. We consider an adversary A that can corrupt up to η · n clients and at most one server. The ideal-world execution proceeds as follows, specialized to the case where only the server receives the final output: (a) Each honest client submits its input to the trusted party T .(b) The simulator S determines which corrupted clients provide valid inputs and which ones abort. (c) If a server is corrupted, S may decide either to abort the execution or to allow it to proceed. (d) If no abort occurs, T computes the function F (X) and sends the result to the server. (e) If the server is honest, it outputs whatever value it receives from T .We formally define the functionality in Figure 3. We allow for the following adversarial behavior: 
+
+• Clients can be malicious, i.e., deviate from protocol descriptions arbitrarily. 
+
+• We require exactly one server to be honest, and the other server to be adversarially controlled. Looking ahead, we model this adversarial control to be either semi-honest or malicious and still offer privacy. Observe that a malicious server can “forge” or provide inputs on behalf of the honest clients. To avoid this trivial attack, we assume that clients’ messages are signed. We assume that there exists a Public Key Infrastructure (PKI) that allows servers to verify and validate signatures. Later, we additionally leverage these signatures to achieve security with identifiable abort. 
+
+# 3 Designing TAPAS 
+
+We will now describe how we build TAPAS .
+
+## 3.1 Building TAPAS BP 
+
+We now focus on constructing TAPAS BP , which instantiates the proof system using Bulletproofs (BP). We first build the protocol secure against a semi-honest server and then show how to extend it for a malicious server. 
+
+3.1.1 Semi-Honest Servers and Malicious Clients. 
+
+In this section, we outline the protocol for semi-honest servers, while allowing for malicious clients. Figure 4 describes the protocol TAPAS BP SH for secure aggregation with semi-honest servers. Each client masks its input 
+
+x(i) using LWE encryption, computes commitments to its secrets, and generates a NIZK proof of correct encryption and bounded input. The client sends the ciphertext, proof, and commitments to Server 1, and the blinding vector with its opening to Server 2. 
+
+> 1Prior works [RSWP23, LCGDW26] have also treated honest clients who drop out or fail to participate as corrupt. While this approach is typical in secure computation literature, Fitzi et al. [FHM98] propose a mixed model where an adversary can induce communication failures among honest clients without those clients being flagged as corrupt.
+
+14 Functionality FSecAgg 
+
+The functionality is parameterized by the maximum allowed dropout fraction δ ∈ [0 , 1) and corruption fraction η ∈ [0 , 1) (subject to δ + η < 1/3) and the iteration identifier ℓ. It interacts with clients i ∈ [n]
+
+and a simulator S.
+
+Corruption Setup: 
+
+Upon receiving a message (Corrupt, ℓ, Ccorr , {x(i)}i∈C corr ) from S: Check if the size of the corrupted set 
+
+|C corr | ≤ ηn . If true, record C as the set of corrupted clients and record their respective adversarial inputs {x(i)}i∈C corr into the input set X.
+
+Honest Input Collection: 
+
+Upon receiving a message (Input, ℓ, x(i)) from an honest client i ∈ [n] \ C corr , record x(i) in the set of client inputs X.
+
+Dropout Specification: 
+
+Upon receiving a message (Drop, ℓ, D) from the S (where D ⊆ [n]), record the set of dropped-out clients D. Here, we mark every client dropped out from the computation as “corrupt”. 1
+
+Aggregation & Output: 
+
+Upon receiving a message (Aggregate, ℓ) from the servers, define: C := {i|i ∈ [n] ∧ i̸ ∈ D ∧ Valid (x(i))}
+
+where Valid is a boolean function that determines whether the input x(i) satisfies predetermined, publicly known constraints (such as bounded L∞ and L2 norms) and evaluate the aggregate based on the recorded inputs X as: 
+
+FD,δ  
+
+> SecAgg
+
+=
+
+X
+
+> i∈C
+
+x(i), if |C| ≥ (1 − δ − η)n, 
+
+⊥, otherwise. (3) Output (Result, ℓ, FD,δ 
+
+> SecAgg
+
+) to the evaluating servers. 
+
+Figure 3: The ideal functionality for Secure Aggregation handling dropouts and validity constraints. To ensure consistency, Server 2 hashes its commitment and sends the digest to Server 1, which verifies both the hash and the proof. Only clients passing both checks are included in the valid set V. Server 2 aggregates the secrets from V and sends the sum to Server 1, which computes the final aggregate. The protocol requires that enough clients are valid to ensure robustness. In the semi-honest version, the final communication of the sum from Server 1 to Server 2 is omitted from the protocol description. Observe that the server 1 receives s from Server 2 which can be viewed as a leakage on each individual LWE sample. Therefore, the earlier argument that As +ei is pseudorandom and can mask the input value is insufficient. This has been observed in prior works [BGL +23,KP25,BCGL +25]. Intuitively, the Hint-LWE (See Definition 5) assumption states that y0 appears pseudorandom to an adversary, even when given randomized leakage on the secret and error vectors. Kim et al. [KLSS23] demonstrate that solving Hint-LWE is no easier than solving the LWE problem. We formally have the following theorem statement: 
+
+Theorem 3 (Simulatability under Hint-LWE) . Let (λ, L, q, χ ) be a secure LWE instance where χ is a discrete Gaussian distribution with standard deviation σ, and let χ′ be a discrete Gaussian distribution with standard deviation σ′ = σ/ √2. Let A ∈ ZL×λq be a public matrix, X ∈ ZLq be a message vector, and n ≥ 2 be the number of parties. Then there exists a probabilistic polynomial-time simulator Sim such that for all probabilistic polynomial-
+
+15 Protocol TAPAS BP SH : Group-Based Aggregation (Semi-Honest)                                                                                                                     
+
+> Setup: Matrix A∈ZL×λqInputs: Client ihas s(i),e(i),x(i).
+> Phase 1: Client Computation
+> •Masking & Commitments: Client icomputes: yi=A·si+ei+ ∆ ·ximod qCompute commitments: C(i)
+> s=
+> PCommit (si;r(i)
+> s),C(i)
+> x=PCommit (xi;r(i)
+> x),C(i)
+> e=PCommit (ei;r(i)
+> e).
+> •Proof Generation: Generate NIZK proof π(i)
+> Enc satisfying Eq 2.
+> •Distribution: –To Server 1: Sends yi, Proof π(i)
+> Enc , and Commitments {C(i)
+> s, C (i)
+> x, C (i)
+> e}.
+> –To Server 2: Sends Blinding Factor siand Opening {r(i)
+> s}.
+> Phase 2: Consistency Check
+> •S2→S1(Digest): S2computes z(i)=H(PCommit (si;r(i)
+> s)and sends list {z(i)}to S1.
+> •S1Verification: S1checks z(i)?
+> =H(C(i)
+> s)and verifies proof π(i).
+> •Filtering: Define valid set V={i|Checks Pass }. Send Vto S2.
+> Phase 3: Aggregation
+> •S2→S1:Compute aggregate secret sΣ=P
+> i∈V s(i)and send to S1.
+> •S1Finalize: Compute xΣ=Decode  (P
+> i∈V y(i))−As Σ.
+
+Figure 4: Protocol Two-server Asymmetric Private Aggregation Scheme BP SH for Semi-Honest Servers. Let 
+
+L, λ, q be integers such that they are secure parameter choices of Hint LWE Assumption. 
+
+time adversaries A, the following distributions are computationally indistinguishable under the Hint-LWE assumption: 
+
+DR =
+
+s, y1, . . . , yn :
+
+si
+
+> $
+
+←− Zλq , ei
+
+> $
+
+←− χL for i ∈ [n],
+
+s = Pni=1 si mod q, 
+
+yi = Asi + ei + ∆ xi for i ∈ [n],
+
+ , DSim = {Sim (A, X)}
+
+That is, for all PPT adversaries A: |Pr[ A(DR) = 1] − Pr[ A(DSim ) = 1] | ≤ negl (λ) where the probability is taken over the randomness of the distributions and the adversary. 
+
+The proof of Theorem 3 can be found in Section C 
+
+Theorem 4. Let λ and κ be the computational and statistical security parameters, and let n be the num-ber of clients chosen for summation. Let L be the vector length. The construction defined in Figure 4 securely realizes the functionality FSecAgg (X) (defined in Figure 3) achieving semi-honest security for X =
+
+{xi}i∈[n]\(Ccorr ∪C drop where Ccorr is the set of corrupted clients and Cdrop denotes the set of dropped clients, under the Hint-LWE assumption and the existence of SHVZK proofs and secure commitments. 
+
+The proof of Theorem 4 can be found in Section C. 
+
+3.1.2 Security Against Malicious Server. 
+
+In a two-server setting, at most one server can be malicious. However, the asymmetry of TAPAS implies the following: 
+
+• The client’s input is handled solely by S1. Therefore, a malicious server S1, while attempting to leverage the corrupt clients and the semi-honest server S2, attempts to compromise the privacy of the inputs of the honest clients. Additionally, it can provide an incorrect sum of the inputs it has recovered. 
+
+• Meanwhile, a malicious server S2 can provide inconsistent inputs to server 1, affecting the output of the computation. 16 We leverage this asymmetry to propose a protocol in which any communication from S2 can be validated by 
+
+S1, with the aid of the client. However, a semi-honest S1 cannot determine whether the inconsistency is due to S2’s maliciousness or the client’s. S1 can preemptively abort or drop the client from the computation. This approach is similar to those taken by prior works, such as Elsa [RSWP23]. However, in a major improvement, we can guarantee security with identifiable abort once the servers begin interacting. The protocol is formally described in Figure 5. 
+
+Protocol TAPAS BP MAL : Group-Based Aggregation (Malicious)                                                                                                                                                     
+
+> Parameters: Matrix A, Group G, Hash H′.Input: Client ihas s(i),e(i),x(i).
+> Phase 1: Client Computation
+> •Setup: Sample seed seed (i)∈ { 0,1}λ. Derive mask w(i)=H′(seed (i)).
+> •Masking: Compute y(i)=As (i)+e(i)+ ∆ x(i)+w(i)mod q.
+> •Commitments: Compute C(i)
+> s, C (i)
+> x, C (i)
+> e(as above) and C(i)
+> w=PCommit (w(i);r(i)
+> w).
+> •Proof: Generate π(i)proving well-formedness of y(i)and consistency of commitments.
+> •Submission: –To S1:y(i),π(i),{C(i)
+> s, C (i)
+> x, C (i)
+> e, C (i)
+> w}.
+> –To S2:s(i),seed (i), Openings {r(i)
+> s, r (i)
+> w}.
+> Phase 2: Consistency Check
+> •S2→S1:Recompute commitments C′
+> s=PCommit (s(i);r(i)
+> s)and C′
+> w=PCommit (H′(seed (i)); r(i)
+> w). Send digests z(i)
+> s=
+> H(C′
+> s)and z(i)
+> w=H(C′
+> w)to S1.
+> •S1Verify: Check z(i)
+> s?
+> =H(C(i)
+> s)and z(i)
+> w?
+> =H(C(i)
+> w). If valid, add ito V.
+> Phase 3: Secure Aggregation
+> •S2→S1:Aggregate sΣ=Ps(i)and send seeds {seed (i)}i∈V .Also send aggregate openings Rs=Pr(i)
+> sand Rw=
+> Pr(i)
+> w.
+> •S1Verify: Check homomorphic property:
+> PCommit (sΣ;Rs)?
+> =Y
+> i∈V
+> C(i)
+> sand PCommit (XH′(seed (i)); Rw)?
+> =Y
+> i∈V
+> C(i)
+> w
+> •Finalize: xΣ=Decode (Py(i)−As Σ−Pw(i)).
+
+Figure 5: Protocol TAPAS BP MAL . Adds mask w and homomorphic verification for malicious security. We focus on the malicious security against server 1. The security against malicious server 2 follows from the binding property of commitments and collision-resistance of hash functions. A malicious server S2 could either collude with corrupt clients in the digest phase where it provides convincing digests to convince S1.However, due to the binding property of commitments, S2 will not be able to provide correct openings to the malicious s(i) or seed (i). We have the following theorem whose proof can be found in Section C. 
+
+Theorem 5 (Security Against Malicious Server 1) . Assuming the hardness of the hint Learning With Errors (LWE) problem, the existence of simulation-sound Non-Interactive Zero-Knowledge Arguments of Knowledge (NIZK-AoK) in the Random Oracle Model, and the security of perfectly hiding, computationally binding, additively homomorphic commitments (e.g., Pedersen), and collision-resistant hash functions, the protocol 
+
+TAPAS BP (Figure 5) securely realizes the ideal functionality FSecAgg (see Figure 3) against a malicious Server 1 and a subset of malicious clients, provided Server 2 is semi-honest and non-colluding. 
+
+## 3.2 Building TAPAS LWE 
+
+We now focus on building TAPAS LWE , which instantiates the proof system by relying on lattice-based proof systems. We first build the protocol secure against a semi-honest server and then show how to extend it for a malicious server. 17 3.2.1 Security Against Semi-Honest Servers and Malicious Clients. 
+
+We define the semi-honest protocol in Figure 6. The process flow is similar to the bulletproof but with critical technical challenges. A core security requirement is ensuring input consistency : a malicious client must not be able to prove correctness of a valid masking secret s to Server 1 ( S1) via the ZK-AoK, while revealing a different, incorrect secret s′̸ = s to Server 2 ( S2). A standard mitigation, having S2 recompute the full set of ZK responses 
+
+{zj,u,s } to verify consistency against S1’s view, would require the client to send the underlying randomness 
+
+{rj,u,s } for all k blocks. Since k = L/λ , this would result in communication complexity scaling linearly with the vector dimension L, negating the protocol’s efficiency goals. We now detail two approaches towards circumventing this bottleneck: 
+
+Folding Argument via Randomized Aggregation. To circumvent this bottleneck, we employ a randomized aggregation technique . Instead of verifying block-wise consistency, we check consistency over a random linear combination of the blocks. 1. Randomized Compression: The client aggregates the randomness vectors across all k blocks into a single compact vector r∗ 
+
+> u,i
+
+= Pkj=1 αj,u · r(i) 
+
+> j,u,s
+
+for each repetition u. The coefficients αj,u are derived from a PRG seeded by the proof transcript ρi, ensuring they are verifiably random and bound to the proof sent to S1.2. Split Verification: 
+
+• S1 computes the aggregated proof response z∗ 
+
+> u, s1
+
+by applying the same linear combination to the proof components z(i) 
+
+> j,u,s
+
+it received. 
+
+• S2 computes the expected aggregate response z∗ 
+
+> u, s2
+
+using the compressed randomness r∗ 
+
+> u,i
+
+and the secret si it received. 3. Consistency: The servers verify that z∗ 
+
+> u, s1
+
+= z∗ 
+
+> u, s2
+
+by using a hash function to produce a digest. This reduces the consistency check traffic from O(κL ) to O(κ · λ), making it independent of the vector dimension L while retaining binding security due to the unpredictability of αj,u . We argue that a malicious client cannot successfully satisfy the consistency check at S1 and S2 simultaneously while providing different inputs. 
+
+Lemma 4 (Folding via Randomized Aggregation) . Let ∆s = s − s′̸ = 0 be the difference between the secret used in the proof to S1 and the secret sent to S2. For a client to pass the consistency check for all t repetitions, they must present fake aggregated randomness r∗′  
+
+> u,i
+
+to S2 satisfying: 
+
+r∗′  
+
+> u,i
+
+= r∗ 
+
+> u,i
+
++ c∗ 
+
+> u,i
+
+· ∆s (4) 
+
+where r∗ 
+
+> u,i
+
+is the valid aggregated randomness and c∗ 
+
+> u,i
+
+= Pkj=1 αj,u cj,u is the aggregated challenge. The probability that the norm bound check ∥r∗′ 
+
+> u,i
+
+∥2 ≤ τ σ s
+
+√kλ holds for all u ∈ [t] is negligible in κ.
+
+We defer the proof to Section C. 
+
+Seed-based Digest Approach. Instead of algebraic folding, we utilize a deterministic reconstruction approach. The Client samples a seed ρ, which is expanded to produce the masking vectors: 
+
+rj,u,s := Hr (ρ, u, j, attempt )
+
+where attempt is the index of the first successful rejection sampling iteration for block j, in iteration u. With 
+
+ρ and the attempt values, S2 can independently reconstruct the client’s state. 
+
+• Protocol: The Client sends to S2 the secret s(i), seed ρ, challenges {cj,u }, and an attempt matrix 
+
+Att . S2 reconstructs zj,u,s := rj,u,s + cj,u · s(i) and computes a digest h(i) := H({zj,u,s , c j,u }j,u ). S1
+
+computes a matching digest using the values received directly from the Client. 18 Protocol TAPAS LWE SH : LWE Aggregation (Semi-Honest Servers) 
+
+Setup: Public matrix A ∈ ZL×λq (parsed as k blocks), Hash H, PRG : {0, 1}λ → { 0, 1}kt .
+
+Inputs: Client i has secret s(i) ∈ Zλq , error e(i), input x(i).
+
+Phase 1: Client Computation (Local) 
+
+• Masking: Compute LWE ciphertext y(i) = As (i) + e(i) + ∆ x(i) mod q.
+
+• Proof Generation: : Generate π(i) =
+
+n
+
+cj,u , z(i)
+
+> j,u,s
+
+, z(i)
+
+> j,u,e
+
+, z(i)
+
+> j,u,x
+
+o 
+
+> j,u
+
+(as described in Figure 2) for blocks j ∈ { 1, . . . , k }
+
+and repetitions u ∈ { 1, . . . , t } where zj,u, • := rj,u, • + cj,u · • j and • ∈ { s, e, x }
+
+• Aggregation Coefficients: Derive ρ(i) = H(A, y(i), π (i)) and get: {αj,u }j,u ← PRG (ρ(i))
+
+• For each repetition u ∈ [t], aggregate randomness over blocks j: r(i)
+
+> u
+> ∗
+
+= Pkj=1 αj,u · r(i) 
+
+> j,u,s
+
+Restart if ∥r(i)
+
+> u
+> ∗
+
+∥2 > τ σ s
+
+√kλ .
+
+• Submission: – To Server 1 ( S1): Ciphertext y(i), Proof commitment π(i), Seed ρ(i).. 
+
+– To Server 2 ( S2): Secret s(i), Compact response r(i)
+
+> u
+> ∗
+
+, Seed ρ(i), Challenges {cj,u }.
+
+Phase 2: Verification & Filtering 
+
+• S2 Verification: Reconstruct challenge αj,u from ρ(i). Compute c∗ 
+
+> u,i
+
+= Pkj=1 αj,u cj,u for u ∈ [t].
+
+• If ∥r(i)
+
+> u
+> ∗
+
+∥2 ≤ τ σ s
+
+√kλ , then compute: z∗ 
+
+> u, s2
+
+= r(i)
+
+> u
+> ∗
+
++ c∗
+
+> u,i
+
+s(i).
+
+• Send digest h(i) = H(ρ(i), {cj,u }j,u , {z∗
+
+> u, s2
+
+}tu=1 ) to S1.
+
+• S1 Verification: S1 does: (1) π(i) verification, and (2) computes {z∗
+
+> u,s 1
+
+}u from z(i) 
+
+> j,u,s
+
+and verifies against h(i) received from S2. If valid, add i to V.
+
+Phase 3: Final Aggregation 
+
+• Aggregation: S2 computes sΣ = P 
+
+> i∈V
+
+s(i) and sends to S1.
+
+• Decryption: S1 computes xΣ = Decode  (P 
+
+> i∈V
+
+y(i)) − As Σ.
+
+Figure 6: The Semi-Honest Protocol TAPAS LWE SH . Here t, L, d, k are integers such that L = dk . Further, 
+
+L, λ, q satisfies the Hint LWE Assumption. 
+
+• Complexity: We eliminate the overhead of random linear combinations and complex norm-bound checks. While this introduces an O(κ · L/λ ) communication cost for the matrix Att (as opposed to simply sending O(κλ ) in the previous approach), this matrix is typically sparse and highly compressible, ensuring minimal impact on total bandwidth. The formal proof of security in the semi-honest setting is largely similar to that of the bulletproof-based counterpart. The key idea is that the simulator can emulate the ciphertexts of the honest users by querying the functionality to obtain the sum of their inputs. Further, using the special-honest verifier zero-knowledge proofs, the zero-knowledge proofs can be simulated. 
+
+3.2.2 Security Against Malicious Servers. 
+
+Before we present the malicious version of the protocol it is necessary to discuss the additional properties needed in this version. They are: 
+
+• As shown in the malicious version of TAPAS BP , we need a secondary mask w(i) that is the output of a hash function H′ on seed (i). The purpose of this is two fold: (a) use this to program the random oracle model once the online set is finalized by server S1, and (b) to ensure that the communication from S2
+
+to S1 is independent of the vector length. 
+
+• Similar to the other malicious version, we need server S2 to prove to S1 that it has provided the correct 
+
+sagg , with respect to the online set. Unfortunately, with the information provided to S1, it cannot be convinced. To this end, we need a second commitment that is additively homomorphic, lattice-based and compatible with the rest of the proof protocol. 
+
+• Finally, we need an equivocable commitment. This is critical because while we provide a commitment to w(i) and prove that y(i) is correctly computed with respect to this commitment, S1 needs to be convinced that indeed the seed (i) provided by S2 when expanded opens the commitment to w(i). We 19 need this level of equivocation. To this end we will use the Ajtai commitment [Ajt96, LNP22]. One can commit to s1 using randomness s2 as Bs 1 + Cs 2 where we require that norm of ∥s1∥ and ∥s2∥ are small. This is binding under the SIS assumption and hiding aspect of the commitment scheme is based on the indistinguishability of C, Cs 2 from uniform. A key artifact that will be useful for our protocol is that the dimension of the message s1 does not increase the commitment size. Further, since SIS hardness is fairly independent of the size of the solution, increasing the length of s1 does not impact the security. However, we do require that the norm of s1 is bounded. We first show how to extend Figure 2 to now work for our desired malicious setting, specifically for the following relation: 
+
+Definition 3 (Relation R∗
+
+> Enc
+
+). The prover P proves knowledge of a witness w = ( s, e, x, w, ρs, ρw) satisfying the following conditions with respect to the public instance x = ( A, Bs, Bw, Bρ, C):1. Ciphertext Validity (Payload Masking): ct ≡ As + e + ∆( x + w) (mod q) where ∆ = ⌊q/p ⌋.2. Commitment Binding: C ≡ Bss + Bww + Bρρρρ (mod q)
+
+3. Norm Constraints: ∥s∥2 ≤ βs, ∥e∥2 ≤ βs, ∥x∥2 ≤ βx, ∥w∥2 ≤ βw, ∥ρ∥ ≤ βρ
+
+The proposed protocol Π∗ (defined in Figure 7) extends the standard lattice-based Σ-protocol defined from Figure 2. We introduce two critical enhancements: (1) We augment the relation to include a witness w
+
+(client weights/metadata), proving it satisfies the linear relation y = As + e + ∆ w + ∆ x without revealing 
+
+w. Looking ahead w will be the output of the programmable hash function. (2) To ensure the prover is bound to their specific weight w and gradient s across the protocol, we add an auxiliary compressing Ajtai commitment C = Bss + Bww + Bρρρρ. This binds the ephemeral LWE secrets to a long-term identity or pre-declared metadata.                                                                                                                                                                                   
+
+> Protocol Π∗: Extended ΣProtocol
+> Public Parameters (CRS): LWE Matrix A∈ZL×λq(blocks {A(j)}); Commitment Matrices Bs∈Zλ×λq,Bw∈Zλ×dq,Bρ∈Zλ×mq;Static Commitments {C (j)}kj=1 ,C(j)∈Zλq.
+> Prover Witness: s ∈Zλ,{e(j),x(j),w(j)}kj=1 ,{ρρρ(j)∈Zm}kj=1
+> Execution (for j= 1 . . . k in parallel):
+> (1) Sample: r j,s ←Dλσs ,rj,e ←Ddσe ,rj,x ←Ddσx ,rj,w ←Ddσw ,rj,ρ ←Dmσρ
+> (2) Prover Msgs: t j=A(j)rj,s +rj,e + ∆ rj,x + ∆ rj,w (mod q);vj=Bsrj,s +Bwrj,w +Bρrj,ρ (mod q)
+> (3) Challenge: cj=H(A,Bs,Bw,Bρ,C(j),tj,vj, j )∈ {− 1,0,1}
+> (4) Response: z j,s =rj,s +cjs,zj,e =rj,e +cje(j),zj,x =rj,x +cjx(j),zj,w =rj,w +cjw(j),zj,ρ =rj,ρ +cjρρρ(j)
+> (5) Rejection Sampling: If ∥z•∥too large, reject and resample; else output πj= ( cj,zj,s ,zj,e ,zj,x ,zj,w ,zj,ρ )
+> Verification (for j= 1 . . . k ):
+> (1) ¯tj=A(j)zj,s +zj,e + ∆ zj,x + ∆ zj,w −cjy(j)(mod q)
+> (2) ¯vj=Bszj,s +Bwzj,w +Bρzj,ρ −cjC(j)(mod q)
+> (3) Check cj
+> ?
+> =H(A,Bs,Bw,Bρ,C(j),¯tj,¯vj, j )and ∥z•∥2≤β•
+
+Figure 7: Extended Σ-protocol for the relation in Definition 3 using Ajtai Commitment. 
+
+Theorem 6 (Security Against Malicious Server 1) . Assuming the hardness of the Hint Learning With Errors (Hint-LWE) problem, the Short Integer Solution (SIS) problem (for the binding of Ajtai commitments), and the existence of a Random Oracle H′, the protocol TAPAS LWE securely realizes the ideal functionality FSecAgg 
+
+in the presence of a malicious Server 1 controlling a static subset of corrupt clients K, provided that Server 2 is semi-honest and non-colluding. 
+
+The proof is deferred to Section C. 20 Protocol TAPAS MAL LWE : LWE Aggregation (Malicious Security) 
+
+Parameters: LWE Matrix A ∈ ZL×λq , Commitment Matrices Bs ∈ Zλ×λq , Bw ∈ Zλ×dq , Bρ ∈ Zλ×mq , Hashes H : {0, 1}∗ →
+
+Zq , H′ : {0, 1}∗ → ZLp . Inputs: Client i has s(i), e(i), x(i).
+
+Phase 1: Client Computation 
+
+• Setup: Sample seed (i) $
+
+←− { 0, 1}λ, ρ ρρ(i) $
+
+←− Dkm σ . Derive vector w(i) ← H ′(seed (i)).
+
+• LWE Encryption: Compute y(i) = As (i) + e(i) + ∆ x(i) + ∆ w(i) mod q.
+
+• Commitment: Compute C(i) 
+
+> j
+
+= Bss(i) + Bw w(i) 
+
+> j
+
++ Bρρρρ(i) 
+
+> j
+
+where w(i) = [ w(i)1 | . . . |w(i) 
+
+> k
+
+] and ρρρ(i) = [ ρρρ(i)1 | . . . |ρρρ(i) 
+
+> k
+
+]
+
+• Proof Generation: Generate ZK proof (based on Figure 7) π(i) =
+
+n
+
+cj,u , z(i)
+
+> j,u,s
+
+, z(i)
+
+> j,u,e
+
+, z(i)
+
+> j,u,x
+
+, z(i) 
+
+> j,u,w
+
+, z(i)
+
+> j,u,ρ
+
+o 
+
+> j,u
+
+for the relation between y(i) and C(i) 
+
+> j
+
+.
+
+• Submission: – To S1: Ciphertext y(i), Commitments {C (i) 
+
+> j
+
+}, Proof π(i).
+
+– To S2: Secret s(i), Randomness {ρρρ(i) 
+
+> j
+
+}, seed (i).
+
+Phase 2: Consistency Check ( S2-aided) 
+
+• S2 Verification: Reconstruct ¯w(i) 
+
+> j
+
+= H′(seed (i)). Recompute ¯C(i) 
+
+> j
+
+= Bss(i) + Bw ¯w(i) 
+
+> j
+
++ Bρρρρ(i) 
+
+> j
+
+.
+
+• Digest Exchange: S2 computes individual digests h(i) 
+
+> S2
+
+= H({ ¯C(i) 
+
+> j
+
+}j ) for all i and sends list {h(i)
+
+> S2
+
+}i to S1.
+
+• S1 Verification: S1 computes local digests h(i) 
+
+> S1
+
+= H({C (i) 
+
+> j
+
+}j ).
+
+• Filtering: Construct valid set V = {i | Digests match ∧ Verify (π(i)) = 1 }.
+
+Phase 3: Secure Aggregation 
+
+• S2 → S1: Send aggregated secret sΣ = P 
+
+> i∈V
+
+s(i) and seeds {seed (i)}i∈V .
+
+• S1 Finalize: – Reconstruct aggregate mask wΣ = P H′(seed (i)).
+
+– Decrypt: xΣ = Decode  P  
+
+> i∈V
+
+y(i) − As Σ − ∆wΣ.
+
+Figure 8: Protocol TAPAS MAL LWE . Secure against Malicious server. Let L, k, m, d, t, λ be integers such that such that L = k · d, m = ω(λ log q). and q, L, λ satisfy the Hint-LWE Assumption. 
+
+## 3.3 Malicious Security with Identifiable Abort 
+
+Existing efficient aggregation protocols, such as Elsa [RSWP23], typically achieve only Security with Abort 
+
+(SwA). In these systems, if a server detects an inconsistency (e.g., a checksum failure), it must abort to preserve privacy, but it cannot cryptographically prove who caused the failure. This creates a “framing” vulnerability: a malicious server can falsely report a failure to halt the protocol, effectively censoring honest clients without being identified. We demonstrate that TAPAS achieves the stronger property of Security with Identifiable Abort (IA) by incorporating digital signatures. This ensures that any abort is accompanied by cryptographic evidence identifying the cheater (whether a client or a server). 
+
+Ideal Functionalities: SwA vs. IA. Let n be the number of clients and A be the adversary controlling a subset of corrupt clients C ⊂ [n].
+
+• Standard Security with Abort ( FSwA ): If A sends a malformed input, the functionality outputs 
+
+⊥ to all parties. Deficiency: Honest parties learn that someone cheated, but learn nothing about the identity of the malicious party. 
+
+• Identifiable Abort ( FIA-Agg ): If the functionality detects an invalid input or protocol violation from client j ∈ C (resp. from server Si), it halts and outputs (⊥, j ) (resp. (⊥, S i) Advantage: The server 
+
+S1−i (and other honest parties) obtains the identity. If it is client j, then the servers can evict the malicious client and then restart the protocol. 
+
+The Mechanism. The core intuition is to enforce a Binding Agreement Phase before aggregation. Clients sign their inputs, and servers must commit to the set of valid signatures they have received before processing data. This prevents a malicious server from initially accepting a client’s data and later claiming it was 21 malformed to force an abort. Let Σ = ( KeyGen , Sign , Verify ) be an EU-CMA secure signature scheme. The protocol proceeds as follows: 1. Authenticated Submission. Client Ci signs their payload. For a message mi,ℓ destined for Server ℓ,the client sends ¯mi,ℓ = ( mi,ℓ , σ i,ℓ ), where σi,ℓ ← Sign (sk i, m i,ℓ || ℓ).2. The Handshake (Binding Agreement). Before exchanging any user data, the servers exchange their sets of locally valid clients, V1 and V2.
+
+• They compute the intersection V = V1 ∩ V 2.
+
+• Critical Step: Each server signs and exchanges the set V.By signing V, Server ℓ explicitly attests: “I possess a validly signed message from every client in V.” 3. Blame Attribution. During aggregation, if a consistency check fails for Client i ∈ V , the servers enter a Blame Phase by exchanging the signed transcripts (mi, 1, σ i, 1) and (mi, 2, σ i, 2).
+
+• Case A: Malicious Client (Equivocation). If both signatures σi, 1, σ i, 2 are valid but the messages are inconsistent (e.g., mi, 1 and mi, 2 do not sum to a valid vector), Client i is identified as malicious. The signed conflicting messages serve as proof of misbehavior. 
+
+• Case B: Malicious Server (Framing/Forgery). If Server 1 claims an error but cannot produce a valid signature σi, 1 for Client i, Server 1 is identified as malicious (having violated the Handshake agreement). Similarly, if Server 1 provides a message that is actually consistent with Server 2’s message (contradicting the error claim), Server 1 is identified as malicious for raising a false alarm. By leveraging the non-repudiation of signatures, TAPAS ensures that a malicious server cannot simply assert a fault; it must cryptographically prove it. Table 3: Scalability Analysis ( L = 2 16 ). Direct comparison of computation time (in seconds) between Elsa and our proposed protocol as the number of clients ( n) increases. Bold indicates the best performance in each category.                                             
+
+> Clients ( n)Client (s) Server 1 (s) Server 2 (s)
+> Elsa Ours Elsa Ours Elsa Ours
+> 10 0.550 0.197 0.908 0.563 0.912 0.015
+> 20 0.805 0.200 1.178 0.762 1.180 0.031
+> 30 1.003 0.193 1.384 0.778 1.380 0.048
+> 40 1.650 0.198 1.752 1.388 1.751 0.063
+> 50 1.707 0.193 2.098 1.433 2.098 0.077
+> 100 3.139 0.202 3.743 2.270 3.734 0.162
+
+# 4 Experiments 
+
+In this section, we microbenchmark the performance of TAPAS LWE MAL . We implemented our protocol in Rust (v1.75) to leverage Elsa’s codebase [RSWP23]. All experiments were conducted on a single AWS c5.9xlarge 
+
+instance equipped with 36 vCPUs (Intel Xeon Platinum 8000-series @ 3.0 GHz) and 72 GiB of RAM. The statistical security parameter was fixed at κ = 128 bits. The challenges were drawn from {− 1, 0, 1}. The computational security parameter was also set at 128. We choose Elsa [RSWP23] as our baseline. This protocol is the current “best” protocol offering malicious privacy as a security guarantee while also being efficient for large vector lengths L. Additionally, we use the 22 Table 4: Computation Time Comparison ( n = 100 clients). Running times (in seconds) for Elsa and Pri vs. Ours across varying vector dimensions ( L). Ours uses batched verification on Server 1 and lightweight auditing on Server 2. Bold indicates the best performance. 
+
+Vector Size System Client (s) Server 1 (s) Server 2 (s) 
+
+216 
+
+Elsa 3.139 3.743 3.734 Prio 13.282 2.62 3.070 
+
+Ours 0.202 2.572 0.162 
+
+217 
+
+Elsa 6.920 7.914 7.913 Prio 35.345 7.651 8.427 
+
+Ours 0.395 5.150 0.282 
+
+218 
+
+Elsa 13.775 15.354 15.350 Prio 73.377 15.036 16.721 
+
+Ours 0.789 10.231 0.521 
+
+current state-of-the-art Rust implementation Prio [CGB17] dubbed “prio3” [Div25] to create an implemen-tation to measure the running time. We observe that TAPAS LWE MAL naively offers L2 norm bound check, albeit with soundness slack. We compare only with the Elsa version that does not provide this additional L2-norm bound. As our experiments indicate, even without the additional processing, Elsa performs significantly worse than our construction. 
+
+Performance with respect to vector length L. Table 4 presents a comprehensive comparison of computation time between Elsa, Prio, and our proposed protocol for a cohort of n = 100 clients across varying input vector sizes L ∈ { 216 , 217 , 218 }.
+
+• Client Efficiency. Our client-side proving time is significantly reduced, requiring only 0.789 s for dimension 218 , compared to Elsa’s 13 .775 s and Prio’s 73 .377 s. This represents a ≈ 17 .5× speedup over Elsa and a staggering ≈ 93 × speedup over Prio. The poor performance of Prio is largely due to the O(L log L) complexity of polynomial interpolation and evaluation over large fields, whereas our 
+
+independent restart strategy maintains a much lower constant overhead. 
+
+• Server 1 Scalability via Batching. Server 1 achieves consistent performance gains through ran-domized batch verification. For L = 2 18 , our system processes the cohort in 10 .231 s, outperforming Elsa ( 15 .354 s) and Prio ( 15 .036 s). While Prio and Elsa scale linearly with vector size, our system opti-mizes the linear lattice verification by compressing n proofs into vectorized matrix operations, yielding superior throughput. 
+
+• Asymmetric Server Load. The most critical architectural advantage is observed in Server 2. While Elsa and Prio impose symmetric or near-symmetric computational burdens ( ≈ 15 .3 s and ≈ 16 .7 srespectively at L = 2 18 ), our asymmetric model reduces Server 2’s role to lightweight consistency checks, requiring only 0.521 s. This represents a 30 × reduction compared to Prio, effectively rendering the second server’s computational cost negligible. 
+
+Performance with Increasing Client Cohort ( n). To evaluate the system’s scalability, we measured the total running time as we varied the number of participating clients, n ∈ { 10 , . . . , 100 }, with a fixed vector dimension L = 2 16 .
+
+• Client-Side Scalability. A defining characteristic of our architecture is the independence of client proof generation. As shown in Table 4, our client computational cost remains effectively constant at 
+
+≈ 0.20 s regardless of n. In contrast, Elsa exhibits super-linear growth, rising from 0.550 s at n = 10 
+
+23 to 3.139 s at n = 100 . This confirms that our independent restart strategy allows for fully parallelized, 
+
+O(1) client execution. 
+
+• Server 1: Efficiency via Batching. Server 1 benefits from randomized batch verification, which amortizes the cost of lattice verification across the cohort. We observe a non-linear relationship between 
+
+n and verification time; for instance, increasing the cohort from 20 to 30 clients only increases latency by 0.016 s. At n = 100 , our Server 1 requires only 2.270 s, representing a ≈ 1.6× improvement over Elsa’s 3.743 s. 
+
+• Server 2: The Asymmetric Advantage. The most significant gain is observed in the secondary server. While Elsa’s Server 2 mirrors the heavy workload of Server 1 ( 3.734 s at n = 100 ), our Server 2 is restricted to lightweight auditing. Consequently, Server 2 scales with minimal overhead, requiring only 0.162 s for 100 clients—a 23 × reduction that effectively eliminates the dual-server computational bottleneck. 
+
+# 5 Conclusion 
+
+In this work, we presented TAPAS , a novel two-server secure aggregation protocol that fundamentally redefines the resource allocation in privacy-preserving federated learning. By enforcing an asymmetric de-sign, TAPAS decouples the communication and computation costs of the secondary server from the vector dimension L and scales instead with the number of clients n. This addresses a critical scalability bottle-neck in prior symmetric protocols such as Prio and Elsa, making TAPAS uniquely suitable for aggregating high-dimensional models (e.g., deep learning parameters) where L ≫ n.Our construction leverages standard lattice-based assumptions (LWE and SIS), ensuring post-quantum security without relying on trusted setups or pre-processing. We introduced a tailored Zero-Knowledge proof system that uses block-wise rejection sampling, which mitigates the soundness slack typically associated with lattice proofs while maintaining efficient runtime. Furthermore, TAPAS achieves Identifiable Abort and full malicious security, ensuring that protocol deviations are cryptographically attributable to the malicious party, whether client or server. Experimental microbenchmarks suggest that TAPAS offers an efficient path for deploying secure ag-gregation at scale, combining the rigorous security guarantees of lattice cryptography with the efficiency required for modern machine-learning workloads. Future work may focus on further optimizing the con-stants in the lattice-based proof system and exploring client-side compression techniques compatible with LWE encapsulation. 
+
+Disclaimer. 
+
+This paper was prepared for informational purposes by the Artificial Intelligence Research group of JPMorgan Chase & Co and its affiliates (“J.P. Morgan”) and is not a product of the Research Department of J.P. Morgan. J.P. Morgan makes no representation and warranty whatsoever and disclaims all liability, for the completeness, accuracy or reliability of the information contained herein. This document is not intended as investment research or investment advice, or a recommendation, offer or solicitation for the purchase or sale of any security, financial instrument, financial product or service, or to be used in any way for evaluating the merits of participating in any transaction, and shall not constitute a solicitation under any jurisdiction or to any person, if such solicitation under such jurisdiction or to such person would be unlawful. 
+
+©2026 JPMorgan Chase & Co. All rights reserved. 24 References 
+
+[AGJ +22] Surya Addanki, Kevin Garbe, Eli Jaffe, Rafail Ostrovsky, and Antigoni Polychroniadou. Prio+: Privacy preserving aggregate statistics via boolean shares. In Clemente Galdi and Stanislaw Jarecki, editors, SCN 22 , volume 13409 of LNCS , pages 516–539, Amalfi, Italy, September 12– 14, 2022. Springer, Cham, Switzerland. [Ajt96] M. Ajtai. Generating hard instances of lattice problems (extended abstract). In Proceedings of the Twenty-Eighth Annual ACM Symposium on Theory of Computing , STOC ’96, page 99–108, New York, NY, USA, 1996. Association for Computing Machinery. [BBB +18] Benedikt Bünz, Jonathan Bootle, Dan Boneh, Andrew Poelstra, Pieter Wuille, and Greg Maxwell. Bulletproofs: Short proofs for confidential transactions and more. In 2018 IEEE Symposium on Security and Privacy , pages 315–334, San Francisco, CA, USA, May 21–23, 2018. IEEE Computer Society Press. [BBG +20] James Henry Bell, Kallista A. Bonawitz, Adrià Gascón, Tancrède Lepoint, and Mariana Raykova. Secure single-server aggregation with (poly)logarithmic overhead. In Jay Ligatti, Xinming Ou, Jonathan Katz, and Giovanni Vigna, editors, ACM CCS 2020 , pages 1253–1269, Virtual Event, USA, November 9–13, 2020. ACM Press. [BCGL +25] James Bell-Clark, Adrià Gascón, Baiyu Li, Mariana Raykova, and Phillipp Schoppmann. Wil-low: Secure aggregation with one-shot clients. In Kalai and Kamara [KK25], pages 285–318. [BGL +23] James Bell, Adrià Gascón, Tancrède Lepoint, Baiyu Li, Sarah Meiklejohn, Mariana Raykova, and Cathie Yun. ACORN: Input validation for secure aggregation. In Joseph A. Calandrino and Carmela Troncoso, editors, USENIX Security 2023 , pages 4805–4822, Anaheim, CA, USA, August 9–11, 2023. USENIX Association. [BIK +17] Keith Bonawitz, Vladimir Ivanov, Ben Kreuter, Antonio Marcedone, H. Brendan McMahan, Sarvar Patel, Daniel Ramage, Aaron Segal, and Karn Seth. Practical secure aggregation for privacy-preserving machine learning. In Bhavani M. Thuraisingham, David Evans, Tal Malkin, and Dongyan Xu, editors, ACM CCS 2017 , pages 1175–1191, Dallas, TX, USA, October 31 – November 2, 2017. ACM Press. [BKM +22] Eugene Bagdasaryan, Peter Kairouz, Stefan Mellem, Adrià Gascón, Kallista A. Bonawitz, Deborah Estrin, and Marco Gruteser. Towards sparse federated analytics: Location heatmaps under distributed differential privacy with secure aggregation. PoPETs , 2022(4):162–182, Oc-tober 2022. [CGB17] Henry Corrigan-Gibbs and Dan Boneh. Prio: private, robust, and scalable computation of aggregate statistics. In Proceedings of the 14th USENIX Conference on Networked Systems Design and Implementation , NSDI’17, page 259–282, USA, 2017. USENIX Association. [CKK +21] Jung Hee Cheon, Dongwoo Kim, Duhyeong Kim, Joohee Lee, Junbum Shin, and Yongsoo Song. Lattice-based secure biometric authentication for hamming distance. In Joonsang Baek and Sushmita Ruj, editors, ACISP 21 , volume 13083 of LNCS , pages 653–672, Virtual Event, December 1–3, 2021. Springer, Cham, Switzerland. [Cor20] Henry Corrigan-Gibbs. Privacy-preserving firefox telemetry with prio, 2020. [DDLL13] Léo Ducas, Alain Durmus, Tancrède Lepoint, and Vadim Lyubashevsky. Lattice signatures and bimodal Gaussians. In Ran Canetti and Juan A. Garay, editors, CRYPTO 2013, Part I ,volume 8042 of LNCS , pages 40–56, Santa Barbara, CA, USA, August 18–22, 2013. Springer Berlin Heidelberg, Germany. 25 [Div25] Divviup. libprio-rs: Implementation of prio in rust. https://github.com/divviup/ libprio-rs , 2025. GitHub repository, version 0.17.0. [DKL +23] Nico Döttling, Dimitris Kolonelos, Russell W. F. Lai, Chuanwei Lin, Giulio Malavolta, and Ahmadreza Rahimi. Efficient laconic cryptography from learning with errors. In Carmit Hazay and Martijn Stam, editors, EUROCRYPT 2023, Part III , volume 14006 of LNCS , pages 417– 446, Lyon, France, April 23–27, 2023. Springer, Cham, Switzerland. [FHM98] Matthias Fitzi, Martin Hirt, and Ueli M. Maurer. Trading correctness for privacy in uncondi-tional multi-party computation (extended abstract). In Hugo Krawczyk, editor, CRYPTO’98 ,volume 1462 of LNCS , pages 121–136, Santa Barbara, CA, USA, August 23–27, 1998. Springer Berlin Heidelberg, Germany. [FKMV12] Sebastian Faust, Markulf Kohlweiss, Giorgia Azzurra Marson, and Daniele Venturi. On the non-malleability of the Fiat-Shamir transform. In Steven D. Galbraith and Mridul Nandi, editors, INDOCRYPT 2012 , volume 7668 of LNCS , pages 60–79, Kolkata, India, December 9– 12, 2012. Springer Berlin Heidelberg, Germany. [GHL22] Craig Gentry, Shai Halevi, and Vadim Lyubashevsky. Practical non-interactive publicly veri-fiable secret sharing with thousands of parties. In Orr Dunkelman and Stefan Dziembowski, editors, EUROCRYPT 2022, Part I , volume 13275 of LNCS , pages 458–487, Trondheim, Nor-way, May 30 – June 3, 2022. Springer, Cham, Switzerland. [GMO16] Irene Giacomelli, Jesper Madsen, and Claudio Orlandi. ZKBoo: Faster zero-knowledge for Boolean circuits. In Thorsten Holz and Stefan Savage, editors, USENIX Security 2016 , pages 1069–1083, Austin, TX, USA, August 10–12, 2016. USENIX Association. [Gol04] Oded Goldreich. Foundations of Cryptography: Volume 2, Basic Applications . Cambridge University Press, USA, 2004. [GPV08] Craig Gentry, Chris Peikert, and Vinod Vaikuntanathan. Trapdoors for hard lattices and new cryptographic constructions. In Proceedings of the Fortieth Annual ACM Symposium on Theory of Computing , STOC ’08, page 197–206, New York, NY, USA, 2008. Association for Computing Machinery. [HCS +25] Chun-Ying Huang, Jyh-Cheng Chen, Shiuh-Pyng Shieh, David Lie, and Véronique Cortier, editors. ACM CCS 2025 , Taipei, Taiwan, October 13–17, 2025. ACM Press. [IEE23] 2023 IEEE Symposium on Security and Privacy , San Francisco, CA, USA, May 21–25, 2023. IEEE Computer Society Press. [KK25] Yael Tauman Kalai and Seny F. Kamara, editors. CRYPTO 2025, Part VIII , volume 16007 of 
+
+LNCS , Santa Barbara, CA, USA, August 17–21, 2025. Springer, Cham, Switzerland. [KLSS23] Duhyeong Kim, Dongwon Lee, Jinyeong Seo, and Yongsoo Song. Toward practical lattice-based proof of knowledge from hint-MLWE. In Helena Handschuh and Anna Lysyanskaya, editors, 
+
+CRYPTO 2023, Part V , volume 14085 of LNCS , pages 549–580, Santa Barbara, CA, USA, August 20–24, 2023. Springer, Cham, Switzerland. [KMA +21] Peter Kairouz, H. Brendan McMahan, Brendan Avent, Aurélien Bellet, Mehdi Bennis, Ar-jun Nitin Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, Rafael G. L. D’Oliveira, Hubert Eichner, Salim El Rouayheb, David Evans, Josh Gardner, Zachary Garrett, Adrià Gascón, Badih Ghazi, Phillip B. Gibbons, Marco Gruteser, Zaid Har-chaoui, Chaoyang He, Lie He, Zhouyuan Huo, Ben Hutchinson, Justin Hsu, Martin Jaggi, Tara Javidi, Gauri Joshi, Mikhail Khodak, Jakub Konecný, Aleksandra Korolova, Farinaz Koushan-far, Sanmi Koyejo, Tancrède Lepoint, Yang Liu, Prateek Mittal, Mehryar Mohri, Richard Nock, 26 Ayfer Özgür, Rasmus Pagh, Hang Qi, Daniel Ramage, Ramesh Raskar, Mariana Raykova, Dawn Song, Weikang Song, Sebastian U. Stich, Ziteng Sun, Ananda Theertha Suresh, Florian Tramèr, Praneeth Vepakomma, Jianyu Wang, Li Xiong, Zheng Xu, Qiang Yang, Felix X. Yu, Han Yu, and Sen Zhao. Advances and open problems in federated learning. Found. Trends Mach. Learn. , 14(1–2):1–210, June 2021. [KP25] Harish Karthikeyan and Antigoni Polychroniadou. OPA: One-shot private aggregation with single client interaction and its applications to federated learning. In Kalai and Kamara [KK25], pages 319–353. [LCGDW26] Ryan Lehmkuhl, Henry Corrigan-Gibbs, Emma Dauterman, and David J. Wu. Heli: Heavy-light private aggregation. Cryptology ePrint Archive, Paper 2026/059, 2026. To Appear in USENIX Security 2026. [Lin17] Yehuda Lindell. How to Simulate It – A Tutorial on the Simulation Proof Technique , pages 277–346. Springer International Publishing, Cham, 2017. [LL25] Zhi Lu and Songfeng Lu. LZKSA: Lattice-based special zero-knowledge proofs for secure aggregation’s input verification. In Huang et al. [HCS +25], pages 573–587. [LNP22] Vadim Lyubashevsky, Ngoc Khanh Nguyen, and Maxime Plançon. Lattice-based zero-knowledge proofs and applications: Shorter, simpler, and more general. In Yevgeniy Dodis and Thomas Shrimpton, editors, CRYPTO 2022, Part II , volume 13508 of LNCS , pages 71– 101, Santa Barbara, CA, USA, August 15–18, 2022. Springer, Cham, Switzerland. [Lyu08] Vadim Lyubashevsky. Lattice-based identification schemes secure under active attacks. In Ronald Cramer, editor, PKC 2008 , volume 4939 of LNCS , pages 162–179, Barcelona, Spain, March 9–12, 2008. Springer Berlin Heidelberg, Germany. [Lyu12] Vadim Lyubashevsky. Lattice signatures without trapdoors. In David Pointcheval and Thomas Johansson, editors, EUROCRYPT 2012 , volume 7237 of LNCS , pages 738–755, Cambridge, UK, April 15–19, 2012. Springer Berlin Heidelberg, Germany. [MGKP25] Yiping Ma, Yue Guo, Harish Karthikeyan, and Antigoni Polychroniadou. Armadillo: Robust single-server secure aggregation for federated learning with input validation. In Huang et al. [HCS +25], pages 2219–2233. [MWA +23] Yiping Ma, Jess Woods, Sebastian Angel, Antigoni Polychroniadou, and Tal Rabin. Flamingo: Multi-round single-server secure aggregation with applications to private federated learning. In IEEE S&P 2023 [IEE23], pages 477–496. [NHC22] Mohammad Naseri, Jamie Hayes, and Emiliano De Cristofaro. Local and central differential privacy for robustness and privacy in federated learning. In 29th Annual Network and Dis-tributed System Security Symposium, NDSS 2022, San Diego, California, USA, April 24-28, 2022 . The Internet Society, 2022. [PBS22] Christopher Patton, Richard Barnes, and Phillipp Schoppmann. Verifiable Distributed Aggre-gation Functions. Internet-Draft draft-patton-cfrg-vdaf-01, Internet Engineering Task Force, March 2022. Work in Progress. [Ped92] Torben P. Pedersen. Non-interactive and information-theoretic secure verifiable secret sharing. In Joan Feigenbaum, editor, CRYPTO’91 , volume 576 of LNCS , pages 129–140, Santa Barbara, CA, USA, August 11–15, 1992. Springer Berlin Heidelberg, Germany. 27 [PFA22] Dario Pasquini, Danilo Francati, and Giuseppe Ateniese. Eluding secure aggregation in feder-ated learning via model inconsistency. In Heng Yin, Angelos Stavrou, Cas Cremers, and Elaine Shi, editors, ACM CCS 2022 , pages 2429–2443, Los Angeles, CA, USA, November 7–11, 2022. ACM Press. [Reg05] Oded Regev. On lattices, learning with errors, random linear codes, and cryptography. In Harold N. Gabow and Ronald Fagin, editors, 37th ACM STOC , pages 84–93, Baltimore, MA, USA, May 22–24, 2005. ACM Press. [Reg09] Oded Regev. On lattices, learning with errors, random linear codes, and cryptography. J. ACM , 56(6), sep 2009. [RSWP23] Mayank Rathee, Conghao Shen, Sameer Wagh, and Raluca Ada Popa. ELSA: Secure aggrega-tion for federated learning with malicious actors. In IEEE S&P 2023 [IEE23], pages 1961–1979. [Sch80] J. T. Schwartz. Fast probabilistic algorithms for verification of polynomial identities. J. ACM ,27(4):701–717, October 1980. [SCR +11] Elaine Shi, T.-H. Hubert Chan, Eleanor G. Rieffel, Richard Chow, and Dawn Song. Privacy-preserving aggregation of time-series data. In NDSS 2011 , San Diego, CA, USA, February 6–9, 2011. The Internet Society. [SHKR22] Virat Shejwalkar, Amir Houmansadr, Peter Kairouz, and Daniel Ramage. Back to the drawing board: A critical evaluation of poisoning attacks on production federated learning. In 2022 IEEE Symposium on Security and Privacy , pages 1354–1371, San Francisco, CA, USA, May 22– 26, 2022. IEEE Computer Society Press. [Zip79] Richard Zippel. Probabilistic algorithms for sparse polynomials. In Proceedings of the Interna-tional Symposiumon on Symbolic and Algebraic Computation , EUROSAM ’79, page 216–226, Berlin, Heidelberg, 1979. Springer-Verlag. 
+
+# A Cryptographic Preliminaries 
+
+## A.1 Learning with Errors Assumption 
+
+Definition 4 (Learning with Errors Assumption (LWE)) . Consider integers κ, L, q ∈ N that are functions of the security parameter ρ, and a probability distribution χ on Zq , typically taken to be a normal distribution that has been discretized. Then, the LWE κ,L,q,χ assumption states that for all PPT adversaries A, there exists a negligible function negl such that: 
+
+Pr 
+
+b = b′
+
+A $
+
+←− ZL×κq , x $
+
+←− Zκq , e $
+
+←− χL
+
+y0 := Ax + ey1$
+
+←− ZLq , b $
+
+←− { 0, 1}, b ′ $
+
+←− A (A, yb)
+
+ = 12 + negl (λ)
+
+Definition 5 (Hint-LWE [CKK +21,DKL +23]) . Consider integers κ, L, q and a probability distribution χ on 
+
+Zq , typically taken to be a normal distribution that has been discretized. Then, the Hint-LWE assumption 2                            
+
+> 2Kim et al. [KLSS23] demonstrates that the Hint-LWE assumption is computationally equivalent to the standard LWE assumption. This assumption posits that y0retains its pseudorandomness from an adversary’s perspective, even when given certain randomized information about the secret and error vectors. Consider a secure LWE instance defined by parameters
+> (κ, L, q, χ ), where χrepresents a discrete Gaussian distribution with standard deviation κ.The corresponding Hint-LWE instance, characterized by (κ, L, q, χ ′), where χ′denotes a discrete Gaussian distribution with standard deviation κ′, remains secure under the condition κ′=κ/ √2. As a result, we can decompose any e∈χinto the sum e1+e2, where both e1and e2
+> are drawn from χ′.
+
+28 states that for all PPT adversaries A, there exists a negligible function negl such that: 
+
+Pr 
+
+b = b′
+
+A $
+
+←− ZL×κq , k $
+
+←− Zκq , e $
+
+←− χ′L
+
+r $
+
+←− Zκq , f $
+
+←− χ′L
+
+y0 := Ak + e, y1$
+
+←− ZLq , b $
+
+←− { 0, 1}
+
+b′ $
+
+←− A (A, (yb, k + r, e + f)) 
+
+ = 12 + negl (λ)
+
+Where ρ is the security parameter. 
+
+Remark 2 (Short-Secret LWE) . As shown by prior work, LWE Encryption is still secure if s $
+
+←− χλ. Indeed, it has been shown that s $
+
+←− {− 1, 0, 1}λ is sufficient for security to hold. We will take advantage of this in our actual construction, reducing further communication. Further, in practice, one requires that the discrete Gaussian distribution has width ≫ √λ. This helps us set much smaller χ distribution. 
+
+Definition 6 (Short Integer Solution (SIS) Problem) . Let q be a positive integer, n and m be positive integers, and β > 0 be a bound. Given a uniformly random matrix A ∈ Zn×mq , the SIS problem asks to find a non-zero integer vector x ∈ Zm such that 
+
+Ax = 0 (mod q), ∥x∥ ≤ β, 
+
+where ∥ · ∥ denotes the Euclidean norm. 
+
+## A.2 Cryptographic Primitives 
+
+Definition 7 (Security of Commitment Scheme) . A non-interactive commitment scheme com is secure if: 
+
+• Hiding Property: for all PPT adversaries A,
+
+Pr 
+
+
+
+b = b′
+
+(pp ) $
+
+←− Setup (1 λ)(x0, x 1, st ) $
+
+←− A (pp )
+
+b $
+
+←− { 0, 1}, α $
+
+←− R 
+
+com = Commit pp (xb; α)
+
+b′ $
+
+←− A (com, st )
+
+
+
+≤ 12 + negl (λ)
+
+where the probability is over b, α, Setup , A.
+
+• Binding Property: for all PPT adversaries A,
+
+Pr 
+
+
+
+com 0 := Commit pp (x0; α0) (pp ) $
+
+←− Setup (1 λ)
+
+com 1 := Commit pp (x1; α1) ((x(i), α (i)) i=0 ,1 , st ) $
+
+←− A (pp )
+
+com 0 = com 1
+
+x0̸ = x1
+
+ ≤ negl (λ)
+
+where the probability is over Setup , A. If the probability is 0, then we say that the scheme is perfectly binding. 
+
+Definition 8 (Simulation-Extractable NIZK) . Let R be an NP relation with language LR = {x | ∃ w :(x, w ) ∈ R}.A tuple of PPT algorithms (Setup , Prove , Verif , Sim , Ext ) is called a simulation-extractable non-interactive zero-knowledge proof system (SE-NIZK) for R if the following hold. 
+
+Algorithms. 
+
+• (crs , td ) ← Setup (1 λ) outputs a common reference string (CRS) and a trapdoor. 29 • π ← Prove (crs , x, w ) outputs a proof for statement x and witness w.
+
+• b ← Verif (crs , x, π ) outputs 1 (accept) or 0 (reject). 
+
+• π⋆ ← Sim (crs , td , x ) outputs a simulated proof using td .
+
+• w⋆ ← Ext (crs , td , T , st A) is the extractor. 
+
+Completeness. For all (x, w ) ∈ R and for all (crs , td ) ← Setup (1 λ),
+
+Pr Verif (crs , x, Prove (crs , x, w )) = 1  = 1 .
+
+Soundness. For every PPT adversary A,
+
+Pr 
+
+ (crs , td ) ← Setup (1 λ); (x, π ) ← A (crs ); 
+
+Verif (crs , x, π ) = 1 ∧ x / ∈ LR
+
+ ≤ negl (λ).
+
+That is, no efficient adversary can convince the verifier of a false statement. 
+
+Special Honest-Verifier Zero-Knowledge (SHVZK). There exists a simulator Sim that can generate a valid proof (i.e., an accepting transcript) without knowing a witness, using the trapdoor information from the setup. More precisely, there exists a PPT simulator Sim such that for all non-uniform PPT adversaries A,there exists a negligible function negl satisfying: 
+
+Pr 
+
+
+
+b = b′
+
+(crs , td ) ← Setup (1 λ); b $
+
+←− { 0, 1}
+
+(stmt , wit ) $
+
+←− A (crs )
+
+π0 = Prove (crs , stmt , wit )
+
+π1 = Sim (crs , td , stmt )
+
+b′ $
+
+←− A (πb)
+
+
+
+≤ 12 + negl (λ)
+
+That is, the adversary cannot distinguish a real proof π0 produced using a witness from a simulated proof π1
+
+generated without it, even when adaptively choosing the statement stmt after seeing the common reference string crs .When negl (λ) = 0 , the NIZK proof system satisfies perfect zero-knowledge .
+
+Simulation Soundness. Informally, this requires soundness even if a cheating prover is allowed to see simulated proofs for potentially false statements chosen by the cheating prover. Recall that the simulated proofs are generated by the NIZK simulator. We use the definition from the work of Faust et al. [FKMV12] for Simulation Soundness and the eventual theorem on which we will rely for the security of our construction. 
+
+Definition 9. Let R be a decidable polynomial-time relation. Consider a NIZK proof system denoted by 
+
+(PH, VH) for R. Furthermore, let S denote the NIZK simulator and let OS1 , OS2 be the oracle queries such that: OS1 (q(i)) returns h(i) where (h(i), st ) ← S(1 , st, q (i)) and OS2 (x) returns π where (π, st ) ← S(2 , st, x )
+
+(even if x̸ ∈ R ). Then, we say that the NIZK proof system is (unbounded) simulation-sound with respect to S in the random oracle model if for any PPT adversary A, there exists a negligible function negl (κ) such that: 
+
+Pr 
+
+"
+
+(x∗, π ∗)̸ ∈ T ∧ x∗̸ ∈ R VOS1 (x∗, π ∗) = 1 (crs ) $
+
+←− Setup R(1 κ)(x∗, π ∗) $
+
+←− A OS1 (·),OS2 (·)(crs )
+
+#
+
+≤ negl (κ)
+
+where T is the list of pairs (x(i), π (i)) such that π(i) was the response to OS2 (x(i)).30 A.3 Group-Based LWE Encryption Proof 
+
+Recall that a client i must prove knowledge of secrets s(i), x(i), e(i) satisfying: 
+
+c(i) = As (i) + e(i) + ∆ · x(i) (mod q) ∈ Zmq
+
+Naively, proving this for each of the m elements in m elements in c(i) would require m independent proofs. We can efficiently collapse these into a single statement using the Schwartz-Zippel Lemma [Sch80,Zip79]. To verify the equality of two vectors of length m over Zq , we treat them as coefficient vectors of degree-(m − 1) 
+
+polynomials evaluated at a random point. If the vectors differ, their evaluations will differ with probability at least 1 − m/q .Let the verifier (server) sample a random challenge r ∈ Zq and define the vector r = ( r0, r 1, . . . , r m−1).The client proves the following identity: 
+
+c = ⟨A⊤r ∥ r ∥ ∆r, s(i) ∥ e(i) ∥ x(i)⟩ (mod q),
+
+where c = ⟨c(i), r⟩ is computable by both parties. The identity is derived as follows: 
+
+⟨c(i), r⟩ = ⟨As (i), r⟩ + ⟨e(i), r⟩ + ∆ ⟨x(i), r⟩
+
+= ⟨A⊤r, s(i)⟩ + ⟨r, e(i)⟩ + ⟨∆r, x(i)⟩
+
+= ⟨A⊤r ∥ r ∥ ∆r, s(i) ∥ e(i) ∥ x(i)⟩.
+
+Since the vector (A⊤r ∥ r ∥ ∆r) is public, this reduces to a linear proof Πlinear over the witness (s(i) ∥ e(i) ∥ x(i)).
+
+Approximate Proof of Smallness. Following Gentry et al. [GHL22], we employ an efficient proof system to show that a committed vector w satisfies a relaxed norm bound. Specifically, given ∥w∥∞ < B , one can efficiently prove ∥w∥∞ < B ′ for some B′ ≫ B. Let κ be the statistical security parameter. The soundness gap γ := B′/B must satisfy γ > 19 .5κ√m.1. The prover sends PCommit (w) to the verifier. 2. The prover samples y $
+
+←− [±⌈ B′/(2(1 + 1 /κ )) ⌉]κ and sends PCommit (y).3. The verifier samples R ← D κ×m (where D(0) = 1 /2, D(±1) = 1 /4) and sends it to the prover. 4. The prover computes u := Rw and z := u + y. If ∥u∥∞ > B ′/(2 κ) or ∥z∥∞ > B ′/2, the prover restarts from Step 2 (Rejection Sampling). 5. The prover sends z to the verifier. 6. The verifier samples a random r and sends it to the prover. 7. They execute an inner-product proof for: 
+
+⟨R⊤r, w⟩ + ⟨r, y⟩ = ⟨z, r⟩,
+
+where r = ( r0, . . . , r κ−1).Note that ⟨z, r⟩ is public. This protocol ensures that if ∥w∥∞ > B ′, the prover fails with overwhelming probability. 
+
+L2 Proofs of Smallness. To prove ∥w∥2 ≤ B, it suffices to show that B2 − ∥ w∥2 ≥ 0. By Lagrange’s four-square theorem, there exist non-negative integers α, β, γ, δ such that B2 − ∥ w∥2 = α2 + β2 + γ2 + δ2.The prover commits to these auxiliary integers and proves (a) the algebraic relation modulo q, and (b) that all components are sufficiently small to avoid modular wrap-around using the approximate proof described above [GHL22]. 31 1. Let B be the public bound. Assume B < √q/ (3536( m + 4)) .2. The prover computes α, β, γ, δ such that α2 + β2 + γ2 + δ2 = B2 − ∥ w∥2.3. Define u := ( α, β, γ, δ ) and the concatenated witness v := ( w∥u) ∈ Zm+4 . The prover commits to u.4. The prover provides a ZK proof that ∥v∥2 = B2 (mod q).5. The prover provides an approximate L∞ proof showing ∥v∥∞ < pq/ (2( m + 4)) .
+
+Remark 3. Note that ∥w∥2 ≤ B implies B/ √m ≤ ∥ w∥∞ ≤ B.
+
+L∞ Proofs of Smallness. To strictly prove ∥x∥∞ ≤ B, we equivalently require that every entry of b − x is non-negative, where b := B · 1. Utilizing the four-square theorem component-wise, this is encoded by the existence of vectors a1, . . . , a4 such that: 
+
+x + a1 ◦ a1 + · · · + a4 ◦ a4 = b.
+
+Step 1. Random linearization. Let r := (1 , r, r 2, . . . , r m−1) ∈ ZLq for a random challenge r. Taking the inner product with r yields: 
+
+⟨r, x + a1 ◦ a1 + · · · + a4 ◦ a4⟩ = ⟨r, b⟩.
+
+Step 2. Inner-product form. Using the identity ⟨r, u ◦ u⟩ = ⟨r ◦ u, u⟩, we rewrite the relation as: 
+
+⟨r ◦ x, x⟩ +
+
+> 4
+
+X
+
+> i=1
+
+⟨r ◦ a(i), a(i)⟩ = ⟨r, b⟩.
+
+Defining z := x | a1 | a2 | a3 | a4 and r′ := r | r | r | r | r, the relation becomes ⟨r′ ◦ z, z⟩ = ⟨r, b⟩.
+
+Step 3. Commitments & Consistency. The prover commits to z and an auxiliary vector y claimed to be r′ ◦ z. The verifier checks: 1. ⟨y, z⟩ = ⟨r, b⟩ (via Inner Product Proof). 2. y = r′ ◦ z. This is verified by sampling a fresh challenge α and checking ⟨α, y − r′ ◦ z⟩ = 0 , which reduces to a linear proof on the commitment of y − z.
+
+# B Comparison with Prior Work [LL25] 
+
+Recent work by [LL25] proposed a secure aggregation scheme for federated learning which uses lattice-based proof systems. Unfortunately, their constructions have security gaps. To begin with, the defined commitment scheme cannot be binding, because the protocol validates the commitment relation without enforcing constraints on randomness, allowing a malicious prover to alge-braically compute a noise term that effectively opens the commitment to any arbitrary message. Although the authors specify distributions ostensibly to address these concerns, they are never formally defined in the remainder of the paper. As shown in Lemma 2, we eliminate this vulnerability by grounding binding strictly in the hardness of the Short Integer Solution (SIS) problem. Unlike LZKSA, our protocol enforces computational binding by requiring a Zero-Knowledge Proof of Knowledge (ZKPoK) for the randomness vectors s, e with strict norm bounds when the commitments are used later to build zero-knowledge proofs, a feature missing from LZKSA. 
+
+Background: Σ-Protocols in DL vs. Lattices. In classical discrete-logarithm protocols (e.g., Schnorr), the response z = r + cx (mod q) is reduced modulo q. This modular reduction perfectly hides the witness x
+
+(ensuring Zero-Knowledge) and allows the challenge c to be drawn from the full field Zq (ensuring negligible soundness error). In contrast, lattice-based arguments rely on the witness having a small norm. Consequently, the response 
+
+z = r + cs must be computed over the integers (Z), not modulo q. This introduces two fatal constraints that LZKSA ignores: 32 1. Small Challenge Space: To prevent norm explosion, c must be small (e.g., binary), which yields a high soundness error (1/2) in a single execution. 2. Leakage via Distribution: Without modular reduction, the distribution of z depends on s. Standard constructions require Rejection Sampling ( [LNP22,DDLL13,Lyu12,Lyu08]) to decouple z from s. This is done by sampling r from a much larger space so that it “floods” cs.A rigorous inspection of the LZKSA protocol [LL25] reveals that it fails to satisfy the fundamental re-quirements of lattice-based Zero-Knowledge arguments. We identify two fatal flaws in their adaptation of discrete-logarithm Σ-protocols to the lattice setting: 
+
+• Soundness: LZKSA leaves the challenge space C undefined. If C is small (to allow extraction), a single execution yields a non-negligible cheating probability of 1/2. If C is large (to ensure soundness), the extracted witness norm explodes, preventing a valid reduction to SIS. LZKSA performs only a single execution, rendering the proofs unsound. 
+
+• Zero-Knowledge: LZKSA omits Rejection Sampling entirely, outputting the raw vector z = r + cs.Consequently, the conditional distribution of z shifts by s. A verifier can recover the secret witness s by simply averaging the difference between the response and the expected noise distribution, completely breaking the privacy of the aggregation scheme. 
+
+TAPAS resolves these issues by implementing a fully rigorous lattice ZK argument. We fix the challenge space to C = {− 1, 0, 1} and perform parallel repetitions to drive the soundness error below 2−λ. Furthermore, we employ Bimodal Rejection Sampling [DDLL13] to ensure the response distribution is statistically independent of the witness, guaranteeing Zero-Knowledge while maintaining compact parameters. 
+
+LZKSA and Norm Bounds. Proposition 1 of LZKSA asserts that for positive integers, bounded output implies bounded input. Specifically, checking ∥μ + cx∥∞ ≤ (c + 1) B∞ supposedly guarantees ∥x∥∞ ≤ B∞
+
+if c > B ∞. However, the authors miss the key detail of the proof that it relies on ∥μμμ∥∞ ≤ B∞ and μμμ is actually sampled by the prover. It is clear that this breaks even for a vector of length 1. Let B∞ = 10 . Let 
+
+x = 11 and clearly x > B ∞. Let c = 11 . Then, we can set μ such that μ + 11 · 11 ≤ (12) · 10 which is satisfies by μ = −1.Let the challenge c > B ∞ and the bound B∞ be public parameters. The verification checks the norm of the response vector z = μ + cx over the integers. 1. Select Malicious Input: The prover chooses an input vector x∗ with arbitrarily large norm ∥x∗∥∞ ≫
+
+B∞.2. Compute Compensatory Mask: Instead of sampling μ from the small valid distribution, the prover algebraically constructs a "compensatory" mask μ∗ to force the response into the valid range 
+
+[0 , (c + 1) B∞].
+
+μ∗ := ztarget − cx∗
+
+where ztarget is any valid small vector (e.g., the zero vector 0). 3. Proof Execution: The prover sends the commitment to x∗. Upon receiving challenge c, the prover sends the response z = μ∗ + cx∗. By construction, z = 0.4. Verification: The verifier checks ∥z∥∞ ≤ (c + 1) B∞. Since ∥0∥∞ = 0 , the check passes. 
+
+Outcome: The verifier accepts the proof. However, the input x∗ is unbounded. The safety of Proposition 1 is entirely bypassed because the mask μ∗ (which was implicitly huge and negative: μ∗ = −cx∗) absorbed the malicious input’s magnitude. A similar attack can be mounted on their Proposition 2, which focuses on L2 norm, but again relies on 
+
+μμμ satisfying a constraint. This renders their entire proof system vacuous. 33 C Deferred Proofs 
+
+Lemma 2 (Hiding and Binding) . The commitment scheme is computationally hiding under the Decision-LWE assumption and computationally binding under the Short Integer Solution (SIS) assumption. Proof. Hiding: We construct a reduction R that breaks the Decision-LWE assumption given a distinguisher 
+
+D for the commitment scheme. Let (A, b) be an LWE challenge where b is either As + e (LWE) or u
+
+(Uniform). Given two messages x0, x1, R picks b ←$ {0, 1} and computes c = b + ∆ xb (mod q). If b is an LWE sample, c is a valid commitment to xb. If b is uniform, c is perfectly uniform (acting as a one-time pad), and thus statistically independent of xb. Any advantage D has in distinguishing commitments translates directly to distinguishing the LWE source from uniform. 
+
+Binding: Assume toward contradiction that an efficient adversary A outputs two valid openings (s, e, x)
+
+and (s′, e′, x′) for the same commitment c, such that x̸ = x′. Since both are valid openings for c, we have: 
+
+As + e + ∆ x = c (mod q)
+
+As ′ + e′ + ∆ x′ = c (mod q)
+
+Subtracting the two equations yields: 
+
+A(s − s′) + ( e − e′) + ∆( x − x′) ≡ 0 (mod q)
+
+Let ¯s = s − s′, ¯e = e − e′, and ¯x = x − x′. We can rewrite this linear relation as a matrix-vector product. Let M = [ A | IL | ∆IL] ∈ ZL×(λ+2 L) 
+
+> q
+
+. Let z = (¯ s⊤, ¯e⊤, ¯x⊤)⊤.
+
+Mz ≡ 0 (mod q)
+
+Since x̸ = x′, we have ¯x̸ = 0, implying z is a non-zero vector in the kernel of M. The components of z are differences of short vectors. Specifically: 
+
+∥¯s∥∞ ≤ 2Bs, ∥¯e∥∞ ≤ 2Be, ∥¯x∥∞ ≤ 2Bx.
+
+The Euclidean norm of z is bounded by ∥z∥2 ≤ pdim (z) · 2 max( Bs, B e, B x). If parameters are chosen such that ∥z∥2 is within the hardness regime of SIS (typically ∥z∥2 < q ), finding such a vector z constitutes a solution to the SIS problem, which is assumed computationally hard. 
+
+Lemma 4 (Folding via Randomized Aggregation) . Let ∆s = s − s′̸ = 0 be the difference between the secret used in the proof to S1 and the secret sent to S2. For a client to pass the consistency check for all t repetitions, they must present fake aggregated randomness r∗′  
+
+> u,i
+
+to S2 satisfying: 
+
+r∗′  
+
+> u,i
+
+= r∗ 
+
+> u,i
+
++ c∗ 
+
+> u,i
+
+· ∆s (4) 
+
+where r∗ 
+
+> u,i
+
+is the valid aggregated randomness and c∗ 
+
+> u,i
+
+= Pkj=1 αj,u cj,u is the aggregated challenge. The probability that the norm bound check ∥r∗′ 
+
+> u,i
+
+∥2 ≤ τ σ s
+
+√kλ holds for all u ∈ [t] is negligible in κ.Proof Sketch. The consistency check requires S2’s digest to match S1’s computed view. This enforces the algebraic constraint in Equation 4. The term vu = c∗ 
+
+> u,i
+
+· ∆s acts as a "shift" vector. Since the aggregation coefficients αj,u are derived from a random oracle (via ρi), the aggregated challenge c∗ 
+
+> u,i
+
+is a random scalar. In high-dimensional lattice settings, the honest randomness r∗ 
+
+> u,i
+
+is concentrated on a thin shell of radius 
+
+σs
+
+√kλ . The shift vector vu is independent of r∗
+
+> u,i
+
+. By the properties of high-dimensional geometry, adding a significant non-zero vector vu to r∗ 
+
+> u,i
+
+results in a vector with squared Euclidean norm: 
+
+∥r∗′ 
+
+> u,i
+
+∥2 ≈ ∥ r∗
+
+> u,i
+
+∥2 + ∥vu∥2
+
+Since the honest norm ∥r∗
+
+> u,i
+
+∥ is already close to the acceptance threshold (bounded by factor τ ≈ 1.1), the addition of the positive term ∥vu∥2 pushes the resulting norm ∥r∗′ 
+
+> u,i
+
+∥ beyond the threshold τ σ s
+
+√kλ with high probability. By requiring this check to pass independently across t parallel repetitions, the probability of the adversary successfully forging valid randomness for all iterations decreases exponentially in t.34 Theorem 2 (Security of ΠEnc ). The protocol ΠEnc is a complete, Special Honest-Verifier Zero-Knowledge (SHVZK) Argument of Knowledge for the relation RBlock .Proof. 1. Completeness: Follows from the construction. An honest prover samples r and outputs z only if rejection sampling succeeds. The verification equation holds by linearity: 
+
+Aj zj,s + zj,e + ∆ zj,x = Aj (rj,s + cj sj ) + ( rj,e + cj ej ) + ∆( rj,x + cj xj )= ( Aj rj,s + rj,e + ∆ rj,x ) + cj (Aj sj + ej + ∆ xj )= tj + cj yj (mod q)
+
+This matches the reconstructed ¯tj . The norms ∥z∥2 are bounded by β ≈ √dσ with overwhelming probability for Gaussian samples. 
+
+2. Special Honest-Verifier Zero-Knowledge (SHVZK): We construct a Simulator S that, given public input (A, y) and a challenge vector ⃗c, outputs a transcript indistinguishable from a real execution without knowing the witness. 1. For each block j, S samples response vectors zj,s , zj,e , zj,x directly from the target Gaussian distribu-tions Dσs , D σe , D σx .2. S computes the commitment tj to satisfy the verification equation: 
+
+tj = Aj zj,s + zj,e + ∆ zj,x − cj yj (mod q)
+
+3. Output the transcript πj = ( cj , zj,s , zj,e , zj,x ).
+
+Indistinguishability: In the real protocol, Bimodal Rejection Sampling (Lemma 3) ensures the output z
+
+follows the exact distribution Dσ , independent of the witness shift. Thus, the simulated z is identically distributed to the real z. Since tj is uniquely determined by (z, c, y), the simulated commitment is also identically distributed. 
+
+3. Knowledge Soundness (Extraction): We use the rewinding technique for Σ-protocols. Suppose an adversary A convinces the verifier for a block j with probability ϵ > 1/|C| . By the Heavy Row Lemma, we can rewind A to the same state (same commitment tj ) and obtain two accepting transcripts with distinct challenges cj̸ = c′ 
+
+> j
+
+:
+
+(tj , c j , z) and (tj , c ′ 
+
+> j
+
+, z′)
+
+Subtracting the verification equations for these two transcripts: 
+
+Aj (zj,s − z′
+
+> j,s
+
+) + ( zj,e − z′
+
+> j,e
+
+) + ∆( zj,x − z′
+
+> j,x
+
+) = ( cj − c′ 
+
+> j
+
+)yj (mod q)
+
+Let ∆c = ( cj − c′ 
+
+> j
+
+). Since the challenge space is small (e.g., {− 1, 0, 1}), ∆c is invertible or we can define the witness over the ring extension. We extract the witness components as ¯w = (∆ c)−1(zw −z′
+
+> w
+
+) for w ∈ { s, e, x }.The extracted witness ¯w satisfies the linear relation for yj . Its norm is bounded by ∥ ¯w∥ ≤ 2∥z∥, which fits within the relaxed extraction bounds γβ .
+
+Lemma 5 (Extraction Slack & Efficiency) . The protocol runs in expected time O(k · M ) with M ≈ 2. The extracted message witness ¯x satisfies the global Euclidean bound: 
+
+∥¯x∥2 ≤ γ · ∥ x∥2 where γ ∝ √d. 
+
+Proof. To enable rejection sampling for a block of dimension d = L/k , the Gaussian width is set to σx =
+
+ξC √dB x. The extracted witness for a block is the difference of two Gaussian samples. Its norm is bounded by approx 2× the verification bound βx:
+
+∥¯x(j)∥2 ≤ 2βx ≈ 2( τ √dσ x) = 2 τ ξCdB x.
+
+35 Aggregating over all k blocks: 
+
+∥¯x∥2 =
+
+vuut kX
+
+> j=1
+
+∥¯x(j)∥22 ≤ pk · (2 τ ξCdB x)2 = √k · d · (2 τ ξCB x).
+
+Recall that the honest witness has norm ∥x∥2 ≤ √LB x. Comparing the extracted norm to the honest norm: Slack = ∥¯x∥2
+
+∥x∥2
+
+≈√k · (L/k ) · 2τ ξCB x
+
+√L · Bx
+
+= (L/ √k) · 2τ ξC 
+
+√L =
+
+r Lk · 2τ ξC = √d · O(1) .
+
+Theorem 3 (Simulatability under Hint-LWE) . Let (λ, L, q, χ ) be a secure LWE instance where χ is a discrete Gaussian distribution with standard deviation σ, and let χ′ be a discrete Gaussian distribution with standard deviation σ′ = σ/ √2. Let A ∈ ZL×λq be a public matrix, X ∈ ZLq be a message vector, and n ≥ 2 be the number of parties. Then there exists a probabilistic polynomial-time simulator Sim such that for all probabilistic polynomial-time adversaries A, the following distributions are computationally indistinguishable under the Hint-LWE assumption: 
+
+DR =
+
+s, y1, . . . , yn :
+
+si
+
+> $
+
+←− Zλq , ei
+
+> $
+
+←− χL for i ∈ [n],
+
+s = Pni=1 si mod q, 
+
+yi = Asi + ei + ∆ xi for i ∈ [n],
+
+ , DSim = {Sim (A, X)}
+
+That is, for all PPT adversaries A: |Pr[ A(DR) = 1] − Pr[ A(DSim ) = 1] | ≤ negl (λ) where the probability is taken over the randomness of the distributions and the adversary. Proof. For a secure LWE instance (λ, L, q, χ ) where χ is a discrete Gaussian distribution with standard deviation σ, the corresponding Hint-LWE instance (λ, m, q, χ ′), where χ′ is a discrete Gaussian distribution with standard deviation σ′, is secure when σ′ = σ/ √2. Consequently, any e ∈ χ can be written as e1 + e2
+
+where e1, e2 ∈ χ′.This yields the real distribution DR, with the error term rewritten and the last ciphertext modified: 
+
+
+
+s = Pni=1 si mod q ∀i ∈ [n], si
+
+> $
+
+←− Zλq , ei, fi
+
+> $
+
+←− χ′L
+
+y1, . . . , yn ∀i ∈ [n − 1] , yi = Asi + ( ei + fi) + ∆ xi
+
+yn = As − Pn−1 
+
+> i=1
+
+yi + Pni=1 (ei + fi) + ∆ X
+
+
+
+We define Sim (A, X): 
+
+> 1:
+
+Sim (A, X) 
+
+> 2:
+
+Sample u1, . . . , un−1$
+
+←− ZLq 
+
+> 3:
+
+Sample s1, . . . , sn
+
+> $
+
+←− Zλq 
+
+> 4:
+
+Sample e1, . . . , en
+
+> $
+
+←− χ′L 
+
+> 5:
+
+Sample f1, . . . , fn
+
+> $
+
+←− χ′L 
+
+> 6:
+
+Set s := Pni=1 si mod q 
+
+> 7:
+
+Set un = A · s − Pn−1 
+
+> i=1
+
+ui + Pni=1 (ei + fi) + ∆ · X 
+
+> 8:
+
+return s , u1, . . . , un
+
+The simulated distribution, DSim , is: 
+
+
+
+s = Pni=1 si mod q ∀ i ∈ [n], si
+
+> $
+
+←− Zλq , ei, fi
+
+> $
+
+←− χ′L
+
+u1, . . . , un ∀ i ∈ [n − 1] , ui
+
+> $
+
+←− ZLq
+
+un = As − Pn−1 
+
+> i=1
+
+ui + Pni=1 (ei + fi) + ∆ X
+
+
+
+36 We prove that DR is indistinguishable from DSim through a sequence of hybrids. Throughout the hybrids, we will maintain the invariant that Pni=1 yi = AK + Pni=1 (ei + fi) + ∆ X
+
+Hybrid 0. This is DR.
+
+Hybrid 1. We replace the real ciphertext y1 with a modified one: 
+
+
+
+s ∀ i ∈ [n], si
+
+> $
+
+←− Zλq , ei, fi
+
+> $
+
+←− χ′L, u′
+
+> 1$
+
+←− ZLq
+
+y1 = u′ 
+
+> 1
+
++ f1 + ∆ x1 ∀ i ∈ [2 , n − 1] , yi = A · si + ( ei + fi) + ∆ xi
+
+{yi}ni=2 yn = As − Pn−1 
+
+> i=1
+
+yi + Pni=1 (ei + fi) + ∆ X
+
+
+
+We show that if there exists an adversary B that can distinguish between Hybrid 0 and Hybrid 1, then we can construct an adversary A who can distinguish the two ensembles in the Hint-LWE assumption.  
+
+> 1:
+
+A(A, y∗, s∗ = s + r mod q, e∗ = e + f ) 
+
+> 2:
+
+Sample s2, . . . , sn−1$
+
+←− Zλq 
+
+> 3:
+
+Sample e2, . . . , en
+
+> $
+
+←− χ′L 
+
+> 4:
+
+Sample f2, . . . , fn
+
+> $
+
+←− χ′L 
+
+> 5:
+
+Set s = Pn−1 
+
+> i=2
+
+si + s∗ mod q ▷ Implicitly, sn := r 
+
+> 6:
+
+∀ i ∈ { 2, . . . , n − 1}, yi = Asi + ei + fi + ∆ xi 
+
+> 7:
+
+Set y1 = y∗ + fn + ∆ x1 
+
+> 8:
+
+Set yn := As − Pn−1 
+
+> i=1
+
+yi + e∗ + Pni=2 (ei + fi) + ∆ · X 
+
+> 9:
+
+Run b′ $
+
+←− B (s, y1, . . . , yn) 
+
+> 10:
+
+return b′
+
+We argue that the reduction correctly simulates the two hybrids based on the choice of y∗:
+
+• If y∗ = As + e, then y1 is a valid encryption of x1 with key s and error (e + fn). Moreover, it is straightforward to verify that yn satisfies the definition in Hybrid 0. 
+
+• If y∗ = u for some random u, then yn has the prescribed format while y1 is generated as expected in Hybrid 1. 
+
+Hybrid 2. We replace y1 with u1 sampled uniformly at random: 
+
+
+
+s ∀ i ∈ [n], si
+
+> $
+
+←− Zλq , ei, fi
+
+> $
+
+←− χ′L, u1$
+
+←− ZLq
+
+u1 ∀ i ∈ [2 , n − 1] , yi = A · si + ( ei + fi) + ∆ xi
+
+{yi}ni=2 yn = As − u1 − Pn−1 
+
+> i=2
+
+yi + Pni=1 (ei + fi) + ∆ X
+
+
+
+Hybrid 1 and Hybrid 2 are identically distributed since u′ 
+
+> 1
+
+is uniformly sampled and completely masks the values in y1 of Hybrid 1. 
+
+Hybrids 3 and beyond. In Hybrids 3 and 4, we replace y2 with a random element u2 using similar logic. Continuing this process, in Hybrid 2n − 2, the distribution will be identical to DSim .This concludes the proof of simulatability. 
+
+Theorem 4. Let λ and κ be the computational and statistical security parameters, and let n be the num-ber of clients chosen for summation. Let L be the vector length. The construction defined in Figure 4 securely realizes the functionality FSecAgg (X) (defined in Figure 3) achieving semi-honest security for X =
+
+{xi}i∈[n]\(Ccorr ∪C drop where Ccorr is the set of corrupted clients and Cdrop denotes the set of dropped clients, under the Hint-LWE assumption and the existence of SHVZK proofs and secure commitments. Proof. We prove security via simulation using a sequence of hybrid arguments. 
+
+Case 1: Server 1 is Controlled by a Semi-honest Adversary. Let A be the adversary controlling Server 1 and a subset of clients Ccorr , and choosing a set Cdrop of clients to drop from the computation. Define 37 D := Chonest ∩ C drop as the honest clients dropped from the computation, and let C∗ 
+
+> honest
+
+:= Chonest \ D be the active honest clients. We construct a simulator S that interacts with FSecAgg (defined in Figure 3) and A. Simulator S
+
+Operation: 
+
+1. Functionality Query: S observes the actual inputs {xi}i∈C corr of the corrupted clients from A. S sends the corrupted clients list Ccorr , their true inputs, and Cdrop to the ideal functionality through the Corrupt 
+
+and Drop interfaces, respectively. 2. Aggregate Calculation: S receives the total aggregate xtotal via the Aggregate interface. S computes the corrupt clients’ contribution xC := P 
+
+> i∈C corr \C drop
+
+xi. It then deduces the honest active aggregate: 
+
+xH = xtotal − xC .3. LWE Simulation: S invokes the LWE simulator (from Theorem 3) with target sum xH to generate sim-ulated ciphertexts {˜yi}i∈C ∗ 
+
+> honest
+
+. Observe that S now knows an aggregate secret sH such that P
+
+> i∈C ∗
+> honest
+
+˜yi,when decrypted by sH , produces xH .4. Client Simulation: For honest clients, S generates simulated NIZK proofs ˜π(i) (using the SHVZK simulator) and random dummy commitments C(i) 
+
+> s
+
+, C (i) 
+
+> x
+
+, C (i) 
+
+> e
+
+(relying on the hiding property). 5. Server 2 Simulation: S provides these client values to A. Acting as the honest Server 2, S provides hash values zi consistent with the dummy commitments and an aggregate blinding factor ˜s (derived from 
+
+sH ) such that the final decryption executed by A yields exactly xtotal = xH + xC .
+
+Indistinguishability Hybrids: 
+
+H0 (Real): Real protocol execution. 
+
+H1 (Simulated Proofs): Replace honest clients’ NIZK proofs with simulated proofs. Justification: In-distinguishable due to the Special Honest-Verifier Zero-Knowledge (SHVZK) property of the proof system. 
+
+H2 (Random Commitments): Replace honest clients’ commitments with commitments to random values. 
+
+Justification: Indistinguishable due to the Hiding property of the commitment scheme. 
+
+H3 (Simulated Ciphertexts / Ideal): Replace honest clients’ ciphertexts with the output of the LWE simulator (dependent only on the honest sum xH ). Justification: Indistinguishable under the Hint-LWE assumption (Theorem 3). In H3, the view depends only on the aggregate xH , perfectly matching the Ideal World. 
+
+Case 2: Server 2 is Controlled by Semi-Honest Adversary. Let A control Server 2. The view of Server 2 consists strictly of the blinding factors {si}i∈C ∗ 
+
+> honest
+
+and their openings. In the real protocol, si
+
+> $
+
+←− Zλq are chosen uniformly at random, independent of the inputs xi. The simulator S simply samples uniform random vectors ˜si and sends them to A. Since the distribution of si is identically distributed in both the real and simulated worlds (uniform random), the views are perfectly indistinguishable. 
+
+Theorem 5 (Security Against Malicious Server 1) . Assuming the hardness of the hint Learning With Errors (LWE) problem, the existence of simulation-sound Non-Interactive Zero-Knowledge Arguments of Knowledge (NIZK-AoK) in the Random Oracle Model, and the security of perfectly hiding, computationally binding, additively homomorphic commitments (e.g., Pedersen), and collision-resistant hash functions, the protocol 
+
+TAPAS BP (Figure 5) securely realizes the ideal functionality FSecAgg (see Figure 3) against a malicious Server 1 and a subset of malicious clients, provided Server 2 is semi-honest and non-colluding. Proof. We prove security via simulation. Let A be a malicious adversary controlling Server 1 ( S1) and a set of corrupt clients Ccorr . Let Chonest denote the set of honest clients. As before, let Cdrop denote the set of clients dropped from the computation, as specified by the adversary. 
+
+Simulator S Construction: 
+
+38 1. Setup & Trapdoors: S generates the NIZK CRS with an extraction trapdoor ξ. For the Pedersen Vector Commitment, S samples random τ1, . . . , τ m ∈ Zq and sets gj = hτj for all j ∈ [m]. The vector 
+
+τ = ( τ1, . . . , τ m) serves as the equivocation trapdoor .2. Honest Client Simulation (Round 0): For each honest client i ∈ C honest \ C drop , S samples dummy inputs ˜x(i) = 0 and generates dummy ciphertexts ˜y(i) and equivocal commitments. S invokes the NIZK simulator to produce proofs ˜π(i).3. Consistency Check & Online Set (Round 1): S (acting as S2) sends digests to S1 only for clients 
+
+i / ∈ C drop . A (as S1) determines the final online set V. S sets the final dropout set D = {i | i / ∈ V} .4. Witness Extraction: For every corrupted client i ∈ C corr ∩ V that provided a valid NIZK proof π(i) S
+
+observes the proof and uses the extractor E to extract the witness (x(i))
+
+5. Functionality Query: S queries FSecAgg with the extracted inputs for Ccorr and the dropout set D. S
+
+receives xideal = P 
+
+> i∈V
+
+x(i).6. Equivocation (Round 2): S forces the transcript to yield xideal and also provide an opening for the aggregate mask wΣ = P 
+
+> i∈V
+
+w(i).7. Equivocation (Round 2): S forces the transcript to yield xideal and provides an opening for the required aggregate mask. 
+
+• Target Mask Calculation: S calculates the “target” aggregate mask w∗ required to satisfy the decryption equation. By construction, the sum of the ciphertexts P 
+
+> i∈V
+
+y(i) currently contains the honest dummy masks ˜wH = P 
+
+> i∈V∩C honest
+
+˜w(i), the corrupt masks wC = P 
+
+> i∈V∩C corr
+
+w(i), and the corrupt inputs ∆xC . To ensure the final decode yields xideal = xH + xC , the target aggregate mask must offset the missing honest inputs: 
+
+w∗ = ˜ wH + wC − ∆xH
+
+where xH = xideal − xC and xC = P 
+
+> i∈C corr ∩V
+
+x(i)
+
+• RO Programming: S selects one active honest client i∗ ∈ C honest ∩ V and programs the Random Oracle H′ for their seed to output ˜w(i∗) − ∆xH . For all other honest clients j̸ = i∗, it programs 
+
+H′(seed (j)) = ˜ w(j). This ensures the aggregate programmed mask exactly equals w∗.
+
+• Vector Equivocation: Since S already sent dummy commitments C(i) 
+
+> w
+
+in Round 0, it uses the trapdoor vector τ = ( τ1, . . . , τ m) to calculate a forged aggregate opening R′ 
+
+> w
+
+such that: 
+
+PCommit (w∗; R′
+
+> w
+
+) = Y
+
+> i∈V
+
+C(i)
+
+> w
+
+Because the difference between the originally committed values ( ˜ wH + wC ) and the target w∗ is exactly ∆xH , this is computed cleanly as: 
+
+R′ 
+
+> w
+
+= X
+
+> i∈V
+
+r(i)
+
+> w
+
+!
+
++
+
+> m
+
+X
+
+> j=1
+
+τj (∆ xH,j )
+
+where ∆xH,j is the j-th component of the vector ∆xH .
+
+Indistinguishability Hybrids: Hybrid H0 (Real World): The real protocol execution. 
+
+Hybrid H1 (Simulated NIZK): For all honest clients i ∈ C honest , replace the real NIZK proofs with simulated proofs generated using the CRS simulation trapdoor. Indistinguishable from H0 due to the 
+
+Zero-Knowledge property of the NIZK. 39 Hybrid H2 (Extraction): S uses the soundness extractor to extract the witness (x(i), s(i), . . . ) from the proofs provided by A for i ∈ C corr ∩ V . S sends these extracted inputs to the ideal functionality FSecAgg 
+
+to obtain xideal . Indistinguishable from H1 due to the Simulation-Extractability of the NIZK; the probability that A produces a valid proof for a statement from which a valid witness cannot be extracted is negligible. 
+
+Hybrid H3 (Hint-LWE Simulation): Instead of using the individual honest inputs x(i), S invokes the simulator from Theorem 3. Given the honest sum xH , the Hint-LWE simulator generates simulated ciphertexts {y(i)}i∈C honest such that their LWE components correctly sum to an encryption of ∆xH . In-distinguishable from H2 under the Hint-LWE assumption .
+
+Hybrid H4 (RO Programming & Equivocation): S modifies the Hint-LWE simulation to encrypt 0
+
+for all honest clients instead of xH . To ensure the aggregate transcript still decrypts to xideal , S shifts the required offset into the Random Oracle computation. S programs H′ for the honest seeds such that the aggregate target mask becomes w∗ = ˜ wH + wC − ∆xH . S then uses the discrete log trapdoor vector τ to compute a forged aggregate opening R′ 
+
+> w
+
+that equivocates the dummy commitments to this programmed mask w∗.The view in H4 is statistically indistinguishable from H3 because: (1) The Random Oracle is programmed on honest seeds seed (i) that are uniformly random and unqueried by A prior to Phase 3; (2) Pedersen vector commitments are perfectly hiding , so the commitments sent in Phase 1 reveal no information about the shift; and (3) The forged opening R′ 
+
+> w
+
+is distributed identically to a true opening. In Hybrid H4, the simulated view relies solely on xideal and is identical to the Ideal World. This concludes the proof. 
+
+Theorem 6 (Security Against Malicious Server 1) . Assuming the hardness of the Hint Learning With Errors (Hint-LWE) problem, the Short Integer Solution (SIS) problem (for the binding of Ajtai commitments), and the existence of a Random Oracle H′, the protocol TAPAS LWE securely realizes the ideal functionality FSecAgg 
+
+in the presence of a malicious Server 1 controlling a static subset of corrupt clients K, provided that Server 2 is semi-honest and non-colluding. Proof. We prove security via simulation. Let A be a malicious adversary controlling Server 1 ( S1) and a subset of clients Ccorr . Let Chonest denote the set of honest clients. As before, let Cdrop denote the set of clients dropped from the computation, as specified by the adversary. 
+
+Simulator S Construction: 
+
+1. Setup & Lattice Trapdoors: Instead of generating standard uniformly random matrices, S uses the Ajtai trapdoor generation algorithm (e.g., TrapGen ) to generate Bρ ∈ Zλ×mq along with a short basis trapdoor T ρ for the lattice Λ⊥(Bρ). The matrices A, Bs, Bw are generated uniformly. 2. Round 0 (Honest Simulation): For i ∈ C honest \ C drop , S generates dummy inputs ˜x(i) = 0, dummy masks ˜w(i), and dummy secrets ˜s(i) = 0.
+
+• It computes dummy ciphertexts ˜y(i) using these zeros. 
+
+• It computes dummy Ajtai commitments ˜C(i) 
+
+> j
+
+= Bρ˜ρρρ(i) 
+
+> j
+
+using short Gaussian randomness ˜ρρρ(i)
+
+> j
+> $
+
+←− Dkm σ .
+
+• It uses the NIZK simulation trapdoor to produce proofs ˜π(i).3. Round 1 (Lattice Extraction): For each corrupt client i ∈ C corr ∩ V , S observes the proof π(i). Using the NIZK extractor E with trapdoor ξ, S extracts the short vectors wi = ( x(i), s(i), e(i), w(i), ρ ρρ(i)). By the soundness of the lattice-based ZK proof, these extracted values correctly bind to y(i) and C(i) 
+
+> j
+
+.4. Functionality Query: S sends the extracted inputs {x(i)} for active corrupted clients and the dropout set D to FSecAgg , receiving the true aggregate xideal .40 5. Round 2 (RO Programming & Ajtai Equivocation): S must force the final sum to decrypt to 
+
+xideal .
+
+• Target Mask: S calculates the required target mask w∗ to offset the difference ∆xH = ∆( xideal −
+
+xC ).
+
+• RO Programming: S selects an honest client i∗ and programs H′(seed (i∗)) such that the aggregate mask equals w∗.
+
+• Ajtai Equivocation: Because S1 only checks the aggregate secret sΣ and the programmed seeds in Phase 3, explicit equivocation of the individual ρρρ to S1 is not strictly required by the transcript. However, to ensure the internal state of the simulated honest clients is consistent with the dummy commitments ˜C(i) 
+
+> j
+
+sent in Phase 1, S utilizes the lattice trapdoor Tρ. For a programmed mask 
+
+w∗ 
+
+> j
+
+, S defines the target syndrome u = ˜C(i) 
+
+> j
+
+− Bww∗ 
+
+> j
+
+. It then uses Gaussian preimage sampling (SamplePre (Bρ, Tρ, u, σ )) to find a short vector ρρρ∗ 
+
+> j
+
+such that Bρρρρ∗ 
+
+> j
+
+= u.
+
+Indistinguishability Hybrids: 
+
+H0 → H2 (NIZK & Extraction): Replace honest proofs with simulated ones, and use the extractor for 
+
+A’s inputs. Indistinguishable under the Zero-Knowledge and Simulation-Extractability properties of the lattice ZK system. 
+
+H3 (Hint-LWE Simulation): Replace the honest ciphertexts with those generated by the Hint-LWE sim-ulator targeting the sum ∆xH . Indistinguishable under the Hint-LWE assumption .
+
+H4 (RO Programming & Lattice Equivocation): Shift the LWE offset to 0 and program the Random Oracle H′ to absorb the ∆xH difference. The dummy Ajtai commitments sent in Phase 1 are computation-ally indistinguishable from real commitments under the Module-SIS/LWE assumption . Furthermore, the Gaussian preimage sampling ensures the equivocated randomness ρρρ∗ is statistically close to the real distribution Dkm σ .The view in H4 relies solely on xideal and is indistinguishable from the real execution. 41

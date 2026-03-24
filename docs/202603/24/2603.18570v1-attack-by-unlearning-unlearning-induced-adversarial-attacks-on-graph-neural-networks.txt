@@ -1,0 +1,884 @@
+Title: Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks
+
+URL Source: https://arxiv.org/pdf/2603.18570v1
+
+Published Time: Fri, 20 Mar 2026 00:46:05 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks 
+
+## Jiahao Zhang, Yilong Wang, Suhang Wang 
+
+The Pennsylvania State University University Park, PA, USA {jiahao.zhang,yvw5769,szw494}@psu.edu 
+
+## Abstract 
+
+Graph neural networks (GNNs) are widely used for learning from graph-structured data in domains such as social networks, recom-mender systems, and financial platforms. To comply with privacy regulations like the GDPR, CCPA, and PIPEDA, approximate graph unlearning, which aims to remove the influence of specific data points from trained models without full retraining, has become an increasingly important component of trustworthy graph learning. However, approximate unlearning often incurs subtle performance degradation, which may incur negative and unintended side effects. In this work, we show that such degradations can be amplified into adversarial attacks. We introduce the notion of unlearning corruption attacks , where an adversary injects carefully chosen nodes into the training graph and later requests their deletion. Be-cause deletion requests are legally mandated and cannot be denied, this attack surface is both unavoidable and stealthy: the model performs normally during training, but accuracy collapses only after unlearning is applied. Technically, we formulate this attack as a bi-level optimization problem: to overcome the challenges of black-box unlearning and label scarcity, we approximate the un-learning process via gradient-based updates and employ a surrogate model to generate pseudo-labels for the optimization. Extensive experiments across benchmarks and unlearning algorithms demon-strate that small, carefully designed unlearning requests can induce significant accuracy degradation, raising urgent concerns about the robustness of GNN unlearning under real-world regulatory demands. The source code will be released upon paper acceptance. 
+
+## CCS Concepts 
+
+• Computing methodologies → Machine learning ; • Security and privacy → Web application security ; Vulnerability man-agement .
+
+## Keywords 
+
+Graph Unlearning, Adversarial Attack, Graph Neural Networks 
+
+ACM Reference Format: 
+
+Jiahao Zhang, Yilong Wang, Suhang Wang. 2018. Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks. In 
+
+Proceedings of Make sure to enter the correct conference title from your rights confirmation email (Conference acronym ’XX). ACM, New York, NY, USA, 14 pages. https://doi.org/XXXXXXX.XXXXXXX 
+
+## 1 Introduction 
+
+Graph-structured data are ubiquitous in the real world, such as social networks [ 19 , 38 , 52 ], recommender systems [ 25 , 61 , 86 ], fi-nancial networks [ 17 , 40 , 62 ], knowledge bases [ 39 , 42 , 76 ], and biological interaction networks [ 53 , 57 , 73 ]. Graph neural networks (GNNs) have become the de facto approach for learning from graph-structured data because they can effectively combine node features and graph topology to produce powerful predictions [ 29 , 58 , 75 ]. At the same time, many graph datasets may contain sensitive or out-dated information that must be efficiently removed from the trained GNN models [ 49 , 60 , 72 , 87 ]. For example, purchasing records in recommender systems [ 5 , 91 ] or loan histories in financial net-works [ 49 , 60 ] may reveal personally identifying or regulated in-formation. When GNNs are trained on such data and the models are released via APIs, the models themselves can encode sensitive information and become a source of privacy and compliance risk. In addition, regulations such as the GDPR [ 44 ], CCPA [ 46 ], and PIPEDA [ 47 ] further require systems to respect the user’s “right to be forgotten”, motivating a large and growing literature on graph unlearning [ 8 , 10 , 67 ], methods for removing the influence of spe-cific data points from a trained GNN without full retraining. Despite the recent advancements in graph unlearning, concerns regarding its negative side effects are rising. One of the most well-known side effects is that unlearning is necessarily an approxima-tion of full retraining, and this approximation can incur subtle but unavoidable performance degradation [ 7, 67 , 79 , 89 ]. In this work, we ask a timely and fundamental research question: 
+
+Can the unavoidable performance degradation in unlearning be amplified and weaponized to break a GNN, by carefully crafting the unlearning requests themselves? 
+
+We refer to such manipulations as unlearning corruption attacks (Figure 1). Concretely, an attacker first injects carefully crafted adversarial nodes (the brown circles • in Figure 1) into the training graph, and later the attacker will submit deletion (un-learning) requests to remove those nodes from a GNN trained on the poisoned graph. The nodes are crafted in a way such that the approximate unlearning of those nodes from the target GNN would substantially degrade prediction performance on unlabeled nodes (the gold circles • in Figure 1). This new attack surface for graph unlearning is highly practical in real-world scenarios for two key reasons. First, the unlearning requests are hard to reject from the model owner’s perspective: node creation and deletion are legitimate user operations, where deletion requests in particular are often legally mandated by privacy laws. Refusing such requests can carry legal and reputational costs, which constrain defenders’ choices. Second, the attack is highly stealthy : while injected nodes may not noticeably affect model accuracy during training, performance collapse can appear only after deletion/unlearning is performed (i.e., often only when the model is already deployed). Furthermore, we would like to also emphasize that this attack paradigm is novel, since it uniquely exploits the unlearning process itself as the trigger mechanism,  
+
+> 1
+> arXiv:2603.18570v1 [cs.LG] 19 Mar 2026 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Zhang et al.
+
+Injected Graph 
+
+Adversary 
+
+Inject 
+
+GNN Model 
+
+Training Predict 
+
+## Step 1: Node Injection 
+
+Normal Performance 
+
+## Step 2: Node Unlearning 
+
+Adversary Unlearning Request 
+
+> Predict
+
+Bad Performance 
+
+Unlearned GNN Unlabeled 
+
+> Labeled
+> Injected
+
+Figure 1: Attack setting of the proposed unlearning corruption attack on GNNs. 
+
+distinct from traditional poisoning or backdoor attacks. To support this claim, we provide a comprehensive comparison with existing attacks in Section 4.2 and Appendix A. In this paper, we present a systematic study of the vulnerabili-ties of graph unlearning in a semi-supervised node-classification setting. We first identify the core principles governing effective unlearning corruption by formalizing three key adversarial goals: 
+
+(G1) Post-unlearning damage , ensuring the model’s accuracy collapses significantly on the target population after the unlearning request; (G2) Pre-unlearning utility , requiring the attack to re-main latent and stealthy during the initial training phase; and (G3) Stealthiness under benign unlearning , ensuring that unlearning other, benign nodes does not accidentally trigger the degradation. Achieving these adversarial goals simultaneously presents several technical challenges: (i) the unlearning operator is often a “black box” or involves complex gradient updates [ 64 , 67 , 68 ], making it difficult to compute the gradients necessary to optimize the trigger for the post-unlearning state (G1). Second, the attacker typically lacks ground-truth labels for the unlabeled nodes, preventing direct optimization of the utility and stealthiness constraints (G2, G3). To address these challenges, we propose a novel unlearning corruption attack framework that mathematically formalizes the attacker’s problem as a bi-level optimization task. We address the black-box challenge by approximating the unlearning process via gradient-based updates and address the label scarcity issue by train-ing a surrogate model to generate pseudo-labels. This allows our framework to solve for the optimal injection of nodes and edges that maximally degrade the model upon unlearning while strictly adhering to utility and stealthiness constraints. Extensive experi-ments across datasets and unlearning algorithms demonstrate that these carefully designed unlearning requests can induce significant accuracy drop, raising urgent concerns about the robustness of graph unlearning under real-world regulatory demands. 
+
+Contributions. Our work makes the following contributions: 
+
+• We introduce the notion of unlearning corruption attacks 
+
+against GNNs and formalize a threat model where adversaries inject nodes and later submit unlearning requests that the model owner must follow due to privacy regulations. 
+
+• We propose a novel unlearning corruption attack framework that simultaneously addresses all three attack goals (G1-G3). Our framework optimizes the trade-off between maintaining pre-unlearning utility and maximizing post-unlearning damage, while ensuring performance remains unaffected under benign unlearning requests. 
+
+• We demonstrate the effectiveness of our attacks on multiple GNN models, datasets, and graph unlearning algorithms, and discuss practical defenses and the tension between compliance and robustness. 
+
+## 2 Related Works 
+
+Graph Unlearning. Graph unlearning aims to efficiently remove the impact of undesired data from trained graph learning models [ 8,18 , 51 ]. The main challenge lies in balancing model utility, efficiency, and removal guarantees, which have led to two primary research directions: retrain-based and approximate unlearning. Retrain-based methods divide the training graph into disjoint subgraphs and train separate submodels, enabling unlearning by retraining only the affected partitions. GraphEraser [ 8] introduced the first retraining-based GNN unlearning framework, leveraging balanced graph clustering for partitioning and a weighted ensemble of submodels with trainable fusion weights to retain high utility. GUIDE [ 59 ] further extends this paradigm to inductive graph learn-ing scenarios. Follow-up studies [ 36 , 37 , 59 , 84 ] have advanced the trade-off between utility and efficiency using techniques like data condensation [37] and improved clustering strategies [36, 84]. Approximate unlearning removes the target data’s influence by directly updating model parameters. Certified graph unlearn-ing [ 10 ] offers one of the earliest approximate unlearning frame-works for SGC [ 65 ], establishing formal removal guarantees. Graph-Guard [ 64 ] provides a complete framework to address data misuse in GNNs, incorporating gradient ascent-based unlearning as a key component. Such gradient ascent formulations can be approximated via Taylor expansion, motivating a family of influence function-based methods [ 30 , 67 , 68 ]. GIF [ 67 ] adapts influence functions to graph unlearning across feature, node, and edge removal cases, while CEU [ 68 ] specializes in edge unlearning and derives theoreti-cal bounds for its guarantees. Building on these ideas, IDEA [ 16 ]presents a general and theoretically grounded framework that pro-vides removal guarantees for node, edge, and feature unlearning. Re-cent progress has improved the scalability [ 33 , 48 , 78 , 80 , 82 ], model performance [ 15 , 35 , 88 ], and completeness [ 31 , 69 ] of approximate unlearning, expanding its practical applicability. A distinct contri-bution is GNNDelete [ 9], which achieves unlearning through an intermediate node embedding mask inserted between GNN layers. This design provides a unique alternative to both retraining-based and parameter-update unlearning methods. 
+
+Adversarial Attacks for GNNs. Adversarial attacks aim to degrade the prediction performance of GNNs by manipulating  
+
+> 2Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY
+
+specific inputs or training data, which can be generally catego-rized into three prototypes: evasion, poisoning, and backdoor at-tacks [ 12 , 55 , 83 ]. Evasion attacks directly perturb the input graph to reduce model performance and have been shown to be effective against both white-box [ 13 , 66 , 74 ] and black-box GNNs [ 13 , 22 , 43 ]. Poisoning attacks insert or modify nodes and edges in the train-ing graph, causing the trained model to learn corrupted repre-sentations and perform poorly [ 2, 56 , 100 , 101 ]. Backdoor attacks are more stealthy: they first poison the training data to implant hidden triggers that do not affect normal predictions but, when specific trigger patterns appear, lead to severe performance degra-dation [ 11 , 71 , 92 , 93 ]. Our proposed attack fundamentally differs from these existing lines of research, as it explores a new attack surface in the context of graph unlearning, where mandatory data removal operations can be exploited to reduce model performance . A more detailed discussion is shown in Section 4.2. 
+
+Negative Side Effects of Machine Unlearning. Machine un-learning is especially critical in privacy-sensitive domains, such as autonomous driving [ 20 , 23 , 90 ] and healthcare [ 21 , 24 , 32 ], where users’ right to remove their personal data carries real-world con-sequences. Although machine unlearning effectively removes the influence of undesired data from trained ML models, its poten-tial negative side effects have recently attracted growing attention. The most direct side effect is a slight but inevitable degradation in model performance, which has been consistently observed across vi-sion [ 7, 34 , 98 ], language [ 79 , 89 , 95 ], and graph domains [ 16 , 67 , 68 ]. In addition, several studies have shown that unlearning may be incomplete for the unlearned data [ 26 , 54 , 69 , 85 ] or can amplify the privacy leakage of remaining data (also known as the “onion effect”) [ 3, 97 ], creating new privacy attack surfaces. Early findings also reveal that machine unlearning can be exploited to implant or trigger backdoors in ML models [ 28 , 41 , 50 ], activate previously hidden poisoned samples [ 14 ], or cause significant performance degradation under malicious requests [ 6 , 27 , 96 ]. In this work, we in-vestigate the adverse side effects of unlearning in the graph domain and examine how these effects can be amplified to launch adver-sarial attacks. A more detailed comparison between our work and related attack settings can be found in Section 4.2 and Appendix A. 
+
+## 3 Preliminaries 
+
+In this section, we present the notations used in this paper and give preliminaries on node classification and graph unlearning. 
+
+Notations. Bold uppercase letters (e.g., X) denote matrices, bold lowercase letters (e.g., x) denote column vectors, and regular letters (e.g., 𝑎 ) denote scalars. We use 1𝑛 to denote column vectors with 𝑛 
+
+elements valued 1. A graph is denoted by G := (A, X), where A ∈{0, 1}𝑛 ×𝑛 is the adjacency matrix and X := [x1, . . . , x𝑛 ]⊤ ∈ R𝑛 ×𝑑 is the node feature matrix. We define the node set V := {𝑣 1, . . . , 𝑣 𝑛 }
+
+and the edge set E ⊆ V×V , which are represented by the adjacency matrix A, where 𝐴 𝑖,𝑗 = 1 if (𝑣 𝑖 , 𝑣 𝑗 ) ∈ E and 𝐴 𝑖,𝑗 = 0 otherwise. We denote by D ∈ R𝑛 ×𝑛 the degree matrix, where each diagonal element is 𝐷 𝑖,𝑖 := Í𝑛 𝑗 =1 𝐴 𝑖,𝑗 and all off-diagonal elements are zero. 
+
+Semi-supervised Node Classification. In this paper, we study a semi-supervised node classification problem in a transductive set-ting, which is widely adopted in real-world graph learning bench-marks [ 29 , 70 ]. In this setting, the input graph G contains a subset of labeled training nodes V𝐿 := {𝑢 1, . . . , 𝑢 | V 𝐿 | } ⊆ V , where each node 𝑢 𝑖 is assigned a label 𝑦 𝑖 ∈ Y . The remaining unlabeled test nodes form the subset V𝑈 , with V𝑈 ∩ V 𝐿 = ∅. We denote the GNN prediction for a target node 𝑣 ∈ V as 𝑓 𝑣 (A, X; 𝜽 ), where A is the adjacency matrix used for message passing, X represents the node features, and 𝜽 denotes the model parameters. 
+
+Graph Unlearning . Graph unlearning aims to efficiently re-move the influence of undesirable data from a trained GNN without full retraining [ 8 , 67 ]. Let the original training graph be Gorig =
+
+(Aorig , Xorig ), containing both retained and undesirable data. The original model parameters 𝜽 orig are learned by minimizing the su-pervised loss over the labeled nodes: 
+
+𝜽 orig := arg min 
+
+> 𝜽
+
+∑︁ 𝑣 ∈ V 𝐿 
+
+L( 𝑓 𝑣 (Aorig , Xorig ; 𝜽 ), 𝑦 𝑣 ),
+
+where V𝐿 is the set of labeled nodes, and L(· , ·) is a classification loss function such as cross-entropy [94]. The undesirable portion of Gorig is denoted by a subgraph ΔG =
+
+(ΔV, ΔE) , where ΔV ⊆ Vorig and ΔE ⊆ Eorig . After remov-ing this undesirable subgraph, the remaining (cleaned) graph is 
+
+Gun := (Aun , Xun ), with Vun := Vorig \ ΔV and Eun := Eorig \ ΔE.The objective of graph unlearning is to efficiently compute up-dated parameters 𝜽 un through an unlearning algorithm Unlearn 
+
+(e.g., gradient ascent [ 64 , 95 ] or influence function–based meth-ods [ 67 , 68 ]), such that 𝜽 un approximates the parameters 𝜽 retrain 
+
+obtained by retraining on the cleaned graph Gun , but at a substan-tially lower computational cost. Formally, the unlearning process can be expressed as: 
+
+𝜽 un := Unlearn (𝑓 , 𝜽 orig , Gorig , ΔG) ≈ arg min 
+
+> 𝜽
+
+∑︁ 𝑣 ∈ V 𝐿 /ΔV
+
+L( 𝑓 𝑣 (Aun , Xun ; 𝜽 ), 𝑦 𝑣 )
+
+| {z }
+
+> :=𝜽 retrain
+
+,
+
+where the minimization process corresponds to retraining from scratch on the graph after removing ΔG.In this work, we focus on the node unlearning setting [ 68 ], where ΔV ≠ ∅ and ΔE = {( 𝑣 𝑖 , 𝑣 𝑗 ) : 𝑣 𝑖 ∈ ΔV or 𝑣 𝑗 ∈ ΔV} . This setting captures realistic scenarios such as user account deletion requests in social networks or recommender systems. 
+
+## 4 Problem Formulation 
+
+In this section, we first present the threat model of the proposed GNN unlearning corruption attack and then formalize the corre-sponding problem definition. 
+
+## 4.1 Threat Model 
+
+Attacker’s Capability. The attacker has access to the original training graph G := (A, X) and is allowed to inject a small set of new nodes ΔV into it, resulting in an injected graph eG := (eA, eX). During the injection phase, the attacker can modify the features, edges, and labels of the injected nodes within a constrained budget. After the model owner trains a GNN model 𝑓 (· , ·; 𝜽 inj ) on eG, the attacker can request the unlearning of the injected nodes ΔV, producing an unlearned model 𝑓 (· , ·; 𝜽 un ).We consider a black-box and target-model-free setting, where the attacker has no direct access to the target model architecture 𝑓 , 
+
+> 3Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Zhang et al.
+
+the parameters after node injection or unlearned parameters 𝜽 inj 
+
+and 𝜽 un , or the model outputs. The attacker is only aware that the model is a GNN and that a graph unlearning process is applied. To simulate this behavior, the attacker may train a surrogate model 
+
+𝑓 and perform unlearning on it. Although 𝑓 may differ from the target model in architecture, training, or unlearning details, it is assumed to share similar learning behavior with 𝑓 .
+
+Attacker’s Goal. The attacker aims to induce unlearning-time performance degradation while keeping the attack stealthy. Con-cretely, after the model owner trains on eG and then performs un-learning, the attacker seeks: 
+
+• (G1) Post-unlearning damage. After unlearning ΔV, the final unlearned model 𝑓 (· , ·; 𝜽 un ) suffers a large performance drop on the unlabeled nodes (i.e., V𝑈 ). 
+
+• (G2) Pre-unlearning utility. Before any unlearning, the in-jected model 𝑓 (· , ·; 𝜽 inj ) maintains near-normal predictive per-formance (e.g., training/validation accuracy), so the negative effect of node injection is not easily detected. 
+
+• (G3) Stealthiness under benign unlearning. Benign-only un-learning requests (i.e., requests that do not involve ΔV) should not cause a significant additional performance drop beyond the natural effect of benign unlearning. 
+
+Discussion. Our threat-model assumptions are practical and mild. Concretely, we have: (i) Access to G. Many applications ex-pose large portions of the graph (e.g., social or DeFi networks) via public APIs or crawlers, making acquisition of G realistic [ 1,4, 45 , 63 ]. (ii) Feasibility of injection. Injecting new nodes ΔV
+
+and manipulating their features and edges is feasible in many real-world systems. For instance, new accounts in social networks cor-respond to new nodes, editing profiles influence node features, and follows or friend requests create edges. (iii) Unlearning in-jected nodes. Data-removal or account-deletion mechanisms im-pose legally mandatory requests on model owners to remove user data and trigger unlearning, which is mandated by “the right to be forgotten” [ 44 , 46 , 47 ]. (iv) Gray-box surrogate modeling. Know-ing only that a GNN and unlearning are used is a weak assumption, as the attacker has no access to the target model’s internals or out-puts and can only train a surrogate 𝑓 to approximate its learning and unlearning dynamics. Transferability of such attacks among unlearning methods is examined in Section 6.2. Together, these mild assumptions make the inject-then-unlearn attack both feasible and relevant in real-world graph-learning deployments. 
+
+## 4.2 Graph Unlearning Corruption Attack 
+
+Based on the threat model in Section 4.1, we now formalize the graph unlearning corruption attack. We first define how an adver-sary injects nodes into the original graph, then state the attack objective as an optimization problem that chooses injected features and edges to maximize post-unlearning damage to the model. 
+
+Definition 4.1 (Injected Graph) . Let G := (A, X) be the original graph before node injection, with adjacency matrix A ∈{0, 1}𝑛 ×𝑛 and node features X ∈ R𝑛 ×𝑑 . The adversary injects a set of 𝑚 nodes V (i.e., |ΔV | = 𝑚 ), producing the injected graph 
+
+eG := (eA, eX), such that 
+
+eX :=
+
+ XXinj 
+
+
+
+∈ R(𝑛 +𝑚 ) × 𝑑 ,
+
+eA :=
+
+ A A⊤
+
+> inter
+
+Ainter Aintra 
+
+
+
+∈ { 0, 1}(𝑛 +𝑚 ) × ( 𝑛 +𝑚 ) ,
+
+where Xinj ∈ R𝑚 ×𝑑 denotes the injected node features, Aintra ∈{0, 1}𝑚 ×𝑚 encodes edges among the injected nodes, and Ainter ∈{0, 1}𝑚 ×𝑛 encodes edges between injected and original nodes. In this paper, we assume that all injected nodes ΔV are labeled and are included in the training of the GNN on the injected graph eG,i.e., if eV𝐿 denotes the set of labeled nodes on eG, then ΔV ⊆ eV𝐿 . This assumption reflects practical scenarios in user-centric platforms (e.g., social networks, transaction networks) where graph data is derived from user-provided content. An adversary creating fake accounts (i.e., injected nodes) has full control over their user profiles, enabling them to assign arbitrary labels (e.g., self-declared interests or account types) and ensuring these nodes are integrated into the training set. We then formalize the attack as an optimization problem, where the adversary crafts injected Xinj , Ainter , and Aintra such that, after unlearning ΔV, the model’s predictions on the remaining unlabeled nodes V𝑈 are maximally degraded. 
+
+Definition 4.2 (Graph Unlearning Corruption Attack) .
+
+Let the original graph G and the injected graph eG be defined as in Definition 4.1. Let 𝑓 (· , ·; 𝜽 inj ) denote a GNN trained on 
+
+eG, and let integer 𝐵 ≥ 0 be the edge budget. Let 𝜽 ΔV 
+
+> un
+
+:=
+
+Unlearn (𝑓 , 𝜽 inj , eG, ΔV) denote the model parameters after un-learning ΔV. Let 𝜽 V0 
+
+> un
+
+:= Unlearn (𝑓 , 𝜽 inj , eG, V0) denote the model parameters after unlearning a subset of training nodes 
+
+V0 ⊆ V such that V0 ∩ ΔV = ∅. The adversary’s objective is to solve the following maximization problem: 
+
+max 
+
+> Xinj ,Ainter ,Aintra
+
+∑︁ 𝑣 ∈ V 𝑈 
+
+L( 𝑓 𝑣 (eA, eX; 𝜽 ΔV 
+
+> un
+
+), 𝑦 𝑣 ) (1) 
+
+s.t. Ainter · 1𝑛 + Aintra · 1𝑚 ≤ 𝐵 (2) ∑︁  
+
+> 𝑣 ∈ V 𝑈
+
+L( 𝑓 𝑣 (eA, eX; 𝜽 V0 
+
+> un
+
+), 𝑦 𝑣 ) ≤ 𝛿 (3) where L(· , ·) is an arbitrary classification loss function. In Definition 4.2, the adversary optimizes the injected features 
+
+Xinj and edges (Ainter , Aintra ) to satisfy the three attacker’s goals (G1–G3) in Section 4.1. The objective in Eq. (1) maximizes the loss on the unlabeled nodes V𝑈 after unlearning the injected nodes ΔV,capturing post-unlearning damage (G1). The budget constraint in Eq. (2) limits the number of injected edges by 𝐵 , enforcing stealthi-ness during injection (G2), which reflects practical settings where newly created accounts typically form only a small number of con-nections, and creating unusually many edges may trigger bot- or fraud-detection mechanisms. Finally, Eq. (3) upper bounds the loss on V𝑈 after unlearning a benign node subset V0 that excludes 
+
+ΔV, ensuring that benign-only unlearning requests do not cause a significant performance drop (G3). Our unlearning corruption attack is qualitatively different from prevalent graph adversarial attack paradigms. We highlight the key distinctions below. Additional discussions on how our attack  
+
+> 4Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY
+
+setting differs from prior unlearning-induced adversarial attacks are provided in Appendix A. 
+
+Remark 4.3 (Difference to poisoning attacks) . Poisoning attacks seek direct model performance degradation of the loss in Eq. (1) with respect to 𝜽 inj , without involving the unlearning step in Definition 4.2. Equivalently, when the unlearning operator is the identity, i.e. Unlearn (𝑓 , 𝜽 inj , eG, ΔV) = 𝜽 inj , Definition 4.2 reduces to the standard poisoning formulation. By contrast, our objective explicitly depends on the post-unlearning parameters 
+
+𝜽 un returned by the Unlearn procedure. Hence, injected nodes can be benign under 𝜽 inj but induce large degradation only after unlearning, which makes our attack substantially more stealthy. 
+
+Remark 4.4 (Difference to Backdoor Attacks) . Backdoor attacks implant a trigger so that the GNN model behaves ab-normally when the trigger appears at inference (e.g., a specific subgraph or feature pattern). Such attacks can often be mitigated by modifying model inputs. In contrast, our unlearning corrup-tion attacks do not depend on any inference-time trigger. Instead, they exploit the unlearning process itself, which is legally man-dated by the right to be forgotten and thus difficult for model owners to reject. 
+
+## 5 Proposed Method 
+
+Directly solving Definition 4.2 is difficult in practice for two reasons. First, the unlearning operator Unlearn (·) is treated as a black box, so gradients with respect to the injected features and edges are unavailable. Second, the attacker does not observe ground-truth labels on the unlabeled set V𝑈 and thus cannot directly optimize the loss in Eq. (1) and address the constraint in Eq. (3). In this section, we address these two challenges consecutively in Section 5.1 and Section 5.2. We then describe the optimization process of our attack in Section 5.3 and discuss scalability concerns in Section 5.4. 
+
+## 5.1 Approximating Black-box Unlearning 
+
+To address the first challenge on the gradient computation of the unlearning operator Unlearn (·) , we adopt a standard gradient-based formulation of the unlearning process [ 64 , 67 , 68 ], which updates model parameters to retain performance on clean labeled nodes V𝐿 \ΔV while forgetting the injected nodes ΔV. Specifically, we define the following gradient ascent unlearning objective: 
+
+𝑔 𝛾 (eA, eX, 𝜽 , Vun )
+
+:=∑︁   
+
+> 𝑣 ∈ V 𝐿 \V un
+
+L( 𝑓 𝑣 (eA, eX; 𝜽 ), 𝑦 𝑣 ) − 𝛾 ∑︁  
+
+> 𝑣 ∈ V un
+
+L( 𝑓 𝑣 (eA, eX; 𝜽 ), 𝑦 𝑣 ),
+
+where 𝛾 > 0 balances retention and forgetting, and Vun denotes the node subset to be unlearned, which can be ΔV (for attack) or 
+
+V0 (for stealthiness) in Definition 4.2. Therefore, the actual unlearned parameter 𝜽 Vun  
+
+> un
+
+is the solution obtained via an arbitrary optimization solver Solve initialized at the injected parameters 𝜽 inj :
+
+𝜽 Vun  
+
+> un
+
+= Solve (𝑔 𝛾 (eA, eX, ·, Vun ), 𝜽 inj ). (4) In this work, we employ a one-step approximation to instantiate the solver Solve , which estimates the unlearned parameters by performing a single gradient descent update from the initialization: 
+
+Solve (𝑔 𝛾 , 𝜽 inj ) ≈ 𝜽 inj − 𝜂 un ∇𝜽 𝑔 𝛾 (eA, eX, 𝜽 inj , Vun ). (5) This approximation has two advantages. First, it requires only a single gradient step, making it efficient to evaluate, and we em-pirically verify in Section 6.2 that it provides a useful surrogate in practice. Second, since the formulation of Solve consists entirely of differentiable operations, we can compute gradients through the unlearning process via standard automatic differentiation (i.e., gradient-of-gradient) in frameworks such as PyTorch, enabling end-to-end optimization of injected features and edges. 
+
+## 5.2 Surrogate Objective via Pseudo Labels 
+
+Since the attacker lacks access to the ground-truth labels of the unlabeled set V𝑈 , we cannot directly optimize the threat model’s objective (i.e., Eq. (1) and Eq. (3) in Definition 4.2). To address this problem, we adopt a surrogate-modeling ap-proach, where the attacker trains a surrogate GNN model 𝑓 on the injected graph eG and uses its predictions to construct pseudo labels 
+
+𝑦 𝑣 for 𝑣 ∈ V 𝑈 . These pseudo-labels serve as a proxy for the victim model’s behavior. Using the surrogate model 𝑓 , we formulate the final surrogate attack objective by combining the malicious goal in Eq. (1) and the stealthiness goal in Eq. (3) as follows: 
+
+Latk (eA, eX, 𝜽 inj )
+
+:=∑︁  
+
+> 𝑣 ∈ V 𝑈
+
+L( 𝑓 𝑣 (eA, eX; 𝜽 ΔV 
+
+> un
+
+), 𝑦 𝑣 ) − 𝜆 ∑︁  
+
+> 𝑣 ∈ V 𝑈
+
+L( 𝑓 𝑣 (eA, eX; 𝜽 V0 
+
+> un
+
+), 𝑦 𝑣 ), (6) where 𝜆 ≥ 0 controls the strength of the stealthiness regularization term, 𝜽 ΔV 
+
+> un
+
+represents the parameters after unlearning the injected nodes ΔV as in Definition 4.2, and 𝜽 V0 
+
+> un
+
+represents the parameters after unlearning the benign subset V0 as defined in Definition 4.2. Note that both sets of unlearned parameters are approximated via the one-step solver defined in Eq. (4) and Eq. (5). Considering the final surrogate goal in Eq. (6) , the first term promotes post-unlearning damage after unlearning ΔV, while the second term discourages significant degradation under benign-only unlearning requests. 
+
+## 5.3 Optimization 
+
+With the surrogate objective in Eq. (6) , we obtain a practical opti-mization problem over the injected features and edges. Specifically, we obtain the following optimization problem: 
+
+Definition 5.1 (Relaxed problem for graph unlearning corruption) . Let Xinj ∈ R𝑚 ×𝑑 , Aintra ∈ { 0, 1}𝑚 ×𝑚 , and Ainter ∈{0, 1}𝑚 ×𝑛 be in Definition 4.1. Under the same setting as Defini-tion 4.2 and with Latk defined as in Eq. (6) , the adversary solves the following maximization problem: 
+
+max 
+
+> Xinj ,Ainter ,Aintra
+
+Latk (eA, eX, 𝜽 inj )
+
+s.t. Ainter · 1𝑛 + Aintra · 1𝑚 ≤ 𝐵. 
+
+However, we cannot simply perform the optimization, since the injected parts for the adjacency matrix Ainter and Aintra are discrete, which is hard to optimize with simple gradient methods. To this end, we re-parameterize the edges using unconstrained  
+
+> 5Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Zhang et al.
+
+Algorithm 1 Optimization Process for Graph Unlearning Corrup-tion Attack 
+
+Input: Original graph (A, X), injected parameters 𝜽 inj , budget 𝐵 ,learning rates 𝜂 𝑥 , 𝜂 𝑎 , steps 𝑇 
+
+Output: Injected node features Xinj , discrete injected edges 
+
+Ainter , Aintra  
+
+> 1:
+
+Initialize Xinj ∈ R𝑚 ×𝑑 randomly  
+
+> 2:
+
+Initialize Ainter ∈ R𝑚 ×𝑛 , Aintra ∈ R𝑚 ×𝑚 randomly  
+
+> 3:
+
+for 𝑡 = 1, . . . ,𝑇 do  
+
+> 4:
+
+// Map to continuous range [0, 1]  
+
+> 5:
+
+Ainter ← sigmoid (Ainter ); Aintra ← sigmoid (Aintra ) 
+
+> 6:
+
+Build eA =
+
+ A A⊤
+
+> inter
+
+Ainter Aintra 
+
+
+
+and eX =
+
+ XXinj 
+
+ 
+
+> 7:
+
+Evaluate attack loss Latk (Eq. 6) via unrolled approximation  
+
+> 8:
+
+Update Xinj ← Xinj + 𝜂 𝑥 ∇Xinj Latk  
+
+> 9:
+
+Update Ainter ← Ainter + 𝜂 𝑎 ∇Ainter Latk  
+
+> 10:
+
+Update Aintra ← Aintra + 𝜂 𝑎 ∇Aintra Latk  
+
+> 11:
+
+end for  
+
+> 12:
+
+// Projection to satisfy the edge budget  
+
+> 13:
+
+Compute final continuous Ainter = sigmoid (Ainter ), Aintra =
+
+sigmoid (Aintra ) 
+
+> 14:
+
+for each row 𝑖 = 1...𝑚 of concatenated [Ainter , Aintra ] do  
+
+> 15:
+
+Set top-𝐵 largest entries to 1 and set others to 0 
+
+> 16:
+
+end for  
+
+> 17:
+
+return Xinj , Ainter , Aintra 
+
+free variables Ainter ∈ R𝑚 ×𝑛 and Aintra ∈ R𝑚 ×𝑚 . We map these variables to the continuous range [0, 1] via the sigmoid function, i.e., A = sigmoid (A). After optimizing these continuous variables, we project the final solution onto the discrete feasible set: C :=
+
+{( Ainter , Aintra ) : Aintra ∈ { 0, 1}𝑚 ×𝑚 , Ainter ∈ { 0, 1}𝑚 ×𝑛 , Ainter · 1𝑛 +
+
+Aintra · 1𝑚 ≤ 𝐵 }. We first derive the optimal projection onto the constraint set C in Appendix B, and then present the detailed opti-mization procedure in Algorithm 1. Notably, our method differs from standard Projected Gradient Descent (PGD), which enforces discrete constraints at every step. Applying discrete projection iteratively typically leads to a vanish-ing gradient problem, where small accumulated updates are zeroed out by rounding. For example, if an edge A𝑖,𝑗 is initialized at 0, a gradient update might increase it to 0.2, but the subsequent dis-crete projection would round it back to 0, effectively erasing the update. Instead, our sigmoid-based reparameterization allows gra-dients to accumulate in the unconstrained space R throughout the optimization, and we apply a hard projection only at the final stage. 
+
+## 5.4 Scalability 
+
+We now analyze the computational complexity of the proposed optimization framework and introduce a sparsification strategy to ensure scalability on large graph datasets. Due to space limitations, we defer the detailed time complexity analysis of both the original algorithm and our efficient approximation to Appendix D. To address potential scalability bottlenecks, we exploit the lo-cality of GNN aggregation mechanisms. The influence of the in-jected nodes ΔV on the target victims V𝑈 is primarily mediated through their local 𝑘 -hop structural neighbors. Therefore, optimiz-ing connections to nodes topologically distant from V𝑈 may yield negligible gradients and minimal impact on the attack objective. Based on this intuition, we propose a scalable approximation by restricting the optimization search space. Specifically, we enforce sparsity on the injected adjacency matrix eA by deactivating entries corresponding to distant nodes. We define the candidate connection set Scand as the union of the 𝑘 -hop neighborhoods of the target nodes: Scand = Ð𝑣 ∈ V 𝑈 N𝑘 (𝑣 ). We then constrain the optimization of Ainter such that Ainter [𝑖, 𝑗 ] is trainable only if node 𝑣 𝑗 ∈ S cand ,while fixing all other entries to 0. Additionally, to further reduce complexity, we fix Aintra = 0, assuming that connections between injected nodes contribute marginally to the attack compared to connections with the victim’s neighborhood. 
+
+## 6 Experiments 
+
+In this section, we show our experimental setup and report the main empirical results of our study. 
+
+## 6.1 Experiment Settings 
+
+Datasets. We evaluate our attack on four standard graph machine learning benchmarks: Cora [ 77 ], Citeseer [ 77 ], Pubmed [ 77 ], and Flickr [ 81 ]. Following the setup of the well-established graph un-learning method GIF [ 67 ], 90% of the nodes in each dataset are used for training, and the remaining 10% for testing. 
+
+Victim Model. We use a two-layer GCN [ 29 ] as the victim model for node classification. The GCN is implemented with the hyperparameters and training protocol from GIF [ 67 ] to ensure consistency and reproducibility. To construct the poisoned train-ing graph, we insert injected nodes equal to 5% of the total node count, and allocate an edge budget of 5 for each injected node. Af-ter training the GCN on the poisoned graph, we apply GIF [ 67 ], CEU [ 68 ], and Gradient Ascent (GA) [ 64 ] to unlearn the injected nodes, thereby triggering our unlearning-induced adversarial at-tack. All the unlearning methods are run with their official settings to ensure faithful reproduction. 
+
+Baselines. As discussed in Section 4.2, our proposed attack operates under a fundamentally different setting from existing backdoor and poisoning attacks in general-purpose graph learning, making direct comparison infeasible. Similarly, current unlearning-induced adversarial attacks are not directly comparable due to the novelty of our setup (see Appendix A for a detailed discussion). Therefore, we compare our optimization-based attack with several intuitive baselines, namely Random , Copy , NewCopy , TestCopy ,
+
+TestLink , and we defer their implementation details to Appendix C. Although previous adversarial and backdoor node injection at-tacks are not specifically designed for our setting, we compare our method against representative GNN node injection attacks, includ-ing SBA [ 92 ], UGBA [ 11 ], and TDGIA [99 ]. We utilize their official implementations to inject labeled nodes into the training graph. To ensure a fair comparison, we align the train-test splits, injec-tion budgets (nodes and edges), and feature normalization with our experimental setup. For completeness, we also include a baseline that performs stan-dard node unlearning without node injection, denoted as NoAttack .
+
+> 6
+
+Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 1: Main Comparison Results. Original accuracy, unlearned accuracy, and accuracy drop ( ΔAcc) across datasets. Best results are in bold, and second-best are underlined . A complete version with standard deviation can be found in Table 3 in Appendix E. Unlearn Method Attack Cora Citeseer Pubmed Flickr                                                                                                                                                                                                                                                                                                                                                                                    
+
+> Original ↑Unlearned ↓ΔAcc ↓Original ↑Unlearned ↓ΔAcc ↓Original ↑Unlearned ↓ΔAcc ↓Original ↑Unlearned ↓ΔAcc ↓
+> GIF
+> NoAttack 0.8502 0.8458 0.0044 0.7357 0.7201 0.0156 0.8308 0.8180 0.0129 0.4355 0.4348 0.0007
+> Random 0.8317 0.8435 −0.0118 0.7201 0.7363 −0.0162 0.8267 0.7781 0.0486 0.4355 0.4345 0.0010
+> Copy 0.8494 0.8450 0.0044 0.7375 0.7411 −0.0036 0.8308 0.8302 0.0006 0.3648 0.3644 0.0004
+> NewCopy 0.8317 0.8435 −0.0118 0.7375 0.7376 −0.0001 0.8362 0.8316 0.0046 0.4438 0.4435 0.0003
+> TestCopy 0.8303 0.8295 0.0007 0.7153 0.7243 −0.0090 0.8440 0.7991 0.0449 0.4323 0.3961 0.0362
+> TestLink 0.7801 0.8332 −0.0531 0.7279 0.7628 −0.0348 0.8165 0.8329 −0.0163 0.4319 0.4317 0.0002
+> SBA 0.8259 0.8233 0.0026 0.7140 0.7134 0.0006 0.8262 0.8261 0.0001 0.4339 0.4220 0.0119
+> UGBA 0.8311 0.7091 0.1220 0.7173 0.7158 0.0015 0.8247 0.8245 0.0002 0.4208 0.4167 0.0041
+> TDGIA 0.7538 0.7231 0.0307 0.6917 0.6556 0.0361 0.8181 0.5791 0.2390 0.4057 0.4035 0.0022
+> OptimAttack 0.8162 0.6103 0.2059 0.7381 0.2066 0.5315 0.8351 0.2443 0.5908 0.4320 0.2860 0.1460 CEU
+> NoAttack 0.8214 0.8192 0.0022 0.7243 0.7075 0.0168 0.8084 0.7956 0.0128 0.4440 0.4441 −0.0001
+> Random 0.8103 0.8244 −0.0140 0.7195 0.7321 −0.0126 0.7951 0.3849 0.4102 0.4318 0.4316 0.0002
+> Copy 0.8221 0.8220 0.0001 0.7195 0.7159 0.0036 0.8049 0.7467 0.0582 0.4432 0.3987 0.0444
+> NewCopy 0.8089 0.8229 −0.0140 0.7195 0.7207 −0.0012 0.8041 0.7831 0.0210 0.4317 0.4316 0.0001
+> TestCopy 0.8155 0.8177 −0.0022 0.7207 0.7205 0.0002 0.8121 0.3869 0.4252 0.4420 0.4426 −0.0006
+> TestLink 0.7498 0.8185 −0.0686 0.6967 0.7411 −0.0444 0.7438 0.3274 0.4164 0.4322 0.4321 0.0000
+> SBA 0.8037 0.7993 0.0044 0.6941 0.6947 −0.0006 0.7985 0.5682 0.2303 0.4232 0.4230 0.0002
+> UGBA 0.8085 0.6909 0.1176 0.6926 0.6926 −0.0000 0.7877 0.6562 0.1315 0.4219 0.4218 0.0001
+> TDGIA 0.5309 0.5279 0.0030 0.5158 0.4857 0.0301 0.6116 0.6229 −0.0114 0.3912 0.3850 0.0062
+> OptimAttack 0.7904 0.5801 0.2103 0.7267 0.2276 0.4991 0.8102 0.2146 0.5956 0.4322 0.2858 0.1464 GA
+> NoAttack 0.8443 0.8177 0.0266 0.7417 0.6805 0.0612 0.8320 0.8158 0.0162 0.4461 0.4336 0.0125
+> Random 0.8295 0.5166 0.3129 0.7171 0.4613 0.2559 0.8279 0.7041 0.1238 0.4433 0.4317 0.0116
+> Copy 0.8524 0.8258 0.0266 0.7321 0.7177 0.0144 0.8304 0.8291 0.0013 0.2125 0.4331 −0.2206
+> NewCopy 0.8325 0.8635 −0.0310 0.7393 0.6859 0.0535 0.8371 0.8334 0.0038 0.3615 0.4298 −0.0683
+> TestCopy 0.8273 0.7845 0.0428 0.7237 0.7117 0.0120 0.8455 0.8092 0.0363 0.4412 0.4014 0.0398
+> TestLink 0.7786 0.8391 −0.0605 0.7243 0.7435 −0.0192 0.8176 0.8338 −0.0161 0.4054 0.4183 −0.0128
+> SBA 0.8288 0.8348 −0.0059 0.7155 0.6845 0.0310 0.8265 0.8271 −0.0006 0.4339 0.4220 0.0119
+> UGBA 0.8322 0.7767 0.0555 0.7152 0.4262 0.2890 0.8252 0.8285 −0.0033 0.4208 0.4167 0.0041
+> TDGIA 0.7397 0.7512 −0.0115 0.6911 0.6830 0.0081 0.7924 0.7905 0.0019 0.4055 0.4002 0.0053
+> OptimAttack 0.8258 0.4790 0.3469 0.7345 0.4138 0.3207 0.8279 0.6798 0.1481 0.4318 0.3012 0.1306
+
+This baseline verifies that any observed performance degradation is caused by the attack itself rather than the unlearning process. 
+
+Evaluation Metrics. To comprehensively evaluate stealthiness and attack effectiveness, we report three metrics: (1) Original Ac-curacy , which measures model performance on the injected graph before unlearning to ensure that the attack remains stealthy and does not degrade pre-unlearning utility; (2) Unlearned Accuracy ,which measures performance after the unlearning request is pro-cessed; and (3) Accuracy Drop ( ΔAcc) , our primary metric, which quantifies the attack’s success by calculating the difference between original and unlearned accuracy (i.e., ΔAcc = Original −Unlearned ). A higher ΔAcc indicates a more effective corruption attack. 
+
+Implementation Details. Due to space limitations, we defer the details of our proposed OptimAttack to Appendix C. 
+
+## 6.2 Unlearning Corruption Attack Performance 
+
+In this study, we present a comprehensive comparison of our pro-posed OptimAttack against the baselines described in Section 6. The main results are reported in Table 1. All experiments were repeated 5 times; for brevity, we report the mean values here, while the full results with standard deviations are provided in Appendix E. Our key findings are summarized as follows: 
+
+• Significant Post-Unlearning Damage (G1). Our proposed OptimAttack consistently achieves the highest accuracy drop (ΔAcc) across all datasets and unlearning algorithms, success-fully satisfying the primary adversarial goal (G1). For instance, on the Pubmed dataset, OptimAttack induces a massive perfor-mance collapse (e.g., ∼59% drop under GIF and CEU), whereas heuristic baselines like Random or Copy often result in negli-gible or even negative drops. This superiority stems from our bi-level optimization framework: unlike intuitive baselines or standard poisoning attacks (e.g., SBA, UGBA) that are agnostic to the unlearning process, our method explicitly optimizes for post-unlearning degradation. This also validates the effective-ness of our one-step gradient approximation in capturing the dynamics of black-box unlearning operators. 
+
+• Stealthiness via Pre-Unlearning Utility (G2). Regarding the second goal (G2), we observe that the Original Accuracy of models poisoned by OptimAttack remains comparable to those under NoAttack or other baselines. For example, on Citeseer under the GIF setting, the original accuracy for OptimAttack (0.7381 ) is very close to the clean baseline ( 0.7357 ). This confirms that our attack is highly stealthy: the injected nodes behave benignly during the initial training phase and do not trigger a performance collapse until the unlearning request is executed. 
+
+• Transferability Across Unlearning Mechanisms. Our method demonstrates strong transferability across diverse unlearning algorithms. Although we utilize Gradient Ascent (GA) as the 
+
+7Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Zhang et al. 
+
+Table 2: Ablation Study on Stealthiness Regularization. We compare our full method (“w/ Reg.”) against a variant of Eq. (6) 
+
+without the stealthiness loss term ( 𝜆 = 0). Benign F1 measures model utility after unlearning a random benign node; a higher value indicates better stealthiness (G3). Unlearned F1 measures the attack effectiveness (G1). Method Cora Citeseer Pubmed                                                                                
+
+> Original F1 ↑Unlearned F1 ↓Benign F1 ↑Original F1 ↑Unlearned F1 ↓Benign F1 ↑Original F1 ↑Unlearned F1 ↓Benign F1 ↑
+> w/o Reg. ( 𝜆 =0)0.8163 ±0.0045 0.5877 ±0.0480 0.7581 ±0.0035 0.7380 ±0.0059 0.2059 ±0.0023 0.6517 ±0.0043 0.8349 ±0.0007 0.2513 ±0.1236 0.7877 ±0.0012
+> w/ Reg. (Ours) 0.8162 ±0.0043 0.6103 ±0.0600 0.8053 ±0.0027 0.7381 ±0.0064 0.2066 ±0.0029 0.7286 ±0.0043 0.8351 ±0.0009 0.2443 ±0.1372 0.8303 ±0.0013 1510 15 20
+> Edge Budget B
+> 1
+> 3
+> 5
+> 7
+> 9
+> Unlearning Ratio (%)
+> 0
+> 20
+> 40
+> 60
+> Acc (%)
+> Cora 1510 15 20
+> Edge Budget B
+> 1
+> 3
+> 5
+> 7
+> 9
+> Unlearning Ratio (%)
+> 0
+> 20
+> 40
+> 60
+> Acc (%)
+> Citeseer 1510 15 20
+> Edge Budget B
+> 1
+> 3
+> 5
+> 7
+> 9
+> Unlearning Ratio (%)
+> 0
+> 20
+> 40
+> 60
+> Acc (%)
+> Pubmed
+
+Figure 2: Impact of Attack Budget. The attack performance ( ΔAcc) of OptimAttack across varying edge budgets ( 𝐵 ) and unlearning ratios. 
+
+unlearning mechanism for the surrogate model during optimiza-tion, the generated attack vectors effectively degrade models unlearned via GIF (influence functions) and CEU (certified un-learning). This indicates that our surrogate modeling strategy effectively captures the general vulnerabilities of the unlearning problem, allowing the attack to succeed even when the victim’s specific unlearning algorithm is unknown. 
+
+• Scalability via Neighborhood Restriction. On the large-scale Flickr dataset, we employed a scalable approximation strategy that optimizes connections to only a random 10% subset of test nodes and their immediate 1-hop neighbors. Despite this re-stricted search space, OptimAttack still achieves a substantial accuracy drop ( ∼14.6%), significantly outperforming baselines. This result suggests that our neighborhood restriction frame-work is highly efficient and capable of scaling to larger graphs. While these results demonstrate potential scalability, we empha-size that the primary contribution of this work is to establish the unlearning corruption attack surface itself, rather than opti-mizing for extreme scalability. 
+
+## 6.3 Ablation Studies 
+
+Impact of Unlearning Benign Nodes (G3). To verify that our proposed loss function effectively addresses the goal of stealthiness under benign unlearning (G3), we conducted an ablation study by removing the second term in Eq. (6) (i.e., setting 𝜆 = 0). The results, presented in Table 2, demonstrate the critical role of this regulariza-tion. Without it (w/o Reg.”), the model suffers significant collateral damage when unlearning benign nodes: for instance, on Citeseer, the Benign F1 drops sharply to 0.6517 , compared to the original accuracy of 0.7380 . This indicates that without explicit constraints, the corruption attack destabilizes the model globally. In contrast, our full method (w/ Reg.”) maintains a Benign F1 of 0.7286 , almost recovering the original performance. Crucially, this improvement in stealthiness comes with negligible cost to attack effectiveness (G1), as the Unlearned F1 remains comparably low across all datasets. This confirms that the regularization term successfully isolates the corruption to the target unlearning request, satisfying G3. 
+
+Impact of Attack Budget. In Figure 2, we evaluate how the per-formance degradation ( ΔAcc) of the proposed OptimAttack changes under varying attack budgets, specifically the node unlearning ratio and the edge injection budget 𝐵 per node. We evaluate unlearning ratios of {1% , 3% , 5% , 7% , 9% } and edge budgets of {1, 5, 10 , 15 , 20 },where 5% and 𝐵 = 5 represent our default experimental setting. As shown in the figure, OptimAttack is highly stable and resource-efficient. While the damage ( ΔAcc) naturally increases as the at-tacker is granted more budget, the attack effectiveness quickly plateaus. Notably, at our strictly limited default setting (a 5% un-learning ratio and just 5 injected edges), the attack already achieves near-maximum performance degradation on all datasets. 
+
+Victim Model Transferrability. We evaluate whether our un-learning corruption attack, optimized using a surrogate 2-layer GCN, can transfer to other GNN architectures. Due to space limita-tions, the results are deferred to Figure 3 in Appendix E. 
+
+## 7 Conclusion 
+
+In this paper, we introduced the concept of unlearning corruption attacks, a novel adversarial setting where legally mandated data deletion requests are weaponized to degrade GNN performance. We formalized this threat through three key adversarial goals: (G1) max-imizing post-unlearning damage, (G2) maintaining pre-unlearning utility, and (G3) ensuring stealthiness under benign unlearning re-quests. To achieve these goals, we proposed a bi-level optimization framework that overcomes the technical challenges of black-box unlearning and label scarcity via gradient-based approximations and surrogate modeling with pseudo-labels. While extreme scala-bility was not the primary objective of this study, we introduced an intuitive neighborhood restriction approach. In future work, we plan to refine this approximation to investigate scalable attack strategies for billion-scale graphs.  
+
+> 8Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY
+
+## Appendix 
+
+## List of Contents 
+
+In this appendix, we provide the following additional information: 
+
+• Section A : Discussion. 
+
+• Section B : Optimal Projection onto the Constraint Set. 
+
+• Section C : Implementation Details. 
+
+• Section D : Time Complexity. 
+
+• Section E : Additional Experiment Results. 
+
+## A Discussion 
+
+In this section, we discuss the differences between our attack set-tings and previous works. 
+
+Degradation Amplification Attacks. A broad class of attacks [ 6 ,27 , 96 ] aim to submit adversarial unlearning requests to machine learning services, intentionally causing the unlearned model to suffer significant performance degradation. A more stealthy variant of these attacks, known as unlearning-induced backdoors [ 41 , 50 ], manipulates the model such that its performance degrades only when a specific trigger appears in the input (e.g., certain pixels in images [ 41 ] or sentences with abnormal words or typos in text [ 50 ]). However, these attacks have been developed in image [ 6 , 27 ,41 , 96 ] or language [ 50 ] domains, where a key assumption holds: 
+
+the unlearning request does not need to exactly match any original training sample. For example, one may train a model on images of cats and dogs but later request unlearning for an image of a tiger, or train on the text of Harry Potter and request unlearning for a new sentence not found in the book. This assumption does not naturally hold in graph learning, where unlearning must specify existing nodes or edges in the training graph [ 9, 64 , 67 , 68 ]. For instance, in a social network, an adversary can only request the deletion of accounts they control, instead of arbitrary ones such as celebrity accounts. Consequently, these previous attacks are not directly applicable in the context of graph learning. 
+
+Remark A.1 (Difference to Degradation Amplification Attacks) . These attacks assume the flexibility to submit arbitrary unlearning requests (e.g., data points not present in the training set), whereas graph learning restricts unlearning to existing graph elements (i.e., nodes or edges). Our inject-then-unlearn setting thus represents a more realistic adversarial scenario for graphs, and these previous attacks are not directly comparable to ours. 
+
+Camouflaged Poisoning Attacks. Camouflaged poisoning at-tacks [ 14 , 28 ] follow an inject-then-unlearn paradigm similar to ours. They first poison the training dataset to induce performance degradation [ 14 ] or implant a backdoor [ 28 ], and then inject cam-ouflage samples to conceal the malicious effects. Once these camou-flage samples are unlearned, the hidden effects can be reactivated. However, these methods are designed for Euclidean, non-graph data, where injected samples are independent and not intercon-nected, and their attack settings differ from ours, making them not directly comparable. Specifically, HiddenPoison [ 14 ] assumes a white-box setting, whereas our approach is target-model free and relies on transferable surrogate modeling, and UBA-Inf [ 28 ] does not exploit the graph structure. In contrast, our attack focuses on a more challenging and different black-box setting in the graph do-main, jointly optimizing both the injected nodes and connectivity. 
+
+Remark A.2 (Difference to Camouflaged Poisoning At-tacks) . Existing camouflaged poisoning attacks operate in Eu-clidean domains with white-box access, while our black-box graph setting jointly optimizes injected nodes and their connectivity, making the problem more realistic and challenging. 
+
+## B Optimal Projection onto the Constraint Set 
+
+To compute the projection onto the set C, which is a central problem mentioned in Section 5.3, we have the following proposition: 
+
+Proposition B.1 (Optimality of Greedy Projection) . Let 
+
+Aintra ∈ [0, 1]𝑚 ×𝑚 and Ainter ∈ [0, 1]𝑚 ×𝑛 be the relaxed in-jected adjacency matrices. Let 𝐵 be a positive integer bud-get. The Euclidean Projection onto the set C, denoted by 
+
+ΠC (Ainter , Aintra ), can be computed by setting the entries corre-sponding to the 𝐵 largest values in each row of the concatenated matrix [Ainter , Aintra ] to 1, and all others to 0.
+
+Proof. First, we define the combined row-wise matrix for the 
+
+𝑖 -th injected node as r𝑖 := [Ainter [𝑖 ], Aintra [𝑖 ]] ∈ R𝑛 +𝑚 . The con-straint set C requires that each row vector has exactly binary entries and sums to at most 𝐵 .The projection problem minimizes the squared Frobenius norm between the continuous combined matrix Acom and the discrete matrix Acom :
+
+A∗ 
+
+> com
+
+= argmin 
+
+> A∈ C
+
+∑︁ 𝑖,𝑗 
+
+(A𝑖 𝑗 − A𝑖 𝑗 )2
+
+= argmin 
+
+> A∈ C
+
+∑︁ 𝑖,𝑗 
+
+(A2 
+
+> 𝑖 𝑗
+
+− 2A𝑖 𝑗 A𝑖 𝑗 + A2 
+
+> 𝑖 𝑗
+
+).
+
+Since A is binary ( A𝑖 𝑗 ∈ { 0, 1}), we have A2 
+
+> 𝑖 𝑗
+
+= A𝑖 𝑗 . Furthermore, assuming the optimal attack utilizes the full budget, every feasi-ble row has exactly 𝐵 ones, implying Í𝑗 A2 
+
+> 𝑖 𝑗
+
+= Í𝑗 A𝑖 𝑗 = 𝐵 . The term Í A2 
+
+> 𝑖 𝑗
+
+is constant with respect to A. Thus, the minimization simplifies to: 
+
+A∗ 
+
+> com
+
+= argmin 
+
+> A∈ C
+
+∑︁ 𝑖 
+
+(− 2∑︁ 
+
+> 𝑗
+
+A𝑖 𝑗 A𝑖 𝑗 + const )
+
+= argmax 
+
+> A∈ C
+
+∑︁ 𝑖 ∑︁ 𝑗 
+
+A𝑖 𝑗 A𝑖 𝑗 .
+
+The problem decomposes into 𝑚 independent row-wise maximiza-tion problems. For a specific injected node 𝑖 , we seek to maximize the inner product Í𝑗 A𝑖 𝑗 A𝑖 𝑗 subject to Í𝑗 A𝑖 𝑗 ≤ 𝐵 . By the rearrange-ment inequality, this sum is maximized when the non-zero entries of A𝑖 𝑗 (which are all 1) align with the largest coefficients in A𝑖 𝑗 .Therefore, the optimal solution is to set A𝑖 𝑗 = 1 if A𝑖 𝑗 is among the top-𝐵 values in row 𝑖 , and 0 otherwise. □
+
+## C Implementation Details 
+
+Intuitive Baselines. We compare our optimization-based attack with several intuitive baseline attacks, described as follows: 
+
+• Random: Randomly inject 𝑚 nodes into the training graph. Each injected node’s feature vector is sampled from a Gaussian distribution matching the mean and standard deviation of the original node features. The edges and labels of these injected 
+
+> 9
+
+Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Zhang et al. GCN SGC GAT 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> F1 Score
+
+Cora 
+
+> Original
+> Unlearned
+
+GCN SGC GAT 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> F1 Score
+
+Citeseer 
+
+> Original
+> Unlearned
+
+GCN SGC GAT 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> F1 Score
+
+Pubmed 
+
+> Original
+> Unlearned
+
+Figure 3: Attack Transferability across Victim Models. Performance of OptimAttack (generated using a GCN surrogate) when applied to different victim model architectures: GCN, SGC, and GAT. The blue bars represent original accuracy (stealthiness), and red bars represent unlearned accuracy (damage). Table 3: Main Comparison Results (with Standard Deviation). Original accuracy, unlearned accuracy, and accuracy drop ( ΔAcc) across datasets. Best results are in bold, and second-best are underlined . A clearer version without the standard deviation can be found in Table 1. Unlearn Method Attack Cora Citeseer Pubmed Flickr 
+
+Original ↑ Unlearned ↓ ΔAcc ↓ Original ↑ Unlearned ↓ ΔAcc ↓ Original ↑ Unlearned ↓ ΔAcc ↓ Original ↑ Unlearned ↓ ΔAcc ↓
+
+GIF 
+
+NoAttack 0.8502 ± 0.0106 0.8458 ± 0.0122 0.0044 ± 0.0162 0.7357 ± 0.0042 0.7201 ± 0.0044 0.0156 ± 0.0061 0.8308 ± 0.0021 0.8180 ± 0.0025 0.0129 ± 0.0033 0.4355 ± 0.0077 0.4348 ± 0.0064 0.0007 ± 0.0100 
+
+Random 0.8317 ± 0.0060 0.8435 ± 0.0038 −0.0118 ± 0.0071 0.7201 ± 0.0070 0.7363 ± 0.0075 −0.0162 ± 0.0102 0.8267 ± 0.0019 0.7781 ± 0.0743 0.0486 ± 0.0743 0.4355 ± 0.0078 0.4345 ± 0.0058 0.0010 ± 0.0097 
+
+Copy 0.8494 ± 0.0085 0.8450 ± 0.0077 0.0044 ± 0.0115 0.7375 ± 0.0024 0.7411 ± 0.0044 −0.0036 ± 0.0050 0.8308 ± 0.0012 0.8302 ± 0.0013 0.0006 ± 0.0018 0.3648 ± 0.1533 0.3644 ± 0.1531 0.0004 ± 0.2167 
+
+NewCopy 0.8317 ± 0.0127 0.8435 ± 0.0068 −0.0118 ± 0.0144 0.7375 ± 0.0041 0.7376 ± 0.0059 −0.0001 ± 0.0072 0.8362 ± 0.0024 0.8316 ± 0.0017 0.0046 ± 0.0030 0.4438 ± 0.0243 0.4435 ± 0.0238 0.0003 ± 0.0340 
+
+TestCopy 0.8303 ± 0.0070 0.8295 ± 0.0082 0.0007 ± 0.0108 0.7153 ± 0.0035 0.7243 ± 0.0055 −0.0090 ± 0.0065 0.8440 ± 0.0017 0.7991 ± 0.0708 0.0449 ± 0.0708 0.4323 ± 0.0013 0.3961 ± 0.0712 0.0362 ± 0.0712 
+
+TestLink 0.7801 ± 0.0103 0.8332 ± 0.0122 −0.0531 ± 0.0160 0.7279 ± 0.0049 0.7628 ± 0.0042 −0.0348 ± 0.0065 0.8165 ± 0.0029 0.8329 ± 0.0021 −0.0163 ± 0.0036 0.4319 ± 0.0006 0.4317 ± 0.0003 0.0002 ± 0.0007 
+
+SBA 0.8259 ± 0.0043 0.8233 ± 0.0049 0.0026 ± 0.0065 0.7140 ± 0.0044 0.7134 ± 0.0051 0.0006 ± 0.0067 0.8262 ± 0.0007 0.8261 ± 0.0004 0.0001 ± 0.0008 0.4339 ± 0.0007 0.4220 ± 0.0009 0.0119 ± 0.0011 
+
+UGBA 0.8311 ± 0.0046 0.7091 ± 0.0169 0.1220 ± 0.0175 0.7173 ± 0.0063 0.7158 ± 0.0067 0.0015 ± 0.0092 0.8247 ± 0.0009 0.8245 ± 0.0011 0.0002 ± 0.0014 0.4208 ± 0.0024 0.4167 ± 0.0028 0.0041 ± 0.0034 
+
+TDGIA 0.7538 ± 0.0089 0.7231 ± 0.0097 0.0307 ± 0.0132 0.6917 ± 0.0071 0.6556 ± 0.0098 0.0361 ± 0.0121 0.8181 ± 0.0059 0.5791 ± 0.1254 0.2390 ± 0.1255 0.4057 ± 0.0008 0.4035 ± 0.0013 0.0022 ± 0.0015 
+
+OptimAttack 0.8162 ± 0.0043 0.6103 ± 0.0600 0.2059 ± 0.0601 0.7381 ± 0.0064 0.2066 ± 0.0029 0.5315 ± 0.0071 0.8351 ± 0.0009 0.2443 ± 0.1372 0.5908 ± 0.1372 0.4320 ± 0.0008 0.2860 ± 0.1384 0.1460 ± 0.1384 
+
+CEU 
+
+NoAttack 0.8214 ± 0.0060 0.8192 ± 0.0066 0.0022 ± 0.0089 0.7243 ± 0.0044 0.7075 ± 0.0096 0.0168 ± 0.0106 0.8084 ± 0.0051 0.7956 ± 0.0053 0.0128 ± 0.0073 0.4440 ± 0.0249 0.4441 ± 0.0251 −0.0001 ± 0.0353 
+
+Random 0.8103 ± 0.0111 0.8244 ± 0.0095 −0.0140 ± 0.0146 0.7195 ± 0.0110 0.7321 ± 0.0108 −0.0126 ± 0.0154 0.7951 ± 0.0121 0.3849 ± 0.1536 0.4102 ± 0.1541 0.4318 ± 0.0004 0.4316 ± 8.9636 0.0002 ± 8.9636 
+
+Copy 0.8221 ± 0.0108 0.8220 ± 0.0135 0.0001 ± 0.0173 0.7195 ± 0.0082 0.7159 ± 0.0108 0.0036 ± 0.0136 0.8049 ± 0.0056 0.7467 ± 0.0836 0.0582 ± 0.0838 0.4432 ± 0.0232 0.3987 ± 0.0657 0.0444 ± 0.0697 
+
+NewCopy 0.8089 ± 0.0079 0.8229 ± 0.0099 −0.0140 ± 0.0127 0.7195 ± 0.0094 0.7207 ± 0.0076 −0.0012 ± 0.0121 0.8041 ± 0.0096 0.7831 ± 0.0246 0.0210 ± 0.0264 0.4317 ± 0.0003 0.4316 ± 0.0000 0.0001 ± 0.0003 
+
+TestCopy 0.8155 ± 0.0074 0.8177 ± 0.0050 −0.0022 ± 0.0089 0.7207 ± 0.0089 0.7205 ± 0.0087 0.0002 ± 0.0125 0.8121 ± 0.0110 0.3869 ± 0.1584 0.4252 ± 0.1588 0.4420 ± 0.0197 0.4426 ± 0.0216 −0.0006 ± 0.0293 
+
+TestLink 0.7498 ± 0.0120 0.8185 ± 0.0059 −0.0686 ± 0.0134 0.6967 ± 0.0127 0.7411 ± 0.0094 −0.0444 ± 0.0158 0.7438 ± 0.0238 0.3274 ± 0.1582 0.4164 ± 0.1599 0.4322 ± 0.0011 0.4321 ± 0.0010 0.0000 ± 0.0015 
+
+SBA 0.8037 ± 0.0054 0.7993 ± 0.0078 0.0044 ± 0.0095 0.6941 ± 0.0023 0.6947 ± 0.0039 −0.0006 ± 0.0045 0.7985 ± 0.0118 0.5682 ± 0.2948 0.2303 ± 0.2950 0.4232 ± 6.7227 0.4230 ± 0.0007 0.0002 ± 6.7227 
+
+UGBA 0.8085 ± 0.0083 0.6909 ± 0.0090 0.1176 ± 0.0123 0.6926 ± 0.0052 0.6926 ± 0.0048 −0.0000 ± 0.0071 0.7877 ± 0.0161 0.6562 ± 0.2311 0.1315 ± 0.2316 0.4219 ± 0.0024 0.4218 ± 0.0024 0.0001 ± 0.0034 
+
+TDGIA 0.5309 ± 0.0112 0.5279 ± 0.0152 0.0030 ± 0.0189 0.5158 ± 0.0181 0.4857 ± 0.0156 0.0301 ± 0.0239 0.6116 ± 0.0305 0.6229 ± 0.1205 −0.0114 ± 0.1243 0.3912 ± 0.0013 0.3850 ± 0.00023 0.0062 ± 0.0026 
+
+OptimAttack 0.7904 ± 0.0075 0.5801 ± 0.0376 0.2103 ± 0.0383 0.7267 ± 0.0102 0.2276 ± 0.0311 0.4991 ± 0.0327 0.8102 ± 0.0075 0.2146 ± 0.0228 0.5956 ± 0.0240 0.4322 ± 0.0002 0.2858 ± 0.1237 0.1464 ± 0.1237 
+
+GA 
+
+NoAttack 0.8443 ± 0.0120 0.8177 ± 0.0113 0.0266 ± 0.0165 0.7417 ± 0.0074 0.6805 ± 0.0090 0.0612 ± 0.0117 0.8320 ± 0.0014 0.8158 ± 0.0023 0.0162 ± 0.0027 0.4461 ± 0.0178 0.4336 ± 0.0028 0.0125 ± 0.0180 
+
+Random 0.8295 ± 0.0072 0.5166 ± 0.0337 0.3129 ± 0.0344 0.7171 ± 0.0072 0.4613 ± 0.1023 0.2559 ± 0.1025 0.8279 ± 0.0011 0.7041 ± 0.0177 0.1238 ± 0.0177 0.4433 ± 0.0233 0.4317 ± 0.0002 0.0116 ± 0.0233 
+
+Copy 0.8524 ± 0.0040 0.8258 ± 0.0097 0.0266 ± 0.0105 0.7321 ± 0.0048 0.7177 ± 0.0112 0.0144 ± 0.0122 0.8304 ± 0.0014 0.8291 ± 0.0020 0.0013 ± 0.0025 0.2125 ± 0.1763 0.4331 ± 0.0029 −0.2206 ± 0.1763 
+
+NewCopy 0.8325 ± 0.0068 0.8635 ± 0.0084 −0.0310 ± 0.0108 0.7393 ± 0.0040 0.6859 ± 0.0052 0.0535 ± 0.0066 0.8371 ± 0.0012 0.8334 ± 0.0023 0.0038 ± 0.0026 0.3615 ± 0.1502 0.4298 ± 0.0042 −0.0683 ± 0.1502 
+
+TestCopy 0.8273 ± 0.0105 0.7845 ± 0.0289 0.0428 ± 0.0308 0.7237 ± 0.0038 0.7117 ± 0.0042 0.0120 ± 0.0057 0.8455 ± 0.0021 0.8092 ± 0.0053 0.0363 ± 0.0057 0.4412 ± 0.0192 0.4014 ± 0.0740 0.0398 ± 0.0765 
+
+TestLink 0.7786 ± 0.0126 0.8391 ± 0.0030 −0.0605 ± 0.0129 0.7243 ± 0.0077 0.7435 ± 0.0086 −0.0192 ± 0.0116 0.8176 ± 0.0040 0.8338 ± 0.0027 −0.0161 ± 0.0048 0.4054 ± 0.0780 0.4183 ± 0.0859 −0.0128 ± 0.1160 
+
+SBA 0.8288 ± 0.0036 0.8348 ± 0.0043 −0.0059 ± 0.0056 0.7155 ± 0.0042 0.6845 ± 0.0099 0.0310 ± 0.0108 0.8265 ± 0.0014 0.8271 ± 0.0024 −0.0006 ± 0.0028 0.4339 ± 0.0007 0.4220 ± 0.0009 0.0119 ± 0.0011 
+
+UGBA 0.8322 ± 0.0014 0.7767 ± 0.0061 0.0555 ± 0.0063 0.7152 ± 0.0036 0.4262 ± 0.1090 0.2890 ± 0.1090 0.8252 ± 0.0009 0.8285 ± 0.0017 −0.0033 ± 0.0020 0.4208 ± 0.0024 0.4167 ± 0.0028 0.0041 ± 0.0034 
+
+TDGIA 0.7397 ± 0.0156 0.7512 ± 0.0146 −0.0115 ± 0.0213 0.6911 ± 0.0072 0.6830 ± 0.0073 0.0081 ± 0.0102 0.7924 ± 0.0518 0.7905 ± 0.0490 0.0019 ± 0.0713 0.4055 ± 0.0007 0.4002 ± 0.0014 0.0053 ± 0.0016 
+
+OptimAttack 0.8258 ± 0.0097 0.4790 ± 0.0238 0.3469 ± 0.0258 0.7345 ± 0.0065 0.4138 ± 0.0994 0.3207 ± 0.0996 0.8279 ± 0.0018 0.6798 ± 0.0493 0.1481 ± 0.0493 0.4318 ± 0.0007 0.3012 ± 0.1029 0.1306 ± 0.1029 
+
+nodes are assigned uniformly at random, where each node has exactly 𝐵 edges. 
+
+• Copy: Randomly select 𝑚 labeled nodes from the training graph and duplicate them with the same features and labels. If a copied node exceeds the edge budget 𝐵 , a subset of its edges is randomly dropped to satisfy the budget constraint. 
+
+• NewCopy: Rank all labeled training nodes by the number of edges they have to unlabeled nodes, and inject the top-𝑚 nodes with copied features and labels. When randomly selecting edges for the injected nodes, priority is given to connections with unlabeled nodes. 
+
+• TestCopy: Similar to LabeledCopy, but 𝑚 nodes are selected from the unlabeled set. The duplicated nodes retain the same features, while their labels are randomly assigned. 
+
+• TestLink: Randomly select 𝑚 nodes from the test set (unlabeled during training) to copy their features, but assign them random labels. Unlike TestCopy, which duplicates existing edges, this method connects each injected node to 𝐵 randomly selected test nodes, explicitly creating direct links between the injected triggers and the victim population. 
+
+Implementation Details or OptimAttack. For the injection budget, we set the number of injected nodes to 5% of the training graph size, with an edge budget of 𝐵 = 5 per node. We perform optimization for 𝑇 = 200 steps on Cora, Citeseer, and Pubmed, and 𝑇 = 10 steps on Flickr. The learning rates are set to 𝜂 𝑎 = 0.5
+
+for adjacency matrix optimization and 𝜂 𝑥 = 5 × 10 −4 for feature optimization. On the larger Flickr dataset, we apply our scalable approximation strategy: instead of optimizing connections to all test nodes, we sample 10% of the test set and select 3 of their 1-hop neighbors as the candidate connection set. The surrogate model 
+
+𝑓 follows the same architecture as the victim model (a two-layer GCN). We initialize the optimization using a baseline attack chosen via validation performance: we use Copy initialization for GIF and CEU, and Random initialization for GA. The unlearning process on the surrogate model uses Gradient Ascent (GA) with a learning rate of 0.1 and a coefficient 𝛾 = 1.0.
+
+10 Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+## D Time Complexity 
+
+Complexity of Full Optimization. Consider the optimization process in Algorithm 1 on a graph with 𝑛 nodes, 𝐸 edges, and feature dimension 𝑑 . The surrogate model is a standard GNN (e.g., GCN) with 𝐿 layers. In the naive formulation, the optimization variables include the dense matrix Ainter ∈ R𝑚 ×𝑛 and Aintra ∈ R𝑚 ×𝑚 .Consequently, the computation of gradients ∇Ainter Latk necessitates backpropagating through a dense adjacency structure, resulting in a time complexity of 𝑂 (𝐿 (𝐸 +𝑚𝑛 )𝑑 + ( 𝑛 +𝑚 )𝑑 2) per attack step. The term 𝑂 (𝐿𝑚𝑛𝑑 ) for message passing on the injected part of adjacency matrix can be large on large scale graphs (e.g., 𝑛 > 5 × 10 4) and with more attack node budget 𝑚 .
+
+Reduced Complexity. Let 𝑛 sub = |S cand | denote the size of the relevant subgraph. By restricting optimization to this subset, the number of active edge variables reduces from 𝑚𝑛 to 𝑚 · 𝑛 sub .Since 𝑛 sub ≪ 𝑛 in large sparse graphs, the per-step time complexity becomes 𝑂 (𝐿 (𝐸 + 𝑚 · 𝑛 sub )𝑑 + ( 𝑛 + 𝑚 )𝑑 2). This enables our method to efficiently scale to datasets with millions of nodes. 
+
+## E Additional Experiment Results 
+
+Victim Model Transferrability. We evaluate whether our un-learning corruption attack, optimized using a surrogate 2-layer GCN, can transfer to other GNN architectures. Figure 3 reports the attack performance on three victim models: GCN, SGC, and Graph Attention Networks (GAT). We observe that the attack re-mains highly effective across all architectures, demonstrating strong transferability. Specifically, SGC exhibits vulnerability levels com-parable to GCN, likely due to their shared spectral filtering roots. Notably, GAT appears even more susceptible to the attack, suffer-ing the most severe performance collapse after unlearning (e.g., on Cora, GAT accuracy drops to near random). This suggests that the corruption patterns identified by our GCN-based surrogate exploit fundamental vulnerabilities in graph message-passing mechanisms rather than overfitting to a specific architecture. 
+
+Standard Deviation of Main Results. In Table 3, we provide a full version of our comparison results in Table 1, which includes the standard deviation of all the experiments. 
+
+> 11
+
+Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Zhang et al. 
+
+## References 
+
+[1] Max Aliapoulios, Emmi Bevensee, Jeremy Blackburn, Barry Bradlyn, Emiliano De Cristofaro, Gianluca Stringhini, and Savvas Zannettou. 2021. A large open dataset from the Parler social network. In Proceedings of the International AAAI Conference on Web and Social Media , Vol. 15. 943–951. [2] Aleksandar Bojchevski and Stephan Günnemann. 2019. Adversarial attacks on node embeddings via graph poisoning. In International Conference on Machine Learning (ICML) . PMLR, 695–704. [3] Nicholas Carlini, Matthew Jagielski, Chiyuan Zhang, Nicolas Papernot, Andreas Terzis, and Florian Tramer. 2022. The privacy onion effect: Memorization is relative. Advances in Neural Information Processing Systems (NeurIPS) 35 (2022), 13263–13276. [4] Ziwei Chai, Yang Yang, Jiawang Dan, Sheng Tian, Changhua Meng, Weiqiang Wang, and Yifei Sun. 2023. Towards learning to discover money laundering sub-network in massive transaction network. In Proceedings of the AAAI conference on artificial intelligence , Vol. 37. 14153–14160. [5] Chong Chen, Fei Sun, Min Zhang, and Bolin Ding. 2022. Recommendation unlearning. In Proceedings of the ACM web conference 2022 . 2768–2777. [6] Jian Chen, Zehui Lin, Wanyu Lin, Wenlong Shi, Xiaoyan Yin, and Di Wang. 2025. Fedmua: Exploring the vulnerabilities of federated learning to malicious unlearning attacks. IEEE Transactions on Information Forensics and Security 
+
+(2025). [7] Min Chen, Weizhuo Gao, Gaoyang Liu, Kai Peng, and Chen Wang. 2023. Bound-ary unlearning: Rapid forgetting of deep networks via shifting the decision boundary. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 7766–7775. [8] Min Chen, Zhikun Zhang, Tianhao Wang, Michael Backes, Mathias Humbert, and Yang Zhang. 2022. Graph unlearning. In Proceedings of the 2022 ACM SIGSAC conference on computer and communications security . 499–513. [9] Jiali Cheng, George Dasoulas, Huan He, Chirag Agarwal, and Marinka Zitnik. 2023. GNNDelete: A General Strategy for Unlearning in Graph Neural Networks. In The Eleventh International Conference on Learning Representations (ICLR) .https://openreview.net/forum?id=X9yCkmT5Qrl [10] Eli Chien, Chao Pan, and Olgica Milenkovic. 2022. Certified Graph Unlearning. In NeurIPS 2022 Workshop: New Frontiers in Graph Learning . https://openreview. net/forum?id=wCxlGc9ZCwi [11] Enyan Dai, Minhua Lin, Xiang Zhang, and Suhang Wang. 2023. Unnoticeable backdoor attacks on graph neural networks. In Proceedings of the ACM Web Conference 2023 . 2263–2273. [12] Enyan Dai, Tianxiang Zhao, Huaisheng Zhu, Junjie Xu, Zhimeng Guo, Hui Liu, Jiliang Tang, and Suhang Wang. 2024. A comprehensive survey on trustworthy graph neural networks: Privacy, robustness, fairness, and explainability. Machine Intelligence Research 21, 6 (2024), 1011–1061. [13] Hanjun Dai, Hui Li, Tian Tian, Xin Huang, Lin Wang, Jun Zhu, and Le Song. 2018. Adversarial attack on graph structured data. In International Conference on Machine Learning (ICML) . PMLR, 1115–1124. [14] Jimmy Di, Jack Douglas, Jayadev Acharya, Gautam Kamath, and Ayush Sekhari. 2023. Hidden Poison: Machine Unlearning Enables Camouflaged Poisoning Attacks. Advances in Neural Information Processing Systems (NeurIPS) 36 (2023). [15] Pengfei Ding, Yan Wang, Guanfeng Liu, and Jiajie Zhu. 2025. Adaptive Graph Unlearning. In IJCAI .[16] Yushun Dong, Binchi Zhang, Zhenyu Lei, Na Zou, and Jundong Li. 2024. Idea: A flexible framework of certified unlearning for graph neural networks. In 
+
+Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 621–630. [17] Yingtong Dou, Zhiwei Liu, Li Sun, Yutong Deng, Hao Peng, and Philip S Yu. 2020. Enhancing graph neural network-based fraud detectors against camouflaged fraudsters. In Proceedings of the 29th ACM international conference on information & knowledge management . 315–324. [18] Bowen Fan, Yuming Ai, Xunkai Li, Zhilin Guo, Rong-Hua Li, and Guoren Wang. 2025. OpenGU: A Comprehensive Benchmark for Graph Unlearning. In NeurIPS .[19] Wenqi Fan, Yao Ma, Qing Li, Yuan He, Eric Zhao, Jiliang Tang, and Dawei Yin. 2019. Graph neural networks for social recommendation. In The world wide web conference . 417–426. [20] Zhengru Fang, Senkang Hu, Haonan An, Yuang Zhang, Jingjing Wang, Hangcheng Cao, Xianhao Chen, and Yuguang Fang. 2024. PACP: Priority-Aware Collaborative Perception for Connected and Autonomous Vehicles. IEEE Transactions on Mobile Computing 23, 12 (2024), 15003–15018. [21] Ziwang Fu, Feng Liu, Jiahao Zhang, Hanyang Wang, Chengyi Yang, Qing Xu, Jiayin Qi, Xiangling Fu, and Aimin Zhou. 2021. SAGN: semantic adaptive graph network for skeleton-based human action recognition. In Proceedings of the 2021 International Conference on Multimedia Retrieval . 110–117. [22] Simon Geisler, Tobias Schmidt, Hakan Şirin, Daniel Zügner, Aleksandar Bo-jchevski, and Stephan Günnemann. 2021. Robustness of graph neural networks at scale. Advances in Neural Information Processing Systems (NeurIPS) 34 (2021), 7637–7649. [23] Shashwat Goel, Ameya Prabhu, Philip Torr, Ponnurangam Kumaraguru, and Amartya Sanyal. 2024. Corrective Machine Unlearning. Transactions on Machine Learning Research (2024). https://openreview.net/forum?id=v8enu4jP9B [24] Shahad Hardan, Darya Taratynova, Abdelmajid Essofi, Karthik Nandakumar, and Mohammad Yaqub. 2025. Forget-MI: Machine Unlearning for Forgetting Multimodal Information in Healthcare Settings. In International Conference on Medical Image Computing and Computer-Assisted Intervention . Springer, 204– 213. [25] Xiangnan He, Kuan Deng, Xiang Wang, Yan Li, Yongdong Zhang, and Meng Wang. 2020. Lightgcn: Simplifying and powering graph convolution network for recommendation. In Proceedings of the 43rd International ACM SIGIR conference on research and development in Information Retrieval . 639–648. [26] Hongsheng Hu, Shuo Wang, Tian Dong, and Minhui Xue. 2024. Learn what you want to unlearn: Unlearning inversion attacks against machine unlearning. In 2024 IEEE Symposium on Security and Privacy (SP) . IEEE, 3257–3275. [27] Yangsibo Huang, Daogao Liu, Lynn Chua, Badih Ghazi, Pritish Kamath, Ravi Kumar, Pasin Manurangsi, Milad Nasr, Amer Sinha, and Chiyuan Zhang. 2025. Unlearn and Burn: Adversarial Machine Unlearning Requests Destroy Model Accuracy. In The Thirteenth International Conference on Learning Representations (ICLR) . https://openreview.net/forum?id=5xxGP9x5dZ [28] Zirui Huang, Yunlong Mao, and Sheng Zhong. 2024. UBA-Inf: Unlearning activated backdoor attack with influence-driven camouflage. In 33rd USENIX Security Symposium (USENIX Security 24) . 4211–4228. [29] Thomas N. Kipf and Max Welling. 2017. Semi-Supervised Classification with Graph Convolutional Networks. In International Conference on Learning Repre-sentations (ICLR) .[30] Pang Wei Koh and Percy Liang. 2017. Understanding black-box predictions via influence functions. In International Conference on Machine Learning (ICML) .PMLR, 1885–1894. [31] Varshita Kolipaka, Akshit Sinha, Debangan Mishra, Sumit Kumar, Arvindh Arun, Shashwat Goel, and Ponnurangam Kumaraguru. 2025. A Cognac Shot To Forget Bad Memories: Corrective Unlearning for Graph Neural Networks. In Forty-second International Conference on Machine Learning (ICML) . https: //openreview.net/forum?id=epDkt44mkq [32] Ying Lei, Yancheng Cao, Will Ke Wang, Yuanzhe Dong, Changchang Yin, Wei-dan Cao, Ping Zhang, Jingzhe Yang, Bingsheng Yao, Yifan Peng, et al . 2025. Watchguardian: Enabling user-defined personalized just-in-time intervention on smartwatch. ACM Transactions on Computing for Healthcare (2025). [33] Fan Li, Xiaoyang Wang, Dawei Cheng, Wenjie Zhang, Ying Zhang, and Xuemin Lin. 2024. TCGU: Data-centric Graph Unlearning based on Transferable Con-densation. arXiv preprint arXiv:2410.06480 (2024). [34] Jiaqi Li, Qianshan Wei, Chuanyi Zhang, Guilin Qi, Miaozeng Du, Yongrui Chen, Sheng Bi, and Fan Liu. 2024. Single image unlearning: Efficient machine un-learning in multimodal large language models. Advances in Neural Information Processing Systems (NeurIPS) 37 (2024), 35414–35453. [35] Xunkai Li, Yulin Zhao, Zhengyu Wu, Wentao Zhang, Rong-Hua Li, and Guoren Wang. 2024. Towards effective and general graph unlearning via mutual evo-lution. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 38. 13682–13690. [36] Yuyuan Li, Chaochao Chen, Yizhao Zhang, Weiming Liu, Lingjuan Lyu, Xiaolin Zheng, Dan Meng, and Jun Wang. 2023. Ultrare: Enhancing receraser for recommendation unlearning via error decomposition. Advances in Neural Information Processing Systems (NeurIPS) 36 (2023), 12611–12625. [37] Yi Li, Shichao Zhang, Guixian Zhang, and Debo Cheng. 2025. Community-Centric Graph Unlearning. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 39. 18548–18556. [38] Chengyi Liu, Jiahao Zhang, Shijie Wang, Wenqi Fan, and Qing Li. 2025. Score-based Generative Diffusion Models for Social Recommendations. IEEE Transac-tions on Knowledge and Data Engineering (2025). [39] Jiale Liu, Jiahao Zhang, and Suhang Wang. 2025. Exposing Privacy Risks in Graph Retrieval-Augmented Generation. arXiv preprint arXiv:2508.17222 (2025). [40] Zhiwei Liu, Yingtong Dou, Philip S Yu, Yutong Deng, and Hao Peng. 2020. Alleviating the inconsistency problem of applying graph neural network to fraud detection. In Proceedings of the 43rd international ACM SIGIR conference on research and development in information retrieval . 1569–1572. [41] Zihao Liu, Tianhao Wang, Mengdi Huai, and Chenglin Miao. 2024. Backdoor at-tacks via machine unlearning. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 38. 14115–14123. [42] Haitong Luo, Fali Wang, Weiyao Zhang, Xianren Zhang, Zhiwei Zhang, Tianx-iang Zhao, Minhua Lin, Jiahao Zhang, Hui Liu, Xianfeng Tang, et al . 2026. Graphs for LLMs: A Survey of Graph-Assisted Large Language Models. Au-thorea Preprints (2026). [43] Yao Ma, Suhang Wang, Tyler Derr, Lingfei Wu, and Jiliang Tang. 2021. Graph ad-versarial attack via rewiring. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining . 1161–1169. [44] Alessandro Mantelero. 2013. The EU Proposal for a General Data Protection Regulation and the roots of the ‘right to be forgotten’. Computer Law & Security Review 29, 3 (2013), 229–235. 12 Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+[45] Dan S Nielsen and Ryan McConville. 2022. Mumin: A large-scale multilingual multimodal fact-checked misinformation social network dataset. In Proceedings of the 45th international ACM SIGIR conference on research and development in information retrieval . 3141–3153. [46] California Office of the Attorney General. 2025. California Consumer Privacy Act (CCPA). https://oag.ca.gov/privacy/ccpa [47] Office of the Privacy Commissioner of Canada. 2018. Announcement: Pri-vacy commissioner seeks federal court determination on key issue for Cana-dians’ online reputation. https://www.priv.gc.ca/en/opc-news/news-and-announcements/2018/an_181010/ [48] Chao Pan, Eli Chien, and Olgica Milenkovic. 2023. Unlearning graph classifiers with limited data resources. In Proceedings of the ACM Web Conference 2023 .716–726. [49] Pedram Pedarsani and Matthias Grossglauser. 2011. On the privacy of anonymized networks. In Proceedings of the 17th ACM SIGKDD international conference on Knowledge discovery and data mining . 1235–1243. [50] Jie Ren, Zhenwei Dai, Xianfeng Tang, Yue Xing, Shenglai Zeng, Hui Liu, Jingy-ing Zeng, Qiankun Peng, Samarth Varshney, Suhang Wang, Qi He, Charu C. Aggarwal, and Hui Liu. 2025. Keeping an Eye on LLM Unlearning: The Hidden Risk and Remedy. In NeurIPS .[51] Anwar Said, Yuying Zhao, Tyler Derr, Mudassir Shabbir, Waseem Abbas, and Xenofon Koutsoukos. 2023. A survey of graph unlearning. arXiv preprint arXiv:2310.02164 (2023). [52] Aravind Sankar, Yozen Liu, Jun Yu, and Neil Shah. 2021. Graph neural networks for friend ranking in large-scale social platforms. In Proceedings of the Web Conference 2021 . 2535–2546. [53] Alexey Strokach, David Becerra, Carles Corbi-Verge, Albert Perez-Riba, and Philip M Kim. 2020. Fast and flexible protein design using deep graph neural networks. Cell systems 11, 4 (2020), 402–411. [54] Zhihao Sui, Liang Hu, Jian Cao, Dora D. Liu, Usman Naseem, Zhongyuan Lai, and Qi Zhang. 2025. Recalling The Forgotten Class Memberships: Unlearned Models Can Be Noisy Labelers to Leak Privacy. In IJCAI .[55] Lichao Sun, Yingtong Dou, Carl Yang, Kai Zhang, Ji Wang, Philip S Yu, Lifang He, and Bo Li. 2022. Adversarial attack and defense on graph data: A survey. 
+
+IEEE Transactions on Knowledge and Data Engineering 35, 8 (2022), 7693–7711. [56] Yiwei Sun, Suhang Wang, Xianfeng Tang, Tsung-Yu Hsieh, and Vasant Honavar. 2020. Adversarial attacks on graph neural networks via node injections: A hier-archical reinforcement learning approach. In Proceedings of the Web Conference 2020 . 673–683. [57] Chien Truong-Quoc, Jae Young Lee, Kyung Soo Kim, and Do-Nyun Kim. 2024. Prediction of DNA origami shape using graph neural network. Nature Materials 
+
+23, 7 (2024), 984–992. [58] Petar Veličković, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio. 2018. Graph Attention Networks. In International Conference on Learning Representations (ICLR) . https://openreview.net/forum? id=rJXMpikCZ [59] Cheng-Long Wang, Mengdi Huai, and Di Wang. 2023. Inductive graph unlearn-ing. In 32nd USENIX Security Symposium (USENIX Security 23) . 3205–3222. [60] Shuang Wang, Muhammad Asif, Muhammad Farrukh Shahzad, and Muham-mad Ashfaq. 2024. Data privacy and cybersecurity challenges in the digital transformation of the banking sector. Computers & security 147 (2024), 104051. [61] Xiang Wang, Xiangnan He, Meng Wang, Fuli Feng, and Tat-Seng Chua. 2019. Neural graph collaborative filtering. In Proceedings of the 42nd international ACM SIGIR conference on Research and development in Information Retrieval .165–174. [62] Yilong Wang, Jiahao Zhang, Tianxiang Zhao, and Suhang Wang. 2025. Towards Reliable GNNs: Adversarial Calibration Learning for Confidence Estimation. In Proceedings of the 34th ACM International Conference on Information and Knowledge Management . 3166–3176. [63] Mark Weber, Giacomo Domeniconi, Jie Chen, Daniel Karl I Weidele, Claudio Bellei, Tom Robinson, and Charles E Leiserson. 2019. Anti-money laundering in bitcoin: Experimenting with graph convolutional networks for financial forensics. arXiv preprint arXiv:1908.02591 (2019). [64] Bang Wu, He Zhang, Xiangwen Yang, Shuo Wang, Minhui Xue, Shirui Pan, and Xingliang Yuan. 2024. Graphguard: Detecting and counteracting training data misuse in graph neural networks. In 31st Annual Network and Distributed System Security Symposium (NDSS) .[65] Felix Wu, Amauri Souza, Tianyi Zhang, Christopher Fifty, Tao Yu, and Kilian Weinberger. 2019. Simplifying graph convolutional networks. In International Conference on Machine Learning (ICML) . PMLR, 6861–6871. [66] Huijun Wu, Chen Wang, Yuriy Tyshetskiy, Andrew Docherty, Kai Lu, and Liming Zhu. 2019. Adversarial examples for graph data: deep insights into attack and defense. In Proceedings of the 28th International Joint Conference on Artificial Intelligence (IJCAI) . 4816–4823. [67] Jiancan Wu, Yi Yang, Yuchun Qian, Yongduo Sui, Xiang Wang, and Xiangnan He. 2023. Gif: A general graph unlearning strategy via influence function. In 
+
+Proceedings of the ACM Web Conference 2023 . 651–661. [68] Kun Wu, Jie Shen, Yue Ning, Ting Wang, and Wendy Hui Wang. 2023. Certified edge unlearning for graph neural networks. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 2606–2617. [69] Kun Wu and Wendy Hui Wang. 2025. Verification of Incomplete Graph Unlearn-ing through Adversarial Perturbations. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 . 3204–3215. [70] Zonghan Wu, Shirui Pan, Fengwen Chen, Guodong Long, Chengqi Zhang, and Philip S Yu. 2020. A comprehensive survey on graph neural networks. IEEE transactions on neural networks and learning systems 32, 1 (2020), 4–24. [71] Zhaohan Xi, Ren Pang, Shouling Ji, and Ting Wang. 2021. Graph backdoor. In 
+
+30th USENIX security symposium (USENIX Security 21) . 1523–1540. [72] Xin Xin, Jiyuan Yang, Hanbing Wang, Jun Ma, Pengjie Ren, Hengliang Luo, Xinlei Shi, Zhumin Chen, and Zhaochun Ren. 2023. On the user behavior leakage from recommender system exposure. ACM Transactions on Information Systems 
+
+41, 3 (2023), 1–25. [73] Junjie Xu, Jiahao Zhang, Mangal Prakash, Xiang Zhang, and Suhang Wang. 2025. DualEqui: A Dual-Space Hierarchical Equivariant Network for Large Biomolecules. In The Thirty-ninth Annual Conference on Neural Information Processing Systems .[74] Kaidi Xu, Hongge Chen, Sijia Liu, Pin-Yu Chen, Tsui-Wei Weng, Mingyi Hong, and Xue Lin. 2019. Topology attack and defense for graph neural networks: an optimization perspective. In Proceedings of the 28th International Joint Conference on Artificial Intelligence (IJCAI) . 3961–3967. [75] Keyulu Xu, Weihua Hu, Jure Leskovec, and Stefanie Jegelka. 2019. How powerful are graph neural networks?. In ICLR .[76] Shuhua Yang, Jiahao Zhang, Yilong Wang, Dongwon Lee, and Suhang Wang. 2026. Query-Efficient Agentic Graph Extraction Attacks on GraphRAG Systems. 
+
+arXiv preprint arXiv:2601.14662 (2026). [77] Zhilin Yang, William Cohen, and Ruslan Salakhudinov. 2016. Revisiting semi-supervised learning with graph embeddings. In International Conference on Machine Learning (ICML) . PMLR, 40–48. [78] Zhe-Rui Yang, Jindong Han, Chang-Dong Wang, and Hao Liu. 2025. Erase then Rectify: A Training-Free Parameter Editing Approach for Cost-Effective Graph Unlearning. In Proceedings of the AAAI Conference on Artificial Intelligence ,Vol. 39. 13044–13051. [79] Yuanshun Yao, Xiaojun Xu, and Yang Liu. 2024. Large language model unlearn-ing. Advances in Neural Information Processing Systems (NeurIPS) 37 (2024), 105425–105475. [80] Lu Yi and Zhewei Wei. 2025. Scalable and Certifiable Graph Unlearning: Over-coming the Approximation Error Barrier. In The Thirteenth International Con-ference on Learning Representations (ICLR) . https://openreview.net/forum?id= pPyJyeLriR [81] Hanqing Zeng, Hongkuan Zhou, Ajitesh Srivastava, Rajgopal Kannan, and Viktor Prasanna. 2020. GraphSAINT: Graph Sampling Based Inductive Learn-ing Method. In International Conference on Learning Representations . https: //openreview.net/forum?id=BJe8pkHFwS [82] He Zhang, Bang Wu, Xiangwen Yang, Xingliang Yuan, Xiaoning Liu, and Xun Yi. 2025. Dynamic Graph Unlearning: A General and Efficient Post-Processing Method via Gradient Transformation. In Proceedings of the ACM on Web Confer-ence 2025 . 931–944. [83] He Zhang, Bang Wu, Xingliang Yuan, Shirui Pan, Hanghang Tong, and Jian Pei. 2024. Trustworthy graph neural networks: Aspects, methods, and trends. Proc. IEEE 112, 2 (2024), 97–139. [84] Jiahao Zhang. 2024. Graph unlearning with efficient partial retraining. In 
+
+Companion Proceedings of the ACM Web Conference 2024 . 1218–1221. [85] Jiahao Zhang, Yilong Wang, Zhiwei Zhang, Xiaorui Liu, and Suhang Wang. 2026. Unlearning Inversion Attacks for Graph Neural Networks. In Proceedings of the Nineteenth ACM International Conference on Web Search and Data Mining .934—-945. [86] Jiahao Zhang, Rui Xue, Wenqi Fan, Xin Xu, Qing Li, Jian Pei, and Xiaorui Liu. 2024. Linear-time graph neural networks for scalable recommendations. In 
+
+Proceedings of the ACM Web Conference 2024 . 3533–3544. [87] Minxing Zhang, Zhaochun Ren, Zihan Wang, Pengjie Ren, Zhunmin Chen, Pengfei Hu, and Yang Zhang. 2021. Membership inference attacks against recommender systems. In Proceedings of the 2021 ACM SIGSAC Conference on Computer and Communications Security . 864–879. [88] Qiuchen Zhang, Carl Yang, Li Xiong, et al . 2025. Node-level Contrastive Un-learning on Graph Neural Networks. arXiv preprint arXiv:2503.02959 (2025). [89] Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. 2024. Negative Preference Optimization: From Catastrophic Collapse to Effective Unlearning. In First Conference on Language Modeling (COLM) . https://openreview.net/forum?id= MXLBXjQkmb [90] Yuang Zhang, Haonan An, Zhengru Fang, Guowen Xu, Yuan Zhou, Xianhao Chen, and Yuguang Fang. 2024. SmartCooper: Vehicular Collaborative Percep-tion with Adaptive Fusion and Judger Mechanism. In 2024 IEEE International Conference on Robotics and Automation (ICRA) . 4450–4456. [91] Yang Zhang, Zhiyu Hu, Yimeng Bai, Jiancan Wu, Qifan Wang, and Fuli Feng. 2024. Recommendation unlearning via influence function. ACM Transactions 
+
+13 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Zhang et al. 
+
+on Recommender Systems 3, 2 (2024), 1–23. [92] Zaixi Zhang, Jinyuan Jia, Binghui Wang, and Neil Zhenqiang Gong. 2021. Back-door attacks to graph neural networks. In Proceedings of the 26th ACM symposium on access control models and technologies . 15–26. [93] Zhiwei Zhang, Minhua Lin, Junjie Xu, Zongyu Wu, Enyan Dai, and Suhang Wang. 2025. Robustness Inspired Graph Backdoor Defense. In The Thirteenth International Conference on Learning Representations (ICLR) . https://openreview. net/forum?id=trKNi4IUiP [94] Zhilu Zhang and Mert Sabuncu. 2018. Generalized cross entropy loss for train-ing deep neural networks with noisy labels. Advances in Neural Information Processing Systems (NeurIPS) 31 (2018). [95] Zhiwei Zhang, Fali Wang, Xiaomin Li, Zongyu Wu, Xianfeng Tang, Hui Liu, Qi He, Wenpeng Yin, and Suhang Wang. 2025. Catastrophic Failure of LLM Unlearning via Quantization. In The Thirteenth International Conference on Learning Representations (ICLR) . https://openreview.net/forum?id=lHSeDYamnz [96] Chenxu Zhao, Wei Qian, Rex Ying, and Mengdi Huai. 2023. Static and Sequential Malicious Attacks in the Context of Selective Forgetting. Advances in Neural Information Processing Systems (NeurIPS) 36 (2023). [97] Kairan Zhao, Meghdad Kurmanji, George-Octavian Bărbulescu, Eleni Triantafil-lou, and Peter Triantafillou. 2024. What makes unlearning hard and what to do about it. Advances in Neural Information Processing Systems (NeurIPS) 37 (2024), 12293–12333. [98] Yu Zhou, Dian Zheng, Qijie Mo, Renjie Lu, Kun-Yu Lin, and Wei-Shi Zheng. 2025. Decoupled distillation to erase: A general unlearning method for any class-centric tasks. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) . 20350–20359. [99] Xu Zou, Qinkai Zheng, Yuxiao Dong, Xinyu Guan, Evgeny Kharlamov, Jialiang Lu, and Jie Tang. 2021. Tdgia: Effective injection attacks on graph neural networks. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining . 2461–2471. [100] Daniel Zügner, Amir Akbarnejad, and Stephan Günnemann. 2018. Adversarial attacks on neural networks for graph data. In Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining . 2847– 2856. [101] Daniel Zügner and Stephan Günnemann. 2019. Adversarial Attacks on Graph Neural Networks via Meta Learning. In International Conference on Learning Representations (ICLR) . https://openreview.net/forum?id=Bylnx209YX 14

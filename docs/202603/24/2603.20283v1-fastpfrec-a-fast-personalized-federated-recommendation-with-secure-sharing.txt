@@ -1,0 +1,1023 @@
+Title: FastPFRec: A Fast Personalized Federated Recommendation with Secure Sharing
+
+URL Source: https://arxiv.org/pdf/2603.20283v1
+
+Published Time: Tue, 24 Mar 2026 00:03:35 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# FastPFRec: A Fast Personalized Federated Recommendation with Secure Sharing ⋆
+
+Zhenxing Yan a,b , Jidong Yuan a,b, ∗, Yongqi Sun a,b , Haiyang Liu a,b , Zhihui Gao a,b   
+
+> aKey Laboratory of Big Data &Artificial Intelligence in Transportation (Beijing Jiaotong University), Ministry of Education, Beijing, 100044, China
+> bSchool of Computer Science and Technology, Beijing Jiaotong University, Beijing, 100044, China
+
+Abstract 
+
+Graph neural network (GNN)-based federated recommendation systems e ff ectively capture user–item relationships while preserving data privacy. However, existing methods often face slow convergence on graph data and privacy leakage risks during collaboration. To address these challenges, we propose FastPFRec (Fast P ersonalized Federated Rec ommendation with Secure Sharing), a novel framework that enhances both training e ffi ciency and data security. FastPFRec accelerates model convergence through an e ffi cient local update strategy and introduces a privacy-aware parameter sharing mechanism to mitigate leakage risks. Experiments on four real-world datasets (Yelp, Kindle, Gowalla-100k, and Gowalla-1m) show that FastPFRec achieves 32.0% fewer training rounds, 34.1% shorter training time, and 8.1% higher accuracy compared with existing baselines. These results demonstrate that FastPFRec provides an e ffi cient and privacy-preserving solution for scalable federated recommendation. 
+
+Keywords: 
+
+Federated Recommendation, Graph Neural Network, Privacy Preservation, Training E ffi ciency, Personalized Recommendation 
+
+1. Introduction 
+
+Graph neural networks (GNNs) [1] have emerged as a cutting-edge paradigm for modeling complex user-item inter-actions in recommendation systems, providing powerful ca-pabilities for capturing graph-structured relationships. These models have been widely adopted in next-generation intelligent services, such as personalized content delivery across mobile and IoT platforms[2]. Despite their remarkable e ff ectiveness, GNNs predominantly rely on centralized access to user behav-ior data, which introduces critical privacy and security concerns in real-world deployments and highlights the urgent need for privacy-preserving learning frameworks that can maintain per-sonalization without compromising sensitive information. This challenge is further exacerbated by stringent legal frameworks such as the GDPR 1, which mandates strict guidelines on the processing, storage, and sharing of personal data—particularly concerning user consent and data anonymization. Such reg-ulations pose significant compliance challenges for data-driven industries that depend on large-scale user data to refine their ser-vices. In this context, federated learning (FL) [3] has arisen as a promising distributed training paradigm, enabling collaborative model training without exposing raw user data, thus preserv-ing privacy and facilitating compliance with regulations. No-tably, FL is increasingly being applied in consumer-centric do-       
+
+> ⋆This paper has been accepted for publication in Expert Systems with Ap-plications.
+> ∗Corresponding author: Jidong Yuan (yuanjd@bjtu.edu.cn)
+> Email addresses: 23125335@bjtu.edu.cn (Zhenxing Yan),
+> yuanjd@bjtu.edu.cn (Jidong Yuan), yqsun@bjtu.edu.cn (Yongqi Sun),
+> haiyangliu@bjtu.edu.cn (Haiyang Liu), zhihuigao@bjtu.edu.cn
+> (Zhihui Gao)
+> 1https://gdpr-info.eu/
+
+mains—including personalized recommendations, smart health monitoring, and voice assistants to enhance service quality while systematically mitigating privacy risks. However, integrating GNNs with FL also presents non-trivial challenges. First, the iterative process of neighborhood aggre-gation in GNNs, when performed in a federated setting with heterogeneous (Non-IID) user data, often leads to slow model convergence and substantial communication overhead [4]. Sec-ond, while FL avoids raw data sharing, the model parameters exchanged during training could still potentially leak sensitive user information, necessitating stronger privacy guarantees be-yond the basic FL architecture. For example, Figure 1 illus-trates a scenario where an attacker directly targets the server by noisy injection, disrupting the entire federated recommen-dation system. If the server is compromised, the training pro-cess halts, and the model’s integrity is at risk. Additionally, in cases where the server directly interacts with clients, it can trace the source of the uploaded parameters, potentially leading to privacy breaches. This highlights the need for robust security mechanisms to safeguard both system functionality and client privacy [5]. Standard two-tier FL architectures (client-server) lack robust mechanisms to detect and mitigate malicious or noisy client up-dates, which can degrade recommendation quality and compro-mise user privacy. Hierarchical FL methods [6] reduce commu-nication overhead through intermediate aggregation, but they focus primarily on e ffi ciency rather than security, and do not address recommendation-specific privacy risks such as infer-ence attacks on user-item interactions. Existing federated rec-ommenders (e.g., PerFedRec[7], FedGNN[8]) rely on standard FL architectures without specialized security mechanisms for GNN-based recommendation scenarios. This work addresses 
+
+> arXiv:2603.20283v1 [cs.IR] 18 Mar 2026
+
+Server    
+
+> Add Noises Upload Upload
+> User User Attacker
+
+· · · · · ·  
+
+> Download Download Figure 1: An example of federated attack with noise injection.
+
+these gaps by proposing a three-tier federated architecture with trusted nodes that combine the communication e ffi ciency of hi-erarchical FL with security-focused mechanisms tailored for recommendation systems. Beyond privacy and security concerns, recent studies in federated recommendation systems have primarily focused on enhancing model performance and reducing communication costs [9, 10]. Several approaches, such as federated averag-ing [11, 12] and secure aggregation protocols [13], have been proposed to accelerate convergence and ensure privacy protec-tion. Although these methods have achieved promising metric results, the convergence issue remains unresolved. Figure 2 il-lustrates the relationship between the number of training epochs and the evaluation metric, normalized discounted cumulative gain (NDCG), for the state-of-the-art (SOTA) personalized fed-erated recommendation methods, PerFedRec [7] (green line) and PerFedRec ++ [14] (blue line), on the large-scale Gowalla-1m dataset [15]. As shown, both PerFedRec and PerFedRec ++ 
+
+exhibit slow convergence, with their performance not reaching optimal levels even after nearly 300 epochs, by which point the training time has already exceeded 5 hours. After analysis, it is clear that this is because the local GNN model is complex and the local user vectors have not been su ffi ciently trained. 0 50 100 150 200 250 
+
+> Epoch
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> NDCG
+> FastPFRec
+> PerFedRec++
+> PerFedRec
+> Figure 2: Comparison of training NDCG across epochs on the Gowalla-1m dataset.
+
+To address these issues, we propose a novel federated rec-ommendation method called FastPFRec (Fast P ersonalized 
+
+Federated Rec ommendation with secure sharing), which is de-signed to accelerate the convergence speed of federated GNNs while ensuring the privacy of user data. A key component of FastPFRec is the proposed FastGNN, a simplified and fast-converging GNN update scheme that significantly improves the training e ffi ciency. By integrating FastGNN, the number of training epochs required is greatly reduced, leading to a lower time complexity. As shown in Figure 2, FastPFRec (red line) achieves superior performance within just 100 epochs, consis-tently outperforming other methods in terms of NDCG at ev-ery epoch. Furthermore, we introduce a new parameter upload mechanism that ensures data privacy within FL frameworks, ef-fectively preventing user data leakage. Specifically, inspired by hierarchical FL [6], we introduce the concept of trusted nodes within the FL system. These trusted nodes act as intermediaries between clients and the server, securely aggregating the model parameters uploaded by the clients. Our main contributions are summarized as follows: 
+
+• We propose FastPFRec, a three-tier federated recommenda-tion framework with trusted nodes that perform secure inter-mediate aggregation and anomaly detection, going beyond standard two-tier FL recommenders. 
+
+• We design a FastGNN update schedule that updates user embeddings frequently while refreshing item embeddings sparsely, cutting e ff ective training cost without sacrificing ac-curacy—distinct from existing GNN-based FL methods that fully update both sides each round. 
+
+• We combine graph perturbation, local di ff erential privacy (LDP) [16] , and trusted-node aggregation to strengthen ro-bustness against noisy clients, with an explicit threat model. 
+
+• Extensive experiments on real-world datasets show signif-icantly faster convergence and improved recommendation quality compared with SOTA GNN-based federated recom-menders. 
+
+2. Related Work 
+
+This section reviews the literature on two key areas: GNN-based federated recommendation systems and the privacy-preserving techniques employed within this domain. 
+
+2.1. GNN-Based Federated Recommendations 
+
+GNN-based federated recommendation systems learn from decentralized user-item interaction graphs. In this paradigm, a central server aggregates local model updates, and privacy is often enhanced using techniques like di ff erential privacy or ho-momorphic encryption to protect sensitive data [17, 18]. Many such systems employ graph convolutional networks (GCNs) to eff ectively model complex user-item relationships, enabling se-cure and personalized recommendations [19]. For example, FedGNN [8] pioneered the use of GNNs to model user-item feature interactions in a federated context. Building on this, Fe-Sog [20] integrated social network information to capture inter-user dynamics. For enhanced personalization, FedGCLRec [21] dynamic social influence learning with personalized fed-erated optimization, while GPFedRec [22] constructs a user-relation graph from personalized item embeddings to preserve 2data locality. These methods use GCN and its variants, and re-quire a relatively high number of training rounds to reach con-vergence. Other approaches focus on user clustering. PerFedRec [7] utilizes K-means clustering [23] to group users by behavioral similarity, enabling group-specific recommendations. Its suc-cessor, PerFedRec ++ [14], improves upon this by incorporating contrastive learning in a pre-training phase, which refines the distinction between user and item representations and boosts performance. Despite their e ff ectiveness, these models often exhibit grow-ing structural complexity and prolonged training times, lead-ing to significant computational overhead. To mitigate these challenges of slow convergence and model complexity [24], we propose FastGNN which simplifies the GCN update method. 
+
+2.2. Privacy Protection in Federated Recommendation 
+
+Privacy is a cornerstone of federated recommendation[25]. By design, raw user data remains on local devices, with only model updates (e.g., gradients or parameters) being transmitted to the server [26, 27]. To further secure these updates during transmission, cryptographic methods like di ff erential privacy [28] are commonly applied to obfuscate the gradients. Early work such as FCF [29] focused on processing item gra-dients to prevent leakage of raw ratings, while FedMF [30] pro-tects privacy by encrypting item embeddings during transmis-sion. FedRec [31] enhanced privacy by mitigating data recon-struction risks through a hybrid strategy for handling missing ratings and sampling non-interacted items. Subsequent tech-niques include FedNCF [32], which applies di ff erential privacy to computed gradients to defend against inference attacks. Most recently, Fedai [33] leverages homomorphic encryption-based grouping and interaction anonymization to balance recommen-dation accuracy with robust privacy preservation. To further secure computations, previous works [34] have proposed privacy-preserving tensor decomposition over en-crypted data in federated clouds and secure two-party infer-ence frameworks like Panther [35]. While these cryptographic methods provide strong security guarantees, they often incur significant computational and communication overheads com-pared to lightweight perturbation methods. Consequently, re-cent advancements have focused on refining LDP mechanisms to better balance data utility and privacy. For instance, Zhang et al. [36] proposed a mixture model-based matrix factorization framework under LDP, e ff ectively addressing user heterogene-ity. Similarly, in location-based scenarios, Zhang et al. [37] introduced a prior knowledge-enhanced geo-indistinguishable approach to demonstrate the versatility of di ff erential privacy in complex spatial tasks. Parallel to confidentiality, robustness against manipulation is also critical. Recent works [38, 39] have explored attack-agnostic defense frameworks to protect LDP-based systems against manipulation attacks. However, a significant vulnerability persists in these models: the central server can often trace parameter updates back to spe-cific clients. Additionally, malicious clients can directly attack the server, exposing users to potential inference attacks [40]. To address this critical gap, we introduce a novel three-tier archi-tecture comprising clients, trusted nodes, and a server. HierFAVG [6] use intermediate edge servers to reduce com-munication overhead. While our trusted-node mechanism shares the hierarchical structure, it di ff ers in focus: hierar-chical FL optimizes for communication e ffi ciency, whereas our trusted nodes prioritize security and privacy protection through anomaly detection and secure aggregation, specifically designed for GNN-based recommendation scenarios. In our framework, clients send perturbed model updates to trusted nodes, which aggregate these updates before forwarding them to the server. This intermediate aggregation layer e ff ec-tively decouples clients from the server, preventing source trac-ing and enhancing user anonymity, scalability, and e ffi ciency. 
+
+3. Method Algorithm 1 FastPFRec 
+
+Require: Local graph Gu,i, random threshold τ, noise scale λ,update weight β, max rounds Q, learning rate α, distance threshold μ, outlier ratio ν
+
+Ensure: Local model parameters Θi for all clients  
+
+> 1:
+
+Step 1: Client-Side Training  
+
+> 2:
+
+for all client ci ∈ { 1, 2, . . . , C} in parallel do  
+
+> 3:
+
+Build local graph and do perturbation  
+
+> 4:
+
+Train local FastGNN and update embeddings: 
+
+uemb , iemb ← GNN( G′
+
+> u,i
+
+) 
+
+> 5:
+
+Add noise: Θ′ 
+
+> i
+
+← Θi + η, η ∼ Lap( λ) 
+
+> 6:
+
+Upload Θ′ 
+
+> i
+
+to trusted node  
+
+> 7:
+
+end for  
+
+> 8:
+
+Step 2: Trusted Node Aggregation  
+
+> 9:
+
+for i = 1 to T do  
+
+> 10:
+
+Receive Ci clients’ parameters Θ′ 
+
+> 11:
+
+if ¬Check( Θ′, Ws, μ, ν ) then  
+
+> 12:
+
+Wt,i ← 1
+
+> Ci
+
+PCi 
+
+> j=1
+
+Θ′j 
+
+> 13:
+
+Send Wt,i to server  
+
+> 14:
+
+end if  
+
+> 15:
+
+end for  
+
+> 16:
+
+Step 3: Server-Side Global Update  
+
+> 17:
+
+Ws ← 1
+
+> T
+
+PTj=1 Wt, j 
+
+> 18:
+
+Distribute Ws to clients  
+
+> 19:
+
+Step 4: Client Model Update  
+
+> 20:
+
+for all client ci in parallel do  
+
+> 21:
+
+Θq+1 
+
+> i
+
+← (1 − β)Θqi + βWs 
+
+> 22:
+
+end for  
+
+> 23:
+
+End. 
+
+This section provides a detailed overview of the FastPFRec framework, covering client-side, trusted node, and the server-side operational methods. The overall process is presented in Figure 3 and the algorithm procedure is shown in Algorithm 1. 
+
+3.1. Problem Definition 
+
+In our personalized federated recommendation, we consider multiple clients, each representing a user and its interaction 3Ranking Predictor 
+
+Clients   
+
+> Model
+> Parameters
+> LDP
+> Origin Server
+> Collected Model
+> Parameters
+> Parameter Aggregate
+> Trusted
+> Node i
+> Check
+> Parameters
+> and
+> Aggregate
+> 𝐖 &,'
+> 𝐖 !
+> 𝐖 &,(
+> 𝐖 !
+
+Upload 
+
+Download 
+
+Server 
+
+· · · 
+
+Trusted Nodes 
+
+Trusted Nodes  
+
+> 𝑖 )
+> 𝑖 %
+> 𝑖 )
+> 𝑢 %
+> 𝑖 *
+> 𝑖 )
+> 𝑖 %𝑖 *
+> 𝑖 +
+> 𝑢 %
+> Graph info
+> 𝐮 ,-.
+> 𝐢 ,-.
+> 𝐮 ,-.
+> Local Loss
+
+· · · 
+
+· · ·   
+
+> Model
+> Parameters
+> 𝐖 !
+> 𝐢 ,-.
+> Local  FastGNN
+> Embedding Layer
+> Ranking Predictor
+> LDP
+> Graph info
+> 𝐮 ,-.
+> 𝐢 ,-.
+> 𝐮 ,-.
+> Local Loss
+> Noised Model
+> Parameters
+> Client 1
+> Client i
+> 𝐢 ,-.
+
+· · ·   
+
+> Trusted
+> Node j
+> Check
+> Parameters
+> and
+> Aggregate
+> Perturbation
+> 𝐖 &,'𝐖 &,(
+> 𝑖 )
+> Perturbation
+> 𝑖 %
+> 𝑖 /
+> 𝑢 '
+> 𝑖 0
+> 𝑖 /
+> 𝑖 1
+> 𝑖 0
+> 𝑖 "
+> 𝑢 '
+> 𝑖 2
+> 𝑖 2
+> User -Item
+> Interaction
+> Model
+> Parameters
+> Noised Model
+> Parameters
+> Local  FastGNN
+> Embedding Layer
+> User -Item
+> Interaction
+
+Figure 3: The proposed FastPFRec framework. This flowchart illustrates the end-to-end process, highlighting the local training with FastGNN on client devices and the subsequent aggregation of model updates by trusted nodes before being sent to the central server. 
+
+records. The goal is to train a federated recommendation sys-tem while ensuring data privacy. Let U = {u1, u2, . . . , uN } and 
+
+I = {i1, i2, . . . , iM } represent the user and item sets, respectively. The user-item interactions form a bipartite graph Gu,i, where 
+
+yui = 1 indicates an interaction between user u and item i. We define the mapping fpred (·) as a function that predicts the rating ˆyui for a given user u and item i and F as a loss function. 
+
+3.2. Client-Side Method 
+
+The client-side approach aims to achieve localized training of the user-item interaction graph while preserving user data privacy. This method primarily includes mechanisms for local data perturbation, the generation of embedding representations and the design of FastGNN. The detailed client-side training process is outlined in lines 1-7 of Algorithm 1 and illustrated in the right half of Figure 4. The following sections provide a detailed description of the implementation of each step. 
+
+3.2.1. User-Item Graph Construction as Input 
+
+On the client side ci, each user has their local user-item inter-action data, which can be represented as a user-item interaction graph Gu,i. The formal representation of this graph is 
+
+Gu,i = (V, E), (1) where V = {u, i1, i2, . . . , in} is the set of nodes in the graph, including the user u and the set of items N(u) = {i1, i2, . . . , in}
+
+with which the user interacts; E = {eu,i j | i j ∈ N (u)} is the set of edges, representing the interaction between user u and item 
+
+i j; Each edge eu,i j ∈ E is associated with a weight wu,i j , which could represent a binary interaction (clicked /not clicked) or a rating value. For each user u, the client locally stores Gu,i as the input for subsequent model training. 
+
+3.2.2. Client-side Privacy Protection Mechanism 
+
+We randomly add perturbations to some users by treating items that the user has not interacted with as items the user has interacted with. This e ff ectively obscures the user’s true behav-ior, thereby enhancing data privacy. The perturbation process modifies the graph by randomly adding false interactions. Specifically, for a given item i j ∈ I,if the user u has not interacted with i j (i.e., eu,i j < Eu), we ran-domly decide with a certain probability Ppert whether to add the edge eu,i j . This means that some items the user has not inter-acted with will be treated as items the user has interacted with, thus e ff ectively perturbing the original graph. Mathematically, the perturbation process can be described as 
+
+G′ 
+
+> u,i
+
+= Gu,i ∪ { eu,i j | i j ∈ I, eu,i j < Gu,i, and Ppert (i j) > τ }, (2) where E′ 
+
+> u
+
+is the perturbed interaction set, Ppert (i j) is the pertur-bation probability for item i j, τ is a random number uniformly sampled from the interval [0, 1]. In our experimental setup, we set the perturbation probability parameter Ppert = 0.1 to quan-tify the intensity of the perturbation. This implies that approxi-mately 10% of the non-interacting items are randomly selected and added as false edges to the user’s local graph Gu,i. In this process, if Ppert (i j) > τ , the edge eu,i j will be added to the graph, even if the user has not previously interacted with item i j.4And we set N′(u) a union of previously user u interacting items and disturbed items. This perturbation mechanism ensures that the original user-item interaction graph is modified, preventing the accurate reconstruction of the user’s true interaction history, thereby enhancing data privacy [31]. 
+
+3.2.3. Message Passing in Local FastGNN 
+
+The embedding representations of users and items serve as the foundation for subsequent GNN training. Locally, the client maps nodes (users and items) to a low-dimensional vector space via an embedding layer. For a user u and an item i j, their em-bedding representations are 
+
+uemb = femb (u), i j,emb = femb (i j), (3) where femb is the embedding generation function; The dimen-sion of the embedding vectors is k, which is typically a hyper-parameter. The embedding vectors uemb and i j,emb are generated through random initialization or pre-training methods and serve as the initial inputs to the GNN. In the local training phase, the client uses a simplified Fast-GNN to model the user-item graph Gu,i and capture the higher-order interactions between users and items. Instead of aggregat-ing the user and item vectors at every update, we perform con-volutional aggregation on the data at intervals. Specificially, the item embeddings are updated only every H × 10 epochs, while user embeddings are updated at every step. This design is based on the empirical observation that user representations require more frequent updates to capture dynamic preferences, while item representations are relatively stable. The interval of H × 10 was chosen to strike a balance between e ffi ciency and model performance: a shorter interval increases computa-tional cost with diminishing returns, while a longer interval may lead to outdated item representations that harm accuracy. This interval-based aggregation method not only reduces the com-putational overhead of each update but also improves training effi ciency while maintaining model performance, providing a more practical solution for applications on large-scale datasets. The message passing mechanism is used to update the em-bedding representations of users and items. At the l + 1-th layer, the update rule for the embedding representation of the user node u is 
+
+u(l+1) emb = σ
+
+X 
+
+> ij∈N ′(u)
+
+αu,i j · i(l)
+
+> j,emb
+
+ , (4) where N′(u) is the set of neighboring items for user u, σ is the nonlinear activation function (e.g., the sigmoid function). After H layers of message passing, the final embedding rep-resentations of the user and item are 
+
+uemb = u(H)emb , i j,emb = i(H)
+
+> j,emb
+
+, (5) these embedding representations are used for subsequent rank-ing predictions. The accelerated convergence of FastGNN is achieved through a scheduled item-update mechanism, which strate-gically reduces computational overhead. This approach is grounded in the observation that item embeddings, being shared across multiple users, typically exhibit greater stability and evolve more slowly than user-specific embeddings during train-ing. By updating item embeddings only every H × h epochs while continuing to update user embeddings at every epoch, FastGNN significantly lowers the average computational cost per epoch without compromising essential gradient informa-tion. To formalize this e ffi ciency gain, we analyze the compu-tational complexity relative to standard GNN-based federated recommenders (e.g., PerFedRec ++ ). Under standard assump-tions including a fixed embedding dimension k, stable local graph sizes ( |U| users and |I| items per client), and the typi-cal bipartite interaction structure—a full GNN propagation step has a complexity of O(H · | U| · | I| · k) for H layers. In con-ventional methods, this cost is incurred in every epoch over 
+
+E local training rounds, leading to a per-round complexity of 
+
+O(E · H · | U| · | I| · k). In contrast, FastGNN’s scheduled update strategy modifies this cost structure. Since user embeddings are updated every epoch but item embeddings are updated only approximately 
+
+E/(H × h) times, the per-round complexity becomes: 
+
+O
+
+
+
+E · H · | U| · k + EH × h · H · | I| · k
+
+
+
+= O E · H · k · |U| + |I|
+
+h
+
+!! 
+
+.
+
+(6) For common recommendation scenarios where |I| ≫ | U|, this translates to an e ff ective average cost reduction for item-related operations from O(H · | U| · | I| · k) to roughly O(H · | U| · | I| · 
+
+k/h). It is important to clarify that this represents a reduction in the e ff ective average computational cost per epoch, not an alteration of the asymptotic complexity order of a single update operation. In this formulation, h serves as a critical hyperparameter gov-erning the trade-o ff between computational e ffi ciency and the freshness of item representations. A larger h further reduces costs but risks staleness, while a smaller h approaches the cost of full updates. Based on our empirical ablation studies, we adopted h = 10 as the optimal setting, as it e ff ectively max-imizes training speed improvements while maintaining su ffi -cient embedding accuracy for robust recommendation perfor-mance. Ranking prediction aims to predict the user’s preference score for an item and rank the items accordingly. Specifically, the predicted preference score for user u and item i j is calcu-lated as ˆyu,i j = fpred (uemb , i j,emb ), (7) where fpred (·, ·) is the scoring function, typically defined as the dot product 
+
+fpred (uemb , i j,emb ) = u⊤ 
+
+> emb
+
+· i j,emb . (8) To optimize the model parameters, we employ the bayesian personalized ranking (BPR) loss function, which is designed to learn user preferences by maximizing the probability that a 5user prefers a positive item over a negative item. The BPR loss is defined as: 
+
+LBPR = − log( σ(ˆ yui − ˆyu j )) + γ · 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+|| Θi|| 2, (9) where ˆ yui and ˆ yu j represent the predicted scores for positive and negative items respectively, j is a randomly sampled negative item that user u has not interacted with, σ(·) is the sigmoid func-tion, γ is the regularization parameter, and || Θi|| 2 is the L2 norm of the model parameters. Based on the predicted scores ˆ yu,i j , the items {i1, i2, . . . , in}
+
+are sorted in descending order of the scores to generate a rec-ommendation list. 
+
+3.2.4. Model Parameter Upload and Download 
+
+After training, the client uploads the model parameters to a trusted node. The specific process is as follows. First, to protect the user’s local data privacy, the client applies LDP [16] mechanism before processing or uploading local data. Laplace noise is added to the model parameters Θc:
+
+Θ′ 
+
+> c
+
+= Θc + η, (10) where η ∼ Lap (λ). Then, the trusted node i receives the parameters uploaded by all relevant clients and aggregates them to generate the global parameters. The client constructs a local user-item interaction graph, applies the LDP mechanism for data security, uses embed-ding generation and FastGNN to capture interaction relation-ships, and generates personalized recommendations. Finally, the client uploads the perturbed model parameters for aggrega-tion and downloads the global parameters to update the local model, balancing privacy protection and recommendation per-formance. 
+
+3.3. Trusted Node 
+
+In this three-tier architecture federated recommendation sys-tem, the trusted node serves as an intermediary between the client and the server, responsible for aggregating model param-eters and ensuring privacy protection. By o ffl oading the param-eter aggregation process, it reduces the computational burden on the server, while also enhancing the overall security and ro-bustness of the system. The subsequent sections detail the de-sign, data flow, and privacy protection mechanisms employed by the trusted node, with further specifics provided in lines 8-15 of Algorithm 1 and Figure 4. 
+
+3.3.1. Receiving Disturbed Parameters from Clients 
+
+After client ci completes local training, it randomly uploads the disturbed model parameters Θ′ 
+
+> i
+
+to the trusted node i. The number of clients handled by trusted node i is denoted as Ci, and the total number of clients handled by all trusted nodes satisfies 
+
+C1 + C2 + . . . + CT = C. Each trusted node receives a set of disturbed parameters from multiple clients: {Θ′
+
+> 1
+
+, Θ′
+
+> 2
+
+, . . . , Θ′ 
+
+> Ci
+
+},where Ci is the clients uploading to trusted node i.Trusted     
+
+> Node i
+> Trusted
+> Node j
+> 𝐖 !,#𝐖 $𝐖 !,%𝐖 $
+> Client
+
+# · · ·  
+
+> Client
+> Client Client
+> Client
+
+# · · ·  
+
+> Client
+> Client Client
+
+# · · · 
+
+# · · · 
+
+> Origin Server
+> Download Upload Download Upload
+> Figure 4: The position of trusted node in the overall framework.
+
+Before aggregation, each trusted node performs anomaly de-tection on the received parameters: Check( Θ′, Ws, μ, ν ) = 1
+
+CiCiX
+
+> j=1
+
+1[|z j| > μ ] > ν, (11) where z j is the robust Z-score for client j, μ is the distance threshold, and ν is the outlier ratio threshold. If malicious be-havior is detected, the node is isolated and excluded from the global update process. To reduce the amount of data uploaded to the original server, the trusted node performs an initial aggre-gation of the disturbed parameters from the C clients it receives. The aggregation process can use a simple averaging operation 
+
+Wt,i = 1
+
+CiCiX
+
+> j=1
+
+Θ′j, (12) where Wt,i represents the result of the aggregation after the trusted node i; Ci is the number of clients in the current round. The aggregated Wt,i is then uploaded to the original server for global aggregation. 
+
+3.3.2. Uploading and Distributing 
+
+The trusted node uploads its aggregated parameters Wt,i to the original server as one of the inputs for global parameter updates. Suppose there are T trusted nodes in the system, then the set of aggregated parameters received by the original server is {Wt,1, Wt,2, . . . , Wt,T }.As indicated in lines 17-20 of Algorithm 1, after the trusted node receives the global model parameters Ws from the original server, it distributes them to the set of responsible clients for the local model updates. Each client updates its local model parameters as 
+
+Θq+1 
+
+> i
+
+= (1 − β)Θqi + βWs, (13) 6where Θq+1 
+
+> i
+
+is the local model parameter of client ci after the update in round q + 1; Θqi is the local model parameter of client 
+
+ci in round q; β ∈ (0 , 1) is a hyperparameter, determining the weight of the global parameters in updating the local model. 
+
+3.3.3. Privacy Protection Mechanism of Trusted Node 
+
+The introduction of trusted nodes establishes a multi-layered privacy and security framework that substantially strengthens system robustness. Regarding deployment conditions, Trusted Nodes can be implemented as secure edge servers managed by the service provider. Unlike volatile client devices, these infrastructure-level entities possess stable power supplies and su ffi cient computational resources to execute robust aggrega-tion and anomaly detection protocols, acting as reliable bridges between user terminals and the central cloud. Under our trust assumptions, these nodes operate in an “honest-but-curious” threat model; they faithfully execute protocols but may be curi-ous about client data. Client-uploaded parameters, already per-turbed via the LDP mechanism, are aggregated at trusted nodes, which perform statistical anomaly detection using median abso-lute deviation (MAD) to identify and isolate malicious updates. This process prevents compromised parameters from propagat-ing to the central server. Notably, the architecture ensures that neither the server nor any single trusted node has direct access to clients’ raw data; only perturbed, aggregated updates are pro-cessed, ensuring strict privacy even against curious nodes. Beyond privacy, the three-tier design inherently mitigates single-point-of-failure risks and robustly handles various failure scenarios. With clients uniformly distributed across multiple trusted nodes, each node handles approximately |C|/T clients. In the event of node failures, the system continues operating with the remaining nodes, a ff ecting only the clients assigned to the failed nodes. Our experiments confirm that with T = 10 trusted nodes, the system tolerates up to 3 node failures (30% failure rate) without significant performance degradation. Even when trusted nodes themselves are compromised, the impact re-mains contained: a compromised node can observe only its as-signed client subset, and its influence is diluted through server-level aggregation across all nodes. Client-side LDP provides an additional layer of protection, preserving privacy even if up to 30% of nodes are compromised. To further bolster resilience, the system integrates automatic node isolation and dynamic client reassignment, ensuring continuous and secure operation under adversarial conditions. 
+
+3.4. Server-Side Method 
+
+The design goal of the server-side method is to achieve global model collaborative optimization by aggregating model param-eters from multiple clients while ensuring both model accuracy and privacy protection. The server consists of the origin server and multiple trusted nodes, which work together to process the perturbed parameters uploaded by the clients and generate the optimized global model parameters. The following provides a detailed explanation of the processes involved in data upload, parameter aggregation, and global updates. The relevant pseu-docode is provided by lines 16-22 of Algorithm 1. 
+
+3.4.1. Parameter Aggregation 
+
+The trusted node is responsible for receiving the perturbed model parameters Θ′ 
+
+> i
+
+from multiple clients and uploading them to the origin server for global parameter aggregation. Let there be T trusted nodes, and the perturbed parameters uploaded by them are denoted as Wt,1, Wt,2, . . . , Wt,T . The origin server ag-gregates all the parameters using the following equation: 
+
+Ws = 1
+
+T
+
+> T
+
+X
+
+> i=1
+
+Wt,i, (14) where Ws is the aggregated global model parameters; Wt,i is the perturbed parameters from the i-th trusted node. This pro-cess uses averaging to integrate the local training results from all trusted nodes while e ff ectively smoothing the impact of the noise, thus generating a global model Ws, which is then pro-vided to the clients as an update parameter. 
+
+3.4.2. Global Parameter Distribute 
+
+After the parameter aggregation, the origin server sends the global model parameters Ws back to the trusted node, which then distributes them to the respective clients. And the trusted node will update the client parameters. By aggregating param-eters on a central server, the model can learn from diverse client data without exposing sensitive information. The trusted node acts as an intermediary, ensuring that the global model param-eters Ws are securely distributed to clients. This decentralized approach allows for the continuous updating of client models, ensuring that they stay up-to-date with global improvements while preserving privacy and reducing data transfer overhead. Thus, it enhances model performance while maintaining data confidentiality. 
+
+3.5. Convergence Analysis Framework 
+
+This section establishes the theoretical convergence guaran-tee for the FastPFRec algorithm under non-convex settings, ac-counting for Non-IID, LDP noise, and graph perturbations. 
+
+3.5.1. Assumptions 
+
+Our analysis relies on the following standard assumptions in federated learning theory [18, 41]: (A1 ) L-smoothness: Each local loss function Fi is L-smooth, i.e., there exists a constant L > 0 such that for any param-eters W1, W2:
+
+Fi(W1) ≤ Fi(W2) + ⟨∇ Fi(W2), W1 − W2⟩
+
++ L
+
+2 ∥W1 − W2∥2. (15) This ensures the loss function has Lipschitz-continuous gradients. (A2 ) Bounded Gradient Variance: The stochastic gradient 
+
+gi(W) satisfies: 
+
+E[gi(W)] = ∇Fi(W),
+
+E[∥gi(W) − ∇ Fi(W)∥2] ≤ ζ2, (16) where the first condition ensures unbiased estimation, and the second bounds the variance. 7(A3 ) Bounded Gradient Dissimilarity: For any W, the diver-gence between local and global gradients is bounded: 1
+
+C
+
+> C
+
+X
+
+> i=1
+
+∥∇ Fi(W)∥2 ≤ Γ∥∇ F(W)∥2 + δ2, (17) where F(W) = 1
+
+> C
+
+PCi=1 Fi(W) is the global loss function. This characterizes the data heterogeneity across clients. (A4 ) Bounded LDP Noise: The Laplace noise ηi ∼ Lap( λ)added for LDP has zero mean and bounded variance: 
+
+E[∥ηi∥2] = 2dλ2 = σ2
+
+> η
+
+, (18) where d is the model dimension and λ controls the privacy level. (A5 ) Bounded Perturbation Impact: The graph perturbation causes bounded parameter deviation: 
+
+E[∥Θ′qi − Θqi ∥2] ≤ σ2
+
+> p
+
+, (19) where Θ′qi and Θqi are parameters from perturbed and original graphs, respectively. 
+
+3.5.2. Derivation of the Convergence Bound 
+
+The convergence proof establishes an upper bound for the ex-pected squared gradient norm. Beginning with the global model update rule after E local steps: 
+
+Wq+1 
+
+> s
+
+= 1
+
+T
+
+> T
+
+X
+
+> i=1
+
+Wqt,i where Wqt,i = 1
+
+CiCiX
+
+> j=1
+
+(Θqj + ηqj ), (20) we apply the L-smoothness property to analyze the loss im-provement per communication round: 
+
+E[F(Wq+1 
+
+> s
+
+)] ≤ E[F(Wqs )] − αEE[∥∇ F(Wqs )∥2]
+
++ L
+
+2 E[∥Wq+1 
+
+> s
+
+− Wqs ∥2]. (21) The key step involves bounding the variance term: 
+
+E[∥Wq+1 
+
+> s
+
+− Wqs ∥2] = E
+
+
+
+1
+
+T
+
+> T
+
+X
+
+> i=1
+
+
+
+1
+
+CiCiX
+
+> j=1
+
+(Θqj − Wqs + ηqj )
+
+
+
+> 2
+
+
+
+≤ G2 + σ2
+
+> η
+
+,
+
+(22) where G2 bounds the local update deviation and σ2 
+
+> η
+
+is the LDP noise variance. By recursively applying this inequality over Q rounds, we obtain the final convergence bound: 1
+
+Q
+
+> Q−1
+
+X
+
+> q=0
+
+E[∥∇ F(Wqs )∥2] ≤ 2( F(W0 
+
+> s
+
+) − F∗)
+
+αEQ 
+
++ C1ζ2 + C2δ2 + C3(σ2 
+
+> η
+
++ σ2
+
+> p
+
+).
+
+(23) This result demonstrates that FastPFRec converges to a neighborhood of a stationary point, with the O(1 /Q) term show-ing convergence rate and the remaining terms forming an error floor determined by system variances. 
+
+4. Experiments 
+
+In this section, we first outline the datasets and experimental details. Furthermore, we present and discuss the robustness and convergence e ff ectiveness of FastPFRec across various base-lines.                      
+
+> Table 1: Statistics of datasets. Note that Gowalla-100k and Gowalla-1m are dense subsets derived from the original Gowalla dataset to simulate di ff erent scales.
+> Dataset # User # Item # Interaction Density Yelp 5,145 7,421 124,036 0.32% Kindle 7,650 9,173 137,124 0.20% Gowalla-100k (Subset) 3,917 7,000 85,442 0.31% Gowalla-1m (Subset) 29,858 40,981 810,128 0.04%
+
+4.1. Experimental Settings 4.1.1. Datasets and Evaluation Metrics 
+
+To assess the performance of the proposed framework, we carried out experiments on four real-world datasets: Yelp 2,Kindle 3, Gowalla-100k and Gowalla-1m 4. The Gowalla-100k and Gowalla-1m datasets are particularly important for veri-fying the model’s convergence on large-scale sparse datasets in real-world scenarios. They are representative of data typ-ically generated by consumer electronics devices, with their statistics summarized in Table 1. Yelp [42] comes from the Yelp platform and contains multiple types of user-generated data. Kindle [43] comes from Amazon’s review data, covering user purchase records, ratings, and other information. Gowalla [44] comes from the social sign from the platform Gowalla, which records the user’s sign-in data of the geographical lo-cation in the real world. To verify the model’s convergence on large-scale sparse datasets in real-world scenarios, we se-lected the Gowalla-100k and Gowalla-1m datasets. The density of Gowalla-1m is 0.0368%. Regarding the nature of user-item interactions, Yelp and Kin-dle provide explicit feedback (ratings /reviews), while Gowalla-1m o ff ers implicit feedback (location check-ins). We selected these datasets for two critical reasons. First, the underlying content is highly sensitive, making robust privacy protection a practical necessity. Second, their extreme sparsity closely simulates real-world federated environments, where client data is inherently localized and fragmented. Evaluating FastPFRec under these challenging conditions rigorously demonstrates its ability to extract robust global patterns from isolated, privacy-constrained data. Gowalla-100k and Gowalla-1m: Derived from the Gowalla check-in dataset (Feb. 2009–Oct. 2010), these are randomly sampled subsets with interaction scales approximating 100k and 1m, respectively. Gowalla-100k serves as a medium-scale, relatively dense benchmark (0.31% density), while Gowalla-1m represents a large-scale, highly sparse scenario (0.04% density). 
+
+> 2https: // www.yelp.com /dataset
+> 3https: // jmcauley.ucsd.edu /data /amazon /
+> 4https: // snap.stanford.edu /data /loc-gowalla.html
+
+8Table 2: Performance comparison of di ff erent models on Yelp, Kindle, and Gowalla datasets (including Gowalla-100k and Gowalla-1m). Results are reported as mean ± standard deviation across 5 runs. “*” indicates statistical significance at p < 0.05 in Wilcoxon signed-rank test against baseline methods. 
+
+Model Yelp Kindle Gowalla-100k Gowalla-1m HR NDCG HR NDCG HR NDCG HR NDCG 
+
+Centralized Models 
+
+MF 0.0706 ±0.0015 0.0286 ±0.0012 0.1519 ±0.0023 0.0957 ±0.0018 0.1664 ±0.0021 0.1461 ±0.0019 0.1021 ±0.0018 0.1085 ±0.0016 
+
+LightGCN 0.0860 ±0.0018 0.0339 ±0.0014 0.1874 ±0.0025 0.1177 ±0.0020 0.1842 ±0.0023 0.1658 ±0.0021 0.1303 ±0.0020 0.1435 ±0.0018 
+
+SGL 0.0911 ±0.0019 0.0349 ±0.0015 0.1886 ±0.0026 0.1188 ±0.0021 0.1867 ±0.0024 0.1692 ±0.0022 0.1364 ±0.0021 0.1471 ±0.0019 
+
+XSimGCL 0.0959 ±0.0020 0.0369 ±0.0016 0.1767 ±0.0024 0.1120 ±0.0019 0.1896 ±0.0025 0.1750 ±0.0023 0.1466 ±0.0022 0.1576 ±0.0020 
+
+Federated Models 
+
+FedMF 0.0479 ±0.0012 0.0176 ±0.0008 0.0712 ±0.0015 0.0443 ±0.0012 0.1473 ±0.0020 0.1193 ±0.0018 0.0649 ±0.0016 0.0685 ±0.0014 
+
+FedNCF 0.0487 ±0.0013 0.0202 ±0.0009 0.0762 ±0.0016 0.0465 ±0.0013 0.1474 ±0.0020 0.1296 ±0.0019 0.0712 ±0.0017 0.0822 ±0.0015 
+
+FedGNN 0.0518 ±0.0013 0.0202 ±0.0009 0.1311 ±0.0021 0.0789 ±0.0017 0.1425 ±0.0019 0.1266 ±0.0018 0.0877 ±0.0019 0.0968 ±0.0017 
+
+PerFedRec 0.0549 ±0.0014 0.0213 ±0.0010 0.1338 ±0.0022 0.0791 ±0.0017 0.1365 ±0.0018 0.1254 ±0.0017 0.0878 ±0.0019 0.0968 ±0.0017 
+
+PerFedRec ++ 0.0653 ±0.0016 0.0246 ±0.0011 0.1353 ±0.0022 0.0784 ±0.0017 0.1549 ±0.0021 0.1388 ±0.0019 0.0903 ±0.0020 0.1023 ±0.0018 
+
+FastPFRec 0.0705 ∗±0.0017 0.0271 ∗±0.0012 0.1399 ∗±0.0023 0.0861 ∗±0.0018 0.1696 ∗±0.0022 0.1494 ∗±0.0020 0.0997 ∗±0.0019 0.1073 ∗±0.0017 
+
+This distinction allows us to evaluate FastPFRec’s robustness across varying data scales and sparsity levels. Detailed statis-tics are listed in Table 1. In the evaluation, we employed two standard metrics includ-ing hit rate (HR) and NDCG, to evaluate the performance of top-10 recommendations [45]. 
+
+4.1.2. Baselines 
+
+To validate the e ff ectiveness of our proposed method 5, we conducted a comparative study of FastPFRec against several competitive baselines, which include both centralized [46] and federated recommendation methods. These baselines encom-pass traditional collaborative filtering techniques as well as GNN-based models. A detailed description of each baseline is provided below. Centralized methods: 
+
+• MF [47]: It decomposes the user-item interaction matrix into low-dimensional user and item vectors, revealing the latent relationships between user preferences and item features. 
+
+• LightGCN [48]: It is a lightweight model that simplifies the aggregation of weight parameters in GCNs. 
+
+• SGL [49]: It utilizes self-supervised learning to capture the relationships between users and items, improving recom-mendation accuracy by learning from the graph structure. 
+
+• XSimGCL [50]: It utilizes contrastive learning on cross-similarity graphs to enhance user and item representations. Federated recommendation methods: 
+
+• FedMF [30]: It is a matrix factorization method based on FL, designed to address recommendation system problems in distributed scenarios. 
+
+> 5Our source code is available at https: // github.com /yanzhenxing123 /FastPFRec
+
+• FedNCF [32]: It combines the strengths of matrix factoriza-tion and deep learning for improved recommendation accu-racy in privacy-sensitive applications. 
+
+• FedGNN [8]: It utilizes graph neural networks to facilitate feature interactions between users and items, enabling the model to e ff ectively learn information from graph-structured data. 
+
+• PerFedRec [7]: It combines joint representation learning, user clustering, and model adaptation to achieve improved recommendation performance and reduced communication costs. 
+
+• PerFedRec ++ [14]: PerFedRec ++ is built upon the PerFe-dRec model, incorporated contrastive learning pre-training, resulting in superior performance for federated recommen-dation models. 
+
+4.1.3. Implementation Details 
+
+We evaluate FastPFRec and baseline methods in a simulated federated environment where multiple clients collaboratively train recommendation models without sharing raw user-item in-teraction data. To ensure a fair and reproducible comparison, all experiments are conducted on a workstation equipped with a NVIDIA Tesla V100 GPU, and 32GB RAM, running Ubuntu 20.04. The algorithms are implemented using Python 3.8 and PyTorch 2.2.2 with CUDA 11.8. Regarding the experimental protocol, each experiment is re-peated five times with di ff erent random seeds to ensure statis-tical reliability, and we report the results as the mean and stan-dard deviation. We employ a consistent data splitting strategy, dividing the datasets into training, validation, and test sets with ratios of 70%, 10%, and 20%, respectively. To ensure full re-producibility, we fix the random seed to 2025 for both data split-ting and model initialization. For hyperparameter settings, we utilize the federated recom-mendation framework with our proposed FastGNN as the back-bone model. The parameters are configured as follows: the em-9123456 
+
+> FedMF
+> FedNCF
+> FedGNN PerFedRec
+> PerFedRec++
+> FastPFRec
+> CD Figure 5: CD diagram on HR.
+
+bedding dimension is set to k = 64, the batch size to B = 256, the learning rate to α = 0.001, and the regularization coe ffi cient to γ = 0.0001. The number of FastGNN layers is set to H = 2. To balance training e ffi ciency and performance, we configure the system with T = 10 trusted nodes and use a ranking tar-get of top-10. For baseline implementations, we integrate their offi cial codebases into our federated framework and fine-tune their key hyperparameters on the validation set to ensure a fair comparison. 
+
+4.2. E ff ectiveness of FastPFRec 
+
+In this section, we evaluate the overall recommendation per-formance of FastPFRec against state-of-the-art baselines. The objective is to demonstrate that our framework achieves com-petitive or superior accuracy under standard federated settings before introducing strict privacy constraints. From the results in Table 2, it is evident that FastPFRec demonstrates significant performance advantages in federated recommendation tasks. 
+
+• Centralized Models: Centralized models generally achieve better performance across all datasets due to their direct ac-cess to global data. For example, on the Gowalla-100k dataset, XSimGCL achieves an NDCG of 0.1576 and an HR of 0.1466, outperforming any federated models. However, centralized models depend heavily on full data sharing and storage, making them less applicable in scenarios that require privacy preservation. 
+
+• FastPFRec vs. Federated Baselines: Among federated models, FastPFRec consistently outperforms other methods across all datasets and metrics. For instance, on the Gowalla-1m dataset, FastPFRec achieves higher metrics than PerFe-dRec and PerFedRec ++ . Federated GNN-based models per-form better than FedMF, demonstrating the e ff ectiveness of graph neural networks in capturing user-item relationships. 
+
+• Performance Improvements: FastPFRec shows significant improvements over previous SOTA federated models. On the Gowalla-1m dataset, FastPFRec outperforms PerFedRec ++ 
+
+by 10.5%, demonstrating strong adaptability in handling large-scale sparse data. These improvements highlight the eff ectiveness of FastPFRec’s enhanced representation learn-ing capabilities and privacy-preserving mechanisms. Furthermore, we employed the Wilcoxon signed-rank test [51] to assess the significant di ff erences between the algorithms and plotted the critical di ff erence (CD) diagram, as shown in Figure 5. The x-axis represents the average ranking of each al-gorithm across multiple datasets based on the HR metric. If the di ff erence in average rankings between the two algorithms ex-ceeds the CD value, it indicates a statistically significant di ff er-ence between them. From the plot, it is evident that FastPFRec is the best method with the lowest rank, significantly better than FedMF, FedNCF and FedGNN, while the current results are not su ffi cient to distinguish FastPFRec from PerFedRec and PerFe-dRec ++ .The experimental results reveal varying performance im-provements across datasets, which can be understood through their distinct characteristics (summarized in Table 1). FastPFRec achieves the most significant gains on the two Gowalla datasets. This is attributed to their larger scale and higher interaction density, which particularly benefit from the scheduled item-update mechanism. By updating a large num-ber of item embeddings less frequently, substantial computa-tional savings are realized without compromising accuracy, as the richer training signals enable embeddings to converge e ff ec-tively even with sparse updates. On the relatively smaller and sparser Yelp and Kindle datasets, the improvements are more modest yet consistent. Although the absolute e ffi ciency gain is smaller due to the reduced problem scale, the method still maintains a superior effi ciency-accuracy trade-o ff . The analysis of interaction pat-terns further explains these outcomes: datasets with more uni-form distributions allow scheduled updates to work more har-moniously, whereas those with highly skewed popularity still perform robustly, indicating that the update schedule general-izes well across di ff erent data distributions. Overall, the con-vergence speed and e ffi ciency advantages of FastPFRec become increasingly pronounced as the dataset scale and density grow, demonstrating its strong suitability for large-scale recommen-dation scenarios. 
+
+4.3. Ablation Study 
+
+To understand the contribution of each algorithmic com-ponent, this section presents a detailed ablation study. We specifically examine how the FastGNN update strategy and the trusted-node aggregation mechanism independently a ff ect the model’s convergence and recommendation accuracy. As detailed in Table 3, the results regarding structural opti-mizations o ff er critical insights. Removing the scheduled item updating strategy results in a significant performance drop, re-ducing accuracy to a level comparable to the standard Light-GCN baseline. This confirms that without the scheduled update mechanism, the FastGNN architecture behaves similarly to a standard linearized GCN. Therefore, the superior performance of FastPFRec is primarily driven by the scheduled update strat-egy, which e ff ectively mitigates gradient noise in non-IID fed-erated settings. Regarding security modules, the variants without trusted nodes and without anomaly detection demonstrate that our three-tier architecture is crucial for maintaining accuracy, as removing them leads to noticeable performance degradation. Furthermore, the variant without LDP noise represents the non-private baseline; as expected, it achieves the highest accuracy, 10 Table 3: Expanded Ablation Study: Performance of FastPFRec and its variants. "w /o" denotes the removal of a specific module. Note that "w /o LDP" represents the non-private baseline. 
+
+Model / Variant Yelp Kindle Gowalla-1m HR@10 NDCG@10 HR@10 NDCG@10 HR@10 NDCG@10 FastPFRec (Default) 0.0705 0.0271 0.1399 0.0861 0.0997 0.1073 
+
+Structural Modules 
+
+w/o FastGNN (use LightGCN) 0.0642 0.0242 0.1331 0.0782 0.0912 0.0923 w/o Scheduled Item Updating (Full Update) 0.0648 0.0246 0.1340 0.0790 0.0925 0.0938 
+
+Security & Privacy Modules 
+
+w/o Trusted Nodes (Client-Server) 0.0683 0.0261 0.1374 0.0851 0.0953 0.1033 w/o Anomaly Detection 0.0691 0.0264 0.1382 0.0855 0.0975 0.1051 w/o LDP Noise ( λ = 0) 0.0721 0.0285 0.1425 0.0885 0.1041 0.1120 
+
+Update Frequency Analysis H × 5 0.0689 0.0256 0.1382 0.0855 0.0987 0.1064 
+
+H × 15 0.0695 0.0265 0.1385 0.0852 0.0982 0.1061 0 100 200 300 400 500                  
+
+> Epoch
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Loss
+> FastPFRec
+> PerFedRec++
+> (a) Training loss on Yelp. 0100 200 300 400 500
+> Epoch
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Loss
+> FastPFRec
+> PerFedRec++ (b) Training loss on Gowalla-1m. Figure 6: Training loss of FastPFRec and PerFedRec ++ on Yelp and Gowalla-1m. 050 100 150 200
+> Epoch
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> 0.025
+> NDCG
+> FastPFRec
+> PerFedRec++
+> (a) Training NDCG on Yelp. 0100 200 300
+> Epoch
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> NDCG
+> FastPFRec
+> PerFedRec++ (b) Training NDCG on Gowalla-1m. Figure 7: Training NDCG of FastPFRec and PerFedRec ++ on Yelp and Gowalla-1m (per epoch).
+
+validating the privacy-utility trade-o ff where our method sacri-fices only 4.3% utility for rigorous privacy. Finally, the update frequency analysis confirms that updating item embeddings ev-ery H × 10 epochs strikes the optimal balance between model freshness and stability compared to frequencies of H × 5 or 
+
+H × 15, and we set H = 2. 
+
+4.4. Convergence Analysis 
+
+In this section, we analyze the performance of FastPFRec with respect to the loss function and the number of epochs re-quired for convergence analysis, with a particular focus on com-paring its performance to baseline models. In Figure 6, we compare the loss curves of FastPFRec and PerFedRec ++ across di ff erent datasets for each training epoch. Our experimental results show that FastPFRec consistently achieves lower loss values across all evaluation metrics than the baseline model. Specifically, FastPFRec exhibits a smoother convergence process and a more stable learning curve, whereas the baseline model tend to fluctuate more significantly. This indicates that our model is not only more e ffi cient in terms of performance but also demonstrates better generalization to un-seen data. Furthermore, we analyze the number of epochs required for the model to reach its best performance. In Figure 7, we com-pare the changes in the NDCG score for FastPFRec and PerFe-dRec ++ across di ff erent datasets. Additionally, Figure 8 com-pares the number of epochs required for FastPFRec and other federated recommendation baselines to achieve their best per-formance across various datasets. As shown in Figure 7 (a), our experiments demonstrate that FastPFRec converges significantly faster than the baseline model, achieving approximately optimal performance in just 50 epochs on the Yelp dataset. This indicates the model’s ef-ficiency in learning and adapting to the data. In contrast, the baseline model PerFedRec ++ typically requires more epochs to reach a comparable level of performance, i.e., taking up to 200 epochs to achieve similar results. The faster convergence of FastPFRec can be attributed to its improved GNN interaction mechanism, which helps it more e ff ectively learn the underly-ing patterns in the data. On larger and more complex datasets, FastPFRec maintains its superior convergence characteristics. As shown in Figure 7 (b), on large-scale datasets, FastPFRec achieves its best per-formance around 80 epochs, whereas baseline models typically require 300 or even 500 epochs to reach optimal results. Simi-lar results are indicated in the comparison with other baselines in Figure 8. Compared to the baselines, we achieve the best performance with 32.0% fewer training epochs. This acceler-ated convergence is especially valuable in real-world applica-tions where training time is a critical factor. The reduced train-ing time allows FastPFRec to be deployed more quickly and effi ciently, making it a highly practical solution for large-scale recommendation tasks. As evidenced by these convergence curves, the scheduled 11 Yelp Kindle Gowalla-1m 
+
+> Datasets
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> Convergence Epochs
+> FedMF
+> FedNCF
+> FedGNN
+> PerFedRec
+> PerFedRec++
+> FastPFRec Figure 8: Comparison of epochs for federated recommendation models achiev-ing the best NDCG across di ff erent datasets.
+
+item-update mechanism e ff ectively prevents the rapid propa-gation of localized gradient noise, leading to the remarkably stable and accelerated convergence of FastPFRec. A deeper theoretical discussion regarding how this mechanism prevents over-smoothing is provided in Section 4.10. 
+
+4.5. Privacy-Utility Trade-o ff Analysis 
+
+To explicitly address the concern regarding the impact of pri-vacy mechanisms on recommendation quality, we conducted a sensitivity analysis on the Gowalla-1m dataset. We compared our fully private model against a baseline where LDP noise was disabled, quantifying the specific cost of di ff erential privacy. Table 4 presents the detailed impact of varying the privacy parameters. The baseline configuration (with graph perturba-tion Ppert = 0.1 but no LDP noise) achieves an NDCG of 0.1120. When we enforce our default LDP noise ( λ = 0.1), the performance decreases to 0.1073. This represents a total utility cost of approximately 4.29%. It is worth noting that further increasing the noise scale to 
+
+λ = 0.2 only leads to a marginal additional drop (to 0.1065), demonstrating that the FastPFRec architecture is relatively ro-bust to parameter perturbation. Even with these strict privacy constraints, our method (0.1073) continues to outperform the state-of-the-art federated baseline PerFedRec ++ (0.1023), con-firming that the proposed trade-o ff provides essential security guarantees without compromising service quality.           
+
+> Table 4: Privacy-Utility Trade-o ff on Gowalla-1m. We fix the graph pertur-bation Ppert =0.1 and vary the LDP noise scale λ.The row with λ=0.10 corresponds to our default setting.
+
+Privacy Parameters Utility Metric 
+
+Ppert λ (LDP Noise) NDCG Drop Rate (%) 0.10 0 (No Noise) 0.1120 -0.10 0.05 0.1108 1.07% 
+
+0.10 0.10 (Default) 0.1073 4.29% 
+
+0.10 0.20 0.1065 4.91% 
+
+4.6. Trusted Node Security and Resilience Analysis 
+
+This section comprehensively evaluates the security and re-silience of the trusted node architecture, examining its e ff ec-tiveness against malicious attacks and its robustness under in-frastructure failures. We first validate the e ff ectiveness of our trusted node archi-tecture in mitigating malicious attacks through a controlled ex-periment. We simulate a scenario where 30% of clients are malicious and inject Gaussian noise into their local model pa-rameters. We compare two system architectures: a traditional client-server model and our three-tier architecture with trusted nodes. The experiment uses 200 clients distributed across 10 trusted nodes, with 30 independent trials. As shown in Table 5, the trusted node architecture achieves a 94.8% reduction in server damage compared to the traditional client-server model, where server damage is quantified by the L2-norm ∥Wnew − Wold ∥2. The architecture successfully detects and isolates 94.8% of malicious behaviors, preventing attack propagation to the central server and ensuring system stability even under high malicious client ratios. Beyond deliberate attacks, we evaluate system resilience un-der infrastructure failures using the Gowalla-100K dataset. Ta-ble 6 shows system performance under di ff erent numbers of failed trusted nodes. With T = 10 trusted nodes, the system maintains robust performance even with 30% node failure, ex-hibiting only minor accuracy degradation (less than 2.0%). This confirms the architecture’s inherent redundancy and ability to gracefully degrade under infrastructure faults. Table 7 further presents attack resilience when trusted nodes themselves are compromised to launch noise-injection attacks. The anomaly detection system e ff ectively contains such threats, maintaining model accuracy within 1.5% of the baseline and achieving containment rates 98.7%, even when 30.0% of nodes are malicious. Table 8 details the e ff ectiveness of our MAD-based detection, which achieves an average detection rate ex-ceeding 96.0% with false positive rates below 5.0%, while in-troducing minimal latency overhead (under 50 ms). Collectively, these results validate the multi-faceted security design of FastPFRec. The three-tier architecture, combined with proactive anomaly detection and redundant infrastructure, provides strong resilience against both deliberate malicious at-tacks and accidental infrastructure failures. This ensures re-liable and secure operation in practical federated learning de-ployments, making the architecture particularly suitable for privacy-sensitive applications requiring robust security guaran-tees. 
+
+> Table 5: Attack resilience comparison: Traditional vs. FastPFRec architecture
+
+Architecture Server Damage Avg Protection Rate Traditional (Direct) 2.34 ±0.15 0.0% FastPFRec (w / Trusted Nodes) 0.12 ±0.08 94.8% 
+
+4.7. E ffi ciency Analysis 
+
+This section evaluates the computational e ffi ciency and train-ing acceleration introduced by the FastGNN update strategy. The primary objective is to empirically quantify the reduction 12 Table 6: System performance under trusted node failures                     
+
+> Failed Nodes Failure Rate NDCG 00% 0.1073 ±0.0002
+> 110% 0.1068 ±0.0004
+> 220% 0.1070 ±0.0008
+> 330% 0.1064 ±0.0005
+> Table 7: Attack resilience under node compromise
+> Compromised Nodes NDCG Containment Rate 00.1073 ±0.0013 100.0% 10.1069 ±0.0009 99.2% 20.1065 ±0.0010 98.7% 30.1062 ±0.0008 98.1%
+
+in training time and computational overhead compared to con-ventional full-graph update methods, thereby demonstrating the practical scalability of our approach. Specifically, to analyze the time e ffi ciency of FastPFRec, we compare its runtime and time complexity with state-of-the-art methods. Figure 9 reports the per-epoch runtime across datasets. FastPFRec achieves the lowest time consumption, in-cluding a 43.0% reduction on Gowalla-1m compared to PerFe-dRec ++ . Averaged over all datasets, it reduces runtime by 34.1% relative to GNN-based federated baselines. Table 9 shows the total computational cost of the learning representation in the federated recommendation, where H is the number of convolutional layers, k is the vector dimension, |U|
+
+and |I| denote user and item counts. For the GNN-based meth-ods (i.e., FedGNN, PerFedRec, PerFedRec ++ , and FastPFRec), we only consider the time complexity of their local GNN mod-ules. In our model, when performing FastGNN convolution, the user-item interaction matrix is utilized as the local graph. Dur-ing the convolution process, the user matrix convolves with the item matrix at every step, while feature interaction from items to users occurs only every H × 10 epochs. This scheduled strat-egy reduces the amortized computational cost of item embed-ding updates by a factor of approximately H × 10 compared to full updates, resulting in a linear reduction in overall complex-ity as shown in Table 9. 
+
+4.8. Hyperparameter Analysis 
+
+This section analyzes the impact of hyperparameters, with a particular focus on the embedding size k and the number of trusted nodes T .To analyze the e ff ect of embedding size on model perfor-mance, we conducted experiments on the Yelp, Kindle, and Gowalla-1m datasets, using three di ff erent embedding size con-figurations: 32, 64, and 128. The experimental results for HR and NDCG at di ff erent embedding sizes are shown in Figure 10. As the embedding size increases from 32 to 64, all datasets show improvements in both HR and NDCG, with the Kindle dataset achieving the highest peak performance. However, fur-ther increasing the embedding size to 128 results in perfor-                                   
+
+> Table 8: Anomaly detection performance metrics
+> Attack Type Detection Rate False Positive Latency (ms) Noise Injection 97.3% 3.2% 38 ±5Gradient Poisoning 96.8% 4.1% 46 ±6
+> Table 9: Time complexity of di ff erent federated client models (per epoch).
+> Model Time Complexity FedMF O(|U| · | I| · k)FedNCF O(H· | U| · | I| · k)FedGNN O(H· | U| · | I| · k)PerFedRec O(H· | U| · | I| · k)PerFedRec ++ O(H· | U| · | I| · k)FastPFRec O(H·k·(|U|+|I|/h))
+
+mance degradation for most datasets, likely due to overfitting or feature redundancy. Gowalla-1m exhibits the most robust per-formance, with relatively stable NDCG values. These results highlight the importance of selecting an optimal embedding size, typically around 64, to balance performance and model complexity. Table 10 shows the relationship between the number of trusted nodes and performance and time cost (indicated by 
+
+T500 ) under training 500 epochs. As the number of trusted nodes increases from 5 to 10, there is a slight improvement in performance for all datasets. However, further increasing the number to 20 shows marginal gains or even minor declines in certain cases, indicating diminishing returns. For training time, as the number of clients increases, the training time will increase slightly. This suggests that while increasing trusted nodes can enhance performance, the improvements are limited and may come at the cost of reduced training e ffi ciency. Hence, a balance must be struck between performance improvement and computational e ffi ciency. 
+
+4.9. Real-World Federated Simulation 
+
+In this section, we construct a simulated real-world federated recommendation environment to fully evaluate the communi-cation e ffi ciency of FastPFRec. The purpose of this simulation is to emulate practical FL scenarios, in which the cost of data transmission between clients, intermediate trusted nodes, and a central server is often a critical bottleneck. Inspired by HN3S [52], the details of simulation are described below. We train all models for 500 epochs with a batch size of 256 on a system running Ubuntu 20.04, equipped with an NVIDIA Tesla V100 GPU and a 1TB SSD. During training, we explic-itly record only the time spent on communication-related oper-ations, including: 
+
+• Transmission of model parameters between clients, trusted nodes, and the server. 
+
+• Aggregation time at trusted nodes and the central server. 
+
+• Loading and dispatching time of the model updates. As shown in Table 11, we report the communication costs ex-plicitly. Note that computation time (e.g., forward /backward propagation) is excluded to isolate communication overhead. 13 Table 10: Performance and time cost (in seconds) comparison with di ff erent numbers of trusted nodes. 
+
+T Yelp Kindle Gowalla-1m HR NDCG T500 HR NDCG T500 HR NDCG T500 
+
+5 0.0688 0.0261 3303 0.1374 0.0851 3194 0.0973 0.1032 21933 10 0.0704 0.0270 3429 0.1398 0.0860 3204 0.0996 0.1073 22563 20 0.0682 0.0268 3518 0.1361 0.0858 3317 0.0972 0.1029 24016 FedMF       
+
+> FedNCF FedGNN
+> PerFedRec
+> PerFedRec++ FastPFRec
+> 5000s
+> 10000s
+> 15000s
+> 20000s
+> 25000s
+> Our Method
+> Gowalla-1m
+> Yelp
+> Kindle
+> Figure 9: Time consumption of federated recommendation models over same epochs. 32 64 128
+> Embedding Size
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> 0.14
+> 0.16
+> HR
+> Yelp
+> Kindle
+> Gowalla
+> (a) HR on di ff erent datasets. 32 64 128
+> Embedding Size
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> 0.14
+> NDCG
+> Yelp
+> Kindle
+> Gowalla (b) NDCG on di ff erent datasets. Figure 10: Performance comparison with di ff erent embedding size.
+
+These results confirm that the integration of trusted nodes does not introduce substantial communication overhead. On the contrary, the decentralized aggregation mechanism and lightweight update strategy of FastPFRec contribute to e ffi cient communication, making the method suitable for large-scale, real-world federated recommendation systems where low la-tency and scalability are critical. 
+
+4.10. Discussion 
+
+The superior convergence and accuracy of FastPFRec com-pared to existing GNN-based federated methods (e.g., FedGNN and PerFedRec ++ ) are fundamentally driven by its sched-uled item-update mechanism. In collaborative bipartite graphs, frequent full-graph convolutions inevitably lead to the well-known over-smoothing problem [53, 54], where item embed-dings lose their distinctiveness by repeatedly absorbing het-erogeneous user information. Since item characteristics are intrinsically more stable than dynamic user preferences, Fast-
+
+> Table 11: Communication time in real-world simulation (in seconds)
+
+Model Yelp Kindle Gowalla-1m FastPFRec 9.35 8.23 12.09 PerFedRec ++ 9.59 7.87 13.24 
+
+GNN strategically reduces the frequency of item convolu-tions. This asynchronous update mechanism e ff ectively pre-vents over-smoothing, allowing user embeddings to adapt dy-namically while preserving the unique, stable representational capacity of items. Consequently, the global model converges faster and avoids the performance degradation typical of over-convolved GNNs. Furthermore, our three-tier architecture o ff ers systemic se-curity advantages over standard two-tier systems. By utiliz-ing trusted nodes that are deployed as reliable, infrastructure-level edge servers, FastPFRec logically and physically decou-ples clients from the central server. This architecture e ff ectively neutralizes server-side source-tracing vulnerabilities and iso-lates malicious updates. Crucially, this design exhibits strong fault tolerance; empirical results demonstrate that the system maintains robust performance even under a 30% node failure or compromise scenario, as the adverse impact remains strictly contained within isolated subsets of clients. Regarding the privacy-utility trade-o ff , empirical results indi-cate a marginal performance degradation (e.g., a 4 .29% NDCG drop on the Gowalla-1m dataset) when enforcing strict LDP constraints. In practical deployments, this trade-o ff is highly acceptable and often a fundamental prerequisite for compliance with stringent data protection regulations, such as the GDPR. Furthermore, it is noteworthy that even under these strict pri-vacy constraints ( λ = 0.1), FastPFRec consistently outperforms state-of-the-art baselines (e.g., PerFedRec ++ ) that operate en-tirely without privacy noise. This demonstrates that our ar-chitectural design e ff ectively bounds the utility cost of privacy preservation, o ff ering a superior balance compared to alterna-tive approaches that often su ff er severe accuracy drops when perturbation-based privacy is applied. Despite these advantages, the framework has certain limita-tions. Its security guarantees inherently rely on the “honest-but-curious” assumption [55] of these infrastructure-level trusted nodes, making deployment challenging in fully decentralized ad-hoc environments where such reliable intermediaries are unavailable. Additionally, while the system is highly robust against noise-injection attacks, defending against more sophis-ticated adversarial threats, such as advanced model inversion or membership inference attacks, remains an open challenge for 14 future research. 
+
+5. Conclusion 
+
+This study presents FastPFRec, a fast and personalized fed-erated recommendation framework with integrated privacy pro-tection designed to address data privacy and heterogeneity challenges. The experimental results across multiple datasets demonstrate that FastPFRec achieves high recommendation ac-curacy while significantly improving training e ffi ciency through the FastGNN update schedule and providing robust privacy guarantees through a multi-layered protection mechanism. The three-tier architecture with trusted nodes further enhances secu-rity against malicious clients and shows strong scalability, par-ticularly on large-scale datasets. Future work will focus on: (1) exploring e ffi cient model compression techniques and further algorithmic optimizations to enhance scalability with large numbers of users and items; (2) developing more advanced di ff erential privacy strategies and evaluating the framework under a broader range of privacy attacks; and (3) improving the trusted-node aggregation mecha-nism and extending the framework to scenarios without trusted intermediate infrastructure. 
+
+Acknowledgments 
+
+This work is supported in part by the Fundamental Research Funds for the Central Universities (No. 2025JBMC028), and in part by the National Natural Science Foundation of China (No. 61702030). 
+
+References 
+
+[1] J. Zhou, G. Cui, S. Hu, Z. Zhang, C. Yang, Z. Liu, L. Wang, C. Li, M. Sun, Graph neural networks: A review of methods and applications, AI Open 1 (2020) 57–81. [2] J. Park, M. Kang, W. Sim, S. Lee, H. Park, Federated recommender system with data valuation for e-commerce platform, Expert Systems with Applications 298 (2026) 129695. [3] L. Li, Y. Fan, M. Tse, K.-Y. Lin, A review of applications in federated learning, Computers & Industrial Engineer-ing 149 (2020) 106854. [4] S. Luo, X. Zhang, Y. Xiao, L. Song, Hysage: A hybrid static and adaptive graph embedding network for context-drifting recommendations, in: Proceedings of the 31st ACM International Conference on Information & Knowl-edge Management, 2022, pp. 1389–1398. [5] V. Mothukuri, R. M. Parizi, S. Pouriyeh, Y. Huang, A. De-hghantanha, G. Srivastava, A survey on security and pri-vacy of federated learning, Future Generation Computer Systems 115 (2021) 619–640. [6] L. Liu, J. Zhang, S. Song, K. B. Letaief, Client-edge-cloud hierarchical federated learning, in: Proceedings of ICC 2020-2020 IEEE international conference on com-munications (ICC), IEEE, 2020, pp. 1–6. [7] S. Luo, Y. Xiao, L. Song, Personalized federated recom-mendation via joint representation learning, user cluster-ing, and model adaptation, in: Proceedings of the 31st ACM International Conference on Information & Knowl-edge Management, 2022, pp. 4289–4293. [8] C. Wu, F. Wu, Y. Cao, Y. Huang, X. Xie, Fedgnn: Feder-ated graph neural network for privacy-preserving recom-mendation, arXiv preprint arXiv:2102.04925 (2021). [9] S. Banabilah, M. Aloqaily, E. Alsayed, N. Malik, Y. Jarar-weh, Federated learning review: Fundamentals, enabling technologies, and future applications, Information Pro-cessing & Management 59 (2022) 103061. [10] Y. Lin, P. Ren, Z. Chen, Z. Ren, D. Yu, J. Ma, M. d. Rijke, X. Cheng, Meta matrix factorization for federated rat-ing predictions, in: Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval, 2020, pp. 981–990. [11] Y. Li, T.-H. Chang, C.-Y. Chi, Secure federated averag-ing algorithm with di ff erential privacy, in: Proceedings of 2020 IEEE 30th International Workshop on Machine Learning for Signal Processing (MLSP), IEEE, 2020, pp. 1–6. [12] B. McMahan, E. Moore, D. Ramage, S. Hampson, B. A. y Arcas, Communication-e ffi cient learning of deep net-works from decentralized data, in: Proceedings of Arti-ficial Intelligence and Statistics, PMLR, 2017, pp. 1273– 1282. [13] H. Fereidooni, S. Marchal, M. Miettinen, A. Mirhoseini, H. Möllering, T. D. Nguyen, P. Rieger, A.-R. Sadeghi, T. Schneider, H. Yalame, et al., Safelearn: Secure ag-gregation for private federated learning, in: Proceedings of 2021 IEEE Security and Privacy Workshops (SPW), IEEE, 2021, pp. 56–62. [14] S. Luo, Y. Xiao, X. Zhang, Y. Liu, W. Ding, L. Song, Perfedrec ++ : Enhancing personalized federated recom-mendation with self-supervised pre-training, ACM Trans-actions on Intelligent Systems and Technology 15 (2024) 1–24. [15] D. Liang, L. Charlin, J. McInerney, D. M. Blei, Modeling user exposure in recommendation, in: Proceedings of the 25th International Conference on World Wide Web, 2016, pp. 951–961. [16] S. Truex, L. Liu, K.-H. Chow, M. E. Gursoy, W. Wei, Ldp-fed: Federated learning with local di ff erential privacy, in: Proceedings of the Third ACM International Workshop on Edge Systems, Analytics and Networking, 2020, pp. 61– 66. 15 [17] Z. Li, M. Bilal, X. Xu, J. Jiang, Y. Cui, Fed-erated learning-based cross-enterprise recommendation with graph neural networks, IEEE Transactions on In-dustrial Informatics 19 (2022) 673–682. [18] T. Li, L. Song, C. Fragouli, Federated recommendation system via di ff erential privacy, in: Proceedings of 2020 IEEE International Symposium on Information Theory (ISIT), IEEE, 2020, pp. 2592–2597. [19] S. Zhang, H. Tong, J. Xu, R. Maciejewski, Graph convolu-tional networks: a comprehensive review, Computational Social Networks 6 (2019) 1–23. [20] Z. Liu, L. Yang, Z. Fan, H. Peng, P. S. Yu, Federated social recommendation with graph neural network, ACM Trans-actions on Intelligent Systems and Technology (TIST) 13 (2022) 1–24. [21] A. Samad, V. Bhatia, Fedgclrec: Federated graph con-trastive learning framework for social influence recom-mendations, Expert Systems with Applications 297 (2026) 129294. [22] C. Zhang, G. Long, T. Zhou, Z. Zhang, P. Yan, B. Yang, Gpfedrec: Graph-guided personalization for federated recommendation, in: Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, 2024, pp. 4131–4142. [23] M. Ahmed, R. Seraj, S. M. S. Islam, The k-means algo-rithm: A comprehensive survey and performance evalua-tion, Electronics 9 (2020) 1295. [24] C. Zhang, S. Li, J. Xia, W. Wang, F. Yan, Y. Liu, E ffi cient homomorphic encryption for federated learning, in: Pro-ceedings of 2020 USENIX Annual Technical Conference (USENIX ATC 20), 2020, pp. 493–506. [25] D. Kim, K. Oh, Y. Lee, H. Woo, Overview of fair feder-ated learning for fairness and privacy preservation, Expert Systems with Applications 293 (2025) 128568. [26] L. Yang, B. Tan, V. W. Zheng, K. Chen, Q. Yang, Feder-ated recommendation systems, Federated Learning: Pri-vacy and Incentive (2020) 225–239. [27] C. Ma, J. Li, M. Ding, H. H. Yang, F. Shu, T. Q. Quek, H. V. Poor, On safeguarding privacy and security in the framework of federated learning, IEEE Network 34 (2020) 242–248. [28] C. Dwork, Di ff erential privacy, in: Proceedings of Inter-national Colloquium on Automata, Languages, and Pro-gramming, Springer, 2006, pp. 1–12. [29] M. Ammad-Ud-Din, E. Ivannikova, S. A. Khan, W. Oy-omno, Q. Fu, K. E. Tan, A. Flanagan, Federated collab-orative filtering for privacy-preserving personalized rec-ommendation system, arXiv preprint arXiv:1901.09888 (2019). [30] D. Chai, L. Wang, K. Chen, Q. Yang, Secure federated matrix factorization, IEEE Intelligent Systems 36 (2020) 11–20. [31] G. Lin, F. Liang, W. Pan, Z. Ming, Fedrec: Federated recommendation with explicit feedback, IEEE Intelligent Systems 36 (2020) 21–30. [32] X. Jiang, B. Liu, J. Qin, Y. Zhang, J. Qian, Fedncf: feder-ated neural collaborative filtering for privacy-preserving recommender system, in: Proceedings of 2022 Inter-national joint conference on neural networks (IJCNN), IEEE, 2022, pp. 1–8. [33] Y. He, L. Wei, F. Chen, H. Zhang, J. Yu, H. Wang, Fedai: Federated recommendation system with anonymized in-teractions, Expert Systems with Applications 271 (2025) 126564. [34] J. Feng, L. T. Yang, Q. Zhu, K.-K. R. Choo, Privacy-preserving tensor decomposition over encrypted data in a federated cloud environment, IEEE Transactions on De-pendable and Secure Computing 17 (2018) 857–868. [35] J. Feng, Y. Wu, H. Sun, S. Zhang, D. Liu, Panther: Practi-cal secure 2-party neural network inference, IEEE Trans-actions on Information Forensics and Security (2025). [36] P. Zhang, H. Sun, Z. Zhang, X. Cheng, Y. Zhu, J. Zhang, Privacy-preserving recommendations with mix-ture model-based matrix factorization under local di ff er-ential privacy, IEEE Transactions on Industrial Informat-ics (2025). [37] P. Zhang, X. Cheng, Z. Zhang, Y. Zhu, J. Zhang, Maximizing area coverage in privacy-preserving worker recruitment: A prior knowledge-enhanced geo-indistinguishable approach, IEEE Transactions on Information Forensics and Security (2025). [38] P. Zhao, Z. Zhang, J. Dong, J. Wu, Z. Liu, S. Wang, Y. Gao, An attack-agnostic defense framework against manipulation attacks under local di ff erential privacy, in: 2025 IEEE Symposium on Security and Privacy (SP), IEEE, 2025, pp. 3858–3876. [39] R. Fang, Y. Sun, J. Yuan, H. Cao, Dmia: A disentangled-based method for graph convolutional network against membership inference attack, IEEE Transactions on De-pendable and Secure Computing (2025). [40] Q. Yang, Toward responsible ai: An overview of fed-erated learning for user-centered privacy-preserving com-puting, ACM Transactions on Interactive Intelligent Sys-tems (TiiS) 11 (2021) 1–22. [41] X. Li, K. Huang, W. Yang, S. Wang, Z. Zhang, On the convergence of fedavg on non-iid data, arXiv preprint arXiv:1907.02189 (2019). 16 [42] Yelp, Yelp Dataset Challenge, https://www.yelp. com/dataset/challenge , 2018. [43] A. K. Singh, D. Sharma, M. Dhawan, S. Kumar, A. Chat-taraj, C. Gour, Amazon kindle review sentiment analysis, 2024 IEEE Recent Advances in Intelligent Computational Systems (RAICS) (2024) 1–6. [44] G. Ference, M. Ye, W.-C. Lee, Location recommendation for out-of-town users in location-based social networks, in: Proceedings of the 22nd ACM International Confer-ence on Information & Knowledge Management, 2013, pp. 721–726. [45] Y. Wang, L. Wang, Y. Li, D. He, T.-Y. Liu, A theoretical analysis of ndcg type ranking measures, in: Proceedings of Conference on Learning Theory, PMLR, 2013, pp. 25– 54. [46] J. Yu, H. Yin, X. Xia, T. Chen, J. Li, Z. Huang, Self-supervised learning for recommender systems: A survey, IEEE Transactions on Knowledge and Data Engineering 36 (2024) 335–355. [47] Y. Koren, R. Bell, C. Volinsky, Matrix factorization tech-niques for recommender systems, Computer 42 (2009) 30–37. [48] X. He, K. Deng, X. Wang, Y. Li, Y. Zhang, M. Wang, Lightgcn: Simplifying and powering graph convolution network for recommendation, in: Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval, 2020, pp. 639– 648. [49] J. Wu, X. Wang, F. Feng, X. He, L. Chen, J. Lian, X. Xie, Self-supervised graph learning for recommendation, in: Proceedings of the 44th international ACM SIGIR Con-ference on Research and Development in Information Re-trieval, 2021, pp. 726–735. [50] J. Yu, X. Xia, T. Chen, L. Cui, N. Q. V. Hung, H. Yin, Xsimgcl: Towards extremely simple graph contrastive learning for recommendation, IEEE Transactions on Knowledge and Data Engineering 36 (2023) 913–926. [51] F. Wilcoxon, S. B. Bulletin, N. Dec, Individual compar-isons by ranking methods, Springer New York (1992). [52] L. Zhang, G. Li, L. Yuan, X. Ding, Q. Rong, Hn3s: A federated autoencoder framework for collaborative filter-ing via hybrid negative sampling and secret sharing, In-formation Processing & Management 61 (2024) 103580. [53] D. Chen, Y. Lin, W. Li, P. Li, J. Zhou, X. Sun, Measuring and relieving the over-smoothing problem for graph neu-ral networks from the topological view, in: Proceedings of the AAAI conference on artificial intelligence, volume 34, 2020, pp. 3438–3445. [54] Q. Li, Z. Han, X.-M. Wu, Deeper insights into graph con-volutional networks for semi-supervised learning, in: Pro-ceedings of the AAAI conference on artificial intelligence, volume 32, 2018. [55] Q. Yang, Y. Liu, T. Chen, Y. Tong, Federated machine learning: Concept and applications, ACM Transactions on Intelligent Systems and Technology (TIST) 10 (2019) 1–19. 17

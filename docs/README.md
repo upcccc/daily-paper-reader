@@ -6,73 +6,85 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-23
-- 运行时间：2026-03-23 19:45:42 UTC
+- 最新运行日期：2026-03-24
+- 运行时间：2026-03-24 19:56:16 UTC
 - 运行状态：成功
-- 本次总论文数：17
-- 精读区：6
+- 本次总论文数：21
+- 精读区：10
 - 速读区：11
 
 ### 今日简报（AI）
-今日深度复盘 17 篇顶尖论文，聚焦本地差分隐私下的图模式计数突破与矩阵机制的全球收敛性证明。
-重点推荐满分论文对 LDP 图分析的建模，以及联邦学习在科学大模型跨设施扩展与个性化 LLM 对齐（FedPDPO）中的前沿应用。
-建议从隐私计算底层逻辑入手，并关注 Gemini 3 等 AI 工具在复杂数学证明协作中的潜力。
-- 详情：[/202603/23/README](/202603/23/README)
+今日精选 21 篇前沿论文，深度聚焦联邦学习中的隐私保护与机密计算安全。
+重点推荐差分隐私动作识别与抗侧信道攻击的机密计算方案，两项研究均获 10 分满分评价。
+建议关注联邦学习在室内定位及推荐系统中的抗毒化与降噪技术，提升复杂场景下的模型鲁棒性。
+- 详情：[/202603/24/README](/202603/24/README)
 
 ### 精读区论文标签
-1. [Acyclic Graph Pattern Counting under Local Differential Privacy](/202603/23/2603.19671v1-acyclic-graph-pattern-counting-under-local-differential-privacy)  
+1. [Privacy-Preserving Federated Action Recognition via Differentially Private Selective Tuning and Efficient Communication](/202603/24/2603.21305v1-privacy-preserving-federated-action-recognition-via-differentially-private-selective-tuning-and-efficient-communication)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：本地差分隐私下的无向图模式计数
-2. [Global Convergence of Multiplicative Updates for the Matrix Mechanism: A Collaborative Proof with Gemini 3](/202603/23/2603.19465v1-global-convergence-of-multiplicative-updates-for-the-matrix-mechanism-a-collaborative-proof-with-gemini-3)  
+   evidence：针对动作识别的联邦差分隐私
+2. [Hardening Confidential Federated Compute against Side-channel Attacks](/202603/24/2603.21469v1-hardening-confidential-federated-compute-against-side-channel-attacks)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：使用差分隐私缓解联邦计算中的侧信道攻击
+3. [Compressed Distributed Stochastic Nonconvex Optimization with Differential Privacy](/202603/24/2603.21640v1-compressed-distributed-stochastic-nonconvex-optimization-with-differential-privacy)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：具有差分隐私的分布式随机非凸优化
+4. [FastPFRec: A Fast Personalized Federated Recommendation with Secure Sharing](/202603/24/2603.20283v1-fastpfrec-a-fast-personalized-federated-recommendation-with-secure-sharing)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：隐私机器学习中矩阵机制的优化
-3. [Minimax and Adaptive Covariance Matrix Estimation under Differential Privacy](/202603/23/2603.19703v1-minimax-and-adaptive-covariance-matrix-estimation-under-differential-privacy)  
+   evidence：具有隐私感知参数共享的个性化联邦推荐
+5. [Adversarial Attacks on Locally Private Graph Neural Networks](/202603/24/2603.20746v1-adversarial-attacks-on-locally-private-graph-neural-networks)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：差分隐私约束下的极小极大和自适应估计
-4. [TAPAS: Efficient Two-Server Asymmetric Private Aggregation Beyond Prio(+)](/202603/23/2603.19949v1-tapas-efficient-two-server-asymmetric-private-aggregation-beyond-prio)  
+   evidence：针对本地差分隐私（LDP）保护的图神经网络的对抗攻击
+6. [Incentive-Aware Federated Averaging with Performance Guarantees under Strategic Participation](/202603/24/2603.20873v1-incentive-aware-federated-averaging-with-performance-guarantees-under-strategic-participation)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：联邦学习中的隐私保护聚合
-5. [Secure Linear Alignment of Large Language Models](/202603/23/2603.18908v1-secure-linear-alignment-of-large-language-models)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：跨孤岛推理的隐私保护框架
-6. [On Performance Guarantees for Federated Learning with Personalized Constraints](/202603/23/2603.19617v1-on-performance-guarantees-for-federated-learning-with-personalized-constraints)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：具有私有约束集的联邦优化
+   evidence：针对私有本地数据集的激励感知联邦平均
+7. [Composition Theorems for Multiple Differential Privacy Constraints](/202603/24/2603.20968v1-composition-theorems-for-multiple-differential-privacy-constraints)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：具有多个差分隐私约束的机制组合定理
+8. [Anchored Likelihood-Ratio Geometry of Anonymous Shuffle Experiments: Exact Privacy Envelopes and Universal Low-Budget Design](/202603/24/2603.21197v1-anchored-likelihood-ratio-geometry-of-anonymous-shuffle-experiments-exact-privacy-envelopes-and-universal-low-budget-design)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：本地差分隐私与匿名洗牌的隐私包络
+9. [Aggregation Alignment for Federated Learning with Mixture-of-Experts under Data Heterogeneity](/202603/24/2603.21276v1-aggregation-alignment-for-federated-learning-with-mixture-of-experts-under-data-heterogeneity)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：针对隐私敏感数据的MoE架构大模型联邦学习
+10. [TrustFed: Enabling Trustworthy Medical AI under Data Privacy Constraints](/202603/24/2603.21656v1-trustfed-enabling-trustworthy-medical-ai-under-data-privacy-constraints)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：联邦学习实现隐私保护的多机构训练
 
 ### 速读区论文标签
-1. [Scalable Cross-Facility Federated Learning for Scientific Foundation Models on Multiple Supercomputers](/202603/23/2603.19544v1-scalable-cross-facility-federated-learning-for-scientific-foundation-models-on-multiple-supercomputers)  
+1. [ARMOR: Adaptive Resilience Against Model Poisoning Attacks in Continual Federated Learning for Mobile Indoor Localization](/202603/24/2603.19594v1-armor-adaptive-resilience-against-model-poisoning-attacks-in-continual-federated-learning-for-mobile-indoor-localization)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：用于科学模型的跨设施联邦学习框架
-2. [On the Fundamental Limits of Hierarchical Secure Aggregation with Dropout and Collusion Resilience](/202603/23/2603.19705v1-on-the-fundamental-limits-of-hierarchical-secure-aggregation-with-dropout-and-collusion-resilience)  
+   evidence：使用联邦学习进行定位的隐私保护方法
+2. [FedRG: Unleashing the Representation Geometry for Federated Learning with Noisy Clients](/202603/24/2603.19722v1-fedrg-unleashing-the-representation-geometry-for-federated-learning-with-noisy-clients)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：分层网络中的信息论安全聚合
-3. [FedPDPO: Federated Personalized Direct Preference Optimization for Large Language Model Alignment](/202603/23/2603.19741v1-fedpdpo-federated-personalized-direct-preference-optimization-for-large-language-model-alignment)  
+   evidence：利用表示几何处理噪声客户端的联邦学习
+3. [Low-pass Personalized Subgraph Federated Recommendation](/202603/24/2603.20338v1-low-pass-personalized-subgraph-federated-recommendation)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：大语言模型的联邦个性化直接偏好优化
-4. [A Federated Many-to-One Hopfield model for associative Neural Networks](/202603/23/2603.19902v1-a-federated-many-to-one-hopfield-model-for-associative-neural-networks)  
+   evidence：联邦推荐中的隐私保护去中心化模型
+4. [Unveiling the Security Risks of Federated Learning in the Wild: From Research to Practice](/202603/24/2603.20615v1-unveiling-the-security-risks-of-federated-learning-in-the-wild-from-research-to-practice)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：不共享原始数据的联邦学习
-5. [AcceRL: A Distributed Asynchronous Reinforcement Learning and World Model Framework for Vision-Language-Action Models](/202603/23/2603.18464v2-accerl-a-distributed-asynchronous-reinforcement-learning-and-world-model-framework-for-vision-language-action-models)  
+   evidence：联邦学习中安全风险和中毒威胁模型的测量研究
+5. [Prescribed-Time Distributed Generalized Nash Equilibrium Seeking](/202603/24/2603.16865v2-prescribed-time-distributed-generalized-nash-equilibrium-seeking)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式异步强化学习框架
-6. [FedTrident: Resilient Road Condition Classification Against Poisoning Attacks in Federated Learning](/202603/23/2603.19101v1-fedtrident-resilient-road-condition-classification-against-poisoning-attacks-in-federated-learning)  
+   evidence：非合作博弈中纳什均衡的分布式算法
+6. [Tula: Optimizing Time, Cost, and Generalization in Distributed Large-Batch Training](/202603/24/2603.18112v1-tula-optimizing-time-cost-and-generalization-in-distributed-large-batch-training)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：抵御投毒攻击的鲁棒联邦学习
-7. [ADMM-Based Distributed MPC with Control Barrier Functions for Safe Multi-Robot Quadrupedal Locomotion](/202603/23/2603.19170v1-admm-based-distributed-mpc-with-control-barrier-functions-for-safe-multi-robot-quadrupedal-locomotion)  
+   evidence：优化分布式大批量训练的性能与成本
+7. [Secure Linear Alignment of Large Language Models](/202603/24/2603.18908v2-secure-linear-alignment-of-large-language-models)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：基于ADMM的结构化分布式优化框架
-8. [Diffusion-Guided Semantic Consistency for Multimodal Heterogeneity](/202603/23/2603.19337v1-diffusion-guided-semantic-consistency-for-multimodal-heterogeneity)  
+   evidence：使用同态加密保护客户端查询的跨孤岛推理隐私保护框架
+8. [Meeting in the Middle: A Co-Design Paradigm for FHE and AI Inference](/202603/24/2603.20504v1-meeting-in-the-middle-a-co-design-paradigm-for-fhe-and-ai-inference)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦学习本地训练的隐私保护引导
-9. [High-Probability Bounds for SGD under the Polyak-Lojasiewicz Condition with Markovian Noise](/202603/23/2603.14514v1-high-probability-bounds-for-sgd-under-the-polyak-lojasiewicz-condition-with-markovian-noise)  
+   evidence：使用全同态加密的隐私保护AI推理
+9. [Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks](/202603/24/2603.18570v1-attack-by-unlearning-unlearning-induced-adversarial-attacks-on-graph-neural-networks)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：去中心化优化与马尔可夫噪声分析
-10. [DDH-based schemes for multi-party Function Secret Sharing](/202603/23/2603.17453v1-ddh-based-schemes-for-multi-party-function-secret-sharing)  
+   evidence：GNN中与隐私相关的机器卸载及其对抗性风险
+10. [Automated Membership Inference Attacks: Discovering MIA Signal Computations using LLM Agents](/202603/24/2603.19375v1-automated-membership-inference-attacks-discovering-mia-signal-computations-using-llm-agents)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于机器学习的函数秘密共享
-11. [Sharing The Secret: Distributed Privacy-Preserving Monitoring](/202603/23/2603.20107v1-sharing-the-secret-distributed-privacy-preserving-monitoring)  
+   evidence：量化机器学习系统中的潜在信息泄露
+11. [High-dimensional online learning via asynchronous decomposition: Non-divergent results, dynamic regularization, and beyond](/202603/24/2603.20696v1-high-dimensional-online-learning-via-asynchronous-decomposition-non-divergent-results-dynamic-regularization-and-beyond)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：使用秘密共享的分布式隐私保护监控
+   evidence：在线学习与优化的异步分解框架
 
 
 <div class="dpr-home-promo-card">

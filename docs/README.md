@@ -6,85 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-24
-- 运行时间：2026-03-24 19:56:16 UTC
+- 最新运行日期：2026-03-25
+- 运行时间：2026-03-25 19:46:37 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：10
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日精选 21 篇前沿论文，深度聚焦联邦学习中的隐私保护与机密计算安全。
-重点推荐差分隐私动作识别与抗侧信道攻击的机密计算方案，两项研究均获 10 分满分评价。
-建议关注联邦学习在室内定位及推荐系统中的抗毒化与降噪技术，提升复杂场景下的模型鲁棒性。
-- 详情：[/202603/24/README](/202603/24/README)
+今日深度解析 17 篇隐私计算前沿，重点攻克了文本重写隐私校准与拜占庭容错联邦优化两大难题。
+核心结论指出实证校准能有效突破 LDP 理论边界，且弱假设下的联邦优化可同时实现高鲁棒性与强隐私保护。
+建议关注隐私保护与系统效率的平衡，特别是能耗感知梯度剪枝与通信高效编码等实用化技术。
+- 详情：[/202603/25/README](/202603/25/README)
 
 ### 精读区论文标签
-1. [Privacy-Preserving Federated Action Recognition via Differentially Private Selective Tuning and Efficient Communication](/202603/24/2603.21305v1-privacy-preserving-federated-action-recognition-via-differentially-private-selective-tuning-and-efficient-communication)  
+1. [Beyond Theoretical Bounds: Empirical Privacy Loss Calibration for Text Rewriting Under Local Differential Privacy](/202603/25/2603.22968v1-beyond-theoretical-bounds-empirical-privacy-loss-calibration-for-text-rewriting-under-local-differential-privacy)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：针对动作识别的联邦差分隐私
-2. [Hardening Confidential Federated Compute against Side-channel Attacks](/202603/24/2603.21469v1-hardening-confidential-federated-compute-against-side-channel-attacks)  
+   evidence：本地差分隐私下文本重写的经验隐私损失校准
+2. [Byzantine-Robust and Differentially Private Federated Optimization under Weaker Assumptions](/202603/25/2603.23472v1-byzantine-robust-and-differentially-private-federated-optimization-under-weaker-assumptions)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：使用差分隐私缓解联邦计算中的侧信道攻击
-3. [Compressed Distributed Stochastic Nonconvex Optimization with Differential Privacy](/202603/24/2603.21640v1-compressed-distributed-stochastic-nonconvex-optimization-with-differential-privacy)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：具有差分隐私的分布式随机非凸优化
-4. [FastPFRec: A Fast Personalized Federated Recommendation with Secure Sharing](/202603/24/2603.20283v1-fastpfrec-a-fast-personalized-federated-recommendation-with-secure-sharing)  
+   evidence：在联邦优化中整合了差分隐私与拜占庭鲁棒性
+3. [Global Convergence of Multiplicative Updates for the Matrix Mechanism: A Collaborative Proof with Gemini 3](/202603/25/2603.19465v2-global-convergence-of-multiplicative-updates-for-the-matrix-mechanism-a-collaborative-proof-with-gemini-3)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：具有隐私感知参数共享的个性化联邦推荐
-5. [Adversarial Attacks on Locally Private Graph Neural Networks](/202603/24/2603.20746v1-adversarial-attacks-on-locally-private-graph-neural-networks)  
+   evidence：隐私机器学习中矩阵机制的优化
+4. [Privacy-Preserving Reinforcement Learning from Human Feedback via Decoupled Reward Modeling](/202603/25/2603.22563v1-privacy-preserving-reinforcement-learning-from-human-feedback-via-decoupled-reward-modeling)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：针对本地差分隐私（LDP）保护的图神经网络的对抗攻击
-6. [Incentive-Aware Federated Averaging with Performance Guarantees under Strategic Participation](/202603/24/2603.20873v1-incentive-aware-federated-averaging-with-performance-guarantees-under-strategic-participation)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：针对私有本地数据集的激励感知联邦平均
-7. [Composition Theorems for Multiple Differential Privacy Constraints](/202603/24/2603.20968v1-composition-theorems-for-multiple-differential-privacy-constraints)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：具有多个差分隐私约束的机制组合定理
-8. [Anchored Likelihood-Ratio Geometry of Anonymous Shuffle Experiments: Exact Privacy Envelopes and Universal Low-Budget Design](/202603/24/2603.21197v1-anchored-likelihood-ratio-geometry-of-anonymous-shuffle-experiments-exact-privacy-envelopes-and-universal-low-budget-design)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：本地差分隐私与匿名洗牌的隐私包络
-9. [Aggregation Alignment for Federated Learning with Mixture-of-Experts under Data Heterogeneity](/202603/24/2603.21276v1-aggregation-alignment-for-federated-learning-with-mixture-of-experts-under-data-heterogeneity)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：针对隐私敏感数据的MoE架构大模型联邦学习
-10. [TrustFed: Enabling Trustworthy Medical AI under Data Privacy Constraints](/202603/24/2603.21656v1-trustfed-enabling-trustworthy-medical-ai-under-data-privacy-constraints)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：联邦学习实现隐私保护的多机构训练
+   evidence：针对人类反馈强化学习的差分隐私流水线
+5. [In-network Attack Detection with Federated Deep Learning in IoT Networks: Real Implementation and Analysis](/202603/25/2603.21596v1-in-network-attack-detection-with-federated-deep-learning-in-iot-networks-real-implementation-and-analysis)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于物联网隐私保护异常检测的联邦深度学习
+6. [Adaptive Federated Fine-Tuning of Self-Supervised Speech Representations](/202603/25/2603.21888v1-adaptive-federated-fine-tuning-of-self-supervised-speech-representations)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：使用联邦学习进行语音任务的隐私保护微调
 
 ### 速读区论文标签
-1. [ARMOR: Adaptive Resilience Against Model Poisoning Attacks in Continual Federated Learning for Mobile Indoor Localization](/202603/24/2603.19594v1-armor-adaptive-resilience-against-model-poisoning-attacks-in-continual-federated-learning-for-mobile-indoor-localization)  
+1. [A Theoretical Framework for Energy-Aware Gradient Pruning in Federated Learning](/202603/25/2603.22465v1-a-theoretical-framework-for-energy-aware-gradient-pruning-in-federated-learning)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：使用联邦学习进行定位的隐私保护方法
-2. [FedRG: Unleashing the Representation Geometry for Federated Learning with Noisy Clients](/202603/24/2603.19722v1-fedrg-unleashing-the-representation-geometry-for-federated-learning-with-noisy-clients)  
+   evidence：联邦学习中的梯度剪枝
+2. [Communication-Efficient Approximate Gradient Coding](/202603/25/2603.22514v1-communication-efficient-approximate-gradient-coding)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：利用表示几何处理噪声客户端的联邦学习
-3. [Low-pass Personalized Subgraph Federated Recommendation](/202603/24/2603.20338v1-low-pass-personalized-subgraph-federated-recommendation)  
+   evidence：大规模分布式学习的高效通信梯度编码
+3. [Combinatorial Privacy: Private Multi-Party Bitstream Grand Sum by Hiding in Birkhoff Polytopes](/202603/25/2603.22808v1-combinatorial-privacy-private-multi-party-bitstream-grand-sum-by-hiding-in-birkhoff-polytopes)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：联邦推荐中的隐私保护去中心化模型
-4. [Unveiling the Security Risks of Federated Learning in the Wild: From Research to Practice](/202603/24/2603.20615v1-unveiling-the-security-risks-of-federated-learning-in-the-wild-from-research-to-practice)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：联邦学习中安全风险和中毒威胁模型的测量研究
-5. [Prescribed-Time Distributed Generalized Nash Equilibrium Seeking](/202603/24/2603.16865v2-prescribed-time-distributed-generalized-nash-equilibrium-seeking)  
+   evidence：具有有限样本差分隐私分析的多方私密比特流求和协议
+4. [PlanTwin: Privacy-Preserving Planning Abstractions for Cloud-Assisted LLM Agents](/202603/25/2603.18377v2-plantwin-privacy-preserving-planning-abstractions-for-cloud-assisted-llm-agents)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：非合作博弈中纳什均衡的分布式算法
-6. [Tula: Optimizing Time, Cost, and Generalization in Distributed Large-Batch Training](/202603/24/2603.18112v1-tula-optimizing-time-cost-and-generalization-in-distributed-large-batch-training)  
+   evidence：不暴露原始上下文的云辅助规划隐私保护架构
+5. [Collaborative Adaptive Curriculum for Progressive Knowledge Distillation](/202603/25/2603.20296v1-collaborative-adaptive-curriculum-for-progressive-knowledge-distillation)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：优化分布式大批量训练的性能与成本
-7. [Secure Linear Alignment of Large Language Models](/202603/24/2603.18908v2-secure-linear-alignment-of-large-language-models)  
+   evidence：分布式多媒体学习的协作知识蒸馏
+6. [Distributed Gradient Clustering: Convergence and the Effect of Initialization](/202603/25/2603.20507v1-distributed-gradient-clustering-convergence-and-the-effect-of-initialization)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：使用同态加密保护客户端查询的跨孤岛推理隐私保护框架
-8. [Meeting in the Middle: A Co-Design Paradigm for FHE and AI Inference](/202603/24/2603.20504v1-meeting-in-the-middle-a-co-design-paradigm-for-fhe-and-ai-inference)  
+   evidence：连接网络上的分布式梯度聚类算法
+7. [Optimality in Decentralized Optimization under Bandwidth Constraints](/202603/25/2603.20735v1-optimality-in-decentralized-optimization-under-bandwidth-constraints)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：使用全同态加密的隐私保护AI推理
-9. [Attack by Unlearning: Unlearning-Induced Adversarial Attacks on Graph Neural Networks](/202603/24/2603.18570v1-attack-by-unlearning-unlearning-induced-adversarial-attacks-on-graph-neural-networks)  
+   evidence：带宽受限下的去中心化优化
+8. [Ruyi2.5 Technical Report](/202603/25/2603.17311v1-ruyi25-technical-report)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：GNN中与隐私相关的机器卸载及其对抗性风险
-10. [Automated Membership Inference Attacks: Discovering MIA Signal Computations using LLM Agents](/202603/24/2603.19375v1-automated-membership-inference-attacks-discovering-mia-signal-computations-using-llm-agents)  
+   evidence：通过不可逆特征映射实现的隐私保护摄像头服务
+9. [Tackling heavy-tailed noise in distributed estimation: Asymptotic performance and tradeoffs](/202603/25/2603.20728v1-tackling-heavy-tailed-noise-in-distributed-estimation-asymptotic-performance-and-tradeoffs)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：量化机器学习系统中的潜在信息泄露
-11. [High-dimensional online learning via asynchronous decomposition: Non-divergent results, dynamic regularization, and beyond](/202603/24/2603.20696v1-high-dimensional-online-learning-via-asynchronous-decomposition-non-divergent-results-dynamic-regularization-and-beyond)  
+   evidence：对抗重尾观测和通信噪声的分布式估计算法
+10. [Privacy-Preserving Formation Control for Networked Underactuated USVs: A Passivity-Based Approach](/202603/25/2603.21804v1-privacy-preserving-formation-control-for-networked-underactuated-usvs-a-passivity-based-approach)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：在线学习与优化的异步分解框架
+   evidence：网络化系统的隐私保护协调轨迹规划
+11. [Privacy-Preserving EHR Data Transformation via Geometric Operators: A Human-AI Co-Design Technical Report](/202603/25/2603.22954v1-privacy-preserving-ehr-data-transformation-via-geometric-operators-a-human-ai-co-design-technical-report)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：大规模机器学习的隐私保护方法
 
 
 <div class="dpr-home-promo-card">

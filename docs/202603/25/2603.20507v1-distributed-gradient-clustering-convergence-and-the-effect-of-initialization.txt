@@ -1,0 +1,334 @@
+Title: Distributed Gradient Clustering: Convergence and the Effect of Initialization
+
+URL Source: https://arxiv.org/pdf/2603.20507v1
+
+Published Time: Tue, 24 Mar 2026 00:18:40 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Distributed Gradient Clustering: Convergence and the Effect of Initialization 
+
+## Aleksandar Armacki ∗† 1, Himkant Sharma ∗2, Dragana Bajovi´ c3, Duˇ san Jakoveti´ c4,Mrityunjoy Chakraborty 2, and Soummya Kar 11Carnegie Mellon University, Pittsburgh, Pennsylvania, USA 
+
+## {aarmacki,soummyak }@andrew.cmu.edu 
+
+2Indian Institute of Technology Kharagpur, Kharagpur, India 
+
+## himkant@kgpian.iitkgp.ac.in, mrityun@ece.iitkgp.ac.in 
+
+3Faculty of Technical Sciences, University of Novi Sad, Novi Sad, Serbia 
+
+## dbajovic@uns.ac.rs 
+
+4Faculty of Sciences, University of Novi Sad, Novi Sad, Serbia 
+
+## dusan.jakovetic@dmi.uns.ac.rs 
+
+Abstract 
+
+We study the effects of center initialization on the performance of a family of distributed gradient-based clustering algorithms introduced in [1], that work over connected networks of users. In the considered scenario, each user contains a local dataset and communicates only with its immediate neighbours, with the aim of finding a global clustering of the joint data. We perform extensive numerical experiments, evaluating the effects of center initialization on the performance of our family of methods, demonstrating that our methods are more resilient to the effects of initialization, compared to centralized gradient clustering [2]. Next, inspired by the K-means++ initialization [3], we propose a novel distributed center initialization scheme, which is shown to improve the performance of our methods, compared to the baseline random initialization. 
+
+# 1 Introduction 
+
+Clustering is an unsupervized learning problem, with the goal of finding groups of similar data, without having any knowledge of the underlying distribution, or even the true number of groups [4, 5]. Depending on the approach, data can be assigned to clusters in a hard or soft manner, with hard clustering assigning data to exclusively one cluster, while soft clustering provides the probability of a sample belonging to each cluster. In this paper we will be studying the problem of hard clustering. Additionally, we will focus on center-based clustering, e.g., [6], where the goal is to 
+
+> ∗
+
+The first two authors contributed equally. 
+
+> †
+
+The work of A. Armacki and S. Kar is supported in part by the National Science Foundation under grant ECCS 2330196. The work of H. Sharma was supported in part by a SPARC grant from the MHRD, Govt. of India. The work of D. Bajovi´ c is supported by the Ministry of Science, Technological Development and Innovation (Contract No. 451-03-65/2024-03/200156), by Faculty of Technical Sciences, University of Novi Sad, through project “Scientific and Artistic Research Work of Researchers in Teaching and Associate Positions at the Faculty of Technical Sciences, University of Novi Sad” (No. 01-3394/1), and by Serbian Ministry of Science, Technological development and Innovation, within the bilateral project Serbia-Slovakia No. 337-00-3/2024-05/16. The work of D. Jakoveti´ c is supported by the Science Fund of Republic of Serbia, project “LASCADO”, grant No. 7359, by Provincial Secretariat for Higher Education and Scientific Research, grant No. 142-451- 2593/2021-01/2. The work of D. Jakoveti´ c and D. Bajovi´ c is also supported by the European Union’s Horizon Europe program under grant agreement No. 101093006. (Corresponding author: Aleksandar Armacki.) 
+
+1
+
+> arXiv:2603.20507v1 [cs.LG] 20 Mar 2026
+
+find centers which represent the clusters. Many popular algorithms fall in this category, including the celebrated Lloyd’s method [7], its extension to Bregman losses [8], Huber loss clustering [9], as well as the recently proposed gradient based clustering [2]. Clustering has traditionally been studied in the centralized regime, where the methods are run across the entire dataset. Another learning paradigm, which has been attracting significant interest is that of distributed learning . Distributed learning is a popular learning paradigm, wherein many users collaborate to train a joint model, while keeping their data private. There are many approaches to distributed learning, such as federated learning (FL), e.g., [10–13], and peer-to-peer (P2P) distributed learning, e.g., [14–17]. In this paper we are interested in the P2P setup, where users communicate directly with one another, while no user can communicate directly with all the others. The communication network is modeled as a connected graph G = ( V, E ). Clustering in this setup is very challenging, as the data is stored locally at each user, with users only able (or willing) to exchange local parameter estimates (e.g., local centers) in order to achieve the final goal of obtaining a clustering of the entire, joint dataset. 
+
+Literature review. Distributed clustering has been considered in [18–24]. Work [18] proposes approximate K-means algorithms for both P2P and FL setups, providing theoretical guarantees only in the FL setup. Works [19, 22, 24] study distributed soft and hard K-means clustering, with only the method in [19] providing convergence guarantees to a local minima of the centralized K-means problem. In [20], the authors study K-means and K-medians problems and rely on the idea of coresets [25], to design methods with provable constant approximation guarantees. Work [21] studies distributed K-means in the special case where users have a single sample, while in [23] the authors design a parametric family of distributed K-means methods, establishing convergence of centers to local minima of the centralized K-means problem. Finally, we propose a unified framework for distributed clustering in [1], that considers popular clustering methods beyond 
+
+K-means, such as Huber loss clustering [9]. 
+
+Contributions. In this work we study the effects of center initialization on the performance of the distributed gradient-based clustering (DGC-Fρ) method proposed in [1]. To that end, we perform extensive numerical experiments, demonstrating that DGC-Fρ is more resilient to center initialization, compared to the centralized gradient clustering (CGC) method from [2]. Inspired by the celebrated K-means++ initialization, we then propose a novel distributed center initialization scheme, dubbed Distributed K-means+Clustering (DKM+C), which combines local K-means++ with multiple communication and local clustering rounds, to produce the initial centers. The proposed scheme is shown to result in better performance of the algorithm, compared to the baseline random center initialization. 
+
+Paper organization. The rest of the paper is organized as follows. Section 2 formally states the problem of distributed center-based clustering, Section 3 introduces the proposed family of methods, Section 4 provides theoretical results, Section 5 provides numerical results and Section 6 concludes the paper. The remainder of this section introduces notation. 
+
+Notation. The spaces of real numbers and d-dimensional vectors are denoted by R and Rd,with ∥ · ∥ denoting the Euclidean norm. The set of non-negative integers is denoted by N, with [M ] = {1, . . . , M }, for any M ∈ N. For a matrix A ∈ Rd×d, A⊤ and λ(A) denote transposition and the largest eigenvalue of A. Superscripts and subscripts denote iterations and users, while brackets correspond to the particular center or cluster, e.g., xti(k) is center k of user i at iteration 
+
+t.
+
+# 2 Problem Formulation 
+
+Consider a network of m > 1 users, communicating over a graph G = ( V, E ), where V = [ m] is the set of vertices (i.e., users), E is the set of undirected edges connecting them, such that {i, j } ∈ E if and only if users i, j communicate. Each user contains a local dataset Di = {yi, 1, . . . , y i,N i } ⊂ Rd,for some Ni ≥ 1. The goal is to produce a clustering of the global data D = ∪i∈[m]Di, into K ≥ 22disjoint clusters. Formally, the problem can be stated as min   
+
+> xi∈RKd , C i∈C K, Di, i ∈[m]subject to x1=... =xm
+
+X
+
+> i∈[m]
+
+X
+
+> k∈[K]
+
+X
+
+> r∈Ci(k)
+
+f (xi(k), y i,r ), (1) where xi = xi(1) ⊤ . . . xi(K)⊤⊤ is the vector stacking the K centers xi(k) ∈ Rd of user i,
+
+CK, Di is the set of all K-partitions of Di, i.e., Ci ∈ C K, Di is a K-tuple Ci =  Ci(1) , . . . , C i(K),such that Ci(k) ⊆ D i,1 Ci(k) ∩ Ci(l) = ∅ and ∪k∈[K]Ci(k) = Di. Here f : Rd × Rd 7 → [0 , ∞) is a loss function, e.g., f (x, y ) = ∥x − y∥2 recovers the distributed K-means problem, with many other possibilities, such as Huber, Logistic or Fair loss, see [1]. In general, (1) is NP-hard, even in the centralized setting, e.g., [26–28]. As such, the best one can hope for is reaching stationary points, with various schemes guaranteeing this in both centralized, e.g., [2,7,8,29], and distributed settings, e.g., [1, 19, 23]. The problem (1) ensures clustering of the joint data is produced, by requiring centers across all users to be the same. As (1) is a constrained problem, a relaxation is proposed in [1], making it amenable to a distributed first-order approach. The relaxed problem is given by min 
+
+> x∈RKmd ,C∈C m,K, D
+
+Jρ(x, C ) = X
+
+> i∈[m]
+
+X
+
+> k∈[K]
+
+h 12
+
+X
+
+> j∈N i
+
+∥xi(k) − xj (k)∥2
+
++ 1
+
+ρ
+
+X
+
+> r∈Ci(k)
+
+wi,r f (xi(k), y i,r )
+
+i
+
+, (2) where Cm,K, D is the set of all clusterings of the entire data, i.e., for C ∈ C m,K, D, we have C =(C1, . . . , C m), with Ci ∈ C K, Di , Ni = {j ∈ V : {i, j } ∈ E} is the set of neighbours of user i (not including i), while ρ ≥ 1 is a tunable parameter. The formulation (2) relaxes (1), by considering an unconstrained problem which penalizes the difference of centers among neighbouring users and controls the trade-off between center estimation and proximity, via the parameter ρ.
+
+# 3 The DGC-Fρ Family of Methods 
+
+In this section we describe the DGC-Fρ family of methods proposed in [1]. We refer to DGC-Fρ
+
+as a family of methods, as it subsumes several distributed clustering methods, such as K-means, Huber, Logistic and Fair loss-based. In each iteration users maintain their center and cluster estimates. To begin, users choose initial centers x0 
+
+> i
+
+∈ RKd , i ∈ [m]. At iteration t ≥ 0, users first form the clusters locally, by finding a k ∈ [K] for each data point r ∈ D i, such that the k-th center is the closest to the point r, i.e., such that 
+
+∥xti(k) − yi,r ∥ ≤ ∥ xti(l) − yi,r ∥, for all l̸ = k, (3) and assign yi,r to Ct+1  
+
+> i
+
+(k). Next, the centers are updated via 
+
+xt+1  
+
+> i
+
+(k) = xti(k) − α X
+
+> j∈N i
+
+xti(k) − xtj (k)
+
+− αρ
+
+X 
+
+> r∈Ct+1
+> i(k)
+
+∇xf  xti(k), y i,r 
+
+ , (4) where α > 0 is a fixed step-size. The procedure is summarized in Algorithm 1. 2 Note that centers can be initialized randomly, providing flexibility in designing initialization algorithms, such as distributed variants of K-means++, e.g., [22], or the method we propose in Section 5 ahead. The center update is built on the consensus+innovation framework, e.g., [30, 31].     
+
+> 1In a slight abuse of notation, we will also use Dito denote the set of indices of the data, i.e., Di= [ Ni].
+> 2The method in [1] is more general, in that it allows for distance metrics beyond Euclidean and multiple center updates per iteration, see [1] for details.
+
+3Algorithm 1 DGC-Fρ
+
+Require: α > 0, ρ ≥ 1, initial centers x0 
+
+> i
+
+∈ RKd , i ∈ [m].  
+
+> 1:
+
+for all users i in parallel, in round t = 0,1,. . . ,T-1 do  
+
+> 2:
+
+Set Ct+1  
+
+> i
+
+(k) ← ∅ , for all k ∈ [K];  
+
+> 3:
+
+for each r ∈ [Ni] do  
+
+> 4:
+
+Find k so that ∥xti(k) − yi,r ∥ ≤ ∥ xti(l) − yi,r ∥, l̸ = k; 
+
+> 5:
+
+Update Ct+1  
+
+> i
+
+(k) ← Ct+1  
+
+> i
+
+(k) ∪ { r}; 
+
+> 6:
+
+Exchange centers with neighbours j ∈ N i; 
+
+> 7:
+
+Update xt+1  
+
+> i
+
+(k) by performing (4), for all k ∈ [K];  
+
+> 8:
+
+Return (xTi , C Ti ), i ∈ [m]. 
+
+# 4 Convergence Guarantees 
+
+We start by defining the notion of points to which DGC-Fρ converges to, referred to as fixed points .
+
+Definition 1. Let x ∈ RKmd be cluster centers. We say that Ux ⊂ C m,K, D is the set of optimal clusterings with respect to x, if condition (3) is satisfied for all clusterings C ∈ Ux.
+
+Definition 2. The pair (x⋆, C ⋆) ∈ RKmd × C m,K, D is a fixed point of DGC-Fρ, if 1) C⋆ ∈ Ux⋆ ;2) ∇Jρ(x⋆, C ⋆) = 0 .
+
+Definition 3. U x ⊂ C m,K, D is the set of clusterings, such that 1) U x ⊆ Ux; 2) ∇Jρ(x, C ) = 0 ,for all C ∈ U x.
+
+Note that Definition 2 requires ( x⋆, C ⋆) to be a stationary point of Jρ, in the sense that clusters 
+
+C⋆ are optimal for fixed centers x⋆ and centers x⋆ are optimal for fixed clusters C⋆. As such, it is not possible to further improve the clusters, nor the centers at a fixed point. By Definitions 1-3, a point x is a fixed point if and only if U x̸ = ∅. As such, we will call a point x a fixed point if 
+
+U x̸ = ∅. We next state our assumptions. 
+
+Assumption 1. The full data has at least K distinct samples. 
+
+Assumption 2. The graph G = ( V, E ) is connected. 
+
+Assumption 3. The loss f is coercive, convex and β-smooth with respect to the first argu-ment and preserves the ordering with respect to Euclidean distance, i.e., for each x, y, z ∈ Rd 1) 
+
+lim ∥x∥→∞ f (x, y ) = ∞; 2) 0 ≤ f (x, y )−f (z, y )−⟨∇ z f (z, y ), x −z⟩ ≤ β 
+
+> 2
+
+∥x−z∥2; 3) f (x, y ) < f (z, y )
+
+if ∥x − y∥ < ∥z − y∥ and f (x, y ) = f (z, y ) if ∥x − y∥ = ∥z − y∥.
+
+Assumptions 1-3 are mild assumptions on the global data, communication graph and loss func-tion. Assumption 1 requires the full data to have K distinct points, while placing no requirements on the local datasets. Assumption 2 requires the communication graph to be connected, which allows for (1) to be solved in a distributed manner. Finally, Assumption 3 is a mild assumption on the behaviour of the loss, which is an intrinsic property of the loss, independent of the data that we wish to cluster. It is shown to be satisfied by a broad class of popular clustering losses, including K-means (i.e., squared Euclidean), Huber, Logsitic and Fair loss, see [1] for details. We are now ready to state the convergence result from [1]. 
+
+Theorem 1. Let Assumptions 1-3 hold. For the step-size α < (β/ρ + λ(L)) −1, any initialization 
+
+x0 ∈ RKmd and ρ ≥ 1, the sequence of centers {xt}t∈N generated by DGC-Fρ converges to a fixed point x⋆ = x⋆(0 , ρ ) ∈ RKmd , such that U x⋆̸ = ∅. Moreover, the clusters converge in finite time, i.e., there exists a t0 > 0 such that Uxt ⊆ Ux⋆ , for all t ≥ t0.
+
+Theorem 1 shows that the sequence of centers generated by DGC-Fρ is guaranteed to converge to a fixed point, for any center initialization. We emphasize that the fixed point to which the se-quence of centers converges, x⋆ = x⋆(0 , ρ ), depends on center initialization and penalty parameter 
+
+ρ. In the next section we perform extensive empirical studies of the effect of center initialization on the performance of DGC-Fρ. A detailed theoretical study on the effect of parameter ρ on fixed points of DGC-Fρ, as ρ → ∞ , is provided in [1]. 4Figure 1: Homogeneous and heterogeneous data distributions across users. 
+
+# 5 Numerical Results 
+
+In this section we study the effect of center initialization of the performance of DGC-Fρ. In particular, we test the performance of our method using K-means loss, dubbed DGC-KM. All experiments are performed on Iris data [32], which consists of 150 samples, belonging to K = 3 classes (50 samples per class), and dimension d = 4. We distribute the samples across a ring network of m = 10 users. We consider two types of data distributions across users: homogeneous 
+
+and heterogeneous . In the homogeneous setup, each user is assigned samples from all three classes, in equal proportion. In the heterogeneous setup, each user is assigned samples from two out of three classes, with different number of samples per class and per user. The data distributions are visualized in Figure 1. We set ρ = 10 in the homogeneous setup and ρ = 100 in the heterogeneous setup, due to different data distributions across users, to enforce consensus more strongly. To test the robustness to initialization of our method, we apply our DGC-KM method with two different center initializations: random and local K-means++ . For random initialization, each user selects three centers uniformly at random from their local data. For local K-means++, each user initializes their centers using the K-means++ scheme on their local data. To compare the sensitivity of our algorithm, we use the CGC method from [2], also using the K-means cost. CGC is also initialized using random and K-means++ initialization, with the difference being that CGC chooses samples from the entire dataset, as it is a centralized algorithm. We run both methods for 
+
+T = 1000 iterations, on both homogeneous and heterogeneous data. 3 We measure the performance via clustering accuracy , i.e., by comparing the true labels to the ones produced by the clustering methods, accounting for label permutation. We repeat the experiments across 5 runs and present the average accuracy. For our distributed method, we additionally average the accuracy across users. The results are presented in Figure 2. The solid lines represent accuracy per iteration using random initialization, while dashed lines represent the performance using K-means++. We can see that our DGC-KM method shows less sensitivity to center initialization compared to CGC-KM, with the gap in performance of our method under different initialization much smaller than that of CGC-KM. This phenomena has previously been observed in [1, 19], where it was noted that distributed clustering algorithms are less sensitive to initialization, compared to their centralized counterparts, as they in essence perform m initialization, one per each user, whereas the centralized algorithms only perform one initialization. Combined with the effects of consensus, these multiple initializations help mitigate the effects of bad initialization at some users and lead the algorithm to a solution of better quality. Another interesting observation from Figure 2 is that the performance of DGC-KM is improved under local K-means++ initialization, even when the data across users is heterogeneous. This leads to a natural question of can the benefits of K-means++ initialization be further exploited in 
+
+> 3Note that the distinction between homogeneous and heterogeneous data is irrelevant for CGC, as it is a cen-tralized algorithm with access to all data.
+
+5Figure 2: Performance of methods on homogeneous and heterogeneous data. 
+
+Algorithm 2 DKM+C 
+
+Require: Number of centers K and communication rounds L ≥ 0.  
+
+> 1:
+
+for all users i in parallel, in communication round l = 0 , 1, . . . , L do  
+
+> 2:
+
+if l = 0 then  
+
+> 3:
+
+Produce xli by performing K-means++ on local data;  
+
+> 4:
+
+Exchange centers xl−1 
+
+> i
+
+, xl−1 
+
+> j
+
+with neighbours j ∈ N i; 
+
+> 5:
+
+Produce new centers xli, by running K-means on {xl−1 
+
+> i
+
+(k), x l−1 
+
+> j
+
+(k) : k ∈ [K], j ∈ N i}; 
+
+> 6:
+
+Initialize centers via x0 
+
+> i
+
+← xLi , for all i ∈ [m]. the distributed setup, if users are allowed to collaborate during the initialization phase? To answer this question, we design a novel distributed center initialization algorithm, dubbed Distributed K-Means+Clustering (DKM+C). The algorithm runs for a user-specified number of communication rounds L ≥ 0, with L = 0 corresponding to each user initializing their centers by performing 
+
+K-means++ on their local data. If L ≥ 1, then in round l = 1 , . . . , L , users first exchange their centers from round l − 1 with their neighbours. Next, in order to account for potential label mismatch among different users, each user locally runs the K-means clustering algorithm on their own and their neighbours centers, i.e., on the dataset {xl−1 
+
+> i
+
+(k), x l−1 
+
+> j
+
+(k) : k ∈ [K], j ∈ N i} ⊂ Rd,of size ( |N i| + 1) K. The new centers xli are the centers returned by K-means. The steps are then repeated, until all L communication rounds are performed. The proposed initialization scheme is summarized in Algorithm 2. The idea behind the proposed scheme is to combine the power of K-means++ with local communications, to produce center initializations carrying more information than purely local initialization. Compared to some existing distributed K-means schemes, e.g., [22], where users are required to run the max-consensus algorithm until convergence a total of 2 k times, we provide a communication-efficient algorithm, that only communicates for a fixed number of rounds, while performing center inference locally, trading communication for computation. We test the impact of our new initialization scheme, by running DGC-KM for T = 1000 iterations, using random initialization and DKM+C with L = {0, 1, 2, 3, 4}, on both homogeneous and heterogeneous data. We then report the final accuracy of our method, averaged across 5 runs. We again use ρ = 10 for homogeneous and ρ = 100 for heterogeneous data. The results are presented in Figure 3. The x axis represents the number of communication rounds, while the y-axis represents the final accuracy obtained by DGC-KM. We can see that increasing the number of communication rounds benefits the initialization in both homogeneous ( L = 3) and heterogeneous (L = 1) setup. More importantly, the initialization scheme outperforms the random initalization in both setups, showing clear improvements. 6Figure 3: Performance of methods on homogeneous and heterogeneous data. 
+
+# 6 Conclusion 
+
+In this work we studied the effects of initialization on the performance of distributed clustering method originally proposed in [1]. We demonstrated through experiments on real data that the performance of DGC-Fρ is more robust to initialization compared to centralized gradient clustering method from [2]. Next, we propose an initialization scheme, dubbed DKM+C, inspired by K-means++, which is shown to improve the performance of DGC-Fρ compared to the baseline random initialization. Future work includes a rigorous theoretical analysis of the benefits of the proposed initialization scheme, as well as studying a version of the DGC-Fρ method with a time-varying penalty ρt, such that ρt → ∞ , as t → ∞ .
+
+# References 
+
+[1] A. Armacki, D. Bajovi´ c, D. Jakoveti´ c, and S. Kar, “A unified framework for gradient-based clustering of distributed data,” arXiv preprint arXiv:2402.01302 , 2024. [2] A. Armacki, D. Bajovic, D. Jakovetic, and S. Kar, “Gradient based clustering,” in Proceedings of the 39th International Conference on Machine Learning (K. Chaudhuri, S. Jegelka, L. Song, C. Szepesvari, G. Niu, and S. Sabato, eds.), vol. 162 of Proceedings of Machine Learning Research , pp. 929–947, PMLR, 17–23 Jul 2022. [3] D. Arthur and S. Vassilvitskii, “K-means++: The advantages of careful seeding,” in In Pro-ceedings of the 18th Annual ACM-SIAM Symposium on Discrete Algorithms , (New Orleans, Louisiana), p. 1027–1035, SIAM, 2007. [4] R. Xu and D. Wunsch, “Survey of clustering algorithms,” IEEE Transactions on Neural Networks , vol. 16, no. 3, pp. 645–678, 2005. [5] A. K. Jain, “Data clustering: 50 years beyond k-means,” Pattern Recognition Letters , vol. 31, no. 8, pp. 651–666, 2010. Award winning papers from the 19th International Conference on Pattern Recognition (ICPR). [6] P. Awasthi and M.-F. Balcan, “Foundations for center-based clustering: worst-case approxi-mations and modern developments,” in Handbook of cluster analysis (C. Henning, M. Meila, F. Murtagh, and R. Rocci, eds.), pp. 67–100, Chapman and Hall/CRC, 1st ed., 2016. [7] S. Lloyd, “Least squares quantization in PCM,” IEEE Transactions on Information Theory ,vol. 28, no. 2, pp. 129–137, 1982. 7[8] A. Banerjee, S. Merugu, I. S. Dhillon, and J. Ghosh, “Clustering with bregman divergences,” 
+
+Journal of Machine Learning Research , vol. 6, no. 58, pp. 1705–1749, 2005. [9] A. K. Pediredla and C. S. Seelamantula, “A Huber-loss-driven clustering technique and its application to robust cell detection in confocal microscopy images,” in 2011 7th International Symposium on Image and Signal Processing and Analysis (ISPA) , pp. 501–506, 2011. [10] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y. Arcas, “Communication-Efficient Learning of Deep Networks from Decentralized Data,” in Proceedings of the 20th International Conference on Artificial Intelligence and Statistics (A. Singh and J. Zhu, eds.), vol. 54 of Proceedings of Machine Learning Research , pp. 1273–1282, PMLR, 20–22 Apr 2017. [11] P. Kairouz, H. B. McMahan, B. Avent, A. Bellet, M. Bennis, A. N. Bhagoji, K. Bonawitz, Z. Charles, G. Cormode, R. Cummings, R. G. L. D’Oliveira, H. Eichner, S. E. Rouayheb, D. Evans, J. Gardner, Z. Garrett, A. Gasc´ on, B. Ghazi, P. B. Gibbons, M. Gruteser, Z. Har-chaoui, C. He, L. He, Z. Huo, B. Hutchinson, J. Hsu, M. Jaggi, T. Javidi, G. Joshi, M. Khodak, J. Konecn´ y, A. Korolova, F. Koushanfar, S. Koyejo, T. Lepoint, Y. Liu, P. Mittal, M. Mohri, R. Nock, A. ¨Ozg¨ ur, R. Pagh, H. Qi, D. Ramage, R. Raskar, M. Raykova, D. Song, W. Song, S. U. Stich, Z. Sun, A. T. Suresh, F. Tram` er, P. Vepakomma, J. Wang, L. Xiong, Z. Xu, Q. Yang, F. X. Yu, H. Yu, and S. Zhao, “Advances and open problems in federated learning,” 
+
+Foundations and Trends ® in Machine Learning , vol. 14, no. 1–2, pp. 1–210, 2021. [12] A. Armacki, D. Bajovi´ c, D. Jakoveti´ c, and S. Kar, “A one-shot framework for distributed clustered learning in heterogeneous environments,” IEEE Transactions on Signal Processing ,vol. 72, pp. 636–651, 2024. [13] A. Armacki, D. Bajovic, D. Jakovetic, and S. Kar, “Personalized federated learning via convex clustering,” in 2022 IEEE International Smart Cities Conference (ISC2) , pp. 1–7, 2022. [14] S. Vlaski, S. Kar, A. H. Sayed, and J. M. Moura, “Networked signal and information pro-cessing: Learning by multiagent systems,” IEEE Signal Processing Magazine , vol. 40, no. 5, pp. 92–105, 2023. [15] A. H. Sayed, “Adaptive networks,” Proceedings of the IEEE , vol. 102, no. 4, pp. 460–497, 2014. [16] D. Jakoveti´ c, J. Xavier, and J. M. F. Moura, “Fast distributed gradient methods,” IEEE Transactions on Automatic Control , vol. 59, no. 5, pp. 1131–1146, 2014. [17] A. Nedi´ c and A. Ozdaglar, “Distributed subgradient methods for multi-agent optimization,” 
+
+IEEE Transactions on Automatic Control , vol. 54, no. 1, pp. 48–61, 2009. [18] S. Datta, C. Giannella, and H. Kargupta, “Approximate distributed k-means clustering over a peer-to-peer network,” IEEE Transactions on Knowledge and Data Engineering , vol. 21, no. 10, pp. 1372–1388, 2009. [19] P. A. Forero, A. Cano, and G. B. Giannakis, “Distributed clustering using wireless sensor networks,” IEEE Journal of Selected Topics in Signal Processing , vol. 5, no. 4, pp. 707–724, 2011. [20] M.-F. F. Balcan, S. Ehrlich, and Y. Liang, “Distributed k-means and k-median clustering on general topologies,” in Advances in Neural Information Processing Systems (C. Burges, L. Bottou, M. Welling, Z. Ghahramani, and K. Weinberger, eds.), vol. 26, Curran Associates, Inc., 2013. [21] G. Oliva, R. Setola, and C. N. Hadjicostis, “Distributed k-means algorithm,” arXiv preprint arXiv:1312.4176 , 2013. 8[22] J. Qin, W. Fu, H. Gao, and W. X. Zheng, “Distributed k -means algorithm and fuzzy c -means algorithm for sensor networks based on multiagent consensus theory,” IEEE Transactions on Cybernetics , vol. 47, no. 3, pp. 772–783, 2017. [23] S. Kar and B. Swenson, “Clustering with distributed data,” arXiv preprint arXiv:1901.00214 ,2019. [24] H. Yu, H. Chen, S. Zhao, and Q. Shi, “Distributed soft clustering algorithm for iot based on finite time average consensus,” IEEE Internet of Things Journal , vol. 8, no. 21, pp. 16096– 16107, 2021. [25] S. Har-Peled and S. Mazumdar, “On coresets for k-means and k-median clustering,” in Pro-ceedings of the Thirty-Sixth Annual ACM Symposium on Theory of Computing , STOC ’04, (New York, NY, USA), p. 291–300, Association for Computing Machinery, 2004. [26] S. Z. Selim and M. A. Ismail, “K-means-type algorithms: A generalized convergence theo-rem and characterization of local optimality,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. PAMI-6, no. 1, pp. 81–87, 1984. [27] A. Vattani, “The hardness of k-means clustering in the plane.” https://cseweb.ucsd.edu/ avat-tani/papers/kmeans hardness.pdf, 2009. [28] P. Awasthi, M. Charikar, R. Krishnaswamy, and A. K. Sinop, “The hardness of approximation of euclidean k-means,” arXiv preprint arXiv:1502.03316 , 2015. [29] J. MacQueen, “Some methods for classification and analysis of multivariate observations,” in 5-th Berkeley Symposium on Mathematical Statistics and Probability , vol. 1, pp. 281–297, University of California Press, 1967. [30] S. Kar, J. M. F. Moura, and K. Ramanan, “Distributed parameter estimation in sensor networks: Nonlinear observation models and imperfect communication,” IEEE Transactions on Information Theory , vol. 58, no. 6, pp. 3575–3605, 2012. [31] S. Kar and J. M. Moura, “Consensus + innovations distributed inference over networks: cooperation and sensing in networked systems,” IEEE Signal Processing Magazine , vol. 30, no. 3, pp. 99–109, 2013. [32] R. A. Fisher, “The use of multiple measurements in taxonomic problems,” Annals of Eugenics ,vol. 7, no. 2, pp. 179–188, 1936. 9

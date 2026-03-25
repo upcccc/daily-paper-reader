@@ -1,0 +1,7143 @@
+Title: Optimality in Decentralized Optimization under Bandwidth Constraints
+
+URL Source: https://arxiv.org/pdf/2603.20735v1
+
+Published Time: Tue, 24 Mar 2026 00:40:43 GMT
+
+Number of Pages: 55
+
+Markdown Content:
+# Optimality in Decentralized Optimization under Bandwidth Constraints 
+
+Alexander Tyurin 
+
+AXXX, Moscow, Russia Applied AI Institute, Moscow, Russia 
+
+## Abstract 
+
+We consider a realistic decentralized setup with bandwidth-constrained communi-cation and derive optimal time complexities for non-convex stochastic parallel and asynchronous optimization (up to logarithmic factors). We develop the correspond-ing methods, Grace SGD and Leon SGD, for both homogeneous and heterogeneous settings. Unlike previous work, our optimal bounds are characterized in terms of 
+
+min-cut/max-flow quantities and rely on tools from Gomory–Hu trees and Steiner Tree Packing problems, providing tighter and more practical complexities. 
+
+## 1 Introduction 
+
+We consider a decentralized distributed optimization setup with n workers, such as GPUs, CPUs, servers, or mobile devices (Kairouz et al., 2021), that aim to solve a common optimization problem by computing stochastic gradients and sharing this information with each other through a communication network. We study a smooth nonconvex minimization problem defined as 
+
+min 
+
+> x∈Rd
+
+f (x), (1) where f : Rd → R and d is the dimension of f . In this work, we assume that d is large, which is the case in large language models and modern machine learning training (Brown et al., 2020; Grattafiori et al., 2024). We begin with the homogeneous (i.i.d.) setting, where all workers compute stochastic gradients sampled from the same distribution. But we discuss our implications and also study heterogeneous (non-i.i.d.) settings in Sections 5 and 6. 
+
+Assumption 1.1. f is differentiable & L–smooth, i.e., ∥∇ f (x) − ∇ f (y)∥ ≤ L ∥x − y∥, ∀x, y ∈ Rd.
+
+Assumption 1.2. There exist f ∗ ∈ R such that f (x) ≥ f ∗ for all x ∈ Rd. We define ∆ := 
+
+f (x0) − f ∗, where x0 is a starting point. 
+
+Assumption 1.3 (Homogeneous setting) . For all i ∈ [n], worker i can only calculate ∇f (x; ξ) and 
+
+Eξ [∇f (x; ξ)] = ∇f (x) and Eξ [∥∇ f (x; ξ) − ∇ f (x)∥2] ≤ σ2 for all x ∈ Rd, where σ2 ≥ 0.
+
+In the nonconvex optimization, the goal is to find an ε–stationary point, a (random) point ¯x ∈ Rd
+
+such that E[∥∇ f (¯ x)∥2] ≤ ε (Nemirovskij and Yudin, 1983). It is well-known that the optimal oracle complexity in this setting is Θ( L∆/ε + σ2L∆/ε2) (Arjevani et al., 2022) achieved by the classical SGD method (Lan, 2020). 
+
+Computation times. To present our time complexities and new algorithms, and to compare them with previous results in the distributed setup, we consider the following computation model: Computation Model We assume that worker i requires hi seconds 1to compute a stochastic gradient for all i ∈ [n].            
+
+> arXiv:2603.20735v1 [math.OC] 21 Mar 2026 h1
+> h2
+> h3
+> h4h5
+> b12 = 2 b23 = 2
+> b45 = 1 b15 = 1
+> b25 = 1 h1
+> h2
+> h3
+> h4h5
+> w12 = 3 w23 = 2
+> w25 = 2
+> w45 = 1
+
+Figure 1: Left: communication graph G. Node i has computation time hi; edges denote bidirectional links with bandwidth bij = bji . Right: a Gomory–Hu tree T of the undirected version of G
+
+(Definition E.6), the central tool for the design of optimal decentralized optimization methods. 
+
+This is a standard and natural assumption in modern optimization (Mishchenko et al., 2022; Tyurin and Richtárik, 2023), as it allows us to compare parallel and asynchronous methods. 
+
+Communication times. Our main goal is to derive the optimal time complexity in the setup where communication times cannot be ignored. To the best of our knowledge, this work considers a new communication assumption motivated by practical bottlenecks. For example, consider two identical GPUs with the same computation time h, connected by a communication link. The main bottleneck is the bandwidth b, i.e., the number of bits (or coordinates) per second they can transmit to each other. Graph-Bandwidth Communication Model Motivated by the previous example, in general, we assume that there exists a directed connected weighted graph G = ( V, E, b ) with n = |V | vertices and |E| edges. Each vertex 
+
+i ∈ V represents a worker, and each ordered edge (i, j ) ∈ E with weight bij > 0 represents a communication link between workers i and j. The weight/bandwidth bij represents the number of coordinates/bits per second that worker i can send to worker j via edge (i, j ). We assume that if (i, j ) ∈ E, then (j, i ) ∈ E and bij = bji , meaning that the communication is bidirectional: workers can send and receive messages from each other at the same time. It is also convenient to define an undirected version of G, i.e., the undirected graph ¯G = ( V, ¯E, b )
+
+where {i, j } ∈ ¯E with weight bij if and only if (i, j ) ∈ E and (j, i ) ∈ E with weight bij .Without loss of generality (w.l.o.g.), we assume the graph is connected; if not, one should consider each connected component separately. We discuss this model with latencies in Section K. 
+
+Assumption 1.4. The optimization environment satisfies Computation Model and Graph-Bandwidth Communication Model. All other operations, such as in-node aggregation, vector splitting, and other local computations (except for stochastic gradient computations), are assumed to take negligible time. 
+
+We emphasize that our setup allows freedom in how communication is performed and is more flexible than, for instance, the gossip protocol (Boyd et al., 2006). Workers can overlap communication and computation and are allowed to send and receive through all edges asynchronously. Examples: 
+
+Split vector: In Figure 1, worker 5 could send a vector of size d to worker 2 directly in d/b25 seconds, but it is faster to split the vector into two parts and route one part through worker 1, yielding time 
+
+max {d/2b25 , d/2 min {b15 ,b 12 }}, which is two times faster. 
+
+Online in-network aggregation: Assume that all workers want to reduce their vectors at worker 4.A naive approach that sends the vectors separately is bottlenecked by b45 , requiring 4d/b45 seconds. A better strategy aggregates the vectors at worker 5 and forwards coordinates immediately as they arrive, yielding time d/b45 . See another example in Section H. 
+
+Interleaving: Worker 4 needs to send two vectors, one to worker 1 and one to worker 2. Instead of sending them sequentially, it may interleave transmissions: alternating coordinates of the two vectors. Worker 5 then forwards each coordinate to the appropriate destination. 
+
+1.1 Known methods 
+
+We now describe some known methods for decentralized distributed optimization. Related work under previous setups are discussed in Section 7.              
+
+> 1We can even assume that the computation times are not fixed to hiand can vary in the interval [¯ clhi,¯crhi],
+> where ¯cland ¯crare some constants (e.g., ¯cl= 0 .9,¯cr= 1 .1), but this would not change the proved asymptotics.
+
+2Synchronous SGD. One of the most standard ways to solve the decentralized distributed optimization problem is to use Synchronous SGD: xk+1 = xk − γn
+
+Pni=1 ∇f (xk; ξki ), where ξki is a random variable sampled from the distribution Dξ at worker i. In this method, all workers compute the gradients in parallel, and then the algorithm averages the gradients and updates the iterate. It is well-known that this method finds an ε–stationary point after O(L∆/ε + σ2L∆/nε 2) iterations (Lan, 2020). At the same time, under Assumption 1.4, the time complexity of this method is 
+
+O
+
+ dbmin + hmax 
+
+  L∆ 
+
+> ε
+
++ σ2L∆
+
+> nε 2
+
+ 
+
+(2) seconds, where hmax := max i∈[n] hi comes from the fact that every worker computes one stochastic gradient, waiting for the slowest one. We define bmin := min (i,j )∈E bij . The term d/bmin is a time to collect all stochastic gradients at a one worker, update the iterate, and broadcast xk+1 to all workers, using the online in-network aggregation discussed in Section 1 (see details in Section H) 
+
+Hero SGD. Another strategy is to simply run SGD on the fastest worker. In this case, the time complexity is O hmin 
+
+ L∆/ε + σ2L∆/ε2
+
+  , where hmin := min i∈[n] hi. As expected, this time com-plexity does not scale with n; nevertheless, it can be better than (2) if d/bmin or hmax are large. 
+
+Gossip methods. Another important family of decentralized methods is gossip-based methods (Boyd et al., 2006), where each worker communicates vectors with its neighbors. These methods are typically analyzed by deriving iteration convergence rates that depend on the spectral gap of a mixing matrix. As for Synchronous SGD and Hero SGD, it is possible to derive the time complexities of these methods; however, as we will show later, we present a lower bound (with a matching algorithm) that virtually none of these methods can break. 
+
+Compressed communication. Instead of sending the full vectors, it is possible to use lossy com-pression techniques (Seide et al., 2014; Alistarh et al., 2017), where the idea is to use different sparsification and quantization methods to reduce the number of coordinates/bits sent through the communication links (Beznosikov et al., 2020). 
+
+Main problem: There are many ways, from different centralized and decentralized optimization fields, to construct methods with time complexities that depend on the parameters in Assumptions 1.1, 1.2, 1.3, and 1.4. This naturally raises the central question of the paper: what is the fastest possible method in this setting, and can we establish a matching lower bound? 
+
+1.2 Contributions 
+
+♠ Our first main contribution is a new method, Grace SGD (Algorithm 1), that achieves an optimal time complexity , up to logarithmic factors. To design this method and obtain the discovered complexity, we developed two important new subroutines, Algorithms 2 and 3, which use tools from the Gomory-Hu trees (Gomory and Hu, 1961) and the Steiner Tree Packing problem (Lau, 2004) fields, and may be of independent interest. We now present the theorem explained in Section 2. 
+
+Theorem 1.5 (Upper Bound in the Homogeneous Setting) . Assume that Assumptions 1.1, 1.2, and 1.3 hold. Then Grace SGD (Algorithm 1) finds an ε-stationary point of (1) after K = ⌈4L∆/ε⌉
+
+iterations, and the time complexity under Assumption 1.4 is 
+
+O min  
+
+> k∈[n]
+> d
+> ¯wk
+
++ min  
+
+> p∈[k]
+
+min 
+
+> m∈[|Sk,p |]
+
+"
+
+> 1
+> mm
+
+P
+
+> i=1 1
+> hπi(Sk,p )
+
+−1 
+
+1 + σ2
+
+> mε
+
+#! 
+
+> L∆
+> ε
+
+!
+
+(3) 
+
+up to a universal constant factor, where {Sk,p }k∈[n],p ∈[k] and { ¯wk}k∈[n] are the sequences generated by Algorithm 2, and π(S) is a permutation that sorts {hi}i∈S : hπ1(S) ≤ · · · ≤ hπ|S|(S).
+
+Corollary 1.6 (Equal computation times) . In view of Theorem 1.5, if hi = h for all i ∈ [n], then the time complexity of Grace SGD is 
+
+O
+
+
+
+min 
+
+> k∈[n]
+
+ 
+
+> d
+> ¯wk
+
++ min 
+
+> p∈[k]
+> hσ 2
+> |Sk,p |ε
+
+ 
+
+> L∆
+> ε
+
++ hL ∆
+
+> ε
+
+
+
+. (4) The complexities depend on new quantities, ¯wk and Sk,p : ¯wk is the minimum s–t cut value in G for some s, t ∈ V , corresponding to an edge of the Gomory–Hu tree T , and Sk,p is a subset of V whose communication bottleneck is at least ¯wk. Intuitively, ¯wk reflects communication within Sk,p , and Grace SGD chooses k to balance ¯wk and the number of workers max p∈[k] |Sk,p |: the more workers compute stochastic gradients, the longer synchronization takes, and (3) and (4) capture the balance. 3Algorithm 1 Grace SGD 
+
+Require: Graph G = ( V, E, b ), times {hi}i∈[n], ratio σ2
+
+/ε, smoothness constant L, point x0 
+
+> 1:
+
+Find the fastest subset of workers S∗ using Algorithm 2 (crucial new step ) 
+
+> 2:
+
+Workers S∗ locally initialize starting point with x0 and step size γ = 1/2L 
+
+> 3:
+
+for k = 0 , 1, . . . do  
+
+> 4:
+
+Workers in S∗ compute PBi 
+
+> j=1
+
+∇f (xk; ξkij ) in parallel, increasing local batch sizes Bi over time, until P 
+
+> i∈S∗
+
+Bi = max {⌈ σ2
+
+/ε⌉, 1} 
+
+> 5:
+
+Run optimal-bandwidth AllReduce (e.g., Algorithm 3) so workers (crucial new step )in S∗ obtain P
+
+> i∈S∗
+
+PBi 
+
+> j=1
+
+∇f (xk; ξkij ) 
+
+> 6:
+
+Every worker in S∗ updates the iterate: xk+1 = xk − γP 
+
+> i∈S∗Bi
+
+P
+
+> i∈S∗
+
+PBi 
+
+> j=1
+
+∇f (xk; ξkij ) 
+
+> 7:
+
+end for 
+
+♣ While Theorem 1.5 may appear non-intuitive and semi-explicit, it is in fact fundamental and optimal up to logarithmic factors . Despite the flexibility and generality of the setup, it is possible to prove a matching lower bound using new techniques for a broad family of methods (zero-respecting), including standard methods such as SGD, Asynchronous SGD (Recht et al., 2011), Local SGD (Zinkevich et al., 2010), and Adam (Kingma and Ba, 2015), as well as gossip methods and compressed methods via random sparsification. See Theorem 3.2 in Section 3. 
+
+♦ In Section 5, we also consider the heterogeneous setting, where workers have access to different distributions, and prove a new optimal time complexity , achieved by a new method called Leon SGD: 
+
+Theorem 1.7 (Upper Bound in the Heterogeneous Setting) . Assume that Assumptions 1.1, 1.2, and 5.1 hold. Then Leon SGD (Algorithm 4) finds an ε-stationary point of (8) after K = Θ ( L∆/ε)
+
+iterations, and the time complexity under Assumption 1.4 is 
+
+O
+
+
+
+max 
+
+ 
+
+> d
+> ¯w1
+
+, max  
+
+> i∈[n]
+
+hi, σ2
+
+> nε
+
+
+
+> 1
+> nn
+
+P
+
+> i=1
+
+hi
+
+ 
+
+> L∆
+> ε
+
+
+
+(5) 
+
+seconds, where ¯w1 ≡ min {i,j }∈ F wij is the minimum edge weight in the Gomory–Hu tree 
+
+T = ( V, F, w ) of ¯G. Equivalently, ¯w1 is the global minimum cut value of G.
+
+Unlike the homogeneous setting, Theorem 1.7 always depends on ¯w1, the global minimum cut value, reflecting that the heterogeneous setting is inherently more challenging and is bottlenecked by the communication rate through the smallest cut 2. This result is tight by our lower bound in Theorem 5.2. 
+
+♥ In Section 6, we demonstrate an important corollary: for sparse graphs, Leon SGD and a naive mini-batch version of Synchronous SGD (Section 1.1) with complexity ˜Θ( dL ∆/bε + hσ 2L∆/nε 2 + hL ∆/ε)
+
+are optimal (up to logarithmic factors) when ε is small and n is large, even in the homogeneous setting. This means that a fully synchronized method that sends all stochastic vectors to one node is sufficient and the first communication term does not scale with n in sparse graphs. The main difficulty here was to show that this holds even in the homogeneous setting. In Corollaries 6.2 and F.3, we extend this observation and derive a fundamental trade-off . In Sections 4 and D, we discuss several other important examples and implications of our results for modern distributed optimization tasks. 
+
+## 2 Grace SGD: A New Algorithm with Near Optimal Time Complexity 
+
+We now present our new Algorithm 1, Grace SGD, designed for the practical Graph-Bandwidth Communication Model setup and achieving a near-optimal time complexity. Let us now explain how Grace SGD works. In a nutshell, Grace SGD is very simple: i) it finds the right subset of workers S∗ ⊆ [n] (Algorithm 2); ii) asks every worker i ∈ S∗ to calculate a mini-batch of stochastic gradients of size Bi such that the total batch size P 
+
+> i∈S∗
+
+Bi = Θ( σ2
+
+/ε); iii) runs an optimal-bandwidth AllReduce algorithm (e.g. Algorithm 3) so that all workers from S∗ receive the whole batch gk = P
+
+> i∈S∗
+
+PBi 
+
+> j=1
+
+∇f (xk; ξkij )/ P 
+
+> i∈S∗
+
+Bi; iv) every worker locally updates the iterate using the standard SGD step xk+1 = xk − γg k. However, when it comes to the details, the main      
+
+> 2For instance, in Figure 1, the smallest communication bottleneck ¯w1occurs between workers 5and 4.
+
+4Algorithm 2 Find Fastest Subset of Workers (Preprocessing in Grace SGD) 
+
+Require: Graph G = ( V, E, b ), times {hi}i∈[n], ratio σ2
+
+/ε 
+
+> 1:
+
+Construct Gomory-Hu tree T = ( V, F, w ) of the undirected version ¯G 
+
+> 2:
+
+Sort {wij }{i,j }∈ F and obtain ¯w1 ≤ · · · ≤ ¯wn−1; also define ¯wn := ∞ (|F | = n − 1) 
+
+> 3:
+
+Init t∗ = ∞, S ∗ = null , and k∗ = null  
+
+> 4:
+
+for k = 1 , . . . , n do  
+
+> 5:
+
+Find connected components in T and denote them by Sk = ( Sk, 1, . . . , S k,k ) 
+
+> 6:
+
+Find ¯S = arg min 
+
+> S∈S k
+
+(
+
+tk(S) := d 
+
+> ¯wk
+
++ min 
+
+> m∈[|S|]
+
+"
+
+> 1
+> mm
+
+P
+
+> i=1 1
+> hπi(S)
+
+−1 
+
+1 + σ2
+
+> εm
+
+#) 
+
+,
+
+where π(S) is a permutation that sorts {hi}i∈S : hπ1(S) ≤ · · · ≤ hπ|S|(S) 
+
+> 7:
+
+If tk( ¯S) < t ∗, then t∗ = tk( ¯S), S ∗ = ¯S, and k∗ = k 
+
+> 8:
+
+Remove the edge {i, j } in T corresponding to ¯wk (except for k = n) 
+
+> 9:
+
+end for  
+
+> 10:
+
+return Subset of workers S∗
+
+novelty lies in choosing S∗, implementing AllReduce in graph G in a right way, and proving that this whole scheme is indeed near-optimal. For clarity, assume that hi = h for all i ∈ [n] (Corollary 1.6). 
+
+Choosing the best subset S∗ (See visualization in Section B). Recall the discussion of Synchronous SGD and Hero SGD, two diametrically opposed methods, neither of which has universally best theoretical guarantees. The main advantage of Synchronous SGD is that it utilizes all workers; however, this also introduces its main drawback: communication among all workers can become a significant bottleneck. On the other hand, Hero SGD does not communicate but utilizes only one worker. Here comes our question: How to choose a subset of workers that is large enough to cope with noises in gradients, but also does not require significant communication times? And, surprisingly, the answer lies in Gomory–Hu trees , which naturally capture the connectivity structure and bottlenecks of G.Using our directed graph G, we construct the undirected version ¯G = ( V, ¯E, b ). For undirected graphs, Gomory and Hu (1961) proved that it is always possible to construct a tree T = ( V, F, w )
+
+(with the same set of vertices, but different sets of edges and weights). The Gomory–Hu tree T
+
+has one essential property. Consider any edge e ∈ F of the tree with weight we. Then e separates the vertices of T into two sets, S1 and S2. It turns out that the value we is an upper bound on the 
+
+minimum s–t cut value for all s ∈ S1 and t ∈ S2 (Theorem E.7). By the max-flow min-cut theorem, 
+
+we is an upper bound on the number of coordinates per second (maximal flow) that S1 and S2 can transmit to each other. This immediately implies that if group S1 or any worker from S1 wants to send a vector of size ℓ to group S2 or any worker from S2, then it is necessary to wait at least ℓ/we
+
+seconds, no matter what routing strategy one chooses. Moreover, this communication rate is attained by at least one pair of workers s ∈ S1 and t ∈ S2, namely the endpoints of the edge e in T .Using this observation, we design the iterative Algorithm 2. In the first iteration, we take T and find all its connected components. Since T is a tree, there is only one connected component, S1,1 = [ n].The idea of the next steps of the loop is to measure the time complexity of the method when all workers in S1,1 = [ n] solve (1) and communicate to each other. When hi = h for all i ∈ [n], the time complexity is t1(S1,1) × L∆/ε = Θ  d/ ¯w1 + h max σ2
+
+/nε , 1  L∆/ε, where h max σ2
+
+/nε , 1 is the “statistical” term, which improves with n, and d/ ¯w1 is the “communication” term. Notice that ¯w1 is the smallest value among the weights in F of the tree T, which characterizes the slowest communication bottleneck and communication speed, and appears because all workers participate in the optimization. The term d/ ¯w1 can be huge and much larger than hσ 2
+
+/nε .
+
+The main idea of the last step in the loop is to remove the edge {i, j } corresponding to ¯w1 from T ,consider the new graph T − { i, j }, which has two connected components, S2,1 and S2,2, and consider an optimization process in which only one of these subsets is used. Then, choose the best subset using the values t2(S2,1) = d/ ¯w2 + h max σ2
+
+/|S2,1|ε, 1 vs. t2(S2,2) = d/ ¯w2 + h max σ2
+
+/|S2,2|ε, 1 .
+
+Basically, when hi = h for all i ∈ [n], we have to choose the largest connected component. Why is that a good strategy? By removing the edge with weight ¯w1, we disconnect the groups S2,1 and S2,2.However, due to the properties of the Gomory–Hu tree T , the communication bottleneck inside each group becomes greater than or equal to ¯w2 (instead of ¯w1). An important observation is that the “com-5Algorithm 3 Optimal-Bandwidth AllReduce (AllReduce in Grace SGD and Leon SGD) 
+
+Require: Graph G = ( V, E, b ), with {bij }{i,j }∈ ¯E being integers (w.l.o.g.) (a) , subset of workers 
+
+S ⊆ V , vector ai stored at worker i for all i ∈ S
+
+(Preprocessing; performed once) 
+
+1: Find undirected unweighted version of ¯G: ˆG = ( V, ˆE) where, if {i, j } ∈ ¯E, then {i, j } is repeated bij times in ˆE
+
+2: Solve Steiner Tree Packing problem for S ⊆ V in ˆG using (Lau, 2004, Theorem 1.2) and obtain collection of edge-disjoint trees T := ( ˆT1, . . . , ˆTp) that each connects S
+
+(p equals the value of minimum S-cut in ˆG up to a constant factor) 
+
+3: Fix any pivot worker v ∈ S
+
+(End of preprocessing. Beginning of AllReduce) 
+
+4: Worker i ∈ S divides ai into p blocks of size ⌈d/p⌉ : ( ai, 1, . . . , a i,p ) (pad with zeros if needed) 
+
+5: For all j ∈ [p] (in parallel), reduce blocks {ai,j }i∈S to pivot worker v along tree ˆTj (use 
+
+interleaving described in Sections 2 and 1). Worker v receives (P 
+
+> i∈S
+
+ai, 1, . . . , P 
+
+> i∈S
+
+ai,p )
+
+6: For all j ∈ [p] (in parallel), broadcast P 
+
+> i∈S
+
+ai,j from v to all other workers from S along ˆTj
+
+Ensure: Sum P 
+
+> i∈S
+
+ai is stored at worker i for all i ∈ S  
+
+> (a): otherwise, bij are rational numbers (or approximated with arbitrary precision) and can always be renormalized by the common denominator
+
+munication” term d/ ¯w2 ≤ d/ ¯w1; thus, the new time complexity min {t2(S2,1), t 2(S2,2)} can be smaller than t1(S1,1). We repeat this loop until there are n connected components (singletons) {1}, . . . , {n},
+
+which have the time complexity of Hero SGD: tn(Sn,i ) × L∆/ε = Θ  h max σ2
+
+/ε, 1  L∆/ε, where 
+
+> d
+
+/ ¯wn = 0 because ¯wn = ∞, no communication is required. Using the described strategy, we can find the optimal subset of workers that obtains the time complexity 
+
+(4) = tk∗ (S∗) × L∆ 
+
+> ε
+
+= Θ 
+
+ d 
+
+> ¯wk∗
+
++ h max 
+
+n σ2 
+
+> |S∗|ε
+
+, 1
+
+o L∆ 
+
+> ε
+
+, (6) where, roughly speaking, the communication and statistical terms are almost equal. It remains to design a method that indeed achieves this complexity. 
+
+Optimal-bandwidth AllReduce (See visualization in Section C). We have selected the subset of workers S∗. Obtaining the statistical term in (6) can be easily achieved with Minibatch SGD and 
+
+|S∗| workers. The main difficulty is achieving the communication term d/ ¯wk∗ . Intuitively, since the communication bottleneck in S∗ is at least ¯wk∗ , formally, the minimum S∗-cut value is at least 
+
+¯wk∗ (Definition E.5), there should be a way to develop an efficient synchronization algorithm with complexity O(d/ ¯wk∗ ). We now implement an optimal-bandwidth AllReduce algorithm, Algorithm 3, that achieves this complexity. W.l.o.g., assume that {bij } are integers, and instead of the undirected graph ¯G, consider the un-weighted multigraph ˆG (Algorithm 3). That is, instead of considering one edge {i, j } with weight 
+
+bij , we consider an equivalent graph where {i, j } is repeated bij times, each with unit bandwidth. In practice, the system still has a single edge with bandwidth bij ; however, the behavior of bij parallel unit-bandwidth edges can be simulated by multiplexing transmissions using the interleaving strategy described in Section 1. By construction, for all i, j ∈ S∗, if we consider the path of edges p from i to j in the tree T, 
+
+then min e∈p we ≥ ¯wk∗ . Using the Gomory–Hu tree properties, we can conclude that the value of a minimum S∗-cut (Definition E.5) is greater than or equal to ¯wk∗ . Using the result of Lau (2004, Theorem 1.2), there exists a polynomial-time algorithm that can find a collection of edge-disjoint trees T := ( ˆT1, . . . , ˆTp) with p = Θ( ¯ wk∗ ), each connecting S∗ in ˆG. 
+
+In terms of our problem, it means that there exist Θ( ¯ wk∗ ) edge-disjoint communication pipes that can communicate coordinates/bits between the workers in S∗ with unit bandwidth. Now, we ask every worker to split its local vector ai (local minibatch) into Θ( ¯ wk∗ ) blocks. Using the edge-disjoint trees, the workers can first aggregate the blocks at one of the workers (the pivot worker), and then, using the same trees, the pivot worker can broadcast the blocks to all workers in S∗. Importantly, the key idea of this algorithm is to find edge-disjoint trees that enable independent, parallel reduce and broadcast operations, implemented via interleaving without congestion. Since every edge in every 6tree from T has unit bandwidth, we can conclude that the time required for reduce and broadcast is 
+
+Θ d/ ¯wk∗
+
+ seconds for blocks of size Θ d/ ¯wk∗
+
+. See details in the proof of Theorem F.1. This AllReduce works with an arbitrary graph G. In practice, graphs often have a particular structure (e.g., all-to-all graphs or torus graphs), where implementing an optimal-bandwidth AllReduce is more straightforward. See practical guidelines and numerical experiments in Section J. We also note that Grace SGD is asynchronous-friendly and robust to heterogeneous fluctuations in computation ,since when communication times are negligible, it reduces to Rennala SGD, which was proved to be optimal under arbitrary computational dynamics (Tyurin, 2025). 
+
+## 3 Lower Bound in the Homogeneous Setting 
+
+In this section, we show that Grace SGD and the result in Theorem 1.5 are optimal up to logarithmic factors within a large family of optimization methods. The reader will see that we also use Algorithm 2 to state the lower bound, which is not a coincidence. The “communication side” of the lower bound proof is constructive and enables the design of Grace SGD. Obtaining lower bounds in the homogeneous setting is significantly more technically challenging, since the standard trick of placing different blocks of a hard function on distant nodes cannot be used. We consider the standard class of zero-respecting algorithms (Nesterov, 2018; Arjevani et al., 2022), which includes SGD-like methods, Adam, gossip methods (e.g., (Nedic et al., 2017)), and even compressed decentralized methods (e.g., Choco-SGD (Koloskova et al., 2019), BEER (Zhao et al., 2022)). The optimization protocol is flexible and presented in Protocol 5. Every worker runs two parallel loops: i) in the first computation loop, worker i computes stochastic gradients locally, adds these vectors to local information Ii, and the algorithm is allowed to generate the next query point using Ii; ii) in the second communication loop, worker i, using Ii, prepares a set of coordinates, which can be random and not necessarily of size d, and the algorithm sends them using any routing strategy that obeys Assumption 1.4. This way, the protocol allows the use of local steps, minibatching, gossip communication, and compressed communication. The formal description of the allowed ways to prepare coordinates is presented in Assumption G.1, where we allow algorithms to use mappings that do not take into account local information and do not depend on {Ii}i∈[n] when choosing the indices in the sparsifiers. Assumption G.1 covers sending the full vector, sending a predefined block of the vector as is done in AllReduce algorithms, or even a random subset of coordinates, supporting Rand K or Perm K compressors (Szlendak et al., 2021). 
+
+Definition 3.1. We define F∆,L as the set of functions f : Rp → R such that p ≥ 1, f is L-smooth, i.e., ∥∇ f (x) − ∇ f (y)∥ ≤ L ∥x − y∥ for all x, y ∈ Rp, and f (0) − inf x∈Rp f (x) ≤ ∆.
+
+Theorem 3.2 (Lower Bound in the Homogeneous Setting) . We consider any computational and communication environment, any graph G satisfying Assumption 1.4. Let L, ∆, ε, n, σ 2, d > 0
+
+be any numbers such that L∆/ε ≥ ¯c1 log 10 (n + 1) and dimension d ≥ ¯c3L∆/log 3(n+1) ε. Consider Protocol 5. For all i ∈ [n] and k ≥ 0, mappings Cki satisfy Assumption G.1. Then, for any algorithm A, there exists a function f ∈ F ∆,L , exists an oracle that satisfies Assumption 1.3, and 
+
+E
+
+h
+
+inf y∈Gt ∥∇ f (y)∥2i
+
+> ε for all 
+
+t ≤ ¯c2 
+
+> log 14 (n+1)
+
+min  
+
+> k∈[n]
+> d
+> ¯wk
+
++ min  
+
+> p∈[k]
+
+min 
+
+> m∈[|Sk,p |]
+
+"
+
+> 1
+> mm
+
+P
+
+> i=1 1
+> hπi(Sk,p )
+
+−1 
+
+1 + σ2
+
+> mε
+
+#!  
+
+> L∆
+> ε
+
+, (7) 
+
+where Gt is the set of all possible points that can be constructed by A up to time t based on 
+
+{Ii}i∈[n]. The quantities π(S), {Sk,p }k∈[n],p ∈[k], and { ¯wk}k∈[n] are defined in Algorithm 2, and 
+
+¯c1, ¯c2, and ¯c3 are universal constants. 
+
+Hence, Grace SGD matches (7) up to the multiplicative factor ¯c2/log 14 (n+1) . Asymptotically, ignoring the polylogarithmic factor, Grace SGD is optimal. We believe that the log 14 (n + 1) term is an artifact of our proof techniques, and we conjecture that with a slightly more careful analysis around (37), it should be possible to improve this term to log 6(n + 1) with more technical steps. Nevertheless, eliminating the logarithmic factor completely would likely require a different proof strategy. Moreover, following Tyurin (2026), Assumption G.1 covers only a subfamily of unbiased compressors, including Rand K for all K ∈ [d]. As in (Huang et al., 2022; He et al., 2023), the lower bound remains valid for 7the full class of compressed methods if the adversary is allowed to choose a “worst-case” compressor. Extending this result to all compressors and non-zero-respecting algorithms is an important future direction. The proof sketch and the full proof are in Sections G.1 and G.2. 
+
+## 4 Examples with Different Graph Structures in the Homogeneous Setting 
+
+While Theorem 1.5 applies to any graph, we illustrate the time complexities for typical graphs and give explicit formulas. For clarity, we assume hi = h for all i ∈ [n] (Corollary 1.6). 
+
+Example: One Worker. Assume that n = 1 , i.e., G is a graph with one node. In this case, Gomory-Hu T is the same as G, ¯w1 = ∞ and S1,1 = {1} in Algorithm 2, and (4) = O  hσ 2L∆/ε2 + hL ∆/ε
+
+ ,
+
+which restores the classical result of Ghadimi and Lan (2013); Arjevani et al. (2022). 
+
+Example: Star Graph (Centralized Setting). Consider another example where workers com-municate through a server. It can equivalently be represented by the graph in Figure 5. One can show that a Gomory-Hu tree T of G is shown in Figure 5. In the tree, sorting the weights, we get ¯w1 = b, . . . , ¯wn−1 = b, ¯wn = ∞. Using this, one can show that the total time complexity is O
+
+
+
+min 
+
+n db + hσ 2
+
+> nε
+
+ L∆ 
+
+> ε
+
++ hL ∆ 
+
+> ε
+
+, hσ 2L∆ 
+
+> ε2
+
++ hL ∆
+
+> ε
+
+o 
+
+(see Section I.1). Notice that the first term corresponds to the complexity of Synchronous SGD with mini-batching (and Grace SGD), method that communicates the full vectors to and from the server, and the second term corresponds to Hero SGD. This optimality of this result was also proven in (Tyurin, 2026). 
+
+Example: p-Torus. We now assume that G is a p-Torus (Figure 7), a popular architecture in large-scale model training (Jouppi et al., 2020). A Gomory-Hu tree T presented in Figure 8. Sorting the weights, we get ¯w1 = 2 pb, . . . , ¯wn−1 = 2 pb, ¯wn = ∞. Using the same steps as in the previous ex-ample, the time complexity of Grace SGD is O
+
+
+
+min 
+
+n dpb + hσ 2
+
+> nε
+
+ L∆ 
+
+> ε
+
++ hL ∆ 
+
+> ε
+
+, hσ 2L∆ 
+
+> ε2
+
++ hL ∆
+
+> ε
+
+o 
+
+.
+
+Note that the first term improves with p, formalizing why a p-Torus is preferable in practice. 
+
+Example: all-to-all. In the all-to-all graph G, where all nodes are connected to each other, one can similarly derive the time complexity O
+
+
+
+min 
+
+n d 
+
+> (n−1) b
+
++ hσ 2
+
+> nε
+
+ L∆ 
+
+> ε
+
++ hL ∆ 
+
+> ε
+
+, hσ 2L∆ 
+
+> ε2
+
++ hL ∆
+
+> ε
+
+o 
+
+,
+
+where the communication term has the best scaling among the previous examples, which is expected since the all-to-all graph has the best connectivity. 
+
+Example: K clusters. Consider a practical setup (Figure 6), where we have K clusters of n/K 
+
+workers. The intra -communication is fast within each cluster, is all-to-all, and has bandwidth ∞.However, the inter -communication between the clusters is relatively slow, with bandwidth bslow (since, for instance, the clusters may be located in different cities). In this case, Theorem 1.5 yields the time complexity O
+
+
+
+min 
+
+n hσ 2L∆(n/K )ε2 + hL ∆ 
+
+> ε
+
+, dL ∆ 
+
+> bslow ε
+
++ hσ 2L∆ 
+
+> nε 2
+
++ hL ∆
+
+> ε
+
+o 
+
+, which formalizes the simple idea that either we use one cluster S∗ = [ n/K ] with n/K workers, or we use all clusters ( S∗ = [ n])together but pay the communication cost dL ∆/bslow (which may or may not dominate). Notice that we can even consider the case where clusters use different GPUs. In this case, the complexity becomes O min 
+
+(
+
+min  
+
+> i∈[K]
+
+hi
+
+
+
+1 + σ2
+
+> (n/K )ε
+
+
+
+, dbslow + min 
+
+> m∈[K]
+
+
+
+> 1
+> mm
+
+P
+
+> i=1 1
+> hi
+
+−1 
+
+1 + σ2
+
+> εm (n/K )
+
+)
+
+> L∆
+> ε
+
+!
+
+,
+
+where h1 ≤ · · · ≤ hK are the computation times of the clusters. 
+
+Example: optimization with switches. In practice, workers are not directly connected; instead, there are intermediate nodes, switches, that do not compute stochastic gradients and only transmit data between the workers. Our theory even supports this setting by simply setting hi < ∞ if node i
+
+is a worker, and hi = ∞ if it is a switch. Then, one can apply Theorem 1.5 with any graph topology. 
+
+## 5 Heterogeneous Setting: Optimal Method and Lower Bound 
+
+We also consider and analyze the heterogeneous problem of minimizing 
+
+min 
+
+> x∈Rd
+
+n
+
+f (x) := 1
+
+> nn
+
+P
+
+> i=1
+
+fi(x)
+
+o
+
+, (8) where fi : Rd → R for all i ∈ [n]. Unlike the homogeneous setup, for all i ∈ [n], worker i can only access stochastic gradients of fi.8Algorithm 4 Leon SGD 
+
+Require: Graph G = ( V, E, b ), ratio σ2
+
+/ε, smoothness constant L, point x0 
+
+> 1:
+
+All workers [n] locally initialize starting point with x0 and step size γ = 1/2L 
+
+> 2:
+
+for k = 0 , 1, . . . do  
+
+> 3:
+
+All workers compute 1
+
+> Bi
+
+PBi 
+
+> j=1
+
+∇fi(xk; ξkij ), increasing local batch sizes Bi over time, until 
+
+ 1
+
+> n
+
+Pni=1 1
+
+> Bi
+
+−1
+
+≥ max {⌈ σ2
+
+/ε⌉, n }/n  
+
+> 4:
+
+Run optimal-bandwidth AllReduce (e.g., Algorithm 3) so workers (crucial new step )in [n] obtain 1
+
+> n
+
+Pni=1 1
+
+> Bi
+
+PBi 
+
+> j=1
+
+∇fi(xk; ξkij ) 
+
+> 5:
+
+Every worker in [n] updates the iterate: xk+1 = xk − γn
+
+Pni=1 1
+
+> Bi
+
+PBi 
+
+> j=1
+
+∇fi(xk; ξkij ) 
+
+> 6:
+
+end for Assumption 5.1 (Heterogeneous setting) . For all i ∈ [n], worker i can only calculate ∇fi(x; ξ) and 
+
+Eξ [∇fi(x; ξ)] = ∇fi(x) and Eξ [∥∇ fi(x; ξ) − ∇ fi(x)∥2] ≤ σ2 for all x ∈ Rd, where σ2 ≥ 0.
+
+In Theorem 1.7, we show that Leon SGD (Algorithm 4) is an optimal method, where the first term (5) arises from performing AllReduce across all workers, and the second and third terms are the same as in Malenia SGD (Tyurin and Richtárik, 2023), which is not a coincidence, since the aggregation phase in Line 3 is the same as there. Similarly to Section 3, we can provide a lower bound, Theorem 5.2, for the heterogeneous setting. 
+
+Theorem 5.2 (Lower Bound in the Heterogeneous Setting) . We consider any computational and communication environment satisfying Assumption 1.4. Let L, ∆, ε, n, σ 2, d > 0 be any numbers such that L∆/ε ≥ ¯c1 and dimension d ≥ ¯c3L∆/ε. Consider Protocol 5. For all i ∈ [n] and k ≥ 0,
+
+mappings Cki satisfy Assumption G.1. Then, for any algorithm A, there exists a function f ∈ F ∆,L ,
+
+exists oracles that satisfy Assumption 5.1, and E
+
+h
+
+inf y∈Gt ∥∇ f (y)∥2i
+
+> ε for all 
+
+t ≤ ¯c2 × max 
+
+ 
+
+> d
+> ¯w1
+
+, max  
+
+> i∈[n]
+
+hi, σ2
+
+> nε
+
+
+
+> 1
+> nn
+
+P
+
+> i=1
+
+hi
+
+  
+
+> L∆
+> ε
+
+, (9) 
+
+where Gt is the set of all possible points that can be constructed by A up to time t based on 
+
+{Ii}i∈[n], and ¯w1 ≡ min {i,j }∈ F wij is the smallest weight in a Gomory-Hu tree T = ( V, F, w ) of 
+
+¯G. The quantities ¯c1, ¯c2, and ¯c3 are universal constants. 
+
+This result matches Theorem 1.7 up to a constant factor. Unlike the homogeneous setting, Theo-rems 1.7 and 5.2 are much more pessimistic: i) the time complexity depends on the worst bottleneck 
+
+> d
+
+/ ¯w1, where ¯w1 is the smallest weight in the Gomory–Hu tree T , or equivalently the minimum value over all cuts in the graph G; ii) similarly to (Tyurin and Richtárik, 2023), the dependence on {hi}i∈[n]
+
+is arithmetic-like in (5) compared to the harmonic-like dependence in (7). 
+
+## 6 Fundamental Trade-offs in Optimization over Graphs 
+
+We now want to explain that the optimal time complexity (5), derived for the heterogeneous setting, cannot be significantly improved when the graph is sparse , even in the homogeneous setting. Sparse graphs include graphs with a ring structure and other low-connectivity topologies commonly used in decentralized optimization (see examples in (Koloskova et al., 2019)). 
+
+Corollary 6.1 (Sparse Graphs; Proof in Section F.3) . In view of Theorems 3.2 and 1.7, if i) hi = h
+
+for all i ∈ [n]; ii) the degree of every node in G is bounded by a small number p = Θ(1); iii) and all edges have the same bandwidth b. When σ2
+
+/ε ≥ Ω( d/bh ), the optimal time complexity for solving both (1) and (8) is ˜Θ  dL ∆/bε + hσ 2L∆/nε 2 + hL ∆/ε
+
+ and it is achieved by Leon SGD. 
+
+Note that this complexity can also be achieved with a naive mini-batch version of Synchronous SGD: xk+1 = xk − γnB 
+
+Pni=1 
+
+PBj=1 ∇fi(xk; ξkij ) with the simple communication approach from Section H. One of the main challenges was to show that this holds even in the homogeneous setting. The following corollary naturally generalizes Corollary 6.1 and provides additional insight: 9Corollary 6.2 (Proof in Section F.4; see also dual Corollary F.3) . In view of Theorems 3.2, if 
+
+hi = h for all i ∈ [n] and bij = b for all (i, j ) ∈ E, then the lower bound in all settings is ˜Ω
+
+
+
+min 
+
+n
+
+min m∈{ 2,...,n }
+
+h dL ∆ 
+
+> k(m)bε
+
++ hσ 2L∆
+
+> mε 2
+
+i
+
++ hL ∆ 
+
+> ε
+
+, hL ∆ 
+
+> ε
+
++ hσ 2L∆
+
+> ε2
+
+o 
+
+, where k(m) is the m-th largest edge degree. 
+
+Corollaries 6.2 and F.3 are not necessarily tight (the tight bound is given in Theorem 3.2), but they provide important intuition about learning on graphs: in both homogeneous and heterogeneous settings, the more workers that compute stochastic gradients, the better the scaling in the stochastic term hσ 2L∆/mε 2; however, the scaling in the communication term dL ∆/k(m)bε may become worse. 
+
+Having more workers compute stochastic gradients may lead to slower overall communication due to the low connectivity of some workers, and there exists a golden mean that balances the number of active workers, depending on the structure of the graph and the d vs. σ2
+
+/ε regime. 
+
+## 7 Related Work 
+
+Classical theory. Starting with one of the seminal works (Nemirovskij and Yudin, 1983), the optimization field began investigating the optimality of methods. Initially, the focus was mainly on the oracle complexity, e.g., the number of function and gradient evaluations needed to achieve a given accuracy. One of the first results was obtained in the convex setting where it was shown that the optimal complexity for finding an ε-approximate solution is Θ( pLR 2/ε ) (Nesterov, 1983, 2018), where R is the distance between the initial point and an optimal point. For the nonconvex setting, the optimal complexity Θ( L∆/ε) was shown by Carmon et al. (2020) in the deterministic setting and 
+
+Θ( L∆/ε + σ2L∆/ε2) by Arjevani et al. (2022) in the stochastic setting. 
+
+Gossip protocol. One way to extend the classical results to the decentralized setting is to use the gossip protocol. As in Graph-Bandwidth Communication Model, workers are associated with nodes and communication links with edges of the graph. Then, a mixing matrix W ∈ Rn×n is constructed such that wij > 0 if nodes i and j are connected, and wij = 0 otherwise. The upper and lower bounds are then constructed in terms of the number of communication rounds required to find an ε-stationary point (Boyd et al., 2006; Scaman et al., 2017; Koloskova et al., 2019; Lu and De Sa, 2021). However, this approach arguably has the following drawbacks: (i) this protocol allows methods to communicate only with neighbors and to use a single operation yi ← P 
+
+> j
+
+wij xj , where xj is the sent vector and yi
+
+is the received vector. Such a protocol restricts many practical ways to disseminate information in the graph. For instance, the split vector and online in-network aggregation strategies, discussed in Section 1 and commonly used in practice, are ignored; (ii) the obtained complexities are typically defined in terms of iteration complexity and depend on the spectral gap of a mixing matrix, whereas our approach uses time complexities with explicit dependence on computation and communication time parameters {hi} and {bij }; (iii) the obtained results use “one-zero” encoding, assuming that all communication links are the same, whereas our approach uses bandwidths, a practical way of defining connectivity between two workers or switches. 
+
+Time complexities. The classical oracle complexity is a valid and intuitive metric for comparing meth-ods with one worker/GPU/CPU/server. However, modern optimization requires hundreds, thousands, or even millions of workers, requiring the analysis of parallel and asynchronous algorithms , where a conceptually different metric is needed. Let us consider a recent paper by Mishchenko et al. (2022), where the authors compare Synchronous SGD and Asynchronous SGD. The oracle complexity of both methods is the same; moreover, the iteration complexity of Synchronous SGD is better. However, under the time complexity , a more appropriate metric for parallel methods, Asynchronous SGD is provably better. In particular, assuming the Computation Model and using the analysis by Cohen et al. (2021); Koloskova et al. (2022); Mishchenko et al. (2022), it is possible to show that Asynchronous SGD has provably better time complexity than Synchronous SGD. Further, Tyurin and Richtárik (2023) formalized the notion of time complexity and proved that the optimal time complexity is 
+
+Θ(min m∈[n][( 1/m
+
+Pmi=1 1/hπi )−1(1 + σ2
+
+/mε )] L∆/ε), achieved 3 by a method called Rennala SGD, where π is a permutation that sorts {hi}i∈[n].
+
+> 3It was also achieved by another method called Ringmaster ASGD (Maranjyan et al., 2025). Moreover, somewhat surprisingly, it was later shown that this complexity, up to a logarithmic factor, can also be achieved by a synchronous method (Begunov and Tyurin, 2026).
+
+10 Time complexities with communication times. A natural question is to determine the optimal time complexities when communication between workers cannot be ignored. One of the early works studying such complexities in the decentralized setting is Scaman et al. (2017), where the complexity was established for heterogeneous objectives, without stochastic gradients, and under the assumption that workers exchange full vectors with their neighbors at every step (gossip communication). At the same time, our Graph-Bandwidth Communication Model is much more flexible, while also supporting the homogeneous setup and stochastic gradients. The idea of using bandwidths on the communication links was considered in (Tyurin et al., 2024; Tyurin, 2026) (in fact, they define τ sinstead as the time to send one coordinate, which are the inverses of the bandwidths). However, an important limitation of these works is that they only consider the centralized setup (star graphs), while ours considers arbitrary graphs. The analysis of communication in star graphs is much easier due to the lack of congestion on the communication links and the uniqueness of the paths between the workers. A work by Tyurin and Richtárik (2024) is closest to our setting, since it also proves optimal time complexities in the decentralized setup with both homogeneous and heterogeneous functions and stochastic gradients. However, it assumes that algorithms are only allowed to send full vectors to neighbors, an important limitation that does not capture, for instance, optimal-bandwidth AllReduce strategies. 
+
+## References 
+
+Alistarh, D., Grubic, D., Li, J., Tomioka, R., and Vojnovic, M. (2017). QSGD: Communication-efficient SGD via gradient quantization and encoding. In Advances in Neural Information Process-ing Systems (NIPS) , pages 1709–1720. Arjevani, Y., Carmon, Y., Duchi, J. C., Foster, D. J., Srebro, N., and Woodworth, B. (2022). Lower bounds for non-convex stochastic optimization. Mathematical Programming , pages 1–50. Begunov, G. and Tyurin, A. (2026). Do we need Asynchronous SGD? On the near-optimality of synchronous methods. arXiv preprint arXiv:2602.03802 .Beznosikov, A., Horváth, S., Richtárik, P., and Safaryan, M. (2020). On biased compression for distributed learning. arXiv preprint arXiv:2002.12410 .Boyd, S., Ghosh, A., Prabhakar, B., and Shah, D. (2006). Randomized gossip algorithms. IEEE transactions on information theory , 52(6):2508–2530. Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J. D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., Agarwal, S., Herbert-Voss, A., Krueger, G., Henighan, T., Child, R., Ramesh, A., Ziegler, D., Wu, J., Winter, C., Hesse, C., Chen, M., Sigler, E., Litwin, M., Gray, S., Chess, B., Clark, J., Berner, C., McCandlish, S., Radford, A., Sutskever, I., and Amodei, D. (2020). Language models are few-shot learners. In Larochelle, H., Ranzato, M., Hadsell, R., Balcan, M. F., and Lin, H., editors, Advances in Neural Information Processing Systems , volume 33, pages 1877–1901. Curran Associates, Inc. Carmon, Y., Duchi, J. C., Hinder, O., and Sidford, A. (2020). Lower bounds for finding stationary points i. Mathematical Programming , 184(1):71–120. Cohen, A., Daniely, A., Drori, Y., Koren, T., and Schain, M. (2021). Asynchronous stochastic optimization robust to arbitrary delays. Advances in Neural Information Processing Systems ,34:9024–9035. Ghadimi, S. and Lan, G. (2013). Stochastic first-and zeroth-order methods for nonconvex stochastic programming. SIAM Journal on Optimization , 23(4):2341–2368. Gomory, R. E. and Hu, T. C. (1961). Multi-terminal network flows. Journal of the Society for Industrial and Applied Mathematics , 9(4):551–570. Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., et al. (2024). The llama 3 herd of models. arXiv preprint arXiv:2407.21783 .Hagberg, A., Swart, P. J., and Schult, D. A. (2007). Exploring network structure, dynamics, and function using networkx. Technical report, Los Alamos National Laboratory (LANL). 11 He, Y., Huang, X., and Yuan, K. (2023). Unbiased compression saves communication in distributed optimization: When and how much? Advances in Neural Information Processing Systems ,36:47991–48020. Huang, X., Chen, Y., Yin, W., and Yuan, K. (2022). Lower bounds and nearly optimal algorithms in distributed learning with communication compression. Advances in Neural Information Processing Systems (NeurIPS) .Jouppi, N. P., Yoon, D. H., Kurian, G., Li, S., Patil, N., Laudon, J., Young, C., and Patterson, D. (2020). A domain-specific supercomputer for training deep neural networks. Communications of the ACM , 63(7):67–78. Kairouz, P., McMahan, H. B., Avent, B., Bellet, A., Bennis, M., Bhagoji, A. N., Bonawitz, K., Charles, Z., Cormode, G., Cummings, R., et al. (2021). Advances and open problems in federated learning. Foundations and Trends® in Machine Learning , 14(1–2):1–210. Kingma, D. P. and Ba, J. (2015). Adam: A method for stochastic optimization. International Conference on Learning Representations (ICLR) .Koloskova, A., Stich, S. U., and Jaggi, M. (2019). Decentralized stochastic optimization and gossip algorithms with compressed communication. In International Conference on Machine Learning .Koloskova, A., Stich, S. U., and Jaggi, M. (2022). Sharper convergence guarantees for Asynchronous SGD for distributed and federated learning. Advances in Neural Information Processing Systems ,35:17202–17215. Lan, G. (2020). First-order and stochastic optimization methods for machine learning . Springer. Lau, L. C. (2004). An approximate max-steiner-tree-packing min-steiner-cut theorem. In 45th Annual IEEE Symposium on Foundations of Computer Science , pages 61–70. IEEE. LeCun, Y., Cortes, C., and Burges, C. (2010). MNIST handwritten digit database. ATT Labs [Online]. Available: http://yann.lecun.com/exdb/mnist , 2. Lu, Y. and De Sa, C. (2021). Optimal complexity in decentralized training. In International Conference on Machine Learning , pages 7111–7123. PMLR. Maranjyan, A., Tyurin, A., and Richtárik, P. (2025). Ringmaster ASGD: The first Asynchronous SGD with optimal time complexity. In International Conference on Machine Learning .Mishchenko, K., Bach, F., Even, M., and Woodworth, B. (2022). Asynchronous SGD beats minibatch SGD under arbitrary delays. Advances in Neural Information Processing Systems (NeurIPS) .Nedic, A., Olshevsky, A., and Shi, W. (2017). Achieving geometric convergence for distributed optimization over time-varying graphs. SIAM Journal on Optimization , 27(4):2597–2633. Nemirovskij, A. S. and Yudin, D. B. (1983). Problem complexity and method efficiency in optimiza-tion. Nesterov, Y. (1983). A method for solving the convex programming problem with convergence rate o (1/k2). In Dokl akad nauk Sssr , volume 269, page 543. Nesterov, Y. (2018). Lectures on convex optimization , volume 137. Springer. Recht, B., Re, C., Wright, S., and Niu, F. (2011). Hogwild!: A lock-free approach to parallelizing stochastic gradient descent. Advances in Neural Information Processing Systems , 24. Scaman, K., Bach, F., Bubeck, S., Lee, Y. T., and Massoulié, L. (2017). Optimal algorithms for smooth and strongly convex distributed optimization in networks. In International Conference on Machine Learning , pages 3027–3036. PMLR. Schrijver, A. et al. (2003). Combinatorial optimization: polyhedra and efficiency , volume 24. Springer. 12 Seide, F., Fu, H., Droppo, J., Li, G., and Yu, D. (2014). 1-bit stochastic gradient descent and its application to data-parallel distributed training of speech DNNs. In Fifteenth Annual Conference of the International Speech Communication Association .Szlendak, R., Tyurin, A., and Richtárik, P. (2021). Permutation compressors for provably faster distributed nonconvex optimization. In International Conference on Learning Representations .Tyurin, A. (2025). Tight time complexities in parallel stochastic optimization with arbitrary computa-tion dynamics. In 13th International Conference on Learning Representations .Tyurin, A. (2026). Proving the limited scalability of centralized distributed optimization via a new lower bound construction. In International Conference on Learning Representations (ICLR) .Tyurin, A., Pozzi, M., Ilin, I., and Richtárik, P. (2024). Shadowheart SGD: Distributed asynchronous SGD with optimal time complexity under arbitrary computation and communication heterogeneity. 
+
+Advances in Neural Information Processing Systems , 37. Tyurin, A. and Richtárik, P. (2023). Optimal time complexities of parallel stochastic optimization methods under a fixed computation model. Advances in Neural Information Processing Systems .Tyurin, A. and Richtárik, P. (2024). On the optimal time complexities in decentralized stochastic asynchronous optimization. Advances in Neural Information Processing Systems , 37. Zhao, H., Li, B., Li, Z., Richtárik, P., and Chi, Y. (2022). BEER: Fast O(1 /T ) rate for decentralized nonconvex optimization with communication compression. Advances in Neural Information Processing Systems , 35:31653–31667. Zinkevich, M., Weimer, M., Li, L., and Smola, A. (2010). Parallelized stochastic gradient descent. 
+
+Advances in Neural Information Processing Systems , 23. 13 Contents 
+
+1 Introduction 1
+
+1.1 Known methods . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21.2 Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+
+2 Grace SGD: A New Algorithm with Near Optimal Time Complexity 43 Lower Bound in the Homogeneous Setting 74 Examples with Different Graph Structures in the Homogeneous Setting 85 Heterogeneous Setting: Optimal Method and Lower Bound 86 Fundamental Trade-offs in Optimization over Graphs 97 Related Work 10 A Notations 16 B Visualization of Algorithm 2 on Gomory-Hu Tree from Figure 1 17 C Visualization of Algorithm 3 18 D Examples with Different Graph Structures in the Heterogeneous Setting 18 E Definitions and Results from Graph Theory 19 F Upper Bounds 20 
+
+F.1 Proof of Theorem 1.5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 F.2 Proof of Theorem 1.7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 F.3 Proof of Corollary 6.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 F.4 Proof of Corollaries F.3 and 6.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 
+
+G Lower Bounds 25 
+
+G.1 Proof sketch . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 G.2 Full proof . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27 G.3 Auxiliary lemmas . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39 G.4 Proof of Lemma G.7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43 G.5 Proof of Theorem 5.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43 
+
+H One Step in Synchronous SGD 48 I Examples of Graphs 49 
+
+I.1 Star Graph . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 49 I.2 K clusters . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 50 14 I.3 p-Torus . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 51 
+
+J Practical Guidelines and Numerical Experiments 52 
+
+J.1 Numerical experiments . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 52 
+
+K Graph-Bandwidth Communication Model with Latencies 55 
+
+15 A Notations 
+
+Table 1: List of notations used throughout the paper. 
+
+Notation Meaning 
+
+[n] Denotes the finite set {1, . . . , n }.
+
+∥x∥ Euclidean norm of a vector x.
+
+g = O(f ) There exists C > 0 such that g(z) ≤ C f (z) for all z ∈ Z .
+
+g = Ω( f ) There exists C > 0 such that g(z) ≥ C f (z) for all z ∈ Z .
+
+g = Θ( f ) There exist C1, C 2 > 0 such that C1f (z) ≤ g(z) ≤ C2f (z) for all z ∈ Z .
+
+˜O, ˜Ω, and ˜Θ The same as O, Ω, and Θ, but up to logarithmic factors. 
+
+∆ Initial optimality gap, ∆ := f (x0) − f ∗.
+
+E [·] Full expectation. 
+
+Eξ [·] Expectation w.r.t. random variable ξ.
+
+hi Time required by worker i to compute one stochastic gradient. 
+
+G = ( V, E, b ) Directed weighted communication graph. 
+
+¯G = ( V, ¯E, b ) Undirected version of the communication graph G.
+
+T = ( V, F, w ) Gomory–Hu tree of the undirected graph ¯G.
+
+¯w1 ≤ · · · ≤ ¯wn−1 Sorted edge weights of the Gomory–Hu tree. 
+
+¯wn Auxiliary value defined as ∞.
+
+π(S) Permutation that sorts {hi}i∈S increasingly. 
+
+ˆG = ( V, ˆE) Unweighted multigraph obtained from ¯G by repeating {i, j } edge bij times. 
+
+T = ( ˆT1, . . . , ˆTp) Collection of edge-disjoint Steiner trees connecting a subset S ⊆ V in ˆG.16 B Visualization of Algorithm 2 on Gomory-Hu Tree from Figure 1 
+
+Step 1: k = 1 , ¯w1 = 1 
+
+S1 = {S1,1}, S1,1 = {1, 2, 3, 4, 5}
+
+h1
+
+h2
+
+h3
+
+h4h5
+
+3 2
+
+2
+
+1
+
+Step 2: remove edge of weight 1, ¯w2 = 2 
+
+S2 = {S2,1, S 2,2}
+
+h1
+
+h2
+
+h3
+
+h4h5
+
+3 2
+
+2
+
+1
+
+S2,1 = {1, 2, 3, 5}, S2,2 = {4}
+
+Step 3: remove one edge of weight 2, ¯w3 = 2 
+
+S3 = {S3,1, S 3,2, S 3,3}
+
+h1
+
+h2
+
+h3
+
+h4h5
+
+3 2
+
+2
+
+1
+
+S3,1 = {1, 2, 5}, S3,2 = {3}, S3,3 = {4}
+
+Step 4: remove second edge of weight 2, ¯w4 = 3 
+
+S4 = {S4,1, S 4,2, S 4,3, S 4,4}
+
+h1
+
+h2
+
+h3
+
+h4h5
+
+3 2
+
+2
+
+1
+
+S4,1 = {1, 2}, S4,2 = {5}, S4,3 = {3}, S4,4 = {4}
+
+Step 5: remove edge of weight 3, ¯w5 = ∞
+
+S5 = {{ 1}, {2}, {3}, {4}, {5}} 
+
+h1
+
+h2
+
+h3
+
+h4h5
+
+3 2
+
+2
+
+1
+
+Hero-SGDs: no communication 
+
+Figure 2: Step-by-step visualization of Algorithm 2 on the Gomory–Hu tree T. 
+
+In Step 1, we assume that all workers communicate to each other. In this case, if we implement Grace SGD (with S∗ → S1,1), then the guaranteed complexity would be 
+
+O
+
+ d
+
+¯w1
+
+× L∆
+
+ε + min 
+
+> m∈[|S1,1|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S1,1)
+
+!−1 
+
+1 + σ2
+
+εm 
+
+ L∆
+
+ε
+
+ .
+
+In Step 2, we split worker 4 from the other workers in T and evaluate the performance of Grace SGD (with S∗ → S2,1 and S∗ → S2,2), and record the best performance t∗ found so far (Algorithm 2). We repeat these steps until all workers are split. 
+
+Important observation: Assume that S∗ = S4,1 = {1, 2} and Grace SGD decides to use only these workers in the optimization process. This does not mean that, for instance, node 5 would not participate. On the contrary, node 5 should participate, since part of the information would flow through it (see Figure 1, where node 5 is needed to achieve the total max flow from node 1 to node 2). However, node 5 would not perform any computations or produce any gradients. It would act as a switch. See also Section C. 17 C Visualization of Algorithm 3 
+
+In this section, we consider the graph from Figure 3 and visualize the behavior of Algorithm 3.                                                 
+
+> Step 0: G= ( V, E, b )and active set S={1,2,6}
+> h1
+> h2
+> h5
+> h6b12 = 2 b16 = 3
+> b15 = 1
+> b25 = 1
+> Each ordered edge (i, j )represents transmission from worker ito worker j
+> Step 1: Graph ¯G
+> h1
+> h2
+> h5
+> h6b12 = 2 b16 = 3
+> b15 = 1
+> b25 = 1
+> h5acts only as a switch
+> Step 2: Multigraph ˆG
+> h1
+> h2
+> h5
+> h6
+> Step 3: Three edge-disjoint Steiner trees in ˆG
+> h1
+> h2
+> h5
+> h6
+> ˆT1
+> ˆT2
+> ˆT3
+> ˆT1: (1 ,2) + (1 ,6) ˆT2: (1 ,2) + (1 ,6) ˆT3: (1 ,6) + (1 ,5) + (5 ,2)
+> Step 4: Reduce to pivot worker 1
+> h1
+> h2
+> h5
+> h6
+> a2,2a6,1
+> a2,1
+> a6,2
+> a2,3
+> a6,2
+> Step 5: Broadcast from pivot worker 1
+> h1
+> h2
+> h5
+> h6
+> P
+> i∈Sai, 1
+> P
+> i∈Sai, 1P
+> i∈Sai, 2
+> P
+> i∈Sai, 2
+> P
+> i∈Sai, 3
+> P
+> i∈Sai, 3
+
+Figure 3: Step-by-step visualization of the optimal-bandwidth AllReduce for S = {1, 2, 6}. Step 0 shows the initial directed graph G = ( V, E, b ), where each ordered edge (i, j ) represents a communication link from worker i to worker j with bandwidth bij . Step 1 shows the corresponding undirected graph ¯G. Step 2 shows the multigraph ˆG, where each edge of bandwidth bij is replaced by bij parallel unit-bandwidth edges. Step 3 illustrates three edge-disjoint Steiner trees in ˆG. Step 4 shows the reduce phase: each worker sends one block through each tree to the pivot worker 1. Step 5 shows the broadcast phase: the pivot sends the aggregated blocks back through the same trees. 
+
+Important observation: Node 5 is still required in the optimization process, but only as a switch. 
+
+## D Examples with Different Graph Structures in the Heterogeneous Setting 
+
+Similarly to Section 4, we consider the same examples in the heterogeneous setting. We also assume that hi = h for all i ∈ [n].
+
+Example: One Worker. Assume that n = 1 , i.e., G is a graph with one node. In this case, Gomory-Hu T is the same as G, ¯w1 = ∞ and S1,1 = {1} in Algorithm 2, and (5) = O  hσ 2L∆/ε2 + hL ∆/ε
+
+ ,
+
+and we get the same result as in the homogeneous setup. 
+
+Example: Star Graph (Centralized Setting; Figure 5). In this case, ¯w1 = b. Thus, 
+
+(5) = O
+
+ db + hσ 2
+
+> nε
+
+ L∆ 
+
+> ε
+
++ hL ∆
+
+> ε
+
+
+
+.
+
+18 Example: p-Torus. Since ¯w1 = 2 pb in Figure 8, 
+
+(5) = O
+
+ dpb + hσ 2
+
+> nε
+
+ L∆ 
+
+> ε
+
++ hL ∆
+
+> ε
+
+
+
+.
+
+Example: all-to-all. In the all-to-all graph G,
+
+(5) = O
+
+ d 
+
+> (n−1) b
+
++ hσ 2
+
+> nε
+
+ L∆ 
+
+> ε
+
++ hL ∆
+
+> ε
+
+
+
+,
+
+for all n ≥ 2.
+
+Example: K clusters. Using Figure 6, one can show that ¯w1 and Theorem 1.7 yields the time complexity 
+
+O
+
+ dL ∆ 
+
+> bslow ε
+
++ hσ 2L∆ 
+
+> nε 2
+
++ hL ∆
+
+> ε
+
+
+
+.
+
+Unlike the homogeneous setting (Section 4), this complexity tends to ∞ if bslow → 0.
+
+Example: optimization with switches. The heterogeneous setting can also support switches, but this would require extending the setup described in Section 5. Briefly, under Assumption 1.4, we assume that there are two subsets, Sw and Ss, such that Sw ∪ Ss = [ n] and Sw ∩ Ss = ∅, where Sw
+
+is the set of real workers and Ss is the set of switches. Then, we solve 
+
+min 
+
+> x∈Rd
+
+n
+
+f (x) := 1 
+
+> |Sw|
+
+P 
+
+> i∈Sw
+
+fi(x)
+
+o
+
+. (10) Using a modified version of Algorithm 4, where only |Sw| workers compute stochastic gradients and run AllReduce, one can extend Theorem 1.7 and prove the time complexity 
+
+O max 
+
+(   
+
+> dα¯G(Sw)
+
+, max 
+
+> i∈Sw
+
+hi, σ2  
+
+> |Sw|ε
+> 1
+> |Sw|
+
+P
+
+> i∈Sw
+
+hi
+
+!) 
+
+> L∆
+> ε
+
+!
+
+seconds, where α ¯G(Sw) is the minimum value of an Sw-cut in ¯G (Definition E.5 and Theorem F.1). When Sw = [ n] and Ss = ∅, this complexity reduces to (5). 
+
+## E Definitions and Results from Graph Theory 
+
+In this section, we list the standard definition and results from graph theory. 
+
+Definition E.1. Given an undirected weighted graph ¯G = ( V, ¯E, b ) and a vertex set U ⊆ V , we define 
+
+δ(U ) := { e = {x, y } ∈ ¯E : x ∈ U, y ∈ V \ U },
+
+that is, the set of edges with exactly one endpoint in U .
+
+Definition E.2. Given an undirected weighted graph ¯G = ( V, ¯E, b ) and two vertices u, v ∈ V , a u–v
+
+cut is a partition (U, V \ U ) of V such that u ∈ U and v ∈ V \ U . The value of the cut is defined as 
+
+X 
+
+> e∈δ(U)
+
+be.
+
+Definition E.3. Given an undirected weighted graph ¯G = ( V, ¯E, b ) and two vertices u, v ∈ V , we define α ¯G(u, v ) as the minimum value of a u–v cut in ¯G. Moreover, any u–v cut that attains this minimum value is called a minimum u–v cut .
+
+Definition E.4. Given an undirected weighted graph ¯G = ( V, ¯E, b ) and a vertex set S ⊆ V , an S-cut 
+
+is a partition (U, V \ U ) of V such that 
+
+U ∩ S̸ = ∅ and (V \ U ) ∩ S̸ = ∅.
+
+The value of the cut is defined as X 
+
+> e∈δ(U)
+
+be.
+
+Definition E.5. Given an undirected weighted graph ¯G = ( V, ¯E, b ) and a vertex set S ⊆ V , we define α ¯G(S) as the minimum value of an S-cut in ¯G. Moreover, any S-cut that attains this minimum value is called a minimum S-cut .19 Definition E.6 (Gomory and Hu (1961)) . A Gomory–Hu tree T = ( V, F, w ) of an undirected weighted graph ¯G = ( V, ¯E, b ) is a tree T = ( V, F, w ), which consists of a tree edge set F and capacities w such that, for every edge {i, j } ∈ F , δ(W ) is a minimum i − j cut in ¯G and wij is the value of this cut, where W is one component 4 of T − { i, j }.Notice that, by definition, we have wij = α ¯G(i, j ) for all {i, j } ∈ F . Let us also recall the following important theorem. 
+
+Theorem E.7 (e.g. (Schrijver et al., 2003)) . Let T = ( V, F, w ) be a Gomory–Hu tree of ¯G. For any two vertices s, t ∈ V , consider the unique s–t path in T , and let {u, v } ∈ F be an edge on this path minimizing the weight wuv . Then, 
+
+α ¯G(s, t ) = α ¯G(u, v ),
+
+and for any component K of T − { u, v }, the cut δ(K) is a minimum s–t cut in ¯G.
+
+It turns out that the Gomory–Hu tree naturally captures the connectivity structure and bottlenecks of both graphs ¯G and G. Indeed, consider any tree edge {u, v } ∈ F and the corresponding components 
+
+W1 and W2 obtained by removing the edge {u, v } from T . Then, α ¯G(s, t ) ≤ α ¯G(u, v ) = wuv for all s ∈ W1 and t ∈ W2 by Theorem E.7. By the max-flow min-cut theorem, the maximum s–t flow 
+
+in ¯G is upper bounded by wuv .
+
+## F Upper Bounds 
+
+F.1 Proof of Theorem 1.5 Theorem 1.5 (Upper Bound in the Homogeneous Setting) . Assume that Assumptions 1.1, 1.2, and 1.3 hold. Then Grace SGD (Algorithm 1) finds an ε-stationary point of (1) after K = ⌈4L∆/ε⌉ iterations, and the time complexity under Assumption 1.4 is 
+
+O min  
+
+> k∈[n]
+> d
+> ¯wk
+
++ min  
+
+> p∈[k]
+
+min 
+
+> m∈[|Sk,p |]
+
+"
+
+> 1
+> mm
+
+P
+
+> i=1 1
+> hπi(Sk,p )
+
+−1 
+
+1 + σ2
+
+> mε
+
+#! 
+
+> L∆
+> ε
+
+!
+
+(3) 
+
+up to a universal constant factor, where {Sk,p }k∈[n],p ∈[k] and { ¯wk}k∈[n] are the sequences generated by Algorithm 2, and π(S) is a permutation that sorts {hi}i∈S : hπ1(S) ≤ · · · ≤ hπ|S|(S).
+
+Proof. (Iteration rate ). The proof of the iteration is standard and we prove it for completeness. Fix any subset of workers S ⊆ [n], and let 
+
+B = max 
+
+ σ2
+
+ε
+
+
+
+, 1
+
+
+
+.
+
+At iteration k, Grace SGD forms the mini-batch estimator 
+
+gk = 1
+
+B
+
+X
+
+> i∈SBki
+
+X
+
+> j=1
+
+∇f (xk; ξki,j ), X
+
+> i∈S
+
+Bki = B. 
+
+By Assumption 1.3, E  gk xk = ∇f (xk) and E  ∥gk − ∇ f (xk)∥2 xk ≤ σ2 
+
+> B
+
+≤ ε. 
+
+Using L-smoothness of f and the update 
+
+xk+1 = xk − γg k, γ = 12L ,
+
+we get 
+
+E  f (xk+1 ) xk ≤ f (xk) − γ∥∇ f (xk)∥2 + Lγ 2
+
+2 E  ∥gk∥2 xk .
+
+Since 
+
+E  ∥gk∥2 xk = ∥∇ f (xk)∥2 + E  ∥gk − ∇ f (xk)∥2 xk ≤ ∥∇ f (xk)∥2 + ε, 
+
+> 4
+
+Removing the edge {i, j } from the tree T yields two sets of nodes W1 and W2, and W can be either of them, without loss of generality, since δ(W1) = δ(W2).
+
+20 it follows that 
+
+E  f (xk+1 ) xk ≤ f (xk) −
+
+
+
+γ − Lγ 2
+
+2
+
+
+
+∥∇ f (xk)∥2 + Lγ 2
+
+2 ε
+
+= f (xk) − 38L ∥∇ f (xk)∥2 + ε
+
+8L .
+
+Rearranging and taking full expectation, 
+
+38L E
+
+h
+
+∇f (xk) 2i
+
+≤ E f (xk) − E f (xk+1 ) + ε
+
+8L .
+
+Summing over k = 0 , . . . , K − 1 gives 
+
+38L
+
+> K−1
+
+X
+
+> k=0
+
+E ∥∇ f (xk)∥2 ≤ f (x0) − inf 
+
+> x∈Rd
+
+f (x) + Kε 
+
+8L = ∆ + Kε 
+
+8L .
+
+Hence 
+
+1
+
+K
+
+> K−1
+
+X
+
+> k=0
+
+E
+
+h
+
+∇f (xk) 2i
+
+≤ 8L∆3K + ε
+
+3 .
+
+So it is enough to choose K such that the right-hand side is at most ε. In particular, 
+
+K =
+
+ 4L∆
+
+ε
+
+
+
+is sufficient, which proves the iteration complexity. (Time complexity ). It remains to upper bound the time complexity of one iteration. Consider the chosen subset of workers S∗ ⊆ [n] in Algorithm 2. Under Assumption 1.4 (Computation Model), the time required to collect a batch of size B = max 
+
+nl σ2
+
+> ε
+
+m
+
+, 1
+
+o
+
+by the workers from S∗ is at most 
+
+min 
+
+> m∈[|S∗|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S∗)
+
+!−1
+
+1 + σ2
+
+mε 
+
+
+
+seconds (Lemma F.2). Moreover, by our construction in Algorithm 2, we know that the value of a minimum S∗-cut (Definition E.5) is greater than or equal to ¯wk∗ . Thus, there exists an optimal-bandwidth AllReduce algorithm (Algorithm 3, Theorem F.1) such that the allreduce operation is bounded by O (d/ ¯wk∗ ) seconds. Hence one iteration on this subset costs at most 
+
+O
+
+ d
+
+¯wk∗
+
++ min 
+
+> m∈[|S∗|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S∗)
+
+!−1
+
+1 + σ2
+
+mε 
+
+ .
+
+Algorithm 2 chooses the subset S∗ minimizing this quantity over all candidates {Sk,p }. Therefore, the per-iteration time is at most 
+
+min 
+
+> k∈[n]
+
+ d
+
+¯wk
+
++ min  
+
+> p∈[k]
+
+min 
+
+> m∈[|Sk,p |]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(Sk,p )
+
+!−1 
+
+1 + σ2
+
+mε 
+
+ .
+
+Multiplying by the number of iterations K =  4L∆
+
+> ε
+
+ , we get (3). 
+
+Theorem F.1. Let ¯G = ( V, ¯E, b ) be the undirected version of G : {i, j } ∈ ¯E with weight bij iff 
+
+(i, j ) ∈ E with weight bij . Under Assumption 1.4 (Graph-Bandwidth Communication Model), the time complexity of the AllReduce algorithm in Algorithm 3 is 
+
+O
+
+ dα ¯G(S)
+
+
+
+,
+
+where α ¯G(S) denotes the value of a minimum S-cut in the graph ¯G (Definition E.5). 
+
+21 Proof. Consider the unweighted multigraph ˆG = ( V, ˆE) obtained from ¯G = ( V, ¯E, b ) by replacing every edge {i, j } ∈ ¯E of weight bij with bij parallel edges of unit bandwidth. Clearly, any cut in ¯G
+
+and the corresponding cut in ˆG have the same value. Therefore, 
+
+α ¯G(S) = α ˆG(S).
+
+We explain in the main part that in practice, the system still has a single edge with bandwidth 
+
+bij ; however, the behavior of bij parallel unit-bandwidth edges can be simulated by multiplexing transmissions using the interleaving strategy described in Section 1. By the Steiner tree packing result of Lau (2004, Theorem 1.2), there exists a polynomial-time algorithm that finds a collection of 
+
+p = Θ  α ˆG(S) = Θ  α ¯G(S)
+
+edge-disjoint trees 
+
+T = ( ˆT1, . . . , ˆTp)
+
+in ˆG, each of which connects all vertices of S.We use these trees as parallel communication pipes. Split every local vector ai ∈ Rd stored at worker 
+
+i ∈ S into p disjoint blocks, 
+
+ai =  ai, 1, . . . , a i,p 
+
+,
+
+where each block has size O(d/p ) coordinates (w.l.o.g., we assume that d is divisible by p; otherwise, we can pad with zero values). Assign block ℓ to tree ˆTℓ.Fix any pivot worker r ∈ S. We first perform a reduce operation. For every ℓ ∈ [p] and any worker 
+
+i ∈ S, find the unique path from i to the root r. Each worker i ∈ S starts streaming the coordinates of its block ai,ℓ along the unique path in ˆTℓ toward r. Every intermediate node waits until it receives the next coordinate from all of its children, i.e., the neighbors of the intermediate node that send coordinates to the root through this intermediate node. Importantly, the intermediate node does not wait to receive the entire block of size Θ( d/p ). As soon as the first coordinate is received from all children, the node aggregates these values (adding its own coordinate if it belongs to S) and immediately forwards the result to its parent, i.e., the next node on the path towards the root r. The same procedure is then applied to subsequent coordinates. Since the trees are edge-disjoint, these communications do not interfere with one another. Moreover, every edge in ˆG has unit bandwidth, so the time needed to transmit one block through one tree is proportional to the block size, that is, 
+
+O(d/p ).
+
+Thus, after O(d/p ) seconds, the pivot worker r has obtained the sum of block ℓ for every ℓ ∈
+
+[p], and hence the full sum P 
+
+> i∈S
+
+ai. In practice, of course, in addition to sending the values of the coordinates, the workers might also transfer the indices of these coordinates and other meta-information; nevertheless, this would increase the cost by at most a multiplicative constant factor 
+
+Θ(1) .Next, we perform a broadcast operation. Using the same collection of trees, the pivot worker sends block ℓ of the aggregated vector through ˆTℓ, and intermediate nodes forward the received information further. Importantly, the intermediate node does not wait to receive the entire block and immediately broadcasts a new coordinate upon receiving it, without waiting for the next ones. Again, because the trees are edge-disjoint, all broadcasts proceed in parallel without congestion, and the required time is 
+
+O(d/p ).
+
+Combining the reduce and broadcast phases, the total communication time is 
+
+O(d/p ) + O(d/p ) = O(d/p ).
+
+Finally, since 
+
+p = Θ  α ¯G(S),
+
+we obtain that the AllReduce time complexity is 
+
+O
+
+ dα ¯G(S)
+
+
+
+.
+
+22 Lemma F.2. Let S ⊆ [n] be a subset of workers. The time required to collect a batch of size B using workers in S under the Computation Model is at most 
+
+min 
+
+> m∈[|S|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1 
+
+1 + Bm
+
+ (11) 
+
+seconds, π(S) is a permutation that sorts {hi}i∈S : hπ1(S) ≤ · · · ≤ hπ|S|(S).
+
+Proof. Let 
+
+t = min 
+
+> m∈[|S|]
+
+
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1
+
+(B + m)
+
+ .
+
+As soon as a worker finishes computing a stochastic gradient, it immediately starts computing the next one. Hence, by time t, worker i will have computed at least 
+
+ thi
+
+
+
+stochastic gradients. Therefore the total number of gradients computed by workers in S by time t is at least 
+
+X
+
+> i∈S
+
+ thi
+
+
+
+≥
+
+> m∗
+
+X
+
+> i=1
+
+ thπi(S)
+
+
+
+,
+
+where 
+
+m∗ = arg min 
+
+> m∈[|S|]
+
+
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1
+
+(B + m)
+
+ .
+
+Since ⌊x⌋ ≥ x − 1 for all x ≥ 0, we obtain 
+
+> m∗
+
+X
+
+> i=1
+
+ thπi(S)
+
+
+
+≥
+
+> m∗
+
+X
+
+> i=1
+
+ thπi(S)
+
+− 1
+
+
+
+= t
+
+> m∗
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+− m∗ =
+
+> m∗
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+! 
+
+> m∗
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1
+
+(B + m∗)
+
+ − m∗ = B. 
+
+Thus, by time t, at least B stochastic gradients have been computed. 
+
+F.2 Proof of Theorem 1.7 Theorem 1.7 (Upper Bound in the Heterogeneous Setting) . Assume that Assumptions 1.1, 1.2, and 5.1 hold. Then Leon SGD (Algorithm 4) finds an ε-stationary point of (8) after K = Θ ( L∆/ε)
+
+iterations, and the time complexity under Assumption 1.4 is 
+
+O
+
+
+
+max 
+
+ 
+
+> d
+> ¯w1
+
+, max  
+
+> i∈[n]
+
+hi, σ2
+
+> nε
+
+
+
+> 1
+> nn
+
+P
+
+> i=1
+
+hi
+
+ 
+
+> L∆
+> ε
+
+
+
+(5) 
+
+seconds, where ¯w1 ≡ min {i,j }∈ F wij is the minimum edge weight in the Gomory–Hu tree T =(V, F, w ) of ¯G. Equivalently, ¯w1 is the global minimum cut value of G.Proof. Notice that Leon SGD (Algorithm 4) is a Minibatch SGD method with steps 
+
+xk+1 = xk − γn
+
+> n
+
+X
+
+> i=1
+
+1
+
+BiBiX
+
+> j=1
+
+∇fi(xk; ξkij ). (12) 23 Similarly to (Tyurin and Richtárik, 2023, 2024), using the standard SGD analysis (Lan, 2020), one can show that this method converges after O   L∆
+
+> ε
+
+ iterations due to the fact that 
+
+ 1
+
+> n
+
+Pni=1 1
+
+> Bi
+
+−1
+
+≥
+
+max {⌈ σ2
+
+/ε⌉, n }/n. It is left to bound the time of one iteration under Assumption 1.4. The time to collect the minibatch in (12) is the same as in (Tyurin and Richtárik, 2023, 2024) and can be bounded by 
+
+O max 
+
+(
+
+max  
+
+> i∈[n]
+
+hi, σ2
+
+nε 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+hi
+
+!)! 
+
+(13) (e.g., see Theorem A.4 in (Tyurin and Richtárik, 2023)). The time to run AllReduce can be upper bounded by 
+
+O
+
+ d
+
+min  
+
+> {i,j }∈ F
+
+wij 
+
+ (14) due to Theorem F.1, since ¯w1 := min  
+
+> {i,j }∈ F
+
+wij is the smallest value of a min-cut in the graph ¯G, which is the same as the value of a minimum [n]-cut in the graph ¯G. It remains to sum (13) and (14) and multiply them by O   L∆
+
+> ε
+
+.
+
+F.3 Proof of Corollary 6.1 Corollary 6.1 (Sparse Graphs; Proof in Section F.3) . In view of Theorems 3.2 and 1.7, if i) hi = h
+
+for all i ∈ [n]; ii) the degree of every node in G is bounded by a small number p = Θ(1); iii) and all edges have the same bandwidth b. When σ2
+
+/ε ≥ Ω( d/bh ), the optimal time complexity for solving both (1) and (8) is ˜Θ  dL ∆/bε + hσ 2L∆/nε 2 + hL ∆/ε
+
+ and it is achieved by Leon SGD. Proof. Under the new assumptions, the lower bound in Theorem 3.2, proved for both the homoge-neous and heterogeneous settings, is greater than or equal to 
+
+˜Ω
+
+min 
+
+ 
+
+> dL ∆
+> pbε
+
++ hL ∆ 
+
+> ε
+
++ hσ 2L∆
+
+> nε 2
+
+| {z }
+
+> L1:=
+
+, hL ∆ 
+
+> ε
+
++ hσ 2L∆
+
+> ε2
+
+| {z }
+
+> L2:=
+
+ (15) since the weights in the corresponding Gomory-Hu tree are less than or equal to pb. On the other hand, the upper bound by Leon SGD in Theorem 1.7 is less than or equal U := O dL ∆/bε +
+
+> hL ∆
+
+/ε + hσ 2L∆/nε 2
+
+ since all edges have the same bandwidth b. Hero SGD with complexity L2 can potentially improve U when ε is not too large and n is small. However, in the regime when ε is small and σ is large ( σ2
+
+/ε ≥ Ω( d/bh )), the term L1 can be smaller than or equal to L2, and in this case, comparing L1 and U, one can see that L1 can improve the communication term by at most p
+
+times. If p = Θ(1) , i.e., the graph is sparse, then it is infeasible to improve the time complexity U
+
+even in the homogeneous setting. Note that U can also be achieved with a naive mini-batch version of Synchronous SGD: xk+1 = xk − γnB 
+
+Pni=1 
+
+PBj=1 ∇fi(xk; ξkij ) with the simple communication approach from Section H. 
+
+F.4 Proof of Corollaries F.3 and 6.2 Corollary F.3 (Proof in Section F.4) . In view of Theorems 3.2, if hi = h for all i ∈ [n] and bij = b for all (i, j ) ∈ E, then the lower bound is 
+
+˜Ω
+
+
+
+min 
+
+n
+
+min m∈[n−1] 
+
+h dL ∆ 
+
+> mbε
+
++ hσ 2L∆
+
+> n(m)ε2
+
+i
+
++ hL ∆ 
+
+> ε
+
+, hL ∆ 
+
+> ε
+
++ hσ 2L∆
+
+> ε2
+
+o 
+
+, where n(m) is the number of nodes having the number of incident edges greater than or equal m. 
+
+Proof. Using (7), the lower bound is 
+
+LB := ˜Ω
+
+
+
+min 
+
+> k∈[n]
+
+ d
+
+¯wk
+
++ min 
+
+> p∈[k]
+
+hσ 2
+
+|Sk,p | ε
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+24 in both homogeneous and heterogeneous settings when hi = h for all i ∈ [n]. Clearly, 
+
+LB = ˜Ω
+
+ d
+
+¯wk∗
+
++ hσ 2
+
+|Sk∗,p ∗ | ε
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+for some k∗ ∈ [n] and p∗ ∈ [k∗]. If |Sk∗,p ∗ | = 1 , then Corollary F.3 is true. Let |Sk∗,p ∗ | ≥ 2, then necessarily k∗ ∈ [n − 1] . Notice that ¯wk∗ = ik∗ b for some ik∗ ∈ [n − 1] since all bandwidths equal to b. Thus 
+
+LB = ˜Ω
+
+ dbi k∗
+
++ hσ 2
+
+|Sk∗,p ∗ | ε
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+.
+
+It is left to show that |Sk∗,p ∗ | ≤ n(ik∗ ). By construction, Sk∗,p ∗ is a set of nodes in which each node has at least ik∗ incident edges (if one of them had fewer than ik∗ incident edges, then the nodes in Sk∗,p ∗ would have been disconnected in Algorithm 2 at some iteration j ∈ [k∗ − 1] , because there would exist an edge e in T with we < bi k∗ that separates two nodes in Sk∗,p ∗ ; this leads to a contradiction). Thus, |Sk∗,p ∗ | ≤ n(ik∗ ) and 
+
+LB ≥ ˜Ω
+
+ dbi k∗
+
++ hσ 2
+
+n(ik∗ )ε
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+≥ ˜Ω
+
+
+
+min 
+
+> m∈[n−1]
+
+ dbm + hσ 2
+
+n(m)ε
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+.
+
+Corollary 6.2 (Proof in Section F.4; see also dual Corollary F.3) . In view of Theorems 3.2, if 
+
+hi = h for all i ∈ [n] and bij = b for all (i, j ) ∈ E, then the lower bound in all settings is ˜Ω
+
+
+
+min 
+
+n
+
+min m∈{ 2,...,n }
+
+h dL ∆ 
+
+> k(m)bε
+
++ hσ 2L∆
+
+> mε 2
+
+i
+
++ hL ∆ 
+
+> ε
+
+, hL ∆ 
+
+> ε
+
++ hσ 2L∆
+
+> ε2
+
+o 
+
+, where k(m) is the m-th largest edge degree. Proof. Similarly to the previous proof, a lower bound is 
+
+LB = ˜Ω
+
+ d
+
+¯wk∗
+
++ hσ 2
+
+|Sk∗,p ∗ | ε
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+for some k∗ ∈ [n] and p∗ ∈ [k∗]. If |Sk∗,p ∗ | = 1 , then the lower bound is true. Let |Sk∗,p ∗ | ≥ 2 and 
+
+¯d1 ≥ · · · ≥ ¯d|Sk∗,p ∗ | be the node degrees of the nodes in set Sk∗,p ∗ . Notice that ¯wk∗ ≤ b × ¯d|Sk∗,p ∗ |
+
+(the case ¯wk∗ > b × ¯d|Sk∗,p ∗ | is impossible since there exists a node in Sk∗,p ∗ with degree ¯d|Sk∗,p ∗ |,
+
+which would be separated by Algorithm 2 in some iteration j ∈ [k∗ − 1] from another node in Sk∗,p ∗ ). Thus, 
+
+LB ≥ ˜Ω d
+
+¯d|Sk∗,p ∗ |b + hσ 2
+
+|Sk∗,p ∗ | ε
+
+!
+
+L∆
+
+ε + hL ∆
+
+ε
+
+!
+
+≥ ˜Ω
+
+ dk(|Sk∗,p ∗ |)b + hσ 2
+
+|Sk∗,p ∗ | ε
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+≥ ˜Ω
+
+
+
+min 
+
+> m∈{ 2,...,n }
+
+ dk(m)b + hσ 2
+
+mε 
+
+ L∆
+
+ε + hL ∆
+
+ε
+
+
+
+where we use that ¯d|Sk∗,p ∗ | ≤ k(|Sk∗,p ∗ |).
+
+## G Lower Bounds 
+
+G.1 Proof sketch 
+
+In this section, we give a proof sketch of Theorem 1.5. 
+
+(“Worst-case” function and stochastic oracle). In the first step of the proof, we follow (Carmon et al., 2020; Arjevani et al., 2022; Huang et al., 2022; Tyurin and Richtárik, 2023) and construct a “worst-case” function. However, one crucial detail is that we use the function FT,K,a from (Tyurin, 2026) instead of the function from (Carmon et al., 2020). Recall the function FT from (Carmon et al., 2020), which has two important properties: i) if an algorithm wants to find an ε–stationary 25 point, then it is necessary to discover 5 the last T th coordinate; ii) an algorithm can discover the new coordinate j + 1 only if the jth coordinate is discovered. The new construction FT,K,a by Tyurin (2026) generalizes the last property: an algorithm can discover the new coordinate j + 1 only if the 
+
+jth , (j − 1) th , . . . , (j − K + 1) th coordinates are discovered. The stochastic oracle is the same as in (Arjevani et al., 2022): it simply zeros out the newly discovered coordinate, the one with the largest index among all discovered coordinates, with probability 1 − pσ , where pσ = Θ ( ε/σ2).
+
+(Time complexity). Recall Algorithm 2 that generates the sequences { ¯wk}k∈[n] and {Sk,p }k∈[n],p ∈[k]
+
+(see the description in Section 2). Now, consider the lower bound (7), which is equivalent to 
+
+t∗ := min 
+
+> k∈[n]
+
+¯t(k). (16) where 
+
+¯t(k) := 1
+
+c1 log c2 (n + 1) × max 
+
+ d
+
+¯wk
+
+, min  
+
+> p∈[k]
+
+Bh(σ2
+
+/ε, S k,p )
+
+ L∆
+
+ε , (17) 
+
+c1 := 2 43 37514 π2e10 , c 2 := 14 , B h(σ2
+
+/ε, S ) := min m∈[|S|]
+
+ 1
+
+> m
+
+Pmi=1 1
+
+> hπi(S)
+
+−1 
+
+1 + σ2
+
+> εm
+
+
+
+,
+
+and π(S) is a permutation that sorts {hi}i∈S : hπ1(S) ≤ · · · ≤ hπ|S|(S).
+
+Our goal now is to show that (16) is a valid lower bound. Notice that ¯w1 ≤ · · · ≤ ¯wn, and 
+
+{Sk+1 ,p }p∈[k+1] is constructed from {Sk,p }p∈[k] by splitting one of the sets. 
+
+High-level intuition of why (17) is valid lower bound: Assume that an algorithm decides to use all workers ( k = 1 ). In this case, all workers are allowed to work together to obtain the best possible computation term Bh(σ2
+
+/ε, S 1,1) = Bh(σ2
+
+/ε, [n]) . However, intuitively, the algorithm must pay the communication price ·/ ¯w1 because ¯w1 is the smallest possible value of a min-cut in the graph 
+
+G, and there exist two workers such that the maximum flow between them is bounded by ¯w1. No matter what routing strategy the algorithm chooses, if it wants to transfer a vector of size 
+
+ℓ between these two workers, it is necessarily required to wait ℓ/ ¯w1 seconds. Therefore, the only way to remove the dependence on ·/ ¯w1 is for the algorithm to “disconnect” the workers separated by the bottleneck min-cut ¯w1. This way, we get the sets S2,1 and S2,2. Notice that 
+
+min {Bh(σ2
+
+/ε, S 2,1), B h(σ2
+
+/ε, S 2,2)} ≤ Bh(σ2
+
+/ε, S 1,1).
+
+Recall that { ¯wk}k∈[n] and {min p∈[k] Bh(σ2
+
+/ε, S k,p )}k∈[n] are non-decreasing. Thus, expect one corner case when ¯w1 is large, it means that there exists ¯k such that d/ ¯w¯k ≈ min p∈[¯k] Bh(σ2
+
+/ε, S ¯k,p ).
+
+In particular, we can show that there exists ¯k such that 
+
+t∗ = 1
+
+c1 log c2 (n + 1) × min 
+
+ d
+
+¯w¯k
+
+, min 
+
+> p∈[¯k+1]
+
+Bh(σ2
+
+/ε, S ¯k+1 ,p )
+
+ L∆
+
+ε . (18) In other words, either ¯k or ¯k + 1 is the optimal index that balances the two sequences, and the partition 
+
+{S¯k+1 ,p }p∈[¯k+1] is one that an optimal algorithm would choose to identify the best subset of workers (see Figure 4). Thus, it remains to use this partition of workers and show that, with this partition, the workers would require (18) seconds with high probability. (Analysis of the partition .) In Figure 4, consider the (meta) node S¯k+1 ,5. For simplicity, assume that hi = h for all i ∈ [n]. There are S¯k+1 ,5 workers in S¯k+1 ,5. If S¯k+1 ,5 were on its own and isolated, then the required time to find an ε–stationary point would be 
+
+Θ  Bh(σ2
+
+/ε, S ¯k+1 ,p ) L∆
+
+ε = h × L∆
+
+ε + σ2L∆
+
+S¯k+1 ,p ε2
+
+!
+
+(Arjevani et al., 2022; Tyurin and Richtárik, 2023). However, in the tree, S¯k+1 ,5 is connected to other workers through one edge with weight ≤ ¯wk. It means that the maximal number of coordinates per second received from [n] \ S¯k+1 ,5 is bounded by ¯wk.
+
+In the construction of the “worst-case” function, we randomly permute the coordinates, meaning that when workers [n] \ S¯k+1 ,5 send a sequence of coordinates to S¯k+1 ,5, the probability of sending the 
+
+> 5
+
+In the paper, when we say that a worker i discovers a coordinate with index j, it means that it adds a vector to Ii in which the corresponding value of that coordinate is non-zero. 
+
+26 S¯k+1 ,1                      
+
+> S¯k+1 ,2S¯k+1 ,3S¯k+1 ,4
+> S¯k+1 ,9S¯k+1 ,8
+> S¯k+1 ,7
+> S¯k+1 ,5S¯k+1 ,6S¯k+1 ,¯kS¯k+1 ,¯k+1 . . . . . .
+> ≤¯w¯k
+> ≤¯w¯k
+> ≤¯w¯k
+> ≤¯w¯k≤¯w¯k
+> ≤¯w¯k
+> ≤¯w¯k
+> ≤¯w¯k
+> ≤¯w¯k≤¯w¯k
+> ≤¯w¯k≤¯w¯k
+
+Figure 4: Tree of metanodes corresponding to the partition {S¯k+1 ,p }p∈[¯k+1] . Each node represents a subset of workers, and every edge corresponds to a communication link whose bandwidth is at most 
+
+¯w¯k.“right” coordinate is less than or equal to ˜O (1/d). Thus, on average, they have to send d coordinates to provide a “useful” coordinate, which would take at least d/ ¯w¯k seconds. In this way, we can show that it would require at least ≈ min 
+
+n d
+
+> ¯w¯k
+
+, B h(σ2
+
+/ε, S ¯k+1 ,5)
+
+o L∆ 
+
+> ε
+
+seconds to solve the problem by one of the workers from S¯k+1 ,5.
+
+(Recursive analysis .) The final main challenge was to extend this idea not only to the leaves ( ¯L1 = {S¯k+1 ,5, S ¯k+1 ,6, S ¯k+1 ,¯k, S ¯k+1 ,¯k+1 , . . . }), but to all nodes in Figure 4. Moreover, it should hold for all nodes at the same time. In the full proof, we discovered a recursive technique and the 
+
+leaf-branch peeling procedure that, starting from the leaves, recursively proves a similar result for all nodes. Roughly speaking, using the Chernoff’s method, we show 
+
+≈ min 
+
+ d
+
+¯w¯k
+
+, B h(σ2
+
+/ε, S )
+
+ L∆
+
+ε
+
+is a lower bound for all leaves S ∈ ¯L1, including S¯k+1 ,5. Then, we show that this is true for all S ∈
+
+¯B1, where ¯B1 is the set of “line nodes” incident to ¯L1. In Figure 4, ¯B1 = {S¯k+1 ,7, S ¯k+1 ,9, S ¯k+1 ,8}.
+
+Then, we “remove” ¯L1 ∪ ¯B1 and repeat the steps again. In the next step, the new “leaves” ¯L2 are 
+
+S¯k+1 ,2 and S¯k+1 ,4. Notice that S¯k+1 ,2 has one edge connected to S¯k+1 ,1 and two edges connected to ¯L1 ∪ ¯B1. Thus, it has many more sources from which to discover a new coordinate. Nevertheless, recursively, we have already shown that ¯L1 ∪ ¯B1 cannot provide much useful information to S¯k+1 ,2;
+
+thus, the only possible direction is the edge corresponding to S¯k+1 ,1. Controlling the “information leak” from only one edge is possible and easier. In the proof, due to the union bounds, Chernoff’s method “accumulates probabilities,” and we obtain an exponential dependence on the number of steps ¯d in the leaf-branch peeling procedure. Luckily, we can show that ¯d = O(log n), which is sufficient to obtain an optimal lower bound up to logarithmic factors. The proof of Theorem 1.7 is arguably more straightforward and self-contained, and should be clear once the proof of Theorem 1.5 is understood. 
+
+G.2 Full proof 
+
+In this section, we provide the full proof of the lower bound in the homogeneous setting. We consider Protocol 5 and Assumption G.1. 27 Protocol 5 
+
+1: Input: Algorithm A
+
+2: Init Ii = ∅ (all available information) on worker i for all i ∈ [n]
+
+3: Run the following two loops in parallel on the workers. 
+
+4: for i = 1 , . . . , n (in parallel on the workers) do 
+
+5: while true do 
+
+6: Algorithm A calculates a new point x based on local information Ii: (takes 0 seconds) any vector x ∈ Rd such that supp (x) ⊆ ∪ y∈Ii supp (y) (supp (v) := { i ∈ [d] : vi̸ = 0 })
+
+7: Calculate one stochastic gradient ∇f (x; ξ), ξ ∼ D ξ (ξ are i.i.d.) (takes hi seconds) 
+
+8: Add ∇f (x; ξ) to Ii (takes 0 seconds) 
+
+9: Optionally wait before starting the next calculation 
+
+10: end while 
+
+11: end for 
+
+12: for i = 1 , . . . , n (in parallel on the workers) do 
+
+13: for k = 0 , 1, . . . do 
+
+14: Algorithm A calculates a new point s based on local information Ii: (takes 0 seconds) any vector s ∈ Rd such that supp (s) ⊆ ∪ y∈Ii supp (y)
+
+15: Algorithm A chooses any destination worker j (takes 0 seconds) 
+
+16: Compute the transformation Cki (s; ζ), ζ ∼ D ζ (takes 0 seconds; Assumption G.1) 
+
+17: Asynchronously send Cki (s; ζ) to worker j through G using any feasible routing strategy (the protocol does not wait for the send to complete); add (a) Cki (s; ζ) to Ij once it arrives (the time depends on G, the chosen routing strategy, and the current network load) 
+
+18: Optionally wait before starting the next send 
+
+19: end for 
+
+20: end for 
+
+(a vector may be added to Ij while the algorithm computes a new point; in this case, the protocol first adds the vector, incurring no delay since the operation takes 0 seconds) (a): The worker that receives the compressed vector decompresses using the operation P  
+
+> (ν,v )∈C ki(s;ζ)
+
+v · eν , where eν is the νth vector of the standard basis. 
+
+Assumption G.1 (Predefined and Random Sparsifiers) . Assume that the optimized function f :
+
+Rd → R is a randomly generated function such that f (x) = ˆf (P x ), where ˆf is a deterministic function and P is a random permutation drawn from a distribution DP . For all i ∈ [n] and k ≥ 0,
+
+an algorithm A is allowed to use any mapping Cki : Rd × Sζ → [d]pki × Rpki with any pki ≥ 1 such that [Cki (s; ζ)] j = ( νki,j , c ki,j · [s]νki,j ) for all s ∈ Rd, ζ ∈ Sζ , and j ∈ [pki ], where cki,j ≡ cki,j (ζ) ∈ R
+
+is an arbitrary random value, and νki,j = νki,j (ζ) ∈ [d] is an arbitrary random coordinate such that the distribution of {νki,j }k≥0,i ∈[n],j ∈[pki ] is independent of P ∼ D P .
+
+In other words, if we change the optimized function or permute the coordinates in f , then the generated indices do not change. Assumption G.1 is one way of expressing that the workers and the algorithm do not take into account the local information and do not depend on {Ii}i∈[n] or s when choosing the indices in the sparsifiers. It is general enough to support sending the full vector, sending a predefined block of the vector as is done in AllReduce algorithms, or even a random subset of coordinates, supporting Rand K or Perm K compressed communication. For instance, for all K ∈ [d],Rand K, which sends a random subset of coordinates (scaled by d/K) satisfies this assumption with 
+
+p = K because it samples subsets independently. 
+
+Theorem 3.2 (Lower Bound in the Homogeneous Setting) . We consider any computational and communication environment, any graph G satisfying Assumption 1.4. Let L, ∆, ε, n, σ 2, d > 0
+
+be any numbers such that L∆/ε ≥ ¯c1 log 10 (n + 1) and dimension d ≥ ¯c3L∆/log 3(n+1) ε. Consider Protocol 5. For all i ∈ [n] and k ≥ 0, mappings Cki satisfy Assumption G.1. Then, for any algorithm A, there exists a function f ∈ F ∆,L , exists an oracle that satisfies Assumption 1.3, and 
+
+E
+
+h
+
+inf y∈Gt ∥∇ f (y)∥2i
+
+> ε for all 
+
+t ≤ ¯c2 
+
+> log 14 (n+1)
+
+min  
+
+> k∈[n]
+> d
+> ¯wk
+
++ min  
+
+> p∈[k]
+
+min 
+
+> m∈[|Sk,p |]
+
+"
+
+> 1
+> mm
+
+P
+
+> i=1 1
+> hπi(Sk,p )
+
+−1 
+
+1 + σ2
+
+> mε
+
+#!  
+
+> L∆
+> ε
+
+, (7) 28 where Gt is the set of all possible points that can be constructed by A up to time t based on {Ii}i∈[n].
+
+The quantities π(S), {Sk,p }k∈[n],p ∈[k], and { ¯wk}k∈[n] are defined in Algorithm 2, and ¯c1, ¯c2, and ¯c3
+
+are universal constants. Proof. 
+
+(Step 1: “Worst-case” function). In our proof, we use a slightly modified function by Tyurin (2026), which is based on the “worst-case” function by Carmon et al. (2020). For any T, K ∈ N, and 
+
+e ≥ a > 1, Tyurin (2026) defined the function FT,K,a : RT → R such that 
+
+FT,K,a (x) = −
+
+> T
+
+X
+
+> i=1
+
+Ψa(xi−K ) . . . Ψa(xi−2)Ψ a(xi−1)Φ( xi) + 
+
+> T
+
+X
+
+> i=1
+
+Γ( xi), (19) where xi is the ith coordinate of a vector x ∈ RT and 
+
+Ψa(x) = 
+
+(0, x ≤ 1/2,
+
+exp 
+
+
+
+log a ·
+
+
+
+1 − 1(2 x−1) 2
+
+ 
+
+, x > 1/2, Φ( x) = √e
+
+Z x
+
+> −∞
+
+e− 12 t2
+
+dt, 
+
+and 
+
+Γ( x) = 
+
+−xe 1/x +1 , x < 0,
+
+0, x ≥ 0.
+
+We assume that x0 = · · · = x−K+1 ≡ 1. Throughout the lower bound analysis, we assume that 
+
+e ≥ a > 1 in Ψa. We also define supp (v) := { i ∈ [d] : vi̸ = 0 } ∀v ∈ Rd
+
+and prog K (x) := max {i ≥ 0 | xi̸ = 0 , x i−1̸ = 0 , . . . , x i−K+1 ̸ = 0 }
+
+(x0 = · · · = x−K+1 ≡ 1) ,
+
+which extends the standard progress operator prog (x) ≡ prog 1(x) := max {i ≥ 0 | xi̸ = 0 } (x0 ≡
+
+1) . This function has the following properties proved in (Tyurin, 2026): 
+
+Lemma G.2. For all x ∈ RT , supp (∇FT,K,a (x)) ⊆ { 1, . . . , prog K (x) + 1 } ∪ supp (x), where 
+
+supp (v) := { i ∈ [d] : vi̸ = 0 } for all d ≥ 1 and v ∈ Rd
+
+Lemma G.3. For all x ∈ RT , if prog K (x) < T, then ∥∇ FT,K,a (x)∥ > 1.
+
+Lemma G.4. Function FT,K,a satisfies 
+
+FT,K,a (0) − inf 
+
+> x∈RT
+
+FT,K,a (x) ≤ ∆0(K, a ) · T, 
+
+where ∆0(K, a ) := √2πe · aK .
+
+Lemma G.5. For all x ∈ RT , ∥∇ FT,K,a (x)∥∞ ≤ γ∞(K, a ), where γ∞(K, a ) := 6 √2πe 3/2 ·  
+
+> Ka K
+> √log a
+
+.
+
+Lemma G.6. The function FT,K,a is ℓ1(K, a )–smooth, i.e., ∇2FT,K,a (x) ≤ ℓ1(K, a ) for all 
+
+x ∈ RT , where ℓ1(K, a ) := 12 √2πe 5/2 · K2aK  
+
+> log a
+
+.
+
+Using this construction, we define a scaled version with random coordinates. We first sample a uniformly random subset RT = [ RT, 1, . . . , R T,T ] without repetitions from set [d] (RT, 1 < · · · <RT,T ). Let us take any λ > 0, d, T ∈ N, d ≥ T, and take the function f : Rd → R such that 
+
+f (x) := Lλ 2
+
+ℓ1(K, a ) FT,K,a 
+
+ x[RT ]
+
+λ
+
+
+
+, (20) 29 where ℓ1(K, a ) is defined in Lemma G.6 and x[RT ] ∈ RT is the subvector of size T of vector x ∈ Rd
+
+such that [x[RT ]]i = [ x]RT ,i for all i ∈ [T ]. Notice that the d − T coordinates are artificial. We have to ensure that f is L-smooth and f (0) − inf x∈Rd f (x) ≤ ∆, Using Lemma G.6, 
+
+∥∇ f (x) − ∇ f (y)∥ = Lλ ℓ1(K, a ) ∇FT,K,a 
+
+ x[RT ]
+
+λ
+
+
+
+− ∇ FT,K,a 
+
+ y[RT ]
+
+λ
+
+
+
+≤ Lλ x[RT ]
+
+λ − y[RT ]
+
+λ
+
+= L x[RT ] − y[RT ] ≤ L ∥x − y∥ ∀x, y ∈ Rd.
+
+We choose 
+
+T =
+
+ ∆ · ℓ1(K, a )
+
+Lλ 2 · ∆0(K, a )
+
+
+
+.
+
+Due to Lemma G.4, 
+
+f (0) − inf 
+
+> x∈Rd
+
+f (x) = Lλ 2
+
+ℓ1(K, a ) (FT,K,a (0) − inf 
+
+> x∈RT
+
+FT,K,a (x)) ≤ Lλ 2∆0(K, a )Tℓ1(K, a ) ≤ ∆,
+
+where ∆0(K, a ) is defined in Lemma G.4. We also take 
+
+λ =
+
+√2εℓ 1(K, a )
+
+L (21) to get 
+
+∥∇ f (x)∥2 = L2λ2
+
+ℓ21(K, a ) ∇FT,K,a 
+
+ x[RT ]
+
+λ
+
+ 2
+
+= 2 ε ∇FT,K,a 
+
+ x[RT ]
+
+λ
+
+ 2
+
+> 2ε · 1 prog K (x[RT ]) < T  ,
+
+(22) where the last inequality due to Lemma G.3. Note that 
+
+T =
+
+ L∆2∆ 0(K, a ) · ℓ1(K, a ) · ε
+
+
+
+. (23) 
+
+(Step 2: Stochastic Oracle). We consider a stochastic oracle similar to (Arjevani et al., 2022). We define 
+
+[∇f (x; ξ)] j := 
+
+(
+
+[∇f (x)] j ×
+
+ ξpσ
+
+
+
+, for j = RT,i if i ∈ [T ], where i = prog K  x[RT ]
+
+ + 1 ,
+
+[∇f (x)] j , for all other j ∈ [d],
+
+(24) for all ∀x ∈ Rd and take Dξ = Bernouilli (pσ ), where pσ ∈ (0 , 1] . For all x ∈ Rd, [x]j is the 
+
+jth coordinate of x. Similarly to (Arjevani et al., 2022), we now show this oracle is unbiased and 
+
+σ2-variance-bounded. Clearly, for j̸ = RT,i , Eξ [[ ∇f (x, ξ )] j ] = [ ∇f (x)] j . Otherwise, 
+
+Eξ [[ ∇f (x, ξ )] j ] = [ ∇f (x)] j
+
+E [ξ]
+
+pσ
+
+= [ ∇f (x)] j ,
+
+and 
+
+Eξ
+
+h
+
+∥∇ f (x; ξ) − ∇ f (x)∥2i
+
+≤ max  
+
+> j∈[d]
+
+|[∇f (x)] j |2 E
+
+" ξpσ
+
+− 1
+
+2#
+
+because the difference is non-zero only in one coordinate. Thus 
+
+Eξ
+
+h
+
+∥∇ f (x, ξ ) − ∇ f (x)∥2i
+
+≤ ∥∇ f (x)∥2 
+
+> ∞
+
+(1 − pσ )
+
+pσ
+
+= L2λ2 ∇FT,K,a 
+
+  x[RT ]
+
+> λ
+
+ 2 
+
+> ∞
+
+(1 − pσ )
+
+ℓ21(K, a )pσ
+
+≤ L2λ2γ2
+
+> ∞
+
+(K, a )(1 − pσ )
+
+ℓ21(K, a )pσ
+
+,
+
+where we apply Lemma G.5. Taking 
+
+pσ = min 
+
+ L2λ2γ2
+
+> ∞
+
+(K, a )
+
+σ2ℓ21(K, a ) , 1
+
+ (21) 
+
+= min 
+
+ 2εγ 2
+
+> ∞
+
+(K, a )
+
+σ2 , 1
+
+
+
+, (25) 30 we get Eξ
+
+h
+
+∥∇ f (x, ξ ) − ∇ f (x)∥2i
+
+≤ σ2.
+
+(Step 3: Graph Analysis). We now consider the defined graph G = ( V, E, b ). The first step is to construct an undirected version ¯G of the graph G, where we keep the same set of nodes and retain only one edge from {(i, j ), (j, i )} for each (i, j ) ∈ E with the same weight bij , making this edge unordered. Thus, ¯G = ( V, ¯E, b ), where {i, j } ∈ ¯E with weight bij > 0 if and only if (i, j ) ∈ E with weight bij > 0.The second substep is to construct a Gomory–Hu tree T = ( V, F, w ) of ¯G, which in general is not unique but always exists. Notice that, by definition, we have wij = α ¯G(i, j ) for all {i, j } ∈ F .Recall the important Theorem E.7. By the max-flow min-cut theorem, the maximum s–t flow in ¯G is upper bounded by wuv . The maximum s–t flow in G is equal to that in ¯G and is therefore also upper bounded by wuv , since G is obtained from ¯G by replacing each undirected edge {i, j } of capacity 
+
+bij with two directed edges (i, j ) and (j, i ), each of capacity bij = bji . In terms of our problem, the maximum number of coordinates per second that nodes s and t can send to each other is bounded by 
+
+wuv .Next, we take the values {wij }ij ∈F ∪ {∞} , sort them in ascending order, and define this list as 
+
+¯w := ( ¯ w1, . . . , ¯wn). The idea is to take all bandwidth thresholds in T ; we also include ∞ to capture the case when the nodes do not communicate. Consider the Gomory–Hu tree T and Algorithm 2. At the beginning, we define the triple 
+
+(T1, (S1,1), ¯w1), where T1 = T and S1,1 = [ n] is the only connected component of T1 (since 
+
+G is a connected graph; see Section 1). Now, inductively, given a triple (Tk, (Sk, 1, . . . , S k,k ), ¯wk),
+
+we remove an edge with value ¯wk in Tk and define the corresponding graph as Tk+1 . Then, we define the triple (Tk+1 , (Sk+1 ,1, . . . , S k+1 ,k +1 ), ¯wk+1 ), where (Sk+1 ,1, . . . , S k+1 ,k +1 ) are the connected components of Tk+1 . We repeat this procedure until k = |F | + 1 = n, when the corresponding triple is (Tk, (Sk, 1, . . . , S k,k ), ¯wk) with ¯wk = ∞ and (Sk, 1, . . . , S k,k ) = ( {1}, . . . , {n}), which is a collection of singletons. The idea of this procedure is to take the initial Gomory-Hu tree, and one by one remove the edges, from the smallest to the largest value. This way, we can construct a sequence of connected components/partitions (Sk, 1, . . . , S k,k ), where the number of partitions increases by one since we remove only one edge. 
+
+(Step 4: Proposed lower bound). Once the necessary constructions are defined, we now consider 
+
+t∗ := min 
+
+> k∈[n]
+
+¯t(k). (26) where 
+
+¯t(k) := 1
+
+c1 log c2 (n + 1) × max 
+
+ d
+
+¯wk
+
+, min  
+
+> p∈[k]
+
+Bh(σ2
+
+/ε, S k,p )
+
+ L∆
+
+ε ,c1 := 2 43 37514 π2e10 , c 2 := 14 ,Bh(σ2
+
+/ε, S ) := min 
+
+> m∈[|S|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1 
+
+1 + σ2
+
+εm 
+
+ , (27) and π(S) is a permutation that sorts {hi}i∈S : hπ1(S) ≤ · · · ≤ hπ|S|(S). We will show that (26) is a valid lower bound. 
+
+(Corner case). If min p∈[k] Bh(σ2
+
+/ε, S k,p ) ≥ d 
+
+> ¯wk
+
+for all k ∈ [n], then t∗ = ¯ t(k) with k = 1 because 
+
+Bh(σ2
+
+/ε, S 1) ≥ Bh(σ2
+
+/ε, S 2) if S1 ⊆ S2. In this case, 
+
+t∗ = 1
+
+c1 log c2 (n + 1) × min  
+
+> p∈[1]
+
+Bh(σ2
+
+/ε, S 1,p ) L∆
+
+ε = 1
+
+c1 log c2 (n + 1) × Bh(σ2
+
+/ε, S 1,1) L∆
+
+ε
+
+= 1
+
+c1 log c2 (n + 1) × min 
+
+> m∈[n]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi
+
+!−1 
+
+1 + σ2
+
+εm 
+
+ L∆
+
+ε , (28) since S1,1 = [ n], where π is a permutation that sorts {hi}i∈[n]. In this corner case, (28) is a lower bound due to (Tyurin and Richtárik, 2023), where the authors consider the setting without 31 communication times. If one starts taking communication times into account, the time complexity of algorithms can only increase. 
+
+(General cases). Starting from this point, we only consider general cases when there exists the largest index ¯k such that min p∈[¯k] Bh(σ2
+
+/ε, S ¯k,p ) < d
+
+> ¯w¯k
+
+. Notice that ¯k < |F | + 1 , since ¯w|F |+1 = ∞,
+
+and min p∈[¯k+1] Bh(σ2
+
+/ε, S ¯k+1 ,p ) ≥ d
+
+> ¯w¯k+1
+
+. Moreover, the sequence 
+
+n d
+
+> ¯w¯k
+
+o
+
+> k
+
+is non-increasing and 
+
+min p∈[k] Bh(σ2
+
+/ε, S k,p ) k is non-decreasing, where the latter follows from the definition of the partitions {(Sk, 1, . . . , S k,k )}k and the fact that Bh(σ2
+
+/ε, S 1) ≥ Bh(σ2
+
+/ε, S 2) if S1 ⊆ S2. In total, we can conclude that 
+
+t∗ = min ¯t(¯k), ¯t(¯k + 1) = 1
+
+c1 log c2 (n + 1) × min 
+
+ d
+
+¯w¯k
+
+, min 
+
+> p∈[¯k+1]
+
+Bh(σ2
+
+/ε, S ¯k+1 ,p )
+
+ L∆
+
+ε . (29) 
+
+(Step 5: Concentration analysis). Recall the construction (20), where the function depends only on the coordinates indexed by RT . We now split RT into B = ⌊T /K ⌋ blocks of size K with a possible residue of size T − BK. The coordinates B1 := [ RT, 1, . . . , R T,K ] belong to block 1,B2 := [ RT,K +1 , . . . , R T, 2K ] belong to block 2, and so forth. Let us define yki as the first time moment when worker i can start discovering 6 a new coordinate in the k + 1 th block, and yk := min i∈[n] yki as the time when any of them. Notice that y0 
+
+> i
+
+= 0 for all i ∈ [n].
+
+Consider the partition (S¯k+1 ,1, . . . , S ¯k+1 ,¯k+1 ) of the workers. Recall that this partition is constructed from the tree T by removing ¯k edges such that all removed edges {u, v } satisfy wuv ≤ ¯w¯k.
+
+Notice that this partition decomposes the tree T into subtrees ¯T1, . . . , ¯T¯k+1 , which are connected to each other by the removed edges. Thus, we can consider a new meta tree ¯T whose nodes are 
+
+¯V := ( S¯k+1 ,1, . . . , S ¯k+1 ,¯k+1 ) and whose edges are the removed edges. For all S ∈ ¯V , we define 
+
+¯E(S) as the set of edges incident to S. 
+
+In this meta tree ¯T , we run the following leaf-branch peeling procedure. For all p ≥ 1, let ¯Lp be the (non-empty) set of leaves of ¯Tp := ¯T \ S
+
+> i<p
+
+  ¯Li
+
+S ¯Bi
+
+ of size ¯np > 0. Define ¯Bp = ∅, and recursively add to ¯Bp all nodes from ¯Tp with 2 edges that have a neighbor in ¯Lp or ¯Bp : first, add all nodes with 2 edges that have a neighboring node in ¯Lp; then add all nodes with 2 edges that have a neighboring node in ¯Bp, and repeat the last step until no candidate nodes remain. Stop the procedure when ¯T ¯d+1 is empty, where ¯d is the number of steps in the procedure. It is possible to prove the following logarithmic bound on the number of steps ¯d:
+
+Lemma G.7 (Proof in Section G.4) . The number of steps ¯d in the leaf-branch peeling procedure satisfies ¯d ≤ ⌊ log 2(n + 2) ⌋ .
+
+In the meta graph ¯T , consider any node ¯S in ¯V . Also, consider any i ∈ ¯S. There are two ways to discover one of the K coordinates in block k: (1) either one of the workers (potentially worker i itself, but not necessarily) from the group ¯S discovers a coordinate by computing a stochastic gradient with 
+
+ξ = 1 , or (2) group ¯S discovers a coordinate through one of the communication channels from one of other groups in ¯T . 
+
+First way to discover coordinates. Before time yk, for all i ∈ [n], worker i has discov-ered at most coordinates [RT, 1, . . . , R T, (k−1) K ] ∪ [j1, . . . , j p], where [j1, . . . , j p] ⊂ Bk := [RT, 1+( k−1) K , . . . , R T,kK ] and p ≥ 0. Due to Lemma G.2, worker i can discover at most one coordinate in Bk when it calculates a stochastic gradient, at position ¯j such that ¯j is the smallest index in Bk \ (j1, . . . , j p). However, due to the construction (24), worker i can discover ¯j only if it receives a “lucky” random Bernoulli variable with value 1. The time required to calculate one stochastic gradient is hi. Therefore, worker i requires at least hiηk,i, 1 seconds to discover a new coordinate in Bk, where ηk,i, 1 ∼ Geom (pσ ).
+
+Similarly, group ¯S can discover the first coordinate, that was not discovered by any other node from this group and by computing stochastic gradients, after at least min i∈ ¯S hiηk,i, 1 seconds, 
+
+> 6
+
+In the paper, when we say that a worker i discovers a coordinate with index j, it means that it adds a vector to Ii in which the corresponding value of that coordinate is non-zero. 
+
+32 where {ηk,i, 1}k≥1,i ∈[n] are i.i.d random variables from Geom (pσ ), and the mth coordinate after at least Pmj=1 min i∈ ¯S hiηk,i,j seconds, where {ηk,i,j }k≥1,i ∈[n],j ≥1 are i.i.d random variables from Geom (pσ ). The min comes from the fact that the workers can calculate in parallel. 
+
+Second way to discover coordinates (see Figure 4). At the same time, workers from ¯V \ ¯S can share a new coordinate with the workers from ¯S via communication through the graph G. Consider any ˆS ∈ ¯V \ ¯S. Recall that the workers in ¯S are separated from the workers in ˆS in the Gomory–Hu tree T by the ¯S’edge of weight wuv such that wuv ≤ ¯w¯k, meaning that worker i ∈ ¯S is separated from the workers in ˆS by a cut of value less than ¯w¯k (Theorem E.7). Thus, the maximal flow (number of coordinates per second) that worker i ∈ ¯S can receive from ˆS is less than or equal ¯w¯k. After at least time yk, workers ˆS can start sending a sequence of coordinates with indices (ν1, ν 2, . . . ), where worker i ∈ ¯S can discover a new coordinate. In order to discover a new coordinate, worker i ∈ ¯S
+
+should receive some νj such that νj ∈ Bk := [ RT, 1+( k−1) K , . . . , R T,kK ].
+
+Every edge e of ¯S in ¯T separates ¯S from the set of groups S on the other side of the edge. For all 
+
+k ≥ 1, let {νk, ¯S,e,j }j≥1 be the sequence of coordinates sent by S to ¯S after the moment when one of the workers from S can start discovering kth block. We define μk, ¯S,e, 1 as the number of received coordinates {νk, ¯S,e,j }j≥1 from S until the moment when a received coordinate belongs to block k in any worker i from ¯S. Similarly, let μk, ¯S,e,p be the number of received coordinates until the moment when a received coordinate belongs to block k, after the (p − 1) th time this has happened in any worker i from ¯S, and this coordinate does not equal to the previous (p − 1) coordinates belonging to block k. In total, starting from yk, group ¯S can discover m coordinates from S in block k after at least 
+
+> m
+
+X
+
+> j=1
+
+μk, ¯S,e,j 
+
+¯w¯k
+
+seconds since it takes ℓ
+
+> ¯w¯k
+
+seconds to send ℓ coordinates through the communication channel. 
+
+Properties of the random variables. For all k ≥ 0, we define Gk as the sigma-algebra generated by 
+
+{ηk′,i,j }1≤k′≤k,i ∈[n],j ≥1, {μk′,S,e,p }p≥1,1≤k′≤k,S ∈ ¯V ,e ∈ ¯E(S), and {νk,S,e,j }k≥1,j ≥1,S ∈ ¯V ,e ∈ ¯E(S).
+
+In Section G.3, we prove the following bounds on the probabilities. 
+
+Lemma G.8 (Proof in Section G.3) . For all i ∈ [n],
+
+P  ηk,i,j ≤ t {ηk,i,j ′ }i∈[n],1≤j′<j , Gk−1
+
+ ≤ ⌊ t⌋ pσ
+
+for all t ≥ 0, k ≥ 1 and j ≥ 1. Moreover, consider any ¯S ∈ ¯V and e ∈ ¯E( ¯S), then 
+
+P  μk, ¯S,e,m ≤ t μk, ¯S,e,m −1, . . . , μ k, ¯S,e, 1, Gk−1
+
+ ≤ Kt 
+
+max { d 
+
+> 2
+
+− Pm−1 
+
+> p=1
+
+μk, ¯S,e,p , 0}
+
+for all t ≥ 0, k ≥ 1, and m ≥ 1.
+
+Auxiliary bounds. Before continuing with the proof of Theorem 3.2, we now consider two important lemmas, which follow from Lemma G.8. 
+
+Lemma G.9. For all S ∈ ¯V , k ≥ 1,K ≥ 1, and s ≥ 128   
+
+> Bh(1/pσ ,S )
+
+,
+
+E
+
+ exp 
+
+−s
+
+> K
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ Gk−1
+
+ ≤ 18K . (30) 
+
+Lemma G.10. For all S ∈ ¯V , e ∈ ¯E(S), k ≥ 1,K ≥ 1, w > 0, and s ≥ 1024 Kw d ,
+
+E
+
+ exp 
+
+−s
+
+> K
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ Gk−1
+
+ ≤ 18K . (31) 33 We now continue with the proof of Theorem 3.2. 
+
+(Step 6: Concentration bound). Recall that ¯L1 is the set of leaves in ¯V , where each leave has at most one neighbor. Moreover, recall that we have two ways to discover K coordinates in block k. 
+
+Since one of the two discovery methods must discover at least K 
+
+> 3
+
+coordinates, we can conclude that 
+
+min  
+
+> i∈S
+
+yk+1  
+
+> i
+
+≥ min 
+
+yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , y k +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+
+
+for all S ∈ ¯L1, where e is the only edge of S that separates S from all other groups (there may be no other groups, then the second term under the min does not appear). Similarly, for all p ∈ [ ¯d] and 
+
+S ∈ ¯Bp, using the same reasoning, 
+
+min  
+
+> i∈S
+
+yk+1  
+
+> i
+
+≥ min 
+
+yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , y k +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e 1,j 
+
+¯w¯k
+
+, y k +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e 2,j 
+
+¯w¯k
+
+
+
+for all S ∈ ¯Bp and p ∈ [ ¯d], where e1 and e2 are the only edges of S. It is left to get a bound for 
+
+¯Lp+1 with p ≥ 1. Unlike ¯L1, ¯Lp+1 with p ≥ 1 is not a set of leaves and each S ∈ ¯Lp+1 might have potentially a large number of edges. Consider any S ∈ ¯Lp+1 . It has at most one outgoing edge e
+
+that connects S with the nodes from ¯V \ Spj=1 
+
+  ¯Lj ∪ ¯Bj
+
+ , and all other edges connect it directly to 
+
+Spj=1 
+
+  ¯Lj ∪ ¯Bj
+
+ by the construction. Thus, for all S ∈ ¯Lp+1 ,
+
+min  
+
+> i∈S
+
+yk+1  
+
+> i
+
+≥ min 
+
+yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , y k +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+, min 
+
+> S∈∪ pj=1
+
+( ¯Lj ∪ ¯Bj ) min  
+
+> i∈S
+
+yki
+
+ ,
+
+where the last term in min comes from the fact that min S∈∪ pj=1 ( ¯Lj ∪ ¯Bj ) min i∈S yki is the earliest time when nodes from ∪pj=1 
+
+  ¯Lj ∪ ¯Bj
+
+ can start sharing coordinates from block k. 
+
+Since 
+
+yk = min  
+
+> S∈∪ ¯dj=1
+
+( ¯Lj ∪ ¯Bj ) min  
+
+> i∈S
+
+yki
+
+for all k ≥ 0, it is sufficient to analyze the sequences 
+
+¯yk+1  
+
+> S
+
+:= min 
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , ¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+ (32) for all S ∈ ¯L1,
+
+¯yk+1  
+
+> S
+
+:= min 
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , ¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e 1,j 
+
+¯w¯k
+
+, ¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e 2,j 
+
+¯w¯k
+
+ (33) for all S ∈ ¯Bp and p ∈ [ ¯d],
+
+¯yk+1  
+
+> S
+
+:= min 
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , ¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+, min 
+
+> S∈∪ pj=1
+
+( ¯Lj ∪ ¯Bj ) ¯ykS
+
+ , (34) for all p ∈ { 1, . . . , ¯d − 1} and S ∈ ¯Lp+1 , and 
+
+¯yk+1 := min  
+
+> S∈∪ ¯dj=1
+
+( ¯Lj ∪ ¯Bj ) ¯yk+1 
+
+> S
+
+with ¯yk = 0 and ¯ykS = 0 for k = 0 and S ∈ ∪ ¯dj=1 
+
+  ¯Lj ∪ ¯Bj
+
+ . Inductively, one can easily show that 
+
+yk ≥ ¯yk for all k ≥ 0.
+
+34 Using mathematical induction, taking 
+
+s = 1024 max 
+
+
+
+1min  
+
+> S∈¯V
+
+Bh(1/pσ , S ) , K ¯w¯k
+
+d
+
+ , (35) we now prove that 
+
+E exp  −s¯yk ≤ e−(k+1 −K) (36) and 
+
+E
+
+
+
+exp 
+
+
+
+−s min   
+
+> S∈¯Lp∪¯Bp
+
+¯ykS
+
+ 
+
+≤ 3 · 2p−1ep−1nppp
+
+2K e−(k−K) (37) for all k ≥ 0 and p ∈ [ ¯d]. Notice that it is true for k = 0 . Consider the inequalities 
+
+E
+
+
+
+exp 
+
+
+
+−s min   
+
+> S∈¯L1∪¯B1
+
+¯yk+1 
+
+> S
+
+ 
+
+≤ E
+
+
+
+exp 
+
+
+
+−s min  
+
+> S∈¯L1
+
+¯yk+1 
+
+> S
+
+ 
+
++ E
+
+
+
+exp 
+
+
+
+−s min  
+
+> S∈¯B1
+
+¯yk+1 
+
+> S
+
+ 
+
+≤ X 
+
+> S∈¯L1
+
+E exp  −s¯yk+1 
+
+> S
+
+ + X 
+
+> S∈¯B1
+
+E exp  −s¯yk+1 
+
+> S
+
+ . (38) Using (32), 
+
+E exp  −s¯yk+1 
+
+> S
+
+ 
+
+≤ E
+
+exp 
+
+−s min 
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , ¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+
+
+≤ E
+
+exp 
+
+−s
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ + E
+
+exp 
+
+−s
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+
+
+= E
+
+E
+
+ exp 
+
+−s
+
+
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ Gk−1
+
+ exp  −s¯yk
+
++ E
+
+E
+
+ exp 
+
+−s
+
+
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+ Gk−1
+
+ exp  −s¯yk
+
+for all S ∈ ¯L1. Using (30), (31), and (36), 
+
+E exp  −s¯yk+1 
+
+> S
+
+ ≤ 22K e−(k+1 −K) = 22K e−(k+1 −K)
+
+for all S ∈ ¯L1 and our choice of s in (35). For all S ∈ ¯B1, using the same derivations, we can show that 
+
+E exp  −s¯yk+1 
+
+> S
+
+ 
+
+≤ E
+
+exp 
+
+−s
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ + E
+
+exp 
+
+−s
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e 1,j 
+
+¯w¯k
+
+
+
++ E
+
+exp 
+
+−s
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e 2,j 
+
+¯w¯k
+
+ ≤ 32K e−(k+1 −K) = 32K e−(k+1 −K).
+
+Substituting to (38), 
+
+E
+
+
+
+exp 
+
+
+
+−s min   
+
+> S∈¯L1∪¯B1
+
+¯yk+1 
+
+> S
+
+ 
+
+≤ 3   ¯L1 + ¯B1
+
+
+
+2K e−(k+1 −K) ≤ 3 · n
+
+2K e−(k+1 −K).
+
+35 We have proved (37) for p = 1 and k → k + 1 . For p ≥ 1, let us consider 
+
+E
+
+
+
+exp 
+
+
+
+−s min   
+
+> S∈¯Lp+1 ∪¯Bp+1
+
+¯yk+1 
+
+> S
+
+ 
+
+≤ X 
+
+> S∈¯Lp+1
+
+E exp  −s¯yk+1 
+
+> S
+
+ + X 
+
+> S∈¯Bp+1
+
+E exp  −s¯yk+1 
+
+> S
+
+ .
+
+Similarly, to the base case, ¯Bp+1 is a set of nodes with 2 edges. Thus, using (33), (30), (31), and (36), 
+
+E exp  −s¯yk+1 
+
+> S
+
+ ≤ 32K e−(k+1 −K).
+
+for all S ∈ ¯Bp+1 . For all S ∈ ¯Lp+1 , using (34), 
+
+E exp  −s¯yk+1 
+
+> S
+
+ 
+
+≤ E
+
+exp 
+
+−s min 
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j , ¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+, min 
+
+> S∈∪ pj=1
+
+( ¯Lj ∪ ¯Bj ) ¯ykS
+
+
+
+≤ E
+
+exp 
+
+−s
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ + E
+
+exp 
+
+−s
+
+¯yk +
+
+> K
+> 3
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+¯w¯k
+
+
+
++ E
+
+"
+
+exp −s min min 
+
+> S∈∪ pj=1
+
+( ¯Lj ∪ ¯Bj ) ¯ykS
+
+!!# 
+
+.
+
+Using (30), (31), and (36), 
+
+E exp  −s¯yk+1 
+
+> S
+
+ ≤ 22K e−(k+1 −K) + E
+
+"
+
+exp −s min 
+
+> S∈∪ pj=1
+
+( ¯Lj ∪ ¯Bj ) ¯ykS
+
+!# 
+
+,
+
+where we apply (31) with K → K 
+
+> 3
+
+. Notice that 
+
+E
+
+"
+
+exp −s min 
+
+> S∈∪ pj=1
+
+( ¯Lj ∪ ¯Bj ) ¯ykS
+
+!# 
+
+≤ p × 3 · 2p−1ep−1nppp
+
+2K e−(k−K) = 3 · 2p−1ep−1nppp+1 
+
+2K e−(k−K).
+
+(39) due to (37). Using (39), 
+
+X 
+
+> S∈¯Lp+1
+
+E exp  −s¯yk+1 
+
+> S
+
+ ≤ 2 ¯Lp+1 
+
+2K e−(k+1 −K) + 3 · 2p−1ep−1nppp+1 
+
+2K e−(k−K) ¯Lp+1 
+
+≤ 2 ¯Lp+1 
+
+2K e−(k+1 −K) + 3 · 2p−1ep−1np+1 pp+1 
+
+2K e−(k−K).
+
+since ¯Lp+1 ≤ n. Therefore, 
+
+E
+
+
+
+exp 
+
+
+
+−s min   
+
+> S∈¯Lp+1 ∪¯Bp+1
+
+¯yk+1 
+
+> S
+
+ 
+
+≤ 3 · 2p−1ep−1np+1 pp+1 
+
+2K e−(k−K) + 2 ¯Lp+1 
+
+2K e−(k+1 −K) + 3 ¯Bp+1 
+
+2K e−(k+1 −K)
+
+≤ 3 · 2p−1epnp+1 pp+1 
+
+2K e−(k+1 −K) + 3n
+
+2K e−(k+1 −K)
+
+≤ 3 · 2pepnp+1 (p + 1) p+1 
+
+2K e−(k+1 −K). (40) for all p ≥ 1. We have proved the next step of (37) for k → k + 1 . It left to prove (36) for k → k + 1 .
+
+Since ¯V = ∪ ¯dj=1 
+
+  ¯Lj ∪ ¯Bj
+
+ ,
+
+E exp  −s¯yk+1  (40) 
+
+≤ ¯d × 3 · 2 ¯d−1e ¯d−1n ¯d ¯d ¯d
+
+2K e−(k+1 −K) = 3 · 2 ¯d−1e ¯d−1n ¯d ¯d ¯d+1 
+
+2K e−(k+1 −K).
+
+(41) 36 Notice that 
+
+log 2
+
+
+
+3 · 2 ¯d−1e ¯d−1n ¯d ¯d ¯d+1 
+
+= log 2(3) + (1 + log 2 e)( ¯d − 1) + ¯d log 2(n) + ( ¯d + 1) log 2( ¯d)
+
+Due to Lemma G.7, ¯d ≤ log 2(n + 2) . Thus, 
+
+log 2
+
+
+
+3 · 2 ¯d−1n ¯d ¯d ¯d+1 
+
+≤ 8 log 22(n + 2) .
+
+It is sufficient to take 
+
+K = 300 log 2(n + 1)  ≥ 24 log 22(n + 2) (42) in (41) to ensure that (36) holds for k → k + 1 : 
+
+E exp  −s¯yk+1  ≤ e−(k+2 −K).
+
+(Step 7: Endgame). Using Chernoff’s method, (36), and yB ≥ ¯yB ,
+
+P  yB ≤ ¯t ≤ P  ¯yB ≤ ¯t ≤ P  exp  −s¯yB  ≥ exp ( −s¯t) ≤ exp ( s¯t) E exp  −s¯yB  
+
+≤ exp ( s¯t − (B + 1 − K)) = δ
+
+for all δ ∈ (0 , 1] and k ≥ 0, and fixing 
+
+¯t = 1
+
+s (log( δ) + ( B + 1 − K)) . (43) Using (22), for all t ≥ 0,
+
+inf 
+
+> x∈Gt
+
+∥∇ f (x)∥2 > 2ε inf 
+
+> x∈Gt
+
+1 prog K (x[RT ]) < T  ,
+
+where Gt is the set of points computed by the algorithm A up to time t. By construction, if yB > t, 
+
+then inf x∈Gt 1 prog K (x[RT ]) < T  = 1; thus, 
+
+E
+
+
+
+inf 
+
+> y∈Gt
+
+∥∇ f (y)∥2
+
+
+
+> 2ε × P  yB > t  ≥ 2ε(1 − δ).
+
+Choosing δ = 12 and t = ¯ t, 
+
+E
+
+
+
+inf 
+
+> y∈Gt
+
+∥∇ f (y)∥2
+
+
+
+> ε. 
+
+By construction, notice that f is random. Nevertheless, 
+
+E
+
+
+
+E
+
+
+
+inf 
+
+> y∈Gt
+
+∥∇ f (y)∥2 f
+
+ 
+
+> ε. 
+
+Thus, there exists a deterministic ¯f such that 
+
+E
+
+
+
+inf  
+
+> y∈Gt( ¯f)
+
+∇ ¯f (y) 2
+
+
+
+= E
+
+
+
+inf 
+
+> y∈Gt
+
+∥∇ f (y)∥2 f = ¯f
+
+
+
+> ε, 
+
+where Gt( ¯f ) are outputs of the algorithm given ¯f (in the statement of the theorem, we rename ¯f to 
+
+f ). It is left to find the asymptotic of t = ¯ t using (43): 
+
+¯t ≥ 1
+
+s (B − K) (35) 
+
+= 1210 min 
+
+
+
+min  
+
+> S∈¯V
+
+Bh(1/pσ , S ), dK ¯w¯k
+
+  TK
+
+
+
+− K
+
+
+
+. (44) Consider (23): 
+
+T =
+
+ L∆2∆ 0(K, a ) · ℓ1(K, a ) · ε
+
+
+
+.
+
+37 Using the definitions of ∆0(K, a ) and ℓ1(K, a ),T =
+
+ L∆ log a
+
+48 πe 3K2a2K ε
+
+
+
+.
+
+Choosing a = 1 + 1 
+
+> K
+
+,T ≥
+
+ L∆96 πe 5K3ε
+
+
+
+since log  1 + 1
+
+> K
+
+ ≥ 12K and  1 + 1
+
+> K
+
+2K ≤ e2 for all K ≥ 1. Recall the definition of K in (42). Since in the theorem, we assume that L∆ 
+
+> ε
+
+≥ ¯c1 log 10 (n + 1) for some universal constant ¯c1,T ≥ L∆2 · 96 πe 5K3ε ,
+
+ TK
+
+
+
+≥ L∆4 · 96 πe 5K4ε ,
+
+and 
+
+ TK
+
+
+
+− K ≥ L∆4 · 96 πe 5K4ε − K ≥ L∆8 · 96 πe 5K4ε .
+
+Substituting to (44), 
+
+¯t ≥ 1
+
+s (B − K) ≥ 1220 πe 5K4 × min 
+
+
+
+min  
+
+> S∈¯V
+
+Bh
+
+ 1
+
+pσ
+
+, S 
+
+
+
+, dK ¯w¯k
+
+ L∆
+
+ε . (45) Using the definition of γ∞(K, a ),σ2
+
+2εγ 2
+
+> ∞
+
+(K, a ) = σ2 log a
+
+144 πe 3K2a2K ε ≥ σ2
+
+288 πe 5K3ε
+
+since log  1 + 1
+
+> K
+
+ ≥ 12K and  1 + 1
+
+> K
+
+2K ≤ e2 for all K ≥ 1. Due to (27), 
+
+Bh(1/pσ , S ) = Bh
+
+
+
+max 
+
+ σ2
+
+2εγ 2
+
+> ∞
+
+(K, a ) , 1
+
+
+
+, S 
+
+
+
+= min 
+
+> m∈[|S|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1 
+
+1 + max 
+
+ σ2
+
+2εγ 2
+
+> ∞
+
+(K, a ) , 1
+
+
+
+× 1
+
+m
+
+
+
+≥ 1288 πe 5K3 × min 
+
+> m∈[|S|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1 
+
+1 + σ2
+
+εm 
+
+ = 1288 πe 5K3 × Bh
+
+ σ2
+
+/ε, S  .
+
+Substituting to (45), 
+
+¯t ≥ 1220 πe 5K4 × min 
+
+ 1288 πe 5K3 × min  
+
+> S∈¯V
+
+Bh
+
+ σ2
+
+/ε, S  , dK ¯w¯k
+
+ L∆
+
+ε
+
+≥ 1229 π2e10 K7 × min 
+
+
+
+min  
+
+> S∈¯V
+
+Bh
+
+ σ2
+
+/ε, S  , d
+
+¯w¯k
+
+ L∆
+
+ε
+
+≥ 1243 37514 π2e10 · log 14 (n + 1) × min 
+
+
+
+min  
+
+> S∈¯V
+
+Bh
+
+ σ2
+
+/ε, S  , d
+
+¯w¯k
+
+ L∆
+
+ε ,
+
+which matches (29) because ¯V := ( S¯k+1 ,1, . . . , S ¯k+1 ,¯k+1 ).
+
+38 G.3 Auxiliary lemmas Lemma G.8 (Proof in Section G.3) . For all i ∈ [n],
+
+P  ηk,i,j ≤ t {ηk,i,j ′ }i∈[n],1≤j′<j , Gk−1
+
+ ≤ ⌊ t⌋ pσ
+
+for all t ≥ 0, k ≥ 1 and j ≥ 1. Moreover, consider any ¯S ∈ ¯V and e ∈ ¯E( ¯S), then 
+
+P  μk, ¯S,e,m ≤ t μk, ¯S,e,m −1, . . . , μ k, ¯S,e, 1, Gk−1
+
+ ≤ Kt 
+
+max { d 
+
+> 2
+
+− Pm−1 
+
+> p=1
+
+μk, ¯S,e,p , 0}
+
+for all t ≥ 0, k ≥ 1, and m ≥ 1.
+
+Proof. Since the oracle draws {ξ} are i.i.d in (24) and the generated {ξ} are independent of 
+
+{μk′,S,e,p }p≥1,1≤k′≤k,S ∈ ¯V ,e ∈ ¯E(S) and {νk,S,e,j }k≥1,j ≥1,S ∈ ¯V ,e ∈ ¯E(S), we can conclude that 
+
+P  ηk,i,j ≤ t {ηk,i,j ′ }i∈[n],1≤j′<j , Gk−1
+
+
+
+=
+
+> ⌊t⌋
+
+X
+
+> p=1
+
+P (ξk,i,j,p = 1 , ξ k,i,j,p −1 = 0 , . . . , ξ k,i,j, 1 = 0) ≤
+
+> ⌊t⌋
+
+X
+
+> p=1
+
+P (ξk,i,j,p = 1) ≤ ⌊ t⌋ pσ
+
+(46) for all k ≥ 1, i ∈ [n], and j ≥ 1, where {ξk,i,j,p }k,i,j,p ≥1 are i.i.d. Bernoulli random variables. Let us fix any ¯S ∈ ¯V and e ∈ ¯E( ¯S). Recall that RT is a uniformly random subset without repetitions; thus, 
+
+P  μk, ¯S,e, 1 = j Gk−1
+
+ = P  νk, ¯S,e,j ∈ Bk, ν k, ¯S,e,j −1̸ ∈ Bk, . . . , ν k, ¯S,e, 1̸ ∈ Bk Gk−1
+
+
+
+≤ P  νk, ¯S,e,j ∈ Bk Gk−1
+
+ = E  1[νk, ¯S,e,j ∈ Bk] Gk−1
+
+ .
+
+Let us define Bk−1 as the sigma-algebra generated by {ηk′,i,j }1≤k′≤k−1,i ∈[n],j ≥1, {Bk′ }1≤k′≤k−1,
+
+and {νk, ¯S,e,j }j≥1. Notice that Gk−1 ⊆ B k−1 since {μk′,S,e,p }p≥1,1≤k′≤k−1,S ∈ ¯V ,e ∈ ¯E(S) are deter-ministic, knowing Bk−1. Thus, 
+
+P  μk, ¯S,e, 1 = j Gk−1
+
+ = E  E  1[νk, ¯S,e,j ∈ Bk] Bk−1
+
+ Gk−1
+
+
+
+= E  E  1[νk, ¯S,e,j ∈ Bk] {Bk′ }1≤k′≤k−1, {νk, ¯S,e,j }j≥1
+
+ Gk−1
+
+
+
+= E  P  νk, ¯S,e,j ∈ Bk {Bk′ }1≤k′≤k−1, {νk, ¯S,e,j }j≥1
+
+ Gk−1
+
+
+
+≤ Kd − (k − 1) K .
+
+The last inequality follows from the fact that {Bk}k∈[B] is independent of {νk, ¯S,e,j }, and from evalu-ating the probability that a deterministic value belongs to a random subset Bk, given {Bk′ }1≤k′≤k−1.The fact that {Bk}k∈[B] is independent of {νk, ¯S,e,j } follows from Assumption G.1. Since T ≤ d 
+
+> 2
+
+,
+
+P  μk, ¯S,e, 1 = j Gk−1
+
+ ≤ Kd − T ≤ Kd/ 2 .
+
+Let us define um := Pmp=1 μk, ¯S,e,p . Similarly, 
+
+P  μk, ¯S,e,m = j μk, ¯S,e,m −1, . . . , μ k, ¯S,e, 1, Gk−1
+
+
+
+= P
+
+
+
+νk, ¯S,e,u m−1+j ∈ Bk, ∩j−1
+
+> p=1
+
+{νk, ¯S,e,u m−1+p̸ ∈ Bk}, ∩m−1 
+
+> p=1
+
+{νk, ¯S,e,u m−1+j̸ = νk, ¯S,e,u p }
+
+νk, ¯S,e,u m−1 ∈ Bk, . . . , ν k, ¯S,e,u m−2+1 ̸ ∈ Bk, ν k, ¯S,e,u m−2 ∈ Bk, . . . , ν k, ¯S,e, 1̸ ∈ Bk,
+
+∩m−1 
+
+> p̸=p′=1
+
+{νk, ¯S,e,u p′̸ = νk, ¯S,e,u p }, {up}m−1 
+
+> p=1
+
+, Gk−1
+
+
+
+≤ P
+
+
+
+νk, ¯S,e,u m−1+j ∈ Bk ∩m−1 
+
+> p=1
+
+{νk, ¯S,e,u m−1+j̸ = νk, ¯S,e,u p },νk, ¯S,e,u m−1 ∈ Bk, . . . , ν k, ¯S,e,u m−2+1 ̸ ∈ Bk, ν k, ¯S,e,u m−2 ∈ Bk, . . . , ν k, ¯S,e, 1̸ ∈ Bk,
+
+39 ∩m−1 
+
+> p̸=p′=1
+
+{νk, ¯S,e,u p′̸ = νk, ¯S,e,u p }, {up}m−1 
+
+> p=1
+
+, Gk−1
+
+
+
+≤ P
+
+
+
+νk, ¯S,e,u m−1+j ∈ Bk ∩um−1 
+
+> p=1
+
+{νk, ¯S,e,u m−1+j̸ = νk, ¯S,e,p },νk, ¯S,e,u m−1 ∈ Bk, . . . , ν k, ¯S,e,u m−2+1 ̸ ∈ Bk, ν k, ¯S,e,u m−2 ∈ Bk, . . . , ν k, ¯S,e, 1̸ ∈ Bk,
+
+∩m−1 
+
+> p̸=p′=1
+
+{νk, ¯S,e,u p′̸ = νk, ¯S,e,u p }, {up}m−1 
+
+> p=1
+
+, Gk−1
+
+
+
+for all j ≥ 1, where use the standard properties of probability and the last inequality comes from the fact that for all p ≥ 1, if νk, ¯S,e,p ̸ ∈ Bk and νk, ¯S,e,p = νk, ¯S,e,u m−1+j , then the probability is zero. Now, the last condition 
+
+νk, ¯S,e,u m−1 ∈ Bk, . . . , ν k, ¯S,e,u m−2+1 ̸ ∈ Bk, ν k, ¯S,e,u m−2 ∈ Bk, . . . , ν k, ¯S,e, 1̸ ∈ Bk,
+
+∩um−1 
+
+> p=1
+
+{νk, ¯S,e,u m−1+j̸ = νk, ¯S,e,p }, ∩m−1
+
+> p̸=p′=1
+
+{νk, ¯S,e,u p′̸ = νk, ¯S,e,u p }, {up}m−1 
+
+> p=1
+
+, Gk−1
+
+says us that Bk includes νk, ¯S,e,u m−1̸ = . . . ̸ = νk, ¯S,e,u 1 (pairwise distinct) and does not in-clude νk, ¯S,e,u m−1−1, . . . , ν k, ¯S,e,u m−2+1 , ν k, ¯S,e,u m−2−1, . . . , ν k, ¯S,e, 1 such that none of them equals to νk, ¯S,e,u m−1+j , and Gk−1 also might “reveal” the values of {Bk′ }1≤k′≤k−1. Conditioned on this information, the probability that νk, ¯S,e,u m−1+j ∈ Bk is less or equal to K−(m−1) max {d−(k−1) K−um−1,0} ≤  
+
+> K
+> max {d−T−um−1,0}
+
+≤ K 
+
+> max {d/ 2−um−1,0}
+
+since Bk is an uniformly random subset (there are still 
+
+K − (m − 1) coordinates in Bk with “unknown positions” that can uniformly placed in at least 
+
+max {d − (k − 1) K − um−1, 0} positions). Therefore, 
+
+P  μk, ¯S,e,m = j μk, ¯S,e,m −1, . . . , μ k, ¯S,e, 1, Gk−1
+
+ ≤ K
+
+max { d 
+
+> 2
+
+− Pm−1 
+
+> p=1
+
+μk, ¯S,e,p , 0}
+
+and 
+
+P  μk, ¯S,e,m ≤ t μk, ¯S,e,m −1, . . . , μ k, ¯S,e, 1, Gk−1
+
+ ≤ Kt 
+
+max { d 
+
+> 2
+
+− Pm−1 
+
+> p=1
+
+μk, ¯S,e,p , 0} . (47) 
+
+Lemma G.9. For all S ∈ ¯V , k ≥ 1,K ≥ 1, and s ≥ 128   
+
+> Bh(1/pσ ,S )
+
+,
+
+E
+
+ exp 
+
+−s
+
+> K
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ Gk−1
+
+ ≤ 18K . (30) 
+
+Proof. For all t > 0 and j ≥ 1,
+
+E
+
+
+
+exp 
+
+
+
+−s min  
+
+> i∈S
+
+hiηk,i,j 
+
+
+
+{ηk,i,j ′ }1≤j′≤j−1, Gk−1
+
+
+
+≤ e−st + P
+
+
+
+min  
+
+> i∈S
+
+hiηk,i,j ≤ t {ηk,i,j ′ }1≤j′≤j−1, Gk−1
+
+
+
+≤ e−st + X
+
+> i∈S
+
+P (hiηk,i,j ≤ t|{ ηk,i,j ′ }1≤j′≤j−1, Gk−1)
+
+> (46)
+
+≤ e−st + X
+
+> i∈S
+
+pσ
+
+ thi
+
+
+
+.
+
+Taking t = 132 × Bh(1/pσ , S ), we can use Lemma G.11 and the bound on s to get 
+
+E
+
+
+
+exp 
+
+
+
+−s min  
+
+> i∈S
+
+hiηk,i,j 
+
+
+
+{ηk,i,j ′ }1≤j′≤j−1, Gk−1
+
+
+
+≤ 18 (48) 
+
+> 6
+
+Pedantically, P (A|B) is not defined if P (B) = 0 . When we use the inequality P (A) ≤ P (A|B) , we take into account the standard convention that P (A|B) = 0 whenever P (B) = 0 .
+
+40 for all j ≥ 1, k ≥ 1, S ∈ ¯V . Using the tower rule and (48), 
+
+E
+
+ exp 
+
+−s
+
+> K
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ Gk−1
+
+
+
+= E
+
+ E
+
+
+
+exp 
+
+
+
+−s min  
+
+> i∈S
+
+hiηk,i,K 
+
+
+
+{ηk,i,j ′ }1≤j′≤K−1, Gk−1
+
+
+
+exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ Gk−1
+
+
+
+≤ 18 E
+
+ exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+min  
+
+> i∈S
+
+hiηk,i,j 
+
+ Gk−1
+
+ .
+
+Then, repeating these derivations K − 1 times, we obtain (30). 
+
+Lemma G.10. For all S ∈ ¯V , e ∈ ¯E(S), k ≥ 1,K ≥ 1, w > 0, and s ≥ 1024 Kw d ,
+
+E
+
+ exp 
+
+−s
+
+> K
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ Gk−1
+
+ ≤ 18K . (31) 
+
+Proof. Using the tower rule, 
+
+IK 
+
+> 2
+
+:= E
+
+ exp 
+
+−s
+
+> K
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ Gk−1
+
+
+
+= E
+
+
+
+E
+
+h
+
+exp 
+
+
+
+−s μk,S,e,K 
+
+w
+
+
+
+{μk,S,e,j }1≤j≤K−1, Gk−1
+
+i
+
+exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+| {z }
+
+> K2:=
+
+Gk−1
+
+
+
+.
+
+If PK−1 
+
+> j=1
+
+μk,S,e,j ≥ d 
+
+> 4
+
+, then 
+
+K2 ≤ exp 
+
+
+
+− sd 
+
+4w
+
+
+
+.
+
+Otherwise, if PK−1 
+
+> j=1
+
+μk,S,e,j < d 
+
+> 4
+
+, then 
+
+K2 ≤ E
+
+h
+
+exp 
+
+
+
+−s μk,S,e,K 
+
+w
+
+
+
+{μk,S,e,j }1≤j≤K−1, Gk−1
+
+i
+
+exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+
+
+≤
+
+
+
+exp ( −st ) + P
+
+ μk,S,e,K 
+
+w ≤ t {μk,S,e,j }1≤j≤K−1, Gk−1
+
+ 
+
+exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+
+
+for all t > 0. Using (47), if PK−1 
+
+> j=1
+
+μk,S,e,j < d 
+
+> 4
+
+, then 
+
+K2 ≤ exp ( −st ) + Ktw 
+
+max { d 
+
+> 2
+
+− PK−1 
+
+> p=1
+
+μk,S,e,p , 0}
+
+!
+
+exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+
+
+≤
+
+
+
+exp ( −st ) + 4Ktw d
+
+
+
+exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ .
+
+Taking t = d 
+
+> 128 Kw
+
+and using s ≥ log(32)  
+
+> t
+
+,K2 ≤
+
+ 132 + 132 
+
+
+
+exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ = 116 exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ .
+
+41 Combining both cases, 
+
+IK 
+
+> 2
+
+≤ E
+
+ max 
+
+
+
+116 exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ , exp 
+
+
+
+− sd 
+
+4w
+
+ Gk−1
+
+
+
+≤ 116 E
+
+ exp 
+
+−s
+
+> K−1
+
+X
+
+> j=1
+
+μk,S,e,j 
+
+w
+
+ Gk−1
+
+| {z }
+
+> IK−12
+
++ exp 
+
+
+
+− sd 
+
+4w
+
+
+
+.
+
+Repeating the same steps K − 1 more times, 
+
+IK 
+
+> 2
+
+≤ 116 K + 2 exp 
+
+
+
+− sd 
+
+4w
+
+
+
+≤ 18K ,
+
+where we use that s ≥ 256 Kw d and P∞  
+
+> j=0 116 j
+
+≤ 2.
+
+Lemma G.11. For all h1, . . . , h n ≥ 0, p σ ∈ (0 , 1] , and S ⊆ [n], we have 
+
+pσ
+
+X
+
+> i∈S
+
+ thi
+
+
+
+≤ 116 
+
+for 
+
+t = 132 × Bh(1/pσ , S ),
+
+where 
+
+Bh(1/pσ , S ) := min 
+
+> m∈[|S|]
+
+ 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+!−1 
+
+1 + 1
+
+pσ m
+
+ ,
+
+where π(S) is a permutation that sorts {hi}i∈S : hπ1(S) ≤ · · · ≤ hπ|S|(S).
+
+Proof. If ⌊t/h i⌋ = 0 for all i ∈ S, then the lemma is true. Otherwise, let 
+
+m := max 
+
+n
+
+r ∈ [|S|] : hπr (S) ≤ t
+
+o
+
+. (49) Then t/h πi(S)
+
+ ≥ 1 for i ≤ m and t/h πi(S)
+
+ = 0 for i > m . Hence, 
+
+X
+
+> i∈S
+
+ thi
+
+
+
+=
+
+> m
+
+X
+
+> i=1
+
+ thπi(S)
+
+
+
+≤
+
+> m
+
+X
+
+> i=1
+
+thπi(S)
+
+= t
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+.
+
+Let Am := 1
+
+> m
+
+Pmi=1 1 
+
+> hπi(S)
+
+. By the definition of Bh(1/pσ , S ) and t = 132 Bh(1/pσ , S ),
+
+t ≤ 132 A−1
+
+> m
+
+
+
+1 + 1
+
+pσ m
+
+
+
+.
+
+Therefore, 
+
+pσ
+
+X
+
+> i∈S
+
+ thi
+
+
+
+≤ pσ t
+
+> m
+
+X
+
+> i=1
+
+1
+
+hπi(S)
+
+= pσ tmA m ≤ 132 pσ
+
+
+
+A−1
+
+> m
+
+
+
+1 + 1
+
+pσ m
+
+ 
+
+mA m = 132 
+
+ pσ m + 1 .
+
+We now show that pσ m < 1. If pσ m ≥ 1, then 1 + 1  
+
+> pσm
+
+≤ 2. Moreover, Am ≥ 1 
+
+> hπm (S)
+
+, hence 
+
+A−1 
+
+> m
+
+≤ hπm . Consequently, 
+
+t ≤ 132 A−1 
+
+> m
+
+× 2 ≤ 116 hπm(S) < h πm(S),
+
+contradicting hπm(S) ≤ t in (49). Thus pσ m < 1, and 
+
+pσ
+
+X
+
+> i∈S
+
+ thi
+
+
+
+≤ 132 (1 + pσ m) < 116 .
+
+42 G.4 Proof of Lemma G.7 Lemma G.7 (Proof in Section G.4) . The number of steps ¯d in the leaf-branch peeling procedure satisfies ¯d ≤ ⌊ log 2(n + 2) ⌋ .
+
+Proof. For any step p ∈ [ ¯d], consider 
+
+¯Tp := ¯T \ [
+
+> i<p
+
+  ¯Li ∪ ¯Bi
+
+ , so that ¯T1 ≡ ¯T . 
+
+Let eTp be the tree obtained from ¯Tp by suppressing all degree-2 nodes (recursively removing any degree-2 node and merging its two incident edges into one). Denote emp := |V ( eTp)|.In eTp, every node has degree 1 or at least 3. Let eLp ≡ ¯Lp be the set of leaves of eTp and eIp := 
+
+V ( eTp) \ eLp. Let deg eTp (v) be the number of edges of node v in tree eTp. Using the degree-sum identity for trees, X  
+
+> v∈V(eTp)
+
+deg eTp (v) = 2( emp − 1) ≥ | eLp| + 3 |eIp|,
+
+which implies | eLp| ≥ | eIp| + 2 due to emp = | eLp| + |eIp| and hence 
+
+|eIp| ≤ emp − 22 .
+
+By construction of the leaf-branch peeling step, removing ¯Lp ∪ ¯Bp from ¯Tp yields ¯Tp+1 . Note that 
+
+eIp is a set of nodes belonging to ¯Tp+1 and not suppressed by the degree-2 suppressing procedure in ¯Tp (all nodes have degree ≥ 3). Consider the set of degree-2 nodes eK = V ( ¯Tp+1 ) \ eIp such that 
+
+deg ¯Tp (v) = 2 for all v ∈ eK. For any v ∈ eK, the degree of v does not change when we construct 
+
+¯Tp+1 , because if it changes, then v would belong to ¯Bp (contradiction). Thus, deg ¯Tp+1 (v) = 2 for all v ∈ eK. It means that when construct ¯Tp+1 , vertices eK still have degree 2. Thus, the degree-2 suppressing procedure on ¯Tp+1 will remove at least eK and we get 
+
+emp+1 ≤ | eIp|.
+
+Therefore, 
+
+emp+1 ≤ | eIp| ≤ emp − 22 .
+
+Unrolling the recursion, 
+
+emp + 2 ≤ em1 + 2 2p−1 ≤ n + 2 2p−1
+
+and 
+
+2 ¯d ≤ n + 2 .
+
+since m ¯d ≥ 0. Thus 
+
+¯d ≤ ⌊ log 2(n + 2) ⌋ .
+
+G.5 Proof of Theorem 5.2 Theorem 5.2 (Lower Bound in the Heterogeneous Setting) . We consider any computational and communication environment satisfying Assumption 1.4. Let L, ∆, ε, n, σ 2, d > 0 be any numbers such that L∆/ε ≥ ¯c1 and dimension d ≥ ¯c3L∆/ε. Consider Protocol 5. For all i ∈ [n] and k ≥ 0,
+
+mappings Cki satisfy Assumption G.1. Then, for any algorithm A, there exists a function f ∈ F ∆,L ,
+
+exists oracles that satisfy Assumption 5.1, and E
+
+h
+
+inf y∈Gt ∥∇ f (y)∥2i
+
+> ε for all 
+
+t ≤ ¯c2 × max 
+
+ 
+
+> d
+> ¯w1
+
+, max  
+
+> i∈[n]
+
+hi, σ2
+
+> nε
+
+
+
+> 1
+> nn
+
+P
+
+> i=1
+
+hi
+
+  
+
+> L∆
+> ε
+
+, (9) 43 where Gt is the set of all possible points that can be constructed by A up to time t based on {Ii}i∈[n],
+
+and ¯w1 ≡ min {i,j }∈ F wij is the smallest weight in a Gomory-Hu tree T = ( V, F, w ) of ¯G. The quantities ¯c1, ¯c2, and ¯c3 are universal constants. Proof. The lower bound 
+
+Ω max 
+
+(
+
+max  
+
+> i∈[n]
+
+hi, σ2
+
+nε 
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+hi
+
+!) 
+
+L∆
+
+ε
+
+!
+
+(50) follows from Theorem A.2 by Tyurin and Richtárik (2023), where the authors do not take into account communication times. With communication times, the lower bound can only increase. We now prove the first term in the max .
+
+Unlike the homogeneous setup, it is sufficient to use the deterministic construction from (Carmon et al., 2020) and apply the standard trick of placing the blocks of this function on different nodes. For any T ∈ N, Carmon et al. (2020) define FT : RT → R such that 
+
+FT (x) := −Ψ(1)Φ( x1) + 
+
+> T
+
+X
+
+> i=2
+
+[Ψ( −xi−1)Φ( −xi) − Ψ( xi−1)Φ( xi)] , (51) where 
+
+Ψ( x) = 
+
+(0, x ≤ 1/2,
+
+exp 
+
+
+
+1 − 1(2 x−1) 2
+
+
+
+, x ≥ 1/2, and Φ( x) = √e
+
+Z x
+
+> −∞
+
+e− 12 t2
+
+dt. 
+
+Lemma G.12 (Carmon et al. (2020)) . The function FT satisfies: 1. FT (0) − inf x∈RT FT (x) ≤ ∆0T, where ∆0 := 12 .
+
+2. The function FT is l1–smooth, where l1 := 152 .
+
+3. For all x ∈ RT , prog (∇FT (x)) ≤ prog (x) + 1 .
+
+4. For all x ∈ RT , if prog (x) < T, then ∥∇ FT (x)∥ > 1.
+
+Find undirected version of G : ¯G = ( V, ¯E, b ) where {i, j } ∈ ¯E with weight bij iff (i, j ) ∈ E with weight bij . For the graph ¯G, we construct a Gomory-Hu tree T = ( V, F, w ). Let us take any pair 
+
+{¯i, ¯j} ∈ F of workers such that min {i,j }∈ F wij = w¯i¯j . We now split the blocks of the function 
+
+FT (x) from (51) and define two new functions. First, sample a uniformly random subset RT = [ RT, 1, . . . , R T,T ] without repetitions from set [d]
+
+(RT, 1 < · · · < R T,T ). Let us fix any λ > 0, then we take FT, 1 : Rd → R and FT, 2 : Rd → R such that 
+
+FT, 1(x) := −Ψ(1)Φ([ x]RT , 1 ) + X   
+
+> i∈{ 2,...,T },i |2=1
+
+Ψ( −[x]RT ,i −1 )Φ( −[x]RT ,i ) − Ψ([ x]RT ,i −1 )Φ([ x]RT ,i ) ,
+
+(52) and 
+
+FT, 2(x) := X   
+
+> i∈{ 2,...,T },i |2=0
+
+Ψ( −[x]RT ,i −1 )Φ( −[x]RT ,i ) − Ψ([ x]RT ,i −1 )Φ([ x]RT ,i ) ,
+
+where [x]j is the jth coordinate of x. The idea is that we apply a random permutation of the coordinates. Notice that the d − T coordinates are artificial. We consider the following functions fi :
+
+fi(x) := 
+
+ 
+
+> nLλ 2
+> l1
+
+FT, 1
+
+  xλ
+
+ , i = ¯ i,  
+
+> nLλ 2
+> l1
+
+FT, 2
+
+  xλ
+
+ , i = ¯ j, 
+
+0, i̸ = ¯ i and i̸ = ¯ j. 
+
+44 Then, we get 
+
+f (x) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+fi(x) = 1
+
+n
+
+ nLλ 2
+
+l1
+
+FT, 1
+
+ xλ
+
+
+
++ nLλ 2
+
+l1
+
+FT, 2
+
+ xλ
+
+
+
+= Lλ 2
+
+l1
+
+FT
+
+ x[RT ]
+
+λ
+
+
+
+,
+
+where x[RT ] ∈ RT is the subvector of size T of vector x ∈ Rd such that [x[RT ]]i = [ x]RT ,i for all 
+
+i ∈ [T ]. The function f is L-smooth since 
+
+∥∇ f (x) − ∇ f (y)∥ = Lλ l1
+
+∇FT
+
+ x[RT ]
+
+λ
+
+
+
+− ∇ FT
+
+ y[RT ]
+
+λ
+
+
+
+≤ L ∥x − y∥ .
+
+Let us take 
+
+T =
+
+ ∆l1
+
+Lλ 2∆0
+
+
+
+,
+
+then 
+
+f (0) − inf 
+
+> x∈Rd
+
+f (x) = Lλ 2
+
+l1
+
+(FT (0) − inf 
+
+> x∈RT
+
+FT (x)) ≤ Lλ 2∆0Tl1
+
+≤ ∆.
+
+We take 
+
+λ = l1
+
+√εL
+
+to ensure that 
+
+∥∇ f (x)∥2 = L2λ2
+
+l21
+
+∇FT
+
+ x[RT ]
+
+λ
+
+ 2
+
+> L2λ2
+
+l21
+
+= ε
+
+for all x ∈ RT such that prog (x) < T. In the last inequality, we use Lemma G.12. We assume that the workers have access to non-stochastic mappings ∇fi(x) that are unbiased and 
+
+0-variance-bounded, which is sufficient to derive the lower bound. Substituting the choice of the parameters, 
+
+T =
+
+ ∆Ll1ε∆0
+
+
+
+.
+
+Only workers ¯i and ¯j possess information about the function f . The function f is constructed as a zero-chain function, and its components are distributed between workers ¯i and ¯j. Because of this partitioning, these two workers must communicate in order to identify the next non-zero coordinate. Initially, only worker ¯i can obtain a non-zero value in the first “useful” coordinate RT, 1
+
+via the gradient of FT, 1. Subsequently, however, this worker cannot obtain a non-zero value in the second “useful” coordinate RT, 2 due to the construction in (52). Thus, it has to pass the first “useful” coordinate to worker ¯j because only this worker can discover a non-zero value in the second “useful” coordinate. Then, once the second worker discovers the second “useful” coordinate and has to pass it to the first worker, and so forth. Let {ν1,j }j≥1 be the sequence that the second worker receives from the first worker during the optimization process. Due to our construction, the function is random with randomly permuted coordinates. We define μ1 as the number of received coordinates {ν1,j }j≥1 by the second worker from the first worker until the moment when a received coordinate is RT, 1. Thus, 
+
+P (μ1 = j) = P (ν1,j = RT, 1, ν 1,j −1̸ = RT, 1, . . . , ν 1,1̸ = RT, 1) ≤ P (ν1,j = RT, 1)= E [P (ν1,j = RT, 1|{ ν1,j }j≥1)] .
+
+Due to Assumption G.1, {ν1,j }j≥1 are independent of RT, 1. Thus, 
+
+P (μ1 = j) ≤ 1
+
+d
+
+and 
+
+P (μ1 ≤ t) ≤ td
+
+45 for all t ≥ 0, since RT, 1 is a uniformly random index from [d], given {ν1,j }j≥1. Let us define yk as the first moment of time when any of the workers can discover the kth coordinate RT,k . Similarly, we define μ2 as the number of received coordinates {ν2,j }j≥1 by the first worker from the second worker, after time y2, until the moment when a received coordinate is RT, 2, we define μ3 as the number of received coordinates {ν3,j }j≥1 by the second worker from the first worker, after time y3,
+
+until the moment when a received coordinate is RT, 3, where {νk,j }j≥1 are the coordinate sent after time yk. Thus, 
+
+P (μk = j|{ μk′ }1≤k′<k ) ≤ P (νk,j = RT,k |{ μk′ }1≤k′<k ) .
+
+Let us define Bk−1 as the sigma-algebra generated by {RT,k ′ }1≤k′<k and {νk,j }j≥1,k ≥1. Since 
+
+{μk′ }1≤k′<k are deterministic knowing Bk−1. Using the tower rule, 
+
+P (μk = j|{ μk′ }1≤k′<k ) ≤ P (νk,j = RT,k |{ μk′ }1≤k′<k )= E [ P (νk,j = RT,k |{ RT,k ′ }1≤k′<k , {νk,j }j≥1,k ≥1)| { μk′ }1≤k′<k ] .
+
+Conditioned on {RT,k ′ }1≤k′<k , there are at least d − (k − 1) positions where RT,k can be placed uniformly. Therefore, 
+
+P (μk = j|{ μk′ }1≤k′<k ) ≤ P (νk,j = RT,k |{ μk′ }1≤k′<k ) ≤ 1
+
+d − (k − 1) ≤ 2
+
+d
+
+and 
+
+P (μk ≤ t|{ μk′ }1≤k′<k ) ≤ 2td
+
+for all t ≥ 0 and 1 ≤ k ≤ T − 1 since T ≤ d/ 2.
+
+By our construction, the two workers are separated by the edge with weight min {i,j }∈ F wij . Hence, the maximum flow, or in terms of our problem, the maximum number of coordinates per second that nodes ¯i and ¯j can send to each other is bounded by min {i,j }∈ F wij .Combining all together, the time discover the last T th “useful” is lower bounded by the sum  
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+min  
+
+> {i,j }∈ F
+
+wij 
+
+.
+
+for an algorithm to find a vector x ∈ RT such that prog (x) = T. We define wmin := min  
+
+> {i,j }∈ F
+
+wij .
+
+Hence, for any ¯t > 0 and s > 0, by Chernoff’s method, 
+
+P
+
+ 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+≤ ¯t
+
+ = P
+
+exp 
+
+−s 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+ ≥ e−s¯t
+
+
+
+≤ es¯tE
+
+exp 
+
+−s 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+ .
+
+Using the tower rule and the bound P (μk ≤ t|{ μk′ }k′<k ) ≤ 2td , for any t ≥ 0,
+
+E
+
+
+
+exp 
+
+
+
+−s μk
+
+wmin 
+
+
+
+{μk′ }k′<k 
+
+
+
+≤ exp( −st ) + P (μk ≤ wmin t|{ μk′ }k′<k )
+
+≤ exp( −st ) + 2wmin td .
+
+Using the tower rule, 
+
+E
+
+exp 
+
+−s 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+ ≤
+
+
+
+exp( −st ) + 2wmin td
+
+T −1
+
+,
+
+46 and 
+
+P
+
+ 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+≤ ¯t
+
+ ≤ exp( s¯t)
+
+
+
+exp( −st ) + 2wmin td
+
+T −1
+
+.
+
+Choosing t = 1 
+
+> s
+
+, gives 
+
+P
+
+ 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+≤ ¯t
+
+ ≤ exp( s¯t)
+
+
+
+e−1 + 2wmin 
+
+sd 
+
+T −1
+
+.
+
+Now we choose 
+
+s = 2ew min 
+
+d
+
+to get 
+
+P
+
+ 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+≤ ¯t
+
+ ≤ exp 
+
+ 2ew min 
+
+d ¯t − 14 (T − 1) 
+
+
+
+For any δ ∈ (0 , 1] , if 
+
+¯t ≤ d
+
+2ew min 
+
+ 14 (T − 1) − log 
+
+ 1
+
+δ
+
+ 
+
+,
+
+then P
+
+PT −1 
+
+> j=1
+> μj
+> wmin
+
+≤ ¯t
+
+
+
+≤ δ. 
+
+For δ = 12 ,d
+
+2ew min 
+
+ 14 (T − 1) − log 
+
+ 1
+
+δ
+
+ 
+
+≥ 12e × dwmin 
+
+ 14
+
+ ∆Ll1ε∆0
+
+
+
+− 2
+
+
+
+.
+
+In the theorem, we assume that L∆ 
+
+> ε
+
+≥ ¯c1 for some universal constant ¯c1 (we take ¯c1 large enough to ensure that 14
+
+j ∆Ll1ε∆0
+
+k
+
+− 2 ≥ ∆L 
+
+> 8l1ε∆0
+
+). Therefore, 
+
+d
+
+2ew min 
+
+ 14 (T − 1) − log 
+
+ 1
+
+δ
+
+ 
+
+≥ 116 el 1∆0 × dwmin 
+
+· ∆Lε .
+
+Thus, we get 
+
+E
+
+
+
+inf 
+
+> x∈Gt
+
+∥∇ f (x)∥2
+
+
+
+> 2εP
+
+ 
+
+> T−1
+
+X
+
+> j=1
+
+μj
+
+wmin 
+
+> t 
+
+ ≥ ε
+
+for 
+
+t = ¯ c1 × dwmin 
+
+· ∆Lε ,
+
+where ¯c1 is a universal constant. It is left to recall that f is random. Nevertheless, since 
+
+E
+
+
+
+E
+
+
+
+inf 
+
+> x∈Gt
+
+∥∇ f (x)∥2 f
+
+ 
+
+> ε, 
+
+there exists a deterministic function ¯f such that 
+
+E
+
+
+
+inf  
+
+> x∈Gt( ¯f)
+
+∇ ¯f (x) 2
+
+
+
+> ε, 
+
+where Gt( ¯f ) are outputs of the algorithm given ¯f (in the statement of the theorem, we rename ¯f to 
+
+f ). 47 H One Step in Synchronous SGD 
+
+In this section, we provide more details on how to implement Synchronous SGD and obtain (2), as discussed in Section 1.1. One way to do it is to fix any pivot worker (server) v that aggregates the stochastic gradients. Then, consider any other worker i. Choose any path p between workers i and v in 
+
+G. Worker i sends ∇f (xk; ξki ) along this path p, which takes at most d/min (i,j )∈p bij ≤ d/min (i,j )∈E bij 
+
+seconds. There is an important caveat: all workers send their vectors to worker v in parallel, potentially occupying the same edges and causing congestion (e.g., if two workers send their vectors through the same edge, it leads to a 2× slowdown because the edge would process 2 × d coordinates). One known way to fix this is to perform online in-network aggregation : each worker streams its vector coordinate-by-coordinate, while intermediate nodes wait for the first coordinate from their children, aggregate these values, and immediately forward the result further. Thus, every edge carries only a single aggregated stream instead of multiple separate vectors, avoiding additional congestion factors, and at most d coordinates pass through each edge. The broadcast operation can be performed in a similar way: every node, upon receiving the new vector xk+1 , immediately broadcasts its first coordinates further, before receiving the last ones. 48 I Examples of Graphs 
+
+In this section, we present examples of graphs that represent the communication topologies of the workers. 
+
+I.1 Star Graph 
+
+n
+
+1
+
+2
+
+# · · · 
+
+n − 3n − 2
+
+n − 1 b b
+
+bb
+
+b
+
+Original graph Gn
+
+1
+
+2
+
+# · · · 
+
+n − 3n − 2
+
+n − 1 b bbbb
+
+Gomory–Hu tree T
+
+Figure 5: Star graph G in the centralized setting and a Gomory–Hu tree of the corresponding undirected graph ¯G.Consider Figure 5 where workers communicate through a server (another worker). One can show that a Gomory-Hu tree T of G is shown in Figure 5. In the tree, sorting the weights, we get ¯w1 = b, . . . , 
+
+¯wn−1 = b, ¯wn = ∞. For k = 1 in Algorithm 2, S1,1 = [ n] and min S∈S 1 t1(S) =  d/b + hσ 2
+
+/nε 
+
++h. 
+
+For k = 2 , S 2,1 = {1} and S2,2 = {2, . . . , n } because we remove the edge corresponding to the first worker (w.l.o.g., we could have chosen any other worker), and min S∈S 2 t2(S) =  d/b + hσ 2
+
+/(n−1) ε
+
++
+
+h. Notice that min S∈S 2 t2(S) ≤ min S∈S 1 t1(S). Repeating the same procedure and removing the edges, we get min S∈S 1 t1(S) ≤ min S∈S k tk(S) for all 1 ≤ k ≤ n − 1. However, for k = n, we get 
+
+¯wn = ∞ and Sn, 1 = {1}, S n, 2 = {2}, . . . , S n,n = {n}, and min S∈S n tn(S) = hσ 2
+
+/ε + h, which can be smaller than min S∈S 1 t1(S). Thus, the total time complexity is 
+
+O
+
+
+
+min 
+
+n db + hσ 2
+
+> nε
+
+ L∆ 
+
+> ε
+
++ hL ∆ 
+
+> ε
+
+, hσ 2L∆ 
+
+> ε2
+
++ hL ∆
+
+> ε
+
+o 
+
+.
+
+49 I.2 K clusters  
+
+> nK
+
+GPUs  
+
+> nK
+
+GPUs 
+
+# · · ·  
+
+> nK
+
+GPUs  
+
+> nK
+
+GPUs  
+
+> nK
+
+GPUs  
+
+> nK
+
+GPUs 
+
+bslow 
+
+bslow 
+
+bslow 
+
+bslow bslow 
+
+bslow 
+
+bslow 
+
+Figure 6: Example of K clusters arranged in a ring. Each cluster contains n/K workers with fast intra-cluster communication (all-to-all with bandwidth ∞). Communication between neighboring clusters occurs with bandwidth bslow .50 I.3 p-Torus 
+
+Let p ≥ 1 and k ≥ 2. The p-Torus is the directed graph G = ( V, E, b ) defined as follows. 
+
+V = [ k]p = {(v1, . . . , v p) : vi ∈ [k]}.
+
+For every vertex v = ( v1, . . . , v p) and every coordinate i ∈ [p], there are directed edges 
+
+v → (v1, . . . , v i + 1 (mod k), . . . , v p)
+
+and 
+
+v → (v1, . . . , v i − 1 (mod k), . . . , v p).
+
+Each edge (u, v ) ∈ E has weight buv = b > 0 (for simplicity). 
+
+1
+
+5
+
+9
+
+13 
+
+2
+
+6
+
+10 
+
+14 
+
+3
+
+7
+
+11 
+
+15 
+
+4
+
+8
+
+12 
+
+16 
+
+Figure 7: Example of a 2-Torus with k = 4 . Each node communicates with its four neighbors, and the dashed edges indicate the wrap-around connections. All links have bandwidth b. In the visualization, two arcs merged and visualized with one undirected edge. 
+
+v1
+
+v2
+
+v3
+
+# · · · 
+
+vn−2vn−1
+
+vn
+
+2pb 2pb 
+
+2pb 2pb 
+
+2pb 
+
+Figure 8: A Gomory–Hu tree T of the undirected graph ¯G corresponding to a p-Torus with bandwidths 
+
+b. The fact that T is a tree with weights 2pb follows from the fact that every value of a min-cut in ¯G
+
+is 2pb. 
+
+51 J Practical Guidelines and Numerical Experiments 
+
+In this section, we discuss practical guidelines and conduct numerical experiments of the new algorithm, Grace SGD. As we explain in Section 2, Grace SGD is simple. It is just a stochastic gradient method with preprocessing (Algorithm 2) and the optimal-bandwidth AllReduce (Algorithm 3). Implementing Algorithm 2 is straightforward. Finding a Gomory-Hu tree is a standard graph problem, and there are many open-source libraries with implementations (for instance, use gomory_hu_tree 
+
+from NetworkX (Hagberg et al., 2007)). Besides that, Algorithm 2 is a standard one loop function where we find all steps can be implemented in Python. At the same time, in general, implementing the optimal-bandwidth AllReduce algorithm described in Algorithm 3 is arguably trickier. The first non-trivial step is to solve the Steiner Tree Packing 
+
+problem. While it is a classical problem in computer science, Lau (2004) only recently proposed a polynomial-time algorithm that finds at least ⌊α ¯G(S)/26 ⌋ edge-disjoint trees that contain every node in S ⊆ V, where α ¯G(S) is the minimum value of an S-cut in ¯G (Definition E.5 and Theorem F.1). Once the Steiner Tree Packing is solved (up to a constant factor), the reduce and broadcast steps can be implemented in practice using the standard communication libraries. The description of the polynomial-time algorithm in Lau (2004) is somewhat non-trivial. Fortunately, for standard graph structures, implementing an optimal-bandwidth AllReduce is more straightforward. In particular, consider the 2-Torus G from Figure 7. Without loss of generality, assume that b = 1 and 
+
+n = (2 k + 1) 2 for some k ≥ 1. We fix the node with coordinate (k, k ) and refer to it as the pivot node (see Figure 9). In this graph, every node has 4 outgoing edges. The idea of this optimal-bandwidth AllReduce is that every node i splits its local vector into four blocks (ai, 1, a i, 2, a i, 3, a i, 4) and sends them in different directions. The goal is now to choose the directions in such a way that each block eventually reaches the pivot worker without cycles, while intermediate nodes use online in-network aggregation to combine blocks with the same index and avoid congestion. Formally, for all (i, j ) with i̸ = k and j̸ = k, the node sends the first block to (i + 1 mod (2 k + 1) , j ),the second block to (i, j + 1 mod (2 k + 1)) , the third block to (i − 1 mod (2 k + 1) , j ), and the fourth block to (i, j − 1 mod (2 k + 1)) . For nodes with i = k or j = k, the node sends the first block to (i, j + 1 mod (2 k + 1)) , the second block to (i + 1 mod (2 k + 1) , j ), the third block to 
+
+(i, j − 1 mod (2 k + 1)) , and the fourth block to (i − 1 mod (2 k + 1) , j ).See visualization for k = 2 in Figure 9. For instance, node (3 , 0) sends the first block to (4 , 0) , which aggregates its own block with it, and sends the sum to (0 , 0) , which also adds its first block. And it happens until the total sum arrives to (2 , 2) . Notice that (2 , 1) aggregates the sum from nodes (2 , 0) 
+
+and (1 , 1) .
+
+Compared to the naive strategy, where every worker sends the full vectors to the pivot worker, using this routing algorithm and online in-network aggregation, we can speed up the reduce operation by 
+
+4×, since each block arrives at the central node via different and independent paths. The improvement by 4× is expected since the value of a min-cut in the graph is 4. The broadcast can be implemented similarly by reversing the edges. We could have obtained a 2–4× speedup using Algorithm 3, but the strategy specialized for the 2-Torus is arguably simpler. For the ring graph, the algorithm is similar and one get a 2× communication speed up. In general, for a p-Torus, the speedup should be Θ( p) (at least with Algorithm 3 due to Theorem F.1). 
+
+J.1 Numerical experiments 
+
+We now consider Grace SGD and compare it to Synchronous SGD. The environment was emulated in Python 3 with one Intel(R) Xeon(R) Platinum 8168 CPU @ 2.70GHz. We assume that ith worker requires hi = 1 second to calculate one stochastic gradient. We assume that the graph G is 2-Torus (see Figure 7) with bandwidth b = 0 .1 for all the edges. We consider the setup with n = 100 . In all methods, we tune the step sizes from the set {2i | i ∈ [−20 , 20] }. In (1), we consider the standard logistic regression problem with MNIST dataset (LeCun et al., 2010), where every worker samples one sample from the dataset and calculates a stochastic gradient. 
+
+Naive synchronization vs. optimal-bandwidth AllReduce. In this part, we compare Synchronous SGD with naive synchronization, where full vectors are sent to neighbors (a similar problem in gossip methods), and Grace SGD with optimal-bandwidth AllReduce. In Figure 10, we set σ2
+
+/ε = 100 for Algorithm 1 to ensure that, in both Grace SGD and Synchronous SGD, all workers compute one 52 (0, 0) (1, 0)    
+
+> (0, 1)
+> (4, 0)
+> (0, 4)
+> (1, 1)
+> (0, 2)
+> (4, 1)
+> (0, 3)
+> (1, 2) (4, 2)
+> (1, 3) (4, 3)
+> (1, 4) (4, 4)
+> (2, 0)
+> (2, 1)
+> (2, 2)
+> (2, 3)
+> (2, 4)
+> (3, 0)
+> (3, 1)
+> (3, 3)
+> (3, 4)
+> (3, 2)
+> Directed 5x5 Torus with Edge Labels
+
+Figure 9: 2-Torus and Reduce routing. Each color corresponds to one of the four blocks. stochastic gradient per iteration, providing a fair comparison of the communication strategies. In practice, we observe that Grace SGD converges faster. 0 2000 4000 6000 8000 10000 
+
+times (seconds)      
+
+> 10 0
+> f(xt) f(x * )
+> Grace SGD: Step size: 1.0
+> Synchronous SGD: Step size: 1.0 02000 4000 6000 8000 10000
+
+times (seconds) 
+
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> accuracy
+> Grace SGD: Step size: 1.0
+> Synchronous SGD: Step size: 1.0
+
+Figure 10: Experiments with Synchronous SGD and Grace SGD 
+
+K clusters. We now consider the practical setup from Figure 6 to test the effectiveness of Algorithm 2 and the usefulness of local training within a single cluster when bslow is small. We take n = 100 
+
+and K = 10 . For this setup, Algorithm 2 can either return S∗ = [ n] (all workers) or S∗ = [ n/K ]
+
+(one cluster), depending on the value of bslow (see the discussion in Section 4). In Figure 11, we compare the performance of these two options and observe that S∗ = [ n] has faster convergence, which concurs with the discussion in Section 4. However, as we start decreasing the bandwidth in Figures 12 and 13, we observe that local training in one cluster is faster in Figure 13, which supports the fact that S∗ = [ n/K ], as discussed in Section 4. 53 0 2000 4000 6000 8000 10000 
+
+times (seconds) 
+
+10 0
+
+> f(xt) f(x * )
+
+Grace SGD (One Cluster): Step size: 0.5 
+
+Grace SGD (All Workers): Step size: 1.0 0 2000 4000 6000 8000 10000 
+
+times (seconds) 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+> accuracy
+
+Grace SGD (One Cluster): Step size: 0.5 
+
+Grace SGD (All Workers): Step size: 1.0 Figure 11: Experiments with Grace SGD and bslow = ∞0 2000 4000 6000 8000 10000 
+
+times (seconds) 
+
+10 0
+
+> f(xt) f(x * )
+
+Grace SGD (One Cluster): Step size: 0.5 
+
+Grace SGD (All Workers): Step size: 1.0 0 2000 4000 6000 8000 10000 
+
+times (seconds) 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+> accuracy
+
+Grace SGD (One Cluster): Step size: 0.5 
+
+Grace SGD (All Workers): Step size: 1.0 
+
+Figure 12: Experiments with Grace SGD and bslow = 1 0 2000 4000 6000 8000 10000 
+
+times (seconds) 
+
+10 0
+
+> f(xt) f(x * )
+
+Grace SGD (One Cluster): Step size: 0.5 
+
+Grace SGD (All Workers): Step size: 1.0 0 2000 4000 6000 8000 10000 
+
+times (seconds) 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+> accuracy
+
+Grace SGD (One Cluster): Step size: 0.5 
+
+Grace SGD (All Workers): Step size: 1.0 
+
+Figure 13: Experiments with Grace SGD and bslow = 0 .1
+
+54 K Graph-Bandwidth Communication Model with Latencies 
+
+We can extend Graph-Bandwidth Communication Model by assuming that each edge has a latency 
+
+ℓij ≥ 0, and use the standard α–β model, where transferring s coordinates through edge (i, j ) takes 
+
+ℓij +s/bij seconds. Notice that the first term does not depend on the amount of transmitted information 
+
+s, and since workers typically send large volumes of data, the latency term does not dominate. Formally, under this model, instead of the main upper bound results in Theorems 1.5 and 1.7, we obtain (3) + O (ℓmax L∆/ε) and (5) + O (ℓmax L∆/ε), respectively, where ℓmax = max (i,j )∈E ℓij . The only result that needs to be adjusted is Theorem F.1, where the reduce and broadcast operations take 
+
+O (ℓmax + d/p ) seconds instead of O (d/p ) (the asymptotic rate remains O (d/p ) if d is large). For instance, if hi = h for all i ∈ [n], then the time complexity of Grace SGD in the homogeneous case is 
+
+O
+
+
+
+min 
+
+
+
+min 
+
+> k∈[n−1]
+
+
+
+ℓmax + d
+
+¯wk
+
++ min 
+
+> p∈[k]
+
+hσ 2
+
+|Sk,p | ε + h
+
+ L∆
+
+ε
+
+
+
+, hσ 2L∆
+
+ε2 + hL ∆
+
+ε
+
+
+
+.
+
+Thus, if d is large, which is the case in modern training, the term involving ℓmax does not dominate, and all our results and conclusions remain valid. For clarity, and because d is large in practice, we ignore latencies in the main part. Nevertheless, deriving tight lower bounds under the model with large latencies is an important direction for future work. 55

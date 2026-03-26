@@ -1,0 +1,1506 @@
+Title: Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices
+
+URL Source: https://arxiv.org/pdf/2603.20966v1
+
+Published Time: Tue, 24 Mar 2026 01:24:11 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices 
+
+# Hussam Al Daas 
+
+hussam.al-daas@stfc.ac.uk Rutherford Appleton Laboratory United Kingdom 
+
+# Grey Ballard 
+
+ballard@wfu.edu Wake Forest University USA 
+
+# Laura Grigori 
+
+laura.grigori@epfl.ch École Polytechnique Fédérale de Lausanne Switzerland 
+
+# Md Taufique Hussain 
+
+hussaint@wfu.edu Wake Forest University USA 
+
+# Suraj Kumar 
+
+suraj.kumar@inria.fr INRIA Lyon France 
+
+# Mohammad Marufur Rahman 
+
+rahmm224@wfu.edu Wake Forest University USA 
+
+# Kathryn Rouse 
+
+kathryn.rouse@inmar.com Inmar Intelligence USA 
+
+## Abstract 
+
+Sketching is widely used in randomized linear algebra for low-rank matrix approximation, column subset selection, and many other problems, and it has gained significant traction in machine learning applications. However, sketching large matrices often ne-cessitates distributed memory algorithms, where communication overhead becomes a critical bottleneck on modern supercomput-ing clusters. Despite its growing relevance, distributed-memory parallel strategies for sketching remain largely unexplored. In this work, we establish communication lower bounds for sketching us-ing dense matrices that determine how much data movement is required to perform it in parallel. One important observation of our lower bounds is that no communication is required for a small number of processors. We show that our lower bounds are tight by presenting communication optimal algorithms. Furthermore, we extend our approach to determine communication lower bounds for computations of Nyström approximation where sketching is applied twice. We also introduce novel parallel algorithms whose communication costs are close to the lower bounds. Finally, we implement our algorithms on modern state-of-the-art supercom-puting infrastructures which have both CPU- and GPU-equipped systems and demonstrate their parallel scalability. 
+
+## 1 Introduction 
+
+Many important linear algebra problems, such as computing low-rank approximations of a matrix, selecting a subset of its columns, solving linear systems, or computing eigenvalue decompositions, can be efficiently solved using randomization techniques that allow reducing computational and communication costs while providing accuracy guarantees with high probability, see [ 6, 10 , 14 , 16 ]. These techniques rely on sketching , a dimensionality reduction approach in which a matrix A ∈ R𝑛 1 ×𝑛 2 is mapped to a lower-dimensional representation by multiplying it with a random matrix Ω ∈ R𝑛 2 ×𝑟 ,where generally 𝑟 ≪ 𝑛 2. Depending on the application, the ma-trix A may have different dimensions and aspect ratios. Different random matrices can be used for sketching, including Gaussian ma-trices, structured fast transforms, and sparse random matrices. In this work, we focus on dense random matrices including Gaussian random matrices, which offer optimal theoretical guarantees for constructing low-dimensional representations. We refer the reader to [ 25 ] for a comprehensive overview of these sketching methods and their associated properties. The goal of this work is to design efficient parallel algorithms for computing the product AΩ , with a particular focus of avoiding unnecessary communication of random matrices. Because each pro-cessor can redundantly generate its needed entries of the random matrix, these products can be computed without communicating the random matrix, decreasing the amount of communication required from that of an explicit matrix multiplication (see, e.g., [ 4]). We then focus on an application of sketching to the Nyström approximation that computes a low rank approximation of a symmetric square ma-trix A as eA = (AΩ )( Ω𝑇 AΩ )† (AΩ )𝑇 [ 17 , 26 , 31 ], for some random matrix Ω. This representation involves first computing B = AΩ 
+
+and then computing C = Ω𝑇 B. We address this question theoret-ically, establishing communication lower bounds and analyzing asymptotic algorithmic costs, as well as practically implementing the most communication efficient algorithms and applying them to large data sets on 100s of nodes (100s of GPUs or 1000s of CPU cores) of a supercomputer. Our lower bound approach uses a geometric inequality that relates computation to data to build a constrained optimization problem whose analytical solution yields communica-tion lower bounds. We consider both a single matrix multiplication involving a random input as well as the entire Nyström compu-tation. We develop implementations using both Python and C++ and adapt them for both CPU-only and GPU platforms and explore the performance tradeoffs among the various configurations. Our results show the benefits of GPUs for performing dense matrix multiplication to accelerate Nyström approximation and the effec-tiveness of direct communication among GPUs to scale to large problems, and we obtain low-rank approximations of symmetric 
+
+> arXiv:2603.20966v1 [cs.DC] 21 Mar 2026 Hussam Al Daas, Grey Ballard, Laura Grigori, Md Taufique Hussain, Suraj Kumar, Mohammad Marufur Rahman, and Kathryn Rouse
+
+matrices of dimension 50,000 in fractions of a second. Our code will be made publicly available. In this work, we focus on AΩ and Ω𝑇 AΩ computations for dense and random Ω. The main contributions are to (1) establish communication lower bounds for the parallel compu-tation of B = AΩ where Ω is a dense random matrix and present parallel algorithms whose communication costs are optimal in all ranges (see §4); (2) establish communication lower bounds for the parallel com-putation of the sequence of computations B = AΩ followed by C = Ω𝑇 B where Ω is a dense random matrix, and present parallel algorithms whose communication costs are close to the lower bounds (see §5); (3) implement the most efficient algorithms using both Python and C++ for CPUs and GPUs (code to be made available) and bench-mark the implementations to demonstrate the communication efficiency of the algorithms and their parallel scaling (see §6). 
+
+## 2 Related Work 
+
+There have been numerous studies on establishing communication lower bounds for matrix multiplication. The first bounds were pro-posed by Hong and Kung [ 20 ] for several computations including matrix multiplication. Aggarwal et al. [ 1] extended this work for the parallel model and established first memory-independent paral-lel communication lower bounds. Irony et al. [ 21 ] reproduced the parallel matrix multiplication bounds using a geometric inequality. Al Daas et al. [ 4] established tight parallel communication lower bounds for all ranges of matrix dimensions and numbers of proces-sors. Liang et al. [ 24 ] presented a theoretical analysis to determine the data transfer cost of their algorithm for multiplying a dense random matrix with a sparse matrix. Their algorithm performs less data movement than the classical GEMM bound. Balabanov et al. [ 5] proposed a parallel sketching using a variant of the subsampled randomized Hadamard transform that exploits the structure of the random matrix. Talwalkar et al. [ 29 ] presented a parallel implementation of sketching and Nyström approxima-tion applied to kernel matrices with very large datasets. Higgins et al. [ 19 ] presented a high performance GPU implementation of sketching using count sketch and its application to least squares problems. Chen et al. [ 12 ] presented a parallel (multi GPU) imple-mentation and a benchmark study of sparse sign sketching and its application to solve least squares problems. Nyström approximation has been considered for a wide range of random matrices. One of the most widely used techniques is based on random sampling. That is, the columns in Ω are ran-domly selected from the identity matrix. The resulting Nyström approximation is given as eA = A(:, 𝑐 )A(𝑐, 𝑐 )†A(:, 𝑐 )𝑇 , where 𝑐 is the randomly selected subset of the column indices. This approxima-tion is very easy to compute as it only requires access to a subset of the matrix entries and does not involve any matrix multiplication. However, the approximation quality can be very poor if 𝑐 is not chosen carefully. Several sampling techniques relying on sketching have been investigated in the literature and applied to Nyström approximation [ 10 , 14 , 15 , 27 ]. Gittens and Mahoney [ 18 ] studied the performance quality and runtime of high-quality random sam-pling and random projection methods for Nyström approximation on various symmetric positive semi-definite matrices using MAT-LAB. They observed that both methods exhibit similar running times, while the relative performance quality depends on the spe-cific parameter of interest, with no clear overall winner. Li et al. [ 23 ]studied the optimal convergence rates of Nyström approximation under sampling-based selection in a distributed environment. 
+
+## 3 Model and Preliminaries 
+
+Multiplication with a random matrix in linear algebra is performed to achieve dimension reduction. Thus the non-contracted dimen-sion, 𝑟 , of the random matrix is much smaller than the contracted dimension 𝑛 . Therefore, we assume that 𝑟 < 𝑛 throughout this paper. Additionally, we assume that all matrix multiplications are performed using a classical matrix multiplication algorithm. 
+
+## 3.1 Parallel Computation Model 
+
+We first present the MPI model of computation and communication, which we use to establish communication lower bounds and analyze the costs of our algorithms in § 4 and 5. In this model, computation is distributed across 𝑃 processors. Each processor has a private local memory and is connected to all others via a fully connected network. Processors can only operate on data residing in their local memory and must communicate to access data stored in other processors. We assume that each processor can send and receive at most one message at a time. Communication refers to send and receive operations that transfer data between the private local memory of a processor and the network. The cost of communication mainly depends on the total volume of data transferred (bandwidth cost) and the number of messages exchanged (latency cost). In our model, the communication cost of an algorithm is defined as the cost along the critical path. For large messages, bandwidth cost typically dominates latency, so we focus mainly on bandwidth cost. Our algorithms in § 4 to 6 use All-Gather, Reduce-Scatter, and All-to-All collectives. The optimal latency and bandwidth costs of All-Gather and Reduce-Scatter collectives on 𝑄 processors are 
+
+log (𝑄 ) and (1 − 1 
+
+> 𝑄
+
+)𝑊 , respectively, where 𝑊 denotes the words of data in each processor after All-Gather or before Reduce-Scatter collective [ 11 , 30 ]. For All-to-All, we assume a bandwidth cost of 𝑊 ,where 𝑊 denotes the amount of data a processor starts and ends with, and a latency cost of 𝑄 − 1 for 𝑄 processors. 
+
+## 3.2 Fundamental Existing Results 
+
+We now present existing results which we will use to prove our lower bound results (Theorems 2 and 3). The first lemma relates the size of a set with its projections onto lower dimensional subspaces. We use it in Theorem 1 to relate the size of a 3-dimensional set to its 1 and 2-dimensional projections. The lemma is proved in [ 13 ]but we use the statement from [7, Lemma 4.1]. 
+
+Lemma 1. Consider any positive integers ℓ and 𝑚 and any 𝑚 
+
+projections 𝜙 𝑗 : Zℓ → Zℓ𝑗 (ℓ𝑗 ≤ ℓ), each of which extracts ℓ𝑗 
+
+coordinates 𝑆 𝑗 ⊆ [ℓ] and forgets the ℓ − ℓ𝑗 others. Define C =s ∈ [ 0, 1]𝑚 : ∆ · s ≥ 1 , where the ℓ × 𝑚 matrix ∆ has entries 
+
+∆𝑖,𝑗 = 1 if 𝑖 ∈ 𝑆 𝑗 and ∆𝑖,𝑗 = 0 otherwise. If [𝑠 1 · · · 𝑠 𝑚 ]T ∈ C , then for all 𝐹 ⊆ Zℓ , |𝐹 | ≤ 
+
+Ö 
+
+> 𝑗 ∈ [ 𝑚 ]
+
+|𝜙 𝑗 (𝐹 )| 𝑠 𝑗 .Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices 
+
+The following lemma provides a bound on the minimum number of elements a processor must access from each matrix to perform at least 1/𝑃 th of the scalar multiplications required for a classical matrix multiplication computation. We use it in the proofs of Theo-rems 2 and 3 to obtain additional constraints for our optimization. 
+
+Lemma 2 ([ 4 , Lemma 4]). Given a parallel matrix multiplication algorithm that multiplies an 𝑛 1 × 𝑛 2 matrix A by an 𝑛 2 × 𝑛 3 matrix 
+
+B using 𝑃 processors, any processor that performs at least 1/𝑃 th of the scalar multiplications must access at least 𝑛 1𝑛 2/𝑃 elements of A
+
+and at least 𝑛 2𝑛 3/𝑃 elements of B and also compute contributions to at least 𝑛 2𝑛 3/𝑃 elements of C = A · B.
+
+The following definition and results allow us to solve the opti-mization problems used to obtain communication lower bounds in § 4 and 5. 
+
+Definition 1 ([ 9, eq. (5.49)]). Consider an optimization problem of the form 
+
+min  
+
+> 𝒙
+
+𝑓 (𝒙 ) subject to 𝒈 (𝒙 ) ≤ 0 (1) 
+
+where 𝑓 : R𝑑 → R and 𝒈 : R𝑑 → R𝑐 are both differentiable. Define the dual variables 𝝁 ∈ R𝑐 , and let 𝑱 𝒈 be the Jacobian of 𝒈 . The 
+
+Karush-Kuhn-Tucker (KKT) conditions of (𝒙 , 𝝁 ) are as follows: 
+
+• Primal feasibility : 𝒈 (𝒙 ) ≤ 0;
+
+• Dual feasibility : 𝝁 ≥ 0;
+
+• Stationarity : ∇𝑓 (𝒙 ) + 𝝁 · 𝑱 𝒈 (𝒙 ) = 0;
+
+• Complementary slackness : 𝜇 𝑖 𝑔 𝑖 (𝒙 ) = 0 for all 𝑖 ∈ { 1, . . . , 𝑐 }.
+
+Lemma 3 ([ 4, Lemma 3]). Consider an optimization problem of the form given in eq. (1) . If 𝑓 is a convex function and each 𝑔 𝑖 is a quasiconvex function, then the KKT conditions are sufficient for optimality. 
+
+Lemma 4 ([ 8, Lemma 2.2]). The function 𝑔 0 (𝒙 ) = 𝐿 − Î𝑛 𝑖 =1 𝑥 𝑖 , for some constant 𝐿 , is quasiconvex in the positive quadrant. 
+
+## 3.3 Fundamental New Results 
+
+We now present a geometric inequality that we will use in § 4.1 and 5.1 to derive lower bounds for computations involving random matrices. 
+
+Theorem 1. Let 𝑉 be a finite set of points in Z3. Let 𝜙 𝑖 𝑗 (𝑉 ) be the projection of 𝑉 on the 𝑖 𝑗 -plane, i.e., all points (𝑖, 𝑗 ) such that there exists a 𝑘 so that (𝑖, 𝑗, 𝑘 ) ∈ 𝑉 . Define 𝜙 𝑗𝑘 (𝑉 ) and 𝜙 𝑘𝑖 (𝑉 ) similarly. Then |𝑉 | ≤ | 𝜙 𝑖 𝑗 (𝑉 )| · | 𝜙 𝑗𝑘 (𝑉 )| , |𝑉 | ≤ | 𝜙 𝑗𝑘 (𝑉 )| · | 𝜙 𝑘𝑖 (𝑉 )| , and |𝑉 | ≤ |𝜙 𝑘𝑖 (𝑉 )| · | 𝜙 𝑖 𝑗 (𝑉 )| .
+
+Proof. To begin, define 𝜙 𝑖 (𝑉 ) to be the projection of 𝑉 on the 𝑖 -axis, i.e., all points 𝑖 such that there exists a ( 𝑗, 𝑘 ) so that (𝑖, 𝑗, 𝑘 ) ∈ 𝑉 ,and 𝜙 𝑗 (𝑉 ) and 𝜙 𝑘 (𝑉 ) similarly. We recall from Lemma 1 that Δ𝑖,𝑗 =
+
+1 if index 𝑖 is present in projection 𝑗 and Δ𝑖,𝑗 = 0 otherwise. We see that |𝑉 | ≤ | 𝜙 𝑖 (𝑉 )| · | 𝜙 𝑗𝑘 (𝑉 )| by setting Δ =
+
+
+
+1 00 10 1
+
+
+
+and s = 1 1,and then applying Lemma 1. The first and second columns of Δ
+
+correspond to 𝜙 𝑖 (𝑉 ) and 𝜙 𝑗𝑘 (𝑉 ) projections, respectively. Likewise, we obtain |𝑉 | ≤ | 𝜙 𝑗 (𝑉 )| · | 𝜙 𝑘𝑖 (𝑉 )| , and |𝑉 | ≤ | 𝜙 𝑘 (𝑉 )| · | 𝜙 𝑖 𝑗 (𝑉 )| .To prove the result, note that 𝑖 ∈ 𝜙 𝑖 (𝑉 ) implies that there is a 
+
+( 𝑗, 𝑘 ) such that (𝑖, 𝑗, 𝑘 ) ∈ 𝑉 , this also implies that (𝑖, 𝑗 ) ∈ 𝜙 𝑖 𝑗 (𝑉 ).Thus |𝜙 𝑖 (𝑉 )| ≤ | 𝜙 𝑖 𝑗 (𝑉 )| so the first inequality holds. A similar argument applies to the remaining inequalities. □
+
+## 4 Lower Bounds and Algorithm for Matrix Multiplication with a Random Matrix 
+
+In this section we consider the computation B = AΩ where A is a matrix of dimensions 𝑛 1×𝑛 2 and Ω is a random matrix of dimensions 
+
+𝑛 2 ×𝑟 where 𝑟 < 𝑛 2. The iteration space of the computation contains 
+
+𝑛 1𝑛 2𝑟 iteration points and a scalar multiplication is performed in each iteration point. As Ω is a random matrix it does not need to be communicated but can instead be generated by any processor that needs it. Thus we expect that an algorithm to compute this should require less communication than one that computes a classical matrix multiplication between non-random matrices. 
+
+## 4.1 Communication Lower Bound 
+
+We begin by presenting an abstract optimization problem which we will use to determine the minimum amount of data required for a processor to perform its assigned scalar multiplications. 
+
+Lemma 5. Consider the following optimization problem 
+
+min  
+
+> x∈R2
+
+𝑥 1 + 𝑥 2
+
+such that 𝑥 1𝑥 2 ≥ 𝑛 1𝑛 2𝑟 /𝑃, 𝑛 1𝑛 2/𝑃 ≤ 𝑥 1, 𝑛 1𝑟 /𝑃 ≤ 𝑥 2, where 𝑃, 𝑛 1, 𝑛 2,and 𝑟 are all positive integers greater than or equal to 1, and 𝑛 2 > 𝑟 . 
+
+The constraints induce three cases for the optimal solution x∗ :
+
+• If 𝑃 ≤ 𝑛 1 then 𝑥 ∗ 
+
+> 1
+
+= 𝑛 1𝑛 2 
+
+> 𝑃
+
+, 𝑥 ∗ 
+
+> 2
+
+= 𝑛 1𝑟 𝑃 ;
+
+• If 𝑛 1 < 𝑃 ≤ 𝑛 1𝑛 2/𝑟 then 𝑥 ∗ 
+
+> 1
+
+= 𝑛 1𝑛 2 
+
+> 𝑃
+
+, 𝑥 ∗ 
+
+> 2
+
+= 𝑟 ;
+
+• If 𝑛 1𝑛 2/𝑟 < 𝑃 then 𝑥 ∗ 
+
+> 1
+
+= 𝑥 ∗ 
+
+> 2
+
+=   𝑛 1𝑛 2𝑟 𝑃 
+
+1/2.This can be visualized as follows: 
+
+𝑃 1 𝑛 1 𝑛 1𝑛 2              
+
+> 𝑟 𝑥 ∗
+> 1=𝑛 1𝑛 2
+> 𝑃
+> 𝑥 ∗
+> 2=𝑛 1𝑟 𝑃
+> 𝑥 ∗
+> 1=𝑛 1𝑛 2
+> 𝑃
+> 𝑥 ∗
+> 2=𝑟 𝑥 ∗
+> 1=𝑥 ∗
+> 2= 𝑛 1𝑛 2𝑟 𝑃
+> 1/2
+
+Proof. By Lemma 3, we can establish the optimality of the so-lution for every case by showing that the KKT conditions specified in Def. 1 are satisfied because the objective function and all but the first constraint are affine functions, which are convex (and qua-siconvex), and the first constraint is quasiconvex in the positive quadrant by Lemma 4. To match standard notation, let 𝑓 (x) = 𝑥 1 + 𝑥 2 and 
+
+𝑔 (x) =
+
+ 
+
+> 𝑛 1𝑛 2𝑟 𝑃
+
+− 𝑥 1𝑥 2 
+
+> 𝑛 1𝑛 2
+> 𝑃
+
+− 𝑥 1 
+
+> 𝑛 1𝑟 𝑃
+
+− 𝑥 2
+
+
+
+.
+
+Then ∇𝑓 (x) = 1 1 and 
+
+𝐽 𝑔 (x) =
+
+
+
+−𝑥 2 −𝑥 1
+
+−1 00 −1
+
+
+
+.
+
+In each of the three cases, we will set x∗ and 𝝁 ∗ then verify that the KKT conditions hold. Hussam Al Daas, Grey Ballard, Laura Grigori, Md Taufique Hussain, Suraj Kumar, Mohammad Marufur Rahman, and Kathryn Rouse 
+
+Case 1 ( 𝑃 ≤ 𝑛 1). Set x∗ = 𝑛 1𝑛 2/𝑃 𝑛 1𝑟 /𝑃  and 𝝁 ∗ = 0 1 1.Both primal and dual feasibility are immediate. As x∗ 𝐽 𝑔 (x)
+
+= −1 −1 , the stationarity condition holds. Complementary slackness is satisfied as all but the first constraint are tight for x∗
+
+and the dual variable 𝜇 ∗ 
+
+> 1
+
+is zero. 
+
+Case 2 ( 𝑛 1 < 𝑃 ≤ 𝑛 1𝑛 2/𝑟 ). Set x∗ = 𝑛 1𝑛 2/𝑃 𝑟  and 𝝁 ∗ =
+
+𝑃 /( 𝑛 1𝑛 2) 1 − ( 𝑟𝑃 )/( 𝑛 1𝑛 2) 0. The primal feasibility of 𝑥 2 is satisfied because 𝑛 1 ≤ 𝑃 implies 𝑛 1𝑟 /𝑃 ≤ 𝑟 . The other constraints are clearly satisfied. Dual feasibility requires that 1 − ( 𝑟𝑃 )/( 𝑛 1𝑛 2) ≥ 
+
+0, which is satisfied from the condition of the case, 𝑃 ≤ 𝑛 1𝑛 2/𝑟 .Stationarity can be directly verified. Complementary slackness follows because the only constraint which is not tight is associated with a zero dual variable. 
+
+Case 3 ( 𝑛 1𝑛 2/𝑟 < 𝑃 ). Set x∗ = (𝑛 1𝑛 2𝑟 /𝑃 )1/2 (𝑛 1𝑛 2𝑟 /𝑃 )1/2 
+
+and 𝝁 ∗ = (𝑃 /( 𝑛 1𝑛 2𝑟 )) 1/2 0 0. Primal feasibility is satisfied because 𝑛 1𝑛 2/𝑟 < 𝑃 implies that 𝑛 1𝑛 2/𝑃 ≤ ( 𝑛 1𝑛 2𝑟 /𝑃 )1/2. Dual feasibility is immediate and stationarity is directly verified. Com-plementary slackness is satisfied because the first constraint is tight and only the first dual variable is not zero. □
+
+Theorem 2. Consider the computation, B = A · Ω, where A has dimensions 𝑛 1 × 𝑛 2 and Ω is a random matrix of dimensions 𝑛 2 × 𝑟 
+
+where 𝑛 2 > 𝑟 . Any parallel algorithm using 𝑃 processors that load balances the computation and begins with one copy of the input matrix 
+
+A and ends with one copy of the output matrix B must communicate at least 𝑊 words of data where 
+
+𝑊 =
+
+
+
+0 if 1 ≤ 𝑃 ≤ 𝑛 1
+
+𝑟 − 𝑛 1𝑟 𝑃 if 𝑛 1 < 𝑃 ≤ 𝑛 1𝑛 2
+
+> 𝑟
+
+2   𝑛 1𝑛 2𝑟 𝑃 
+
+1/2 − 𝑛 1𝑛 2+𝑛 1𝑟 𝑃 if 𝑛 1𝑛 2 
+
+> 𝑟
+
+< 𝑃 .
+
+Proof. The total number of iteration points in the computation is 𝑛 1𝑛 2𝑟 . As the algorithm load balances the computation, each pro-cessor performs the scalar multiplications associated with 𝑛 1𝑛 2𝑟 /𝑃 
+
+iteration points. We focus on a processor for which the sum of the sizes of its input at the start and output at the end of the computa-tion does not exceed (𝑛 1𝑛 2 + 𝑛 1𝑟 )/ 𝑃 words. Such a processor must exist as otherwise the algorithm would either start with more than one copy of 𝐴 or end with more than one copy of 𝐵 .Let 𝐹 be the set iteration points corresponding to the scalar multiplications performed by this processor. An element (𝑖, 𝑗, 𝑘 ) of 
+
+𝐹 corresponds to the multiplication of A(𝑖, 𝑗 ) with Ω( 𝑗, 𝑘 ), which contributes to the result B(𝑖, 𝑘 ). We consider the projections of the iteration points in 𝐹 onto the indices of the arrays. Let 𝜙 𝑖 𝑗 (𝐹 )
+
+and 𝜙 𝑖𝑘 (𝐹 ) denote the projections of 𝐹 onto the input matrix A
+
+and the output matrix B respectively. Then Theorem 1 implies that |𝜙 𝑖 𝑗 (𝐹 )|| 𝜙 𝑖𝑘 (𝐹 )| ≥ | 𝐹 | = 𝑛 1𝑛 2𝑟 /𝑃 . By Lemma 2 we know that 
+
+|𝜙 𝑖𝑘 (𝐹 )| ≥ 𝑛 1𝑟 /𝑃 and |𝜙 𝑖 𝑗 (𝐹 )| ≥ 𝑛 1𝑛 2/𝑃 .To minimize the communication we need to minimize the num-ber of array elements accessed by this processor. As the processor must access all elements in 𝜙 𝑖 𝑗 (𝐹 ) and 𝜙 𝑖𝑘 (𝐹 ) in order to perform all the scalar multiplications corresponding to the iteration points in 𝐹 , we want to minimize |𝜙 𝑖 𝑗 (𝐹 )| + | 𝜙 𝑖𝑘 (𝐹 )| subject to the above constraints. By Lemma 5, we obtain the minimum number of ele-ments that must be accessed by this processor. Subtracting the data the processor can own from the result proves the lower bound. □
+
+Note that by replacing all the projections on matrices in the above proof with the projections on their transposes, we can show that the above lower bound is also valid for the computation, C𝑇 = Ω𝑇 A𝑇 .Hence the above theorem also allows one to obtain communication lower bounds for matrix multiplications where the random matrices are the first operands. In most practical cases, the number of rows of 𝐴 is larger than 𝑃 ;the bound indicates that no communication is required. In general, the obtained bounds are better (smaller) than the general matrix multiplication bounds [ 4 ]. This motivates us to design algorithms that achieve these bounds. 
+
+## 4.2 Optimal Parallel Algorithm 
+
+In this section, we present an optimal algorithm to show that the lower bound of Theorem 2 is tight. We organize 𝑃 processors into a 𝑝 1 × 𝑝 2 × 𝑝 3 processor grid and assign the computation to pro-cessors according to their rank, represented as (𝑖, 𝑗, 𝑘 ) which gives their location in the grid. The algorithm performs two collective operations, one All-Gather and one Reduce-Scatter. Each processor receives the portion of the input matrix A it needs to perform its computation through an All-Gather collective operation. After that, the processor generates the required portion of the random matrix and performs its local computation. The result of each local com-putation must be summed with all other contributions to the same output matrix entries from other processors, which is achieved by a Reduce-Scatter collective operation. As we require that there is one copy of data in the system at the start and end of the computation, we distribute the input (resp. output) matrix A (resp. B) evenly among all processors at the start (resp. end). For simplicity of explanation, we assume that 𝑝 1, 𝑝 2, 𝑝 3
+
+evenly divide 𝑛 1, 𝑛 2, 𝑟 , respectively. We use the notation A𝑖 𝑗 to denote the submatrix of A such that 
+
+A𝑖 𝑗 = A
+
+
+
+(𝑖 − 1) · 𝑛 1
+
+𝑝 1
+
++ 1 : 𝑖 · 𝑛 1
+
+𝑝 1
+
+, ( 𝑗 − 1) · 𝑛 2
+
+𝑝 2
+
++ 1 : 𝑗 · 𝑛 2
+
+𝑝 2
+
+
+
+.We assume that A𝑖 𝑗 is distributed evenly among Π𝑖 𝑗 ∗ processors at the beginning of the computation and denote the part of A𝑖 𝑗 owned by the processor (𝑖, 𝑗, 𝑘 ) by A(𝑘 ) 
+
+> 𝑖 𝑗
+
+. We define B𝑖𝑘 similarly to A𝑖 𝑗 . At the end, B𝑖𝑘 is distributed evenly among Π𝑖 ∗𝑘 processors and we denote the portion of B𝑖𝑘 owned by processor (𝑖, 𝑗, 𝑘 ) with B( 𝑗 ) 
+
+> 𝑖𝑘
+
+.
+
+4.2.1 Cost Analysis. We now analyze computation and communi-cation costs of Alg. 1. Each processor performs (𝑛 1/𝑝 1)( 𝑛 2/𝑝 2)( 𝑟 /𝑝 3)
+
+= 𝑛 1𝑛 2𝑟 /𝑃 scalar multiplications in Alg. 1. Communication occurs only in the All-Gather and Reduce-Scatter collectives in Alg. 1, respectively. The bandwidth costs of Alg. 1 in Alg. 1 are 
+
+
+
+1 − 1
+
+> 𝑝 3
+
+ 𝑛 1𝑛 2 
+
+> 𝑝 1𝑝 2
+
+and 
+
+
+
+1 − 1
+
+> 𝑝 2
+
+ 𝑛 1𝑟 𝑝 1𝑝 3 , respectively. Thus the overall bandwidth cost of Alg. 1 is 
+
+
+
+1 − 1
+
+> 𝑝 3
+
+ 𝑛 1𝑛 2 
+
+> 𝑝 1𝑝 2
+
++
+
+
+
+1 − 1
+
+> 𝑝 2
+
+ 𝑛 1𝑟 𝑝 1𝑝 3 = 
+
+> 𝑛 1𝑛 2
+> 𝑝 1𝑝 2
+
++ 𝑛 1𝑟 𝑝 1𝑝 3 − 𝑛 1𝑛 2+𝑛 1𝑟 𝑃 . The latency costs of Alg. 1 are log (𝑝 3) and 
+
+log (𝑝 2), respectively. Thus the overall latency cost of the algorithm is log (𝑝 3) + log (𝑝 2).
+
+## 4.3 Optimal Processor Grid Selection 
+
+To minimize the communication costs of our algorithm, we select 
+
+𝑝 1, 𝑝 2 and 𝑝 3 based on the terms of the communication lower bound (Theorem 2). As the lower bound has three cases, we discuss for each Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices 
+
+Algorithm 1 Matrix Multiplication with a Random Matrix 
+
+Require: Π is a 𝑝 1 × 𝑝 2 × 𝑝 3 grid of processors, |Π| = 𝑃 .
+
+Require: A is evenly divided into a 𝑝 1 × 𝑝 2 grid of rectangular blocks of dimension 𝑛 1/𝑝 1 ×𝑛 2/𝑝 2, and each block A𝑖 𝑗 is evenly divided across a set of 𝑝 3 processors. A(𝑘 ) 
+
+> 𝑖 𝑗
+
+is owned by processor rank (𝑖, 𝑗, 𝑘 ).
+
+Ensure: B = AΩ , B is evenly divided across a 𝑝 1 × 𝑝 3 grid of blocks, and each block B𝑖𝑘 is evenly divided across a set of 𝑝 2
+
+processors. B( 𝑗 ) 
+
+> 𝑖𝑘
+
+is owned by processor rank (𝑖, 𝑗, 𝑘 ). 
+
+> 1:
+
+function B( 𝑗 ) 
+
+> 𝑖𝑘
+
+= RandMatMul (A(𝑘 ) 
+
+> 𝑖 𝑗
+
+, Π) 
+
+> 2:
+
+(𝑖, 𝑗, 𝑘 ) = MyRank (Π) 
+
+> 3:
+
+//Gather the required data of input matrix A 
+
+> 4:
+
+A𝑖 𝑗 = All-Gather (A(𝑘 ) 
+
+> 𝑖 𝑗
+
+, Π𝑖 𝑗 ∗) 
+
+> 5:
+
+//Generate the required random submatrix  
+
+> 6:
+
+Ω𝑗𝑘 = GenRandom (𝑛 2/𝑝 2, 𝑟 /𝑝 3) 
+
+> 7:
+
+//Perform local matrix multiplication  
+
+> 8:
+
+¯B𝑖𝑘 = A𝑖 𝑗 · Ω𝑗𝑘  
+
+> 9:
+
+//Sum results to compute B( 𝑗 ) 
+
+> 𝑖𝑘
+> 10:
+
+B( 𝑗 ) 
+
+> 𝑖𝑘
+
+= Reduce-Scatter ( ¯B𝑖𝑘 , Π𝑖 ∗𝑘 ) 
+
+> 11:
+
+end function 
+
+separately. In all cases, we assume that the numerator is divisible by the denominator for each division expression. 
+
+Case 1 ( 𝑃 ≤ 𝑛 1). We set 𝑝 1 = 𝑃, and 𝑝 2 = 𝑝 3 = 1. Thus the bandwidth cost is (𝑛 1𝑛 2 + 𝑛 1𝑟 )/ 𝑃 − ( 𝑛 1𝑛 2 + 𝑛 1𝑟 )/ 𝑃 = 0, so no communication is required matching the lower bound. 
+
+Case 2 ( 𝑛 1 < 𝑃 ≤ 𝑛 1𝑛 2/𝑟 ). We set 𝑝 1 = 𝑛 1, 𝑝 2 = 𝑃 /𝑛 1, and 𝑝 3 = 1.
+
+The bandwidth cost is 𝑛 1𝑛 2/𝑃 + 𝑟 − ( 𝑛 1𝑛 2 + 𝑛 1𝑟 )/ 𝑃 which matches the lower bound. 
+
+Case 3 ( 𝑛 1𝑛 2/𝑟 < 𝑃 ). We set 𝑝 1 = 𝑛 1, 𝑝 2 = (𝑃𝑛 2/( 𝑟𝑛 1)) 1/2, and 
+
+𝑝 3 = (𝑃𝑟 /( 𝑛 1𝑛 2)) 1/2. The bandwidth cost is 2(𝑛 1𝑛 2𝑟 /𝑃 )1/2 − ( 𝑛 1𝑛 2 +
+
+𝑛 1𝑟 )/ 𝑃 , which matches the lower bound. 
+
+## 5 Nyström Approximation 
+
+In this section we consider an algorithm that performs two multi-plications in sequence which are key to computing the Nyström approximation, B = AΩ and C = Ω𝑇 B. Here A is a symmetric matrix of dimensions 𝑛 × 𝑛 and Ω is a random matrix of dimensions 
+
+𝑛 × 𝑟 with 𝑟 < 𝑛 . The first multiplication requires 𝑛 2𝑟 scalar mul-tiplications, while the second requires 𝑛𝑟 2 scalar multiplications. Our method of proving the bound is able to handle the sequential nature of the computation through the assumption that each of the component computations is load balanced. Our bound improves over the sum of the best lower bound for each component computa-tion by taking into account that the data a processor requires from 
+
+B must be the union of the data required for each of the component computations. 
+
+## 5.1 Communication Lower Bound 
+
+As with our previous bound, we begin by presenting the abstract optimization problem which allows us to determine the minimum amount of data a processor will require. Similar to the proof of Lemma 5, the following lemma can be established by appropriately choosing the dual variables 𝝁 ∗ and verifying that all the KKT conditions are satisfied. 
+
+Lemma 6. Consider the following optimization problem 
+
+min  
+
+> x∈R3
+
+𝑥 1 + 𝑥 2 + 𝑥 3
+
+such that 𝑥 1𝑥 2 ≥ 𝑛 2𝑟 /𝑃, 𝑥 2𝑥 3 ≥ 𝑛𝑟 2/𝑃, 𝑛 2/𝑃 ≤ 𝑥 1, 𝑛𝑟 /𝑃 ≤ 𝑥 2, 𝑟 2/𝑃 ≤
+
+𝑥 3, where 𝑃, 𝑛 , and 𝑟 are all positive integers greater than or equal to 1, and 𝑟 < 𝑛 . The constraints induce four cases for the optimal solution 
+
+x∗ based upon the relative sizes of 𝑛 and 𝑟 :
+
+• If 𝑃 ≤ 𝑟 then x∗ = 𝑛 2/𝑃 𝑛𝑟 /𝑃 𝑟 2/𝑃  ;
+
+• If 𝑟 < 𝑃 ≤ 𝑛 then x∗ = 𝑛 2/𝑃 𝑛𝑟 /𝑃 𝑟  ;
+
+• If 𝑛 < 𝑃 ≤ 𝑛 (𝑛 + 𝑟 )/ 𝑟 then x∗ = 𝑛 2/𝑃 𝑟 𝑛𝑟 /𝑃  ;
+
+• If 𝑛 (𝑛 + 𝑟 )/ 𝑟 < 𝑃 then 
+
+x∗ =
+
+
+
+𝑛 
+
+ 𝑛𝑟  
+
+> (𝑛 +𝑟 )𝑃
+
+1/2  𝑛𝑟 (𝑛 +𝑟 )
+
+> 𝑃
+
+1/2
+
+𝑟 
+
+ 𝑛𝑟  
+
+> (𝑛 +𝑟 )𝑃
+
+1/2 
+
+.
+
+This can be visualized as follows: 
+
+𝑃 1 𝑟 𝑛 𝑛 (𝑛 +𝑟 )                               
+
+> 𝑟 𝑥 ∗
+> 1=𝑛 2
+> 𝑃
+> 𝑥 ∗
+> 2=𝑛𝑟 𝑃
+> 𝑥 ∗
+> 3=𝑟 2
+> 𝑃
+> 𝑥 ∗
+> 1=𝑛 2
+> 𝑃
+> 𝑥 ∗
+> 2=𝑛𝑟 𝑃
+> 𝑥 ∗
+> 3=𝑟
+> 𝑥 ∗
+> 1=𝑛 2
+> 𝑃
+> 𝑥 ∗
+> 2=𝑟 𝑥 ∗
+> 3=𝑛𝑟 𝑃
+> 𝑥 ∗
+> 1=𝑛
+> 𝑛𝑟
+> (𝑛 +𝑟 )𝑃
+> 1/2
+> 𝑥 ∗
+> 2=
+> 𝑛𝑟 (𝑛 +𝑟 )
+> 𝑃
+> 1/2
+> 𝑥 ∗
+> 3=𝑟
+> 𝑛𝑟
+> (𝑛 +𝑟 )𝑃
+> 1/2
+
+Proof. To begin note that the first and second constraints are quasiconvex in the positive quadrant by Lemma 4, and the objective function and all remaining constraints are affine functions. Thus we can establish the optimality of the solution for every case by showing that the KKT conditions specified in Def. 1 are satisfied by Lemma 3. To match standard notation, let 𝑓 (x) = 𝑥 1 + 𝑥 2 + 𝑥 3 and 
+
+𝑔 (x) =
+
+ 
+
+> 𝑛 2𝑟 𝑃
+
+− 𝑥 1𝑥 2  
+
+> 𝑛𝑟 2
+> 𝑃
+
+− 𝑥 2𝑥 3 
+
+> 𝑛 2
+> 𝑃
+
+− 𝑥 1 
+
+> 𝑛𝑟 𝑃
+
+− 𝑥 2  
+
+> 𝑟 2
+> 𝑃
+
+− 𝑥 3
+
+
+
+.
+
+Then ∇𝑓 (x) = 1 1 1 and 
+
+𝐽 𝑔 (x) =
+
+
+
+−𝑥 2 −𝑥 1 00 −𝑥 3 −𝑥 2
+
+−1 0 00 −1 00 0 −1
+
+
+
+.
+
+For each case, we will give the optimal primal and dual solutions, and comment on why primal and dual feasibility conditions are satisfied. In every case stationarity can be directly verified, and com-plementary slackness holds as only dual variables 𝜇 𝑖 corresponding to tight constraints are not zero. 
+
+Case 1 ( 𝑃 ≤ 𝑟 ). Set x∗ = 𝑛 2/𝑃 𝑛𝑟 /𝑃 𝑟 2/𝑃  and 𝝁 ∗ = 0 0 1 1 1 .
+
+Primal feasibility holds because 𝑃 ≤ 𝑟 ≤ 𝑛 implies that 𝑛 2𝑟 /𝑃 ≤
+
+𝑛 2/𝑃 · 𝑛𝑟 /𝑃 and 𝑛𝑟 2/𝑃 ≤ 𝑛𝑟 /𝑃 · 𝑟 2/𝑃 . Dual feasibility is immediate. Hussam Al Daas, Grey Ballard, Laura Grigori, Md Taufique Hussain, Suraj Kumar, Mohammad Marufur Rahman, and Kathryn Rouse 
+
+Case 2 ( 𝑟 < 𝑃 ≤ 𝑛 ). Set x∗ = 𝑛 2/𝑃 𝑛𝑟 /𝑃 𝑟  and 𝝁 ∗ =
+
+0 𝑃 /( 𝑛𝑟 ) 1 1 − 𝑃 /𝑛 0 . Primal feasibility holds because 
+
+𝑃 ≤ 𝑛 implies that 𝑛 2𝑟 /𝑃 ≤ 𝑛 2/𝑃 · 𝑛𝑟 /𝑃 and 𝑟 < 𝑃 implies that 
+
+𝑟 2/𝑃 < 𝑟 . Dual feasibility holds because 𝑃 ≤ 𝑛. 
+
+Case 3 ( 𝑛 < 𝑃 ≤ 𝑛 (𝑛 + 𝑟 )/ 𝑟 ). Set x∗ = 𝑛 2/𝑃 𝑟 𝑛𝑟 /𝑃  and 
+
+𝝁 ∗ = (𝑃 − 𝑛 )/ 𝑛 2 1/𝑟 (𝑛 (𝑛 + 𝑟 )/ 𝑟 − 𝑃 )𝑟 /𝑛 2 0 0 . Primal feasibility holds because 𝑛 < 𝑃 implies 𝑛𝑟 /𝑃 < 𝑟 and 𝑟 ≤ 𝑛 
+
+implies 𝑟 2/𝑃 ≤ 𝑛𝑟 /𝑃 . Dual feasibility holds because 𝑛 < 𝑃 and 
+
+𝑃 ≤ 𝑛 (𝑛 + 𝑟 )/ 𝑟 .
+
+Case 4 ( 𝑛 (𝑛 + 𝑟 )/ 𝑟 < 𝑃 ). Set x∗ = 𝑛𝑡 (𝑛 + 𝑟 )𝑡 𝑟𝑡  and 𝝁 ∗ =
+
+1/(( 𝑛 + 𝑟 )𝑡 ) 1/(( 𝑛 + 𝑟 )𝑡 ) 0 0 0 where 𝑡 = (𝑛𝑟 /(( 𝑛 +𝑟 )𝑃 )) 1/2.Primal feasibility holds because 𝑟 ≤ 𝑛 and 𝑛 (𝑛 + 𝑟 )/ 𝑟 < 𝑃 imply that 𝑛 2/𝑃 < 𝑛𝑡 , 𝑛𝑟 /𝑃 < (𝑛 + 𝑟 )𝑡 and 𝑟 2/𝑃 < 𝑟𝑡 . Dual feasibility is immediate. □
+
+We prove the following theorem using the solution to the op-timization problem in Lemma 6. A visualization of the iteration space for the two multiplications and the related operands is given in Fig. 1, along with two valid parallelizations across 3 processors. 
+
+Theorem 3. Consider the sequence of two computations, B = A · Ω
+
+and C = ΩT · B using classical matrix multiplication, where A, B and 
+
+C have dimensions 𝑛 ×𝑛 , 𝑛 ×𝑟 and 𝑟 ×𝑟 , respectively, and Ω is a random matrix of dimensions 𝑛 × 𝑟 with 𝑛 > 𝑟 . Any parallel algorithm using 
+
+𝑃 processors that load balances each multiplication and begins with one copy of the input matrix A and ends with one copy of the output matrices B and C must communicate at least 𝑊 − ( 𝑛 2 + 𝑛𝑟 + 𝑟 2)/ 𝑃 
+
+words of data where 
+
+𝑊 =
+
+   
+
+> 𝑛 2+𝑛𝑟 +𝑟 2
+> 𝑃
+
+if 1 ≤ 𝑃 ≤ 𝑟  
+
+> 𝑛 2+𝑛𝑟 𝑃
+
++ 𝑟 if 𝑟 < 𝑃 ≤ 𝑛  
+
+> 𝑛 2
+> 𝑃
+
++ 𝑟 + 𝑛𝑟 𝑃 if 𝑛 < 𝑃 ≤ 𝑛 (𝑛 + 𝑟 )/ 𝑟 
+
+2
+
+ 𝑛𝑟 (𝑛 +𝑟 )
+
+> 𝑃
+
+1/2
+
+if 𝑛 (𝑛 + 𝑟 )/ 𝑟 < 𝑃 .
+
+Proof. As the algorithm load balances each multiplication, each processor must perform 𝑛 2𝑟 /𝑃 scalar multiplications correspond-ing to iteration points of the first multiplication, and 𝑛𝑟 2/𝑃 scalar multiplications corresponding to iteration points of the second mul-tiplication. Because the algorithm begins and ends the computation with at most one copy of the input and output matrices, there must be at least one processor that owns at most (𝑛 2 +𝑛𝑟 +𝑟 2)/ 𝑃 elements of the input and output matrices. We consider this processor. Let 𝐹 be the set of iteration points the processor performs from the first multiplication, and 𝐹 ′ the set of iteration points the pro-cessor performs from the second multiplication. So |𝐹 | = 𝑛 2𝑟 /𝑃, 
+
+and |𝐹 ′ | = 𝑛𝑟 2/𝑃 . We let 𝜙 𝑖 𝑗 (𝐹 ) and 𝜙 𝑖𝑘 (𝐹 ) denote the projec-tions of 𝐹 onto the input matrix A and the output matrix B, and 
+
+𝜙 𝑖 ′𝑘 ′ (𝐹 ′) and 𝜙 𝑗 ′𝑘 ′ (𝐹 ′) denote the projections of 𝐹 ′ onto B and 
+
+C. Then Theorem 1 implies that |𝜙 𝑖 𝑗 (𝐹 )|| 𝜙 𝑖𝑘 (𝐹 )| ≥ | 𝐹 | = 𝑛 2𝑟 /𝑃 
+
+and |𝜙 𝑗 ′𝑘 ′ (𝐹 ′)|| 𝜙 𝑖 ′𝑘 ′ (𝐹 ′)| ≥ 𝑛𝑟 2/𝑃 . By Lemma 2 we know that 
+
+|𝜙 𝑖𝑘 (𝐹 )| ≥ 𝑛𝑟 /𝑃 and |𝜙 𝑖 ′𝑘 ′ (𝐹 ′)| ≥ 𝑛𝑟 /𝑃 . As |𝜙 𝑖𝑘 (𝐹 ) ∪ 𝜙 𝑖 ′𝑘 ′ (𝐹 ′)| ≥ 
+
+max (| 𝜙 𝑖𝑘 (𝐹 )| , |𝜙 𝑖 ′𝑘 ′ (𝐹 ′)|) , we have |𝜙 𝑖 𝑗 (𝐹 )|| 𝜙 𝑖𝑘 (𝐹 ) ∪ 𝜙 𝑖 ′𝑘 ′ (𝐹 ′)| ≥ 
+
+𝑛 2𝑟 /𝑃 , |𝜙 𝑗 ′𝑘 ′ (𝐹 ′)|| 𝜙 𝑖𝑘 (𝐹 )∪ 𝜙 𝑖 ′𝑘 ′ (𝐹 ′)| ≥ 𝑛𝑟 2/𝑃 and |𝜙 𝑖𝑘 (𝐹 )∪ 𝜙 𝑖 ′𝑘 ′ (𝐹 ′)| ≥ 𝑛𝑟 /𝑃 . By Lemma 2, we also know that |𝜙 𝑖 𝑗 (𝐹 )| ≥ 𝑛 2/𝑃, and 
+
+|𝜙 𝑗 ′𝑘 ′ (𝐹 ′)| ≥ 𝑟 2/𝑃 .Thus, to minimize the communication we need to minimize the number of elements accessed by this processor, which corresponds to minimizing |𝜙 𝑖 𝑗 (𝐹 )| + | 𝜙 𝑖𝑘 (𝐹 ) ∪ 𝜙 𝑖 ′𝑘 ′ (𝐹 ′)| + | 𝜙 𝑗 ′𝑘 ′ (𝐹 ′)| subject to the above constraints. Hence the solution to Lemma 6 gives the minimum number of elements that must be accessed by this processor, and subtracting the data the processor can own from the result proves the lower bound. □
+
+## 5.2 Parallel Algorithm 
+
+We organize 𝑃 processors into a 𝑝 1 × 𝑝 2 × 𝑝 3 processor grid to perform the first computation ( B = AΩ ) and into a 𝑞 1 × 𝑞 2 × 𝑞 3
+
+processor grid to perform the second computation ( C = ΩTB). The rank of a processor is represented as (𝑖, 𝑗, 𝑘 ) in the first grid and 
+
+(𝑖 ′, 𝑗 ′, 𝑘 ′) in the second grid. Both computations are performed in the same way, but their grid layouts may be different. We present our algorithm in Alg. 2. In the 𝑝 1 × 𝑝 2 × 𝑝 3 grid, the algorithm performs two collective operations, All-Gather and Reduce-Scatter. Each processor receives the portion of the input matrix A it needs to perform all of its computation through an All-Gather collective operation. After that, the processor generates the required portion of the random ma-trix and performs its local computation. The result of each local computation must be summed with all other contributions to the same output matrix entries from other processors to obtain B, and it is achieved by a Reduce-Scatter collective operation. If layout of both processor grids are different, then B is redistributed according to the 𝑞 1 × 𝑞 2 × 𝑞 3 grid such that the second computation can be performed in this grid. In the 𝑞 1 ×𝑞 2 ×𝑞 3 grid, the algorithm also performs an All-Gather and a Reduce-Scatter collective operations. Each processor receives the required portion of matrix B through an All-Gather collective operation. After that, the processor generates the required portion of the random matrix and perform its local computation. In the end, a Reduce-Scatter collective operation is performed to obtain the final matrix C.We use the same data distribution and notation as in §4.2, and again impose that there is one copy of data in the system. The input matrix A is distributed evenly among all processors at the start, and the output matrices B and C are distributed evenly at the end. We assume that A𝑖 𝑗 is distributed evenly among Π𝑖 𝑗 ∗ processors at the beginning of the computation and denote the portion of A𝑖 𝑗 
+
+owned by processor (𝑖, 𝑗, 𝑘 ) by A(𝑘 ) 
+
+> 𝑖 𝑗
+
+portion of A𝑖 𝑗 . At the end of the computation, B𝑖 ′𝑘 ′ and C𝑗 ′𝑘 ′ are distributed evenly among Ψ𝑖 ′∗𝑘 ′
+
+and Ψ∗𝑗 ′𝑘 ; processors. We denote the portion of B𝑖 ′𝑘 ′ , C𝑗 ′𝑘 ′ owned by processor (𝑖 ′, 𝑗 ′, 𝑘 ′) by B( 𝑗 ′ ) 
+
+> 𝑖 ′𝑘 ′
+
+and C(𝑖 ′ )  
+
+> 𝑗 ′𝑘 ′
+
+.
+
+5.2.1 Cost Analysis. We now analyze computation and communi-cation costs of the algorithm. Each processor performs 𝑛 𝑝 1 · 𝑛 𝑝 2 · 𝑟 𝑝 3
+
+and 𝑟 𝑞 2 · 𝑛 𝑞 1 · 𝑟 𝑞 3 scalar multiplications in Alg. 2, respectively. Thus the total number of multiplications performed by a processor is  
+
+> 𝑛 2𝑟 𝑝 1𝑝 2𝑝 3
+
++ 𝑛𝑟 2 
+
+> 𝑞 1𝑞 2𝑞 3
+
+= 𝑛𝑟 (𝑛 +𝑟 ) 
+
+> 𝑃
+
+.Communication occurs in the All-Gather collective in Alg. 2 and the Reduce-Scatter collective in Alg. 2. In addition, if the two grid layouts differ then communication is also required to redistribute matrix B in Alg. 2. Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices 
+
+Algorithm 2 Parallel algorithms for B = AΩ and C = ΩTB.
+
+Require: Π is a 𝑝 1 ×𝑝 2 ×𝑝 3 grid of processors and Ψ is a 𝑞 1 ×𝑞 2 ×𝑞 3
+
+grid of processors, and |Π| = |Ψ| = 𝑃 .
+
+Require: A is evenly divided into a 𝑝 1 × 𝑝 2 grid of rectangular blocks of dimension 𝑛 /𝑝 1 × 𝑛 /𝑝 2, and each block A𝑖 𝑗 is evenly divided across a set of 𝑝 3 processors with A(𝑘 ) 
+
+> 𝑖 𝑗
+
+owned by pro-cessor rank (𝑖, 𝑗, 𝑘 ) in Π.
+
+Ensure: B = AΩ , B is evenly divided across a 𝑞 1 × 𝑞 3 grid of blocks, and each block B𝑖 ′𝑘 ′ is evenly divided across a set of 𝑞 2
+
+processors with B( 𝑗 ′ ) 
+
+> 𝑖 ′𝑘 ′
+
+owned by processor rank (𝑖 ′, 𝑗 ′, 𝑘 ′) in Ψ.
+
+Ensure: C = ΩTB, C is evenly divided across a 𝑞 2 × 𝑞 3 grid of blocks, and each block C𝑗 ′𝑘 ′ is evenly divided across a set of 𝑞 1
+
+processors with C(𝑖 ′ )  
+
+> 𝑗 ′𝑘 ′
+
+owned by processor rank (𝑖 ′, 𝑗 ′, 𝑘 ′) in Ψ. 
+
+> 1:
+
+function (B( 𝑗 ′ ) 
+
+> 𝑖 ′𝑘 ′
+
+, C(𝑖 ′ )  
+
+> 𝑗 ′𝑘 ′
+
+) = RandCompNys (A(𝑘 ) 
+
+> 𝑖 𝑗
+
+, Π, Ψ) 
+
+> 2:
+
+(𝑖, 𝑗, 𝑘 ) = MyRank (Π) 
+
+> 3:
+
+//Gather the required data of input matrix A 
+
+> 4:
+
+A𝑖 𝑗 = All-Gather (A(𝑘 ) 
+
+> 𝑖 𝑗
+
+, Π𝑖 𝑗 ∗) 
+
+> 5:
+
+//Generate the required 𝑛 /𝑝 2 × 𝑟 /𝑝 3 portion of random matrix for B = AΩ  
+
+> 6:
+
+Ω𝑗𝑘 = GenRandom (𝑛 /𝑝 2, 𝑟 /𝑝 3) 
+
+> 7:
+
+//Perform first local matrix multiplication  
+
+> 8:
+
+¯ˆB𝑖𝑘 = A𝑖 𝑗 · Ω𝑗𝑘  
+
+> 9:
+
+//Each block ˆB𝑖𝑘 is evenly divided across a set of 𝑝 2 proces-sors with ˆB( 𝑗 ) 
+
+> 𝑖𝑘
+
+is owned by processor rank (𝑖, 𝑗, 𝑘 ) 
+
+> 10:
+
+//Sum results to compute ˆB( 𝑗 ) 
+
+> 𝑖𝑘
+> 11:
+
+ˆB( 𝑗 ) 
+
+> 𝑖𝑘
+
+= Reduce-Scatter ( ˆB𝑖𝑘 , Π𝑖 ∗𝑘 ) 
+
+> 12:
+
+(𝑖 ′, 𝑗 ′, 𝑘 ′) = MyRank (Ψ) 
+
+> 13:
+
+//Change distribution of ˆB so that it is suitable for 𝑞 1 ×𝑞 2 ×𝑞 3
+
+grid  
+
+> 14:
+
+if for any 𝑖, 𝑝 𝑖 ≠ 𝑞 𝑖 then  
+
+> 15:
+
+B( 𝑗 ′ ) 
+
+> 𝑖 ′𝑘 ′
+
+= Redistribute ( ˆB) 
+
+> 16:
+
+else  
+
+> 17:
+
+B( 𝑗 ′ ) 
+
+> 𝑖 ′𝑘 ′
+
+= ˆB( 𝑗 ) 
+
+> 𝑖𝑘
+> 18:
+
+end if  
+
+> 19:
+
+//Generate the required 𝑛 /𝑞 1 × 𝑟 /𝑞 2 portion of random matrix for C = ΩTB 
+
+> 20:
+
+Ω𝑖 ′ 𝑗 ′ = GenRandom (𝑛 /𝑞 1, 𝑟 /𝑞 2) 
+
+> 21:
+
+//Gather the required data of matrix B 
+
+> 22:
+
+B𝑖 ′𝑘 ′ = All-Gather (B( 𝑗 ′ ) 
+
+> 𝑖 ′𝑘 ′
+
+, Ψ𝑖 ′∗𝑘 ′ ) 
+
+> 23:
+
+//Perform second local matrix multiplication  
+
+> 24:
+
+¯C𝑗 ′𝑘 ′ = ΩT   
+
+> 𝑖 ′𝑗 ′
+
+· B𝑖 ′𝑘 ′ 
+
+> 25:
+
+//Sum results to compute C(𝑖 ′ )  
+
+> 𝑗 ′𝑘 ′
+> 26:
+
+C(𝑖 ′ )  
+
+> 𝑗 ′𝑘 ′
+
+= Reduce-Scatter ( ¯C𝑗 ′𝑘 ′ , Ψ∗𝑗 ′𝑘 ′ ) 
+
+> 27:
+
+end function 
+
+The bandwidth costs of Alg. 2 in Alg. 2 are 
+
+
+
+1 − 1
+
+> 𝑝 3
+
+ 𝑛 2 
+
+> 𝑝 1𝑝 2
+
+,
+
+
+
+1 − 1
+
+> 𝑝 2
+
+ 𝑛𝑟 𝑝 1𝑝 3 ,
+
+
+
+1 − 1
+
+> 𝑞 2
+
+ 𝑛𝑟 𝑞 1𝑞 3 and 
+
+
+
+1 − 1
+
+> 𝑞 1
+
+ 𝑟 2 
+
+> 𝑞 2𝑞 3
+
+, respectively. Thus the overall band-width cost of Alg. 2 is 
+
+
+
+1 − 1
+
+> 𝑝 3
+
+ 𝑛 2 
+
+> 𝑝 1𝑝 2
+
++
+
+
+
+1 − 1
+
+> 𝑝 2
+
+ 𝑛𝑟 𝑝 1𝑝 3 +
+
+
+
+1 − 1
+
+> 𝑞 2
+
+ 𝑛𝑟 𝑞 1𝑞 3 +
+
+
+
+1 − 1
+
+> 𝑞 1
+
+ 𝑟 2 
+
+> 𝑞 2𝑞 3
+
++ 𝐵𝑊 (𝑅𝑒𝑑𝑖𝑠𝑡𝑟 ).Here 𝐵𝑊 (𝑅𝑒𝑑𝑖𝑠𝑡𝑟 ) denotes the bandwidth cost to redistribute matrix B according to the second grid layout. Note that both ˆB( 𝑗 )
+
+> 𝑖𝑘
+
+and B( 𝑗 ′ ) 
+
+> 𝑖 ′𝑘 ′
+
+in Alg. 2 contain 𝑛𝑟 /𝑃 elements. Thus each processor needs to send at max 𝑛𝑟 /𝑃 words and receive at max 𝑛𝑟 /𝑃 words. Thus the bandwidth cost to redistribute matrix B in a fully con-nected network is at max 𝑛𝑟 /𝑃 [11, 30]. The latency costs of Alg. 2 in Alg. 2 are log (𝑝 3), log (𝑞 2), log (𝑝 2)
+
+and log (𝑞 1), respectively. Thus the overall latency cost of the algo-rithm is log (𝑝 3) + log (𝑝 2) + log (𝑞 2) + log (𝑞 2) + 𝐿 (𝑅𝑒𝑑𝑑𝑖𝑠𝑡𝑟 ). Here 
+
+𝐿 (𝑅𝑒𝑑𝑖𝑠𝑡𝑟 ) denotes the latency cost to redistribute matrix B accord-ing to the second grid layout. In a fully connected network of 𝑃 
+
+processors using a point-to-point algorithm, it is 𝑂 (𝑃 ). The latency cost can be reduced to 𝑂 (log 𝑃 ) using a bidirectional-exchange al-gorithm at the expense of a bandwidth cost that grows by a factor of 𝑂 (log 𝑃 ) [11, 30]. 
+
+## 5.3 Processor Grid Selection 
+
+We consider two approaches to selecting the processor grid dimen-sions. In the first, we select the grid dimensions 𝑝 𝑖 and 𝑞 𝑖 based on the lower bounds (Theorem 3), whereas in the second we select the dimensions so that B does not need to be redistributed. In our first approach of selecting a processor grid, we do not expect the bandwidth cost of our algorithm to be optimal because the lower bounds have one term to express the access of matrix B but in our algorithm communication happens twice for B. Additionally, our lower bound frameworks do not model redistribution cost which we need to perform. The lower bound has four cases, we discuss for each one separately. 
+
+Case 1 ( 𝑃 ≤ 𝑟 ). We set 𝑝 1 = 𝑃, 𝑝 2 = 𝑝 3 = 1 and 𝑞 1 = 𝑞 2 = 1, 𝑞 3 = 𝑃 .Thus the bandwidth cost is 𝑛 2/𝑃 +2𝑛𝑟 /𝑃 +𝑟 2/𝑃 − ( 𝑛 2 +2𝑛𝑟 +𝑟 2)/ 𝑃 +
+
+𝐵𝑊 (𝑅𝑒𝑑𝑖𝑠𝑡𝑟 ) ≤ 𝑛𝑟 /𝑃 , which is at most 𝑛𝑟 /𝑃 greater than the lower bound. 
+
+Case 2 ( 𝑟 < 𝑃 ≤ 𝑛 ). We set 𝑝 1 = 𝑃, 𝑝 2 = 𝑝 3 = 1 and 𝑞 1 = 𝑃 /𝑟, 𝑞 2 =
+
+1, 𝑞 3 = 𝑟 . The bandwidth cost is 𝑛 2/𝑃 + 2𝑛𝑟 /𝑃 + 𝑟 − ( 𝑛 2 + 2𝑛𝑟 +
+
+𝑟 2)/ 𝑃 + 𝐵𝑊 (𝑅𝑒𝑑𝑖𝑠𝑡𝑟 ) ≤ 𝑟 − 𝑟 2/𝑃 + 𝑛𝑟 /𝑃 , which is at most 𝑛𝑟 /𝑃 
+
+greater than the lower bound. 
+
+Case 3 ( 𝑛 < 𝑃 ≤ 𝑛 (𝑛 + 𝑟 )/ 𝑟 ). We set 𝑝 1 = 𝑛, 𝑝 2 = 𝑃 /𝑛, 𝑝 3 = 1
+
+and 𝑞 1 = 𝑛 /𝑟, 𝑞 2 = 𝑃 /𝑛, 𝑞 3 = 𝑟 . The bandwidth cost is 𝑛 2/𝑃 + 2𝑟 +
+
+𝑛𝑟 /𝑃 − ( 𝑛 2 + 2𝑛𝑟 + 𝑟 2)/ 𝑃 + 𝐵𝑊 (𝑅𝑒𝑑𝑖𝑠𝑡𝑟 ) ≤ 2𝑟 − 𝑟 2/𝑃 , which is at most 𝑟 greater than the lower bound. 
+
+Case 4 ( 𝑛 (𝑛 +𝑟 /𝑟 ) < 𝑃 ). We set 𝑝 1 = 𝑛, 𝑝 2 = (( 𝑛 +𝑟 )𝑃 /( 𝑛𝑟 )) 1/2, 𝑝 3 =
+
+(𝑟𝑃 /( 𝑛 (𝑛 + 𝑟 ))) 1/2 and 𝑞 1 = (𝑛𝑃 /( 𝑟 (𝑛 + 𝑟 ))) 1/2𝑛 /𝑟, 𝑞 2 = (( 𝑛 +
+
+𝑟 )𝑃 /( 𝑛𝑟 )) 1/2, 𝑞 3 = 𝑟 . The bandwidth cost is 𝑛 (𝑛𝑟 /(( 𝑛 + 𝑟 )𝑃 )) 1/2 +
+
+2(𝑛𝑟 (𝑛 + 𝑟 )/ 𝑃 )1/2 + 𝑟 (𝑛𝑟 /(( 𝑛 + 𝑟 )𝑃 )) 1/2 − ( 𝑛 2 + 2𝑛𝑟 + 𝑟 2)/ 𝑃 +
+
+𝐵𝑊 (𝑅𝑒𝑑𝑖𝑠𝑡𝑟 ) ≤ 3(𝑛𝑟 (𝑛 + 𝑟 )/ 𝑃 )1/2 − ( 𝑛 2 + 𝑛𝑟 + 𝑟 2)/ 𝑃 , which is at most (𝑛𝑟 (𝑛 + 𝑟 )/ 𝑃 )1/2 greater than the lower bound. The second approach is based on the fact that B = AΩ is the most expensive part. We set 𝑝 𝑖 based on §4.3, and take 𝑞 𝑖 = 𝑝 𝑖 . Note that this approach does not require redistribution for matrix B. For 𝑃 ≤ 𝑛 ,we set 𝑝 1 = 𝑞 1 = 𝑃 and 𝑝 2 = 𝑞 2 = 𝑝 3 = 𝑞 3 = 1. The bandwidth cost of our algorithm is 𝑛 2/𝑃 + 𝑛𝑟 /𝑃 + 𝑟 2 − ( 𝑛 2 + 𝑛𝑟 + 𝑟 2)/ 𝑃 = 𝑟 2 − 𝑟 2/𝑃 .In certain settings, particularly when 𝑃 is smaller than 𝑛 /𝑟 , this cost is lower than that of Case 1 of the first approach. We implement two variants of the algorithm based on 1D matrix multiplications and compare their performance empirically in § 6. The first variant is based on Case 1 of the first approach ( 𝑝 1 =Hussam Al Daas, Grey Ballard, Laura Grigori, Md Taufique Hussain, Suraj Kumar, Mohammad Marufur Rahman, and Kathryn Rouse 
+
+𝑞 3 = 𝑃 ) and we call it Redist algorithm. The second variant is based on the second approach with 𝑝 1 = 𝑞 1 = 𝑃 and we call it No-Redist algorithm. These are the two most efficient variants when 
+
+𝑃 < 𝑟 , which we expect to hold in most practical situations. Figure 1 shows distribution of the computation for both variants across 3 processors.  
+
+> 𝑛 𝑟
+> 𝑟
+> 𝑛
+> B
+
+A
+
+> Ω
+> C
+
+Ω 
+
+> B
+> 𝑛 𝑟
+> 𝑟
+> 𝑛
+> B
+
+A
+
+> Ω
+> C
+
+Ω
+
+> B
+
+Figure 1: Iteration space of B = AΩ and ΩTB = C computation with a total of 𝑛 (𝑛 + 𝑟 )𝑟 iteration points. The faces show the accesses to different matrices and the shading corresponds to distribution of the computation across 3 processors. The prism on the left depicts the algorithm with 𝑝 1 = 𝑞 3 = 𝑃 (1D algorithms with Redist ribution of B), and the prism on the right depicts the algorithm with 𝑝 1 = 𝑞 1 = 𝑃 (1D algorithms with No-Redist ribution of B). 
+
+## 6 Experiments 6.1 Implementation and Experimental Setting 
+
+Implementation. We implement two above mentioned algorithms (Redist and No-Redist ) for both CPU-only and GPU equipped sys-tems using C++ and CUDA. The compilers and libraries used for our implementation are given in Tab. 1. We perform all our experi-ments in double precision. All of our experiments use the Intel MKL library for local CPU performance. We also benchmarked single-threaded and multi-threaded matrix multiplication using Cray’s LibSci library and AMD’s AOCL library and observed comparable performance across all three. In order to ease the adoption of our algorithms by practitioners, we also implement our algorithms us-ing Python-based libraries for CPU-only systems. For our Python implementation we use Numpy version 1.26.3 for local computation and mpi4py version 3.1.5 to perform interprocessor communication. 
+
+Evaluation platform. We evaluate our implementation on the GPU partition of NERSC Perlmutter using 32 compute nodes (2048 cores, 128 GPUs). The details of each compute node are given in Tab. 1. For both GPU and CPU-only evaluations, we run 4 MPI processes per compute node, assigning each process to a distinct GPU or CPU NUMA domain. In the CPU-only runs, each process utilizes 32 threads for multithreading - 16 physical cores within its own NUMA domain and two logical threads per core. 
+
+Parallel performance comparison of C++ vs Python. To compare the parallel performance between C++ and Python we perform a CPU-only experiment with distributed 3D matrix multi-plication by multiplying two 50 𝑘 × 50 𝑘 double precision matrices. The multiplication operation involved gathering parts of both ma-trices, performing multiplication locally and then reducing the      
+
+> CPP
+> CPP
+> CPP
+> CPP
+> CPP
+> CPP
+> Python
+> Python
+> Python
+> Python
+> Python
+> Python 0
+> 50
+> 100
+> 150
+> 4816 32 64 128
+
+PTime (seconds)  Reduce Scatter Local Multiply Gather B Gather A 
+
+Figure 2: Comparison of 3D-distributed memory matrix mul-tiplication in C++ and Python using CPUs only. Experiment is performed by multiplying two 50 𝑘 × 50 𝑘 double precision matrices and using a processor grid that is as cubical as pos-sible. 
+
+partial result by MPI reduce-scatter. The result of the experiment is presented in Fig. 2. We observe that the performance of local ma-trix multiplication is comparable across the two implementations as both of them utilize MKL for BLAS operations. However, even though both of the implementations use the same underlying MPI library, the communication costs were significantly higher for the Python implementation. Because we could not explain the perfor-mance degradation and the C++ implementation is more efficient, in the following subsections, we omit our Python implementation for performance evaluation. 
+
+## 6.2 Datasets 
+
+Metabarcoding genetic dissimilarity matrix. For an experi-ment focused on matrix multiplication with a random matrix, we consider a genetic dissimilarity matrix arising in a metabarcoding application, where the dissimilarity matrix is a 10 6 × 10 6 symmet-ric matrix. 1 In this matrix, each entry represents genetic distance between a pair of diatoms [ 3 ]. Following previous work, we use 
+
+𝑟 = 1000 in sketching this data [2]. 
+
+> 1Available at https://doi.org/10.57745/NKTRHO
+
+Table 1: Overview of the evaluation platform. NERSC Perlmutter GPU Partition 
+
+Processor 1 × AMD EPYC 7763 per node # NUMA domains 4# Cores 64 per node, 16 per NUMA domain # Hyperthreads 2 per core, 32 per NUMA domain # GPUs 4 × NVIDIA A100 per node Memory 256 GB DDR4 per node, 40GB per GPU 
+
+CPU-only GPU 
+
+Compiler Intel C++ NVIDIA CUDA C++ version 2024.1.0 version 24.5-1 BLAS and PRNG MKL 2024.1 CUDA toolkit 12.4 MPI CRAY MPICH 8.1.30 (CUDA-aware for GPUs) Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices 
+
+Table 2: Approximation error of the CIFAR - 10 kernel matrix for different kernel functions and different ranks. 
+
+Kernel r=500 r=2500 r=5000 Linear 5.8e-04 1.6e-05 6.3e-06 
+
+RBF 𝜎 = ∥X∥/ √𝑛 1.0e-03 2.0e-04 9.3e-05 
+
+RBF 𝜎 = 1 9.9e-01 9.7e-01 9.5e-01      
+
+> Gen
+> Gen
+> Gen
+> Gen
+> Gen
+> Gen
+> Comm
+> Comm
+> Comm
+> Comm
+> Comm
+> Comm 0
+> 0.1
+> 0.2
+> 4816 32 64 128
+
+P      
+
+> Time (seconds)
+> Gather B Generate B
+> (a) r = 500
+> Gen
+> Gen
+> Gen
+> Gen
+> Gen
+> Gen
+> Comm
+> Comm
+> Comm
+> Comm
+> Comm
+> Comm 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 4816 32 64 128
+
+P
+
+> (b) r = 5000
+
+Figure 3: Comparison between generating Ω redundantly vs communicating Ω in CPU-only systems for different values of 𝑟 to compute B = AΩ where A is a CIFAR10 kernel matrix with dimensions 50 𝑘 × 50 𝑘 .CIFAR-10 kernel matrix. In order to compare Nyström algo-rithms across meaningful matrix dimensions, we use the CIFAR-10 dataset [ 22 ], a benchmark dataset for image classification/object recognition that consists of 50,000 images of 32 × 32 RGB pixels. The dataset has been used previously to study Nyström aproxima-tion [ 16 ]. We consider the data as a 50 , 000 × 3072 input matrix and compute a symmetric kernel matrix using two different ker-nel functions. To generate a kernel matrix with known rank, we use a linear kernel: 𝐴 𝑖 𝑗 = 𝐾 (x𝑖 , x𝑗 ) = xT 
+
+> 𝑖
+
+x𝑗 , where x𝑖 and x𝑗 are rows of the input matrix. To generate a more realistic kernel with unknown rank, we also use the radial basis function (RBF) kernel: 
+
+𝐴 𝑖 𝑗 = 𝐾 (x𝑖 , x𝑗 ) = exp 
+
+
+
+− ∥x𝑖 −x𝑗 ∥2
+
+> 2𝜎 2
+
+
+
+, for some parameter 𝜎 . We com-pute Nyström approximation with various ranks and report the relative approximation error in Tab. 2. In computing the explicit re-construction of the approximation, we construct the pseudoinverse of the core matrix using a numerical tolerance of 1e-12 .From the data, we see that the linear kernel is approximated to high accuracy for 𝑟 = 5000 , which exceeds the true rank of the data, but it is also well approximated by ranks as low as 𝑟 =
+
+500 . The RBF kernel yields higher numerical ranks, depending on the parameter 𝜎 , and may need ranks of at least 𝑟 = 5000 for a meaningful approximation. Based on this dataset, we target the input matrix dimension 𝑛 = 50000 and ranks 𝑟 = 500 and 𝑟 = 5000 
+
+in our experiments.    
+
+> 256 512 768 1024
+> 0
+> 10
+> 20
+> 30
+
+PTime (sec)  
+
+> Generate B Local Multiply
+
+Figure 4: Total runtime of multiplying 10 6 × 10 6 genetic dis-similarity matrix with a random matrix with 10 3 columns. 
+
+## 6.3 Communicate vs Redundantly Generate Ω
+
+The multiplication B = AΩ is the most expensive part of both of our algorithms as it involves the large input data. We use the row-wise 1D algorithm in both cases because the algorithm requires communicating only one matrix, although each processor requires the entire Ω. Because it is a random matrix, it is possible to generate the entire Ω with a shared seed on each process as opposed to generating parts and all-gathering it from other processors. In this way, no inter-processor communication is required. Figure 3 depicts the experimental results comparing the two approaches to instantiating Ω on all 𝑃 processors using CPUs. In this experiment, we compute B = AΩ where A is a CIFAR10 kernel matrix and Ω has 500 and 5000 columns, but we show only the costs of accumulating Ω. Here we generate Ω as a uniform random matrix using the counter-based pseudorandom number genera-tion algorithm Philox [ 28 ] available on both MKL and cuRAND. We show only the data for the CPU-only experiments as we find similar qualitative behavior on GPUs. We see that generating Ω
+
+redundantly takes less time than communicating it through out all experiments, even at low process count. While the communica-tion time increases with the increase of number of processes, the random number generation remains constant as expected. Based on the evidence from this experiment, we generate Ω redundantly in both of our algorithms using the same generators used in this evaluation. 
+
+## 6.4 Matrix Multiplication with Random Matrix 
+
+We now consider a strong scaling experiment of sketching the metabarcoding data, a large 10 6 × 10 6 symmetric matrix. Given our observation in §6.3, we redundantly generate the random matrix rather than communicating it in this experiment. Figure 4 presents the timing results of the experiment. We start the experiment using 64 nodes (256 MPI processes), as that is the memory required to store the data in memory. We note that these experiments are CPU-only because the limited memory available on the GPUs requires too many nodes to reasonably benchmark. As expected, we observe perfect strong scaling. When the num-ber of rows of A is large, the 1D algorithm performs no inter-process communication: each process independently generates the entire Hussam Al Daas, Grey Ballard, Laura Grigori, Md Taufique Hussain, Suraj Kumar, Mohammad Marufur Rahman, and Kathryn Rouse 
+
+22 23 24 25 26 27
+
+2−3
+
+2−2
+
+2−1
+
+20
+
+21
+
+P  
+
+> Time (seconds)
+> Redist-CPU No-Redist-CPU
+> Redist-GPU No-Redist-GPU
+
+(a) r = 500 
+
+22 23 24 25 26 27
+
+2−2
+
+2−1
+
+20
+
+21
+
+22
+
+23
+
+24
+
+P
+
+(b) r = 5000 
+
+Figure 5: Total runtime of Nyström computation with Re-dist and No-Redist algorithms on both CPU-only and GPU equipped systems when approximating CIFAR10 kernel ma-trix to different ranks.      
+
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist 0
+> 5
+> 10
+> 15
+> 20
+> 4816 32 64 128
+
+P     
+
+> Time (seconds)
+> ReduceScatter 2nd MatMul Unpack All2All 1st MatMul Generate B
+
+(a) CPU      
+
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist 0
+> 0.5
+> 1
+> 4816 32 64 128
+
+P
+
+(b) GPU 
+
+Figure 6: Runtime breakdown of Nyström computation with 
+
+Redist and No-Redist algorithms on both CPU-only and GPU equipped systems when approximating CIFAR10 kernel ma-trix to 𝑟 = 5000 . No-Redist uses a reduce-scatter collective to perform communication while Redist uses an all-to-all. Our storage format is column major order, therefore there is an unpacking step after all-to-all. 
+
+random matrix Ω and performs local matrix multiplication. Thus, we expect perfect strong scaling as long as neither the generation of Ω nor degraded local multiplication performance due to poor aspect ratio becomes a bottleneck. In fact, we observe greater than 
+
+2× speedup from 𝑃 = 256 to 𝑃 = 512 , which is due to the local output matrix fitting into cache for 𝑃 ≥ 512 . For input matrices that are short and wide, we expect that switching to the 2D algorithm will become necessary for smaller ranges of 𝑃 .
+
+## 6.5 Nyström Computation: CPU vs GPU 
+
+We benchmark the performance to approximate the CIFAR10 kernel matrices to rank 500 and 5000 using our algorithms. We present the performance and scalability of both of our algorithms on both systems (CPU-only and GPU) in Fig. 5. Our observations from this evaluation are as follows -
+
+GPU implementations are faster . We observe that for both smaller and larger 𝑟 , GPU implementations are about an order of magnitude faster than the CPU implementation counterpart. This is expected due to faster matrix multiplication on GPUs, which is the dominant cost as shown in Fig. 6. 
+
+CPU-only implementations scale better . Even though GPU implementations are faster, CPU-only implementations scale better than both algorithms on GPUs. We observe from Fig. 6 that the total runtime of the CPU-only implementation is dominated by the local matrix multiplication longer. 
+
+Redist algorithm scales better . If we look at the performance of the GPU implementation, we see that the Redist algorithm scales better. This is expected, as the bandwidth cost of the redistribution (using all-to-all) is 𝑂 (𝑛𝑟 /𝑃 ). The communication cost of the No-Redist algorithm is that of a reduce-scatter with bandwidth cost 
+
+𝑂 (𝑟 2). The CPU implementations perform similarly in overall time, but this is because the time is more heavily dominated by local matrix multiplications. We explore the empirical communication costs further in §6.6. 
+
+## 6.6 Communication Cost of Redist vs No-Redist 
+
+Both of our algorithms have same amount of computation but the main difference comes in communication. Hence, we focus only on evaluating the communication cost for these two algorithms when approximating the CIFAR10 kernel matrix using 𝑟 = 500 and 
+
+𝑟 = 5000 . The communication for the No-Redist algorithm involves reduce-scatter of 𝑂 (𝑟 2) input entries while for the Redist algorithm involves all-to-all of 𝑂 (𝑛𝑟 /𝑃 ) entries per processor. We use column major storage for the matrices, hence, Redist algorithm requires unpacking after all-to-all. The bandwidth bound communication cost is 𝑂 (𝑟 2) for No-Redist vs 𝑂 (𝑛𝑟 /𝑃 ) for Redist . Consequently, we expect the communication cost to scale with 𝑃 for the Redist      
+
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist 0
+> 1
+> 2
+> 3
+> ·10 −2
+> 4816 32 64 128
+
+P  
+
+> Time (seconds)
+> Unpack ReduceScatter All2All
+
+(a) r = 500      
+
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist 0
+> 0.05
+> 0.1
+> 0.15
+> 0.2
+> 4816 32 64 128
+
+P
+
+(b) r = 5000 
+
+Figure 7: Communication cost of the two algorithms on CPU-only systems. Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices      
+
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist 0
+> 0.05
+> 0.1
+> 0.15
+> 4816 32 64 128
+
+P  
+
+> Time (seconds)
+> Unpack AllReduce All2All
+
+(a) r = 500      
+
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist
+> No-Redist 0
+> 0.1
+> 0.2
+> 0.3
+> 4816 32 64 128
+
+P
+
+(b) r = 5000 
+
+Figure 8: Communication cost of the two algorithms on GPU-equipped systems. 
+
+algorithm but not for the No-Redist algorithm. In Fig. 7 we show the comparison for the CPU-only implementation and in Fig. 8 we present it for the GPU implementations. Our observations are as follows. 
+
+Experiment matches theory for the CPU-only implemen-tations . From Fig. 7b, for 𝑟 = 5000 , we observe that the commu-nication cost starts higher for Redist algorithm than for the No-Redist algorithm in the case of small 𝑃 , but it switches and becomes cheaper in the case of larger 𝑃 . The switch happens roughly around 
+
+𝑃 = 𝑛 𝑟 , which matches exactly with the expectation. For 𝑟 = 500 
+
+(Fig. 7a) we observe communication cost of the Redist algorithm to decrease and increase again. We attribute that to the communica-tion becoming latency bound or perhaps a change in underlying algorithm. 
+
+Communication in GPU implementation does not follow the same pattern . From Fig. 8 we observe that communication for 
+
+No-Redist increases at a rate close to log 𝑝 and for Redist algorithm the communication does not scale similar to the CPU-only exper-iments. We suspect one reason for that to be due to differences within the CUDA-aware MPI implementation. In particular, we initially observed that reduce scatter scaled very poorly within our GPU implementation and in a microbenchmark. We alleviated this problem by replacing the reduce-scatter with allreduce for the GPU implementation which gives more reasonable performance despite its higher theoretical costs. 
+
+## 7 Conclusion 
+
+In this work, we establish communication lower bounds for the mul-tiplication of a matrix with a random matrix and the computations of Nyström approximation. Our lower bound proofs rely on a new geometric inequality that relates the size of a 3-dimensional set to its 2-dimensional projections. We employ this inequality, along with additional constraints, to formulate communication lower bounds as constrained optimization problems. We solve these problems an-alytically to derive bounds. For the multiplication of a matrix with a random matrix, we show that our bounds are tight in all ranges by presenting a communication optimal algorithm. We also demon-strate that the communication cost of our algorithm for Nyström approximation is close to the lower bound. We demonstrate that no communication is necessary for com-puting AΩ using a 1D algorithm when the number of processors does not exceed the number of rows of A. In the case of Nyström approximation, we implement two algorithms based on 1D matrix multiplication that are the most efficient variants in practical sit-uations. Our numerical experiments on modern state-of-the-art supercomputing systems equipped with CPUs and GPUs demon-strate their parallel scalability. We are interested in extending our approaches to other sketching methods that use structured matrices such as count sketch, more general sparse embeddings, and subsampled randomized Hadamard transform methods. In Nyström approximation, both input and out-put matrices are symmetric. We plan to exploit symmetry to further reduce communication and computation costs in the future. In this work, we assume that processors load balance each multiplication of the Nyström approximation. We are also interested to study the case where the overall computation is balanced. 
+
+## References 
+
+[1] A. Aggarwal, A. K. Chandra, and M. Snir. 1990. Communication Complexity of PRAMs. Theor. Comp. Sci. 71, 1 (1990). doi:10.1016/0304-3975(90)90188-N [2] Emmanuel Agullo, Alfredo Buttari, Olivier Coulaud, Lionel Eyraud-Dubois, Math-ieu Faverge, Alain Franc, Abdou Guermouche, Antoine Jego, Romain Peressoni, and Florent Pruvost. 2023. On the arithmetic intensity of distributed-memory dense matrix multiplication involving a symmetric input matrix (symm). In 2023 IEEE International Parallel and Distributed Processing Symposium (IPDPS) . IEEE, 357–367. [3] Emmanuel Agullo, Olivier Coulaud, Alexandre Denis, Mathieu Faverge, Alain Franc, Jean-Marc Frigerio, Nathalie Furmento, Adrien Guilbaud, Emmanuel Jeannot, Romain Peressoni, et al . 2022. Task-based randomized singular value decomposition and multidimensional scaling . Ph. D. Dissertation. Inria Bordeaux-Sud Ouest; Inrae-BioGeCo. [4] H. Al Daas, G. Ballard, L. Grigori, S. Kumar, and K. Rouse. 2022. Tight Memory-Independent Parallel Matrix Multiplication Communication Lower Bounds. In 
+
+SPAA 2022 . doi:10.1145/3490148.3538552 [5] Oleg Balabanov, Matthias Beaupère, Laura Grigori, and Victor Lederer. 2023. Block Subsampled Randomized Hadamard Transform for Nyström Approxima-tion on Distributed Architectures. In Proceedings of the 40th International Confer-ence on Machine Learning (Proceedings of Machine Learning Research, Vol. 202) .PMLR, 1564–1576. https://proceedings.mlr.press/v202/balabanov23a.html [6] Oleg Balabanov and Laura Grigori. 2022. Randomized Gram–Schmidt Process with Application to GMRES. SIAM Journal on Scientific Computing 44, 3 (2022), A1450–A1474. doi:10.1137/20M138870X [7] Grey Ballard, Nicholas Knight, and Kathryn Rouse. 2018. Communication Lower Bounds for Matricized Tensor Times Khatri-Rao Product. In 2018 IEEE International Parallel and Distributed Processing Symposium (IPDPS) . 557–567. doi:10.1109/IPDPS.2018.00065 [8] G. Ballard and K. Rouse. 2020. General Memory-Independent Lower Bound for MTTKRP. In SIAM PP . 1–11. doi:10.1137/1.9781611976137.1 [9] S. Boyd and L. Vandenberghe. 2004. Convex Optimization . Cambridge University Press. https://web.stanford.edu/~boyd/cvxbook/ [10] Alberto Bucci, Yuji Nakatsukasa, and Taejun Park. 2025. Numerical Stability of the Nystr \" om Method. arXiv preprint arXiv:2511.15583 (2025). [11] E. Chan, M. Heimlich, A. Purkayastha, and R. van de Geijn. 2007. Collective Communication: Theory, Practice, and Experience. Conc. and Comp.: Prac. and Exper. 19, 13 (2007). doi:10.1002/cpe.1206 [12] Tyler Chen, Pradeep Niroula, Archan Ray, Pragna Subrahmanya, Marco Pistoia, and Niraj Kumar. 2025. GPU-Parallelizable Randomized Sketch-and-Precondition for Linear Regression using Sparse Sign Sketches. arXiv:2506.03070 [cs.DS] https://arxiv.org/abs/2506.03070 [13] Michael Christ, James Demmel, Nicholas Knight, Thomas Scanlon, and Kather-ine A. Yelick. 2013. Communication Lower Bounds and Optimal Algorithms for Programs That Reference Arrays - Part 1 . Technical Report UCB/EECS-2013-61. EECS Department, University of California, Berkeley. http://www2.eecs. berkeley.edu/Pubs/TechRpts/2013/EECS-2013-61.html Hussam Al Daas, Grey Ballard, Laura Grigori, Md Taufique Hussain, Suraj Kumar, Mohammad Marufur Rahman, and Kathryn Rouse 
+
+[14] Alice Cortinovis and Daniel Kressner. 2026. Adaptive randomized pivoting for column subset selection, DEIM, and low-rank approximation. SIAM J. Matrix Anal. Appl. 47, 1 (2026), 25–47. [15] Alice Cortinovis and Lexing Ying. 2025. A sublinear-time randomized algo-rithm for column and row subset selection based on strong rank-revealing QR factorizations. SIAM J. Matrix Anal. Appl. 46, 1 (2025), 22–44. [16] Zachary Frangella, Joel A Tropp, and Madeleine Udell. 2023. Randomized nyström preconditioning. SIAM J. Matrix Anal. Appl. 44, 2 (2023), 718–752. [17] Alex Gittens and Michael W Mahoney. 2016. Revisiting the Nyström method for improved large-scale machine learning. The Journal of Machine Learning Research 17, 1 (2016), 3977–4041. [18] Alex Gittens and Michael W. Mahoney. 2016. Revisiting the Nyström method for improved large-scale machine learning. J. Mach. Learn. Res. 17, 1 (Jan. 2016), 3977–4041. [19] Andrew James Higgins, Erik Boman, and Ichitaro Yamazaki. 2025. A High Perfor-mance GPU CountSketch Implementation and Its Application to Multisketching and Least Squares Problems. In Proceedings of the SC ’25 Workshops of the Inter-national Conference for High Performance Computing, Networking, Storage and Analysis (SC Workshops ’25) . Association for Computing Machinery, New York, NY, USA, 1808–1815. doi:10.1145/3731599.3767544 [20] J. W. Hong and H. T. Kung. 1981. I/O complexity: The Red-Blue Pebble Game. In 
+
+STOC 1981 . doi:10.1145/800076.802486 [21] Dror Irony, Sivan Toledo, and Alexander Tiskin. 2004. Communication Lower Bounds for Distributed-Memory Matrix Multiplication. J. Parallel and Distrib. Comput. 64, 9 (2004), 1017–1026. doi:10.1016/j.jpdc.2004.03.021 [22] Alex Krizhevsky. 2009. Learning Multiple Layers of Features from Tiny Images .Technical Report. Computer Science Department, University of Toronto. [23] Jian Li, Yong Liu, and Weiping Wang. 2023. Optimal Convergence Rates for Distributed Nystroem Approximation. Journal of Machine Learning Research 24, 141 (2023), 1–39. http://jmlr.org/papers/v24/21-1049.html [24] Tianyu Liang, Riley Murray, Aydın Buluç, and James Demmel. 2024. Fast multiplication of random dense matrices with sparse matrices. In 2024 IEEE International Parallel and Distributed Processing Symposium (IPDPS) . 52–62. doi:10.1109/IPDPS57955.2024.00014 [25] Per-Gunnar Martinsson and Joel A Tropp. 2020. Randomized numerical linear algebra: Foundations and algorithms. Acta Numerica 29 (2020), 403–572. [26] Evert J Nyström. 1930. Über die praktisch Auflölung of integral equations with applications to boundary value problems. (1930). [27] Taejun Park and Yuji Nakatsukasa. 2025. Accuracy and stability of CUR decom-positions with oversampling. SIAM J. Matrix Anal. Appl. 46, 1 (2025), 780–810. [28] John K Salmon, Mark A Moraes, Ron O Dror, and David E Shaw. 2011. Parallel random numbers: as easy as 1, 2, 3. In Proceedings of 2011 international conference for high performance computing, networking, storage and analysis . 1–12. [29] Ameet Talwalkar, Sanjiv Kumar, Mehryar Mohri, and Henry Rowley. 2013. Large-scale SVD and manifold learning. The Journal of Machine Learning Research 14, 1 (2013), 3129–3152. [30] R. Thakur, R. Rabenseifner, and W. Gropp. 2005. Optimization of Collective Communication Operations in MPICH. Intl. J. High Perf. Comp. App. 19, 1 (2005). doi:10.1177/1094342005051521 [31] Christopher Williams and Matthias Seeger. 2000. Using the Nyström method to speed up kernel machines. Advances in neural information processing systems 13 (2000).

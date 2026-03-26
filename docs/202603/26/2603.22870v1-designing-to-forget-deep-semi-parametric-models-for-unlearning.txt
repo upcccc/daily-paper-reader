@@ -1,0 +1,730 @@
+Title: Designing to Forget: Deep Semi-parametric Models for Unlearning
+
+URL Source: https://arxiv.org/pdf/2603.22870v1
+
+Published Time: Wed, 25 Mar 2026 00:52:50 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Designing to Forget: Deep Semi-parametric Models for Unlearning 
+
+Amber Yijia Zheng ⋆ Yu-Shan Tai ⋆ Raymond A. Yeh Department of Computer Science, Purdue University 1.0 0.5 0.0 0.5 1.0 1.5 2.0 2.5               
+
+> Feature 1
+> 0.50
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> Feature 2
+> Positive Class
+> Negative Class
+> Base Model 1.0 0.5 0.0 0.5 1.0 1.5 2.0 2.5
+> Feature 1
+> 0.50
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> Feature 2
+> Positive Class
+> Negative Class
+> Removed Points
+> Retrained 1.0 0.5 0.0 0.5 1.0 1.5 2.0 2.5
+> Feature 1
+> 0.50
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> Feature 2
+> Positive Class
+> Negative Class
+> Removed Points
+> Ours
+
+(a) Base SPM (Before Unlearning) (b) Unlearned by Retraining (c) Unlearned by Deletion (Ours) Figure 1. Visualization of semi-parametric classifier’s boundaries before and after unlearning. Points shown in ‘ X’ are removed from the training set. We visualize: (a) the base semi-parametric model (SPM) trained on the full dataset; (b) the unlearned (oracle) SPM by retraining with samples removed; (c) the unlearned SPM by our test-time deletion. We observe that SPM’s unlearned decision boundary by our method in (c) closely matches the one from retraining with the datapoints removed in (b). 
+
+Abstract 
+
+Recent advances in machine unlearning have focused on developing algorithms to remove specific training samples from a trained model. In contrast, we observe that not all models are equally easy to unlearn. Hence, we introduce a family of deep semi-parametric models (SPMs) that exhibit non-parametric behavior during unlearning. SPMs use a fusion module that aggregates information from each train-ing sample, enabling explicit test-time deletion of selected samples without altering model parameters. Empirically, we demonstrate that SPMs achieve competitive task per-formance to parametric models in image classification and generation, while being significantly more efficient for un-learning. Notably, on ImageNet classification, SPMs reduce the prediction gap relative to a retrained (oracle) baseline by 11% and achieve over 10 × faster unlearning compared to existing approaches on parametric models. The code is available at https://github.com/amberyzheng/ spm_unlearning .
+
+1. Introduction 
+
+With the growing awareness of data privacy, model safety, and regulatory compliance, such as the General Data Pro-tection Regulation (GDPR) [15], there is an increasing in-terest in the ability to remove the influence of specific  
+
+> ⋆
+
+indicates equal contribution 
+
+samples from a trained model. Machine unlearning (MU) mainly focuses on developing algorithms for removal with-out retraining the model from scratch [22, 40, 41, 46, 59]. Given a trained model and a set of samples to be unlearned, an MU algorithm fine-tunes the model as if it had been re-trained without including these samples. While MU has demonstrated promising results, it re-mains a challenging task due to the black-box nature of deep learning; it is nontrivial to disentangle the contribution of individual training samples to the learned model param-eters. However, this is not true for all models. For non-parametric models, such as the K-nearest neighbor [11], unlearning can be achieved by simply removing the sam-ples from the training set. In this work, instead of focusing on how to unlearn, we take a different perspective and ask: 
+
+Can we design neural networks that are fundamentally easier and more efficient to unlearn? 
+
+We propose Designing to Forget (DTF), a family of deep semi-parametric models (SPMs) suitable for unlearn-ing. The main motivation for SPMs lies in their explicit 
+
+dependencies, where the predictions are directly influenced by specific training data points. In this case, unlearning can be done by deleting dependencies on data points during a forward pass. In Fig. 1, we illustrate an SPM applied to binary classification. We show that removing samples with test-time deletion produces a decision boundary that closely resembles the oracle, which is retrained from scratch with-out those samples. 
+
+> arXiv:2603.22870v1 [cs.CV] 24 Mar 2026
+
+Following prior work [16, 28, 29], we validate our pro-posed SPMs on image classification and generation tasks. First, we show that SPMs’ performance on these tasks is comparable to parametric models. We then show that SPMs are more efficient and effective at unlearning compared to parametric models with MU algorithms. 
+
+Our main contributions are: 
+
+• We introduce a design-centric approach to machine unlearning, focusing on neural network architectures rather than algorithms. • We propose Designing to Forge (DTF), a family of deep semi-parametric models (SPMs) that enable efficient unlearning through test-time deletion. • We empirically show that SPMs match parametric mod-els’ performance on classification and generation tasks, while offering improved unlearning capability. 
+
+2. Related Work 
+
+Semi-parametric models combine learnable parametric functions with non-parametric components. Classical ker-nel methods, such as Gaussian processes [45] and deep kernel learning [58], allow flexible function approximation with data-dependent inductive bias. Recent work has ex-tended semi-parametric principles to deep learning. In vi-sion, non-parametric modules have been used for condi-tional generation [42], retrieval-augmented image genera-tion [5, 48], and open-set recognition [62]. These models benefit from explicit connections to either training or new samples at test time. In tabular domains, architectures such as NPT [32] apply cross-attention across training points to improve classification, leveraging pairwise interactions in a semi-parametric fashion. Different from these works, which aim to improve prediction or generation quality, our goal is to design SPMs that are inherently suitable for unlearning .
+
+Machine unlearning [9] aims to enable the removal of a user’s private information from a trained model. The goal is to eliminate the influence of specific data samples, often due to privacy, legal, or ethical considerations. Approximate un-learning approaches aim to achieve this by directly modify-ing the pre-trained model using the data to be erased, with-out retraining from scratch [22, 40, 41, 46, 59]. This task has been studied across various domains, including classifi-cation [10, 16, 20, 21, 29], regression [37, 51], and genera-tive modeling [16–18, 25, 28, 64]. In the context of text-to-image models, recent work has focused on erasing specific concepts from generative systems. This includes inference-time interventions [7, 44], fine-tuning-based unlearning of diffusion models [17, 30, 34], and direct model editing ap-proaches [18, 64]. More related to this work, Bourtoule et al. [6] propose to unlearn by adapting the data. They fo-cus on merging a set of models trained on disjoint data splits and achieve unlearning by deleting part of the model trained on the unlearned data. While prior methods have demonstrated the feasibility of approximate unlearning, they require explicit fine-tuning or model editing on the pre-trained weights, incurring an over-head, particularly in scenarios requiring frequent unlearn-ing. In contrast, we propose SPMs that enable unlearning through test-time deletion on specific datapoints, without any modification to the learned parameters. 
+
+AI safety has received increasing attention with rapid progress in generative models [2, 4, 8, 23, 38]. A key di-mension is data governance: machine unlearning (MU) re-moves the influence of specific training samples from pre-trained models [36, 47, 55], motivated by privacy and com-pliance considerations, including links to differential pri-vacy [19, 22, 40, 46, 53]. Complementarily, prior work on model immunization [65–68] develops defenses that harden open-source image classification and diffusion mod-els against harmful adaptations. 
+
+3. Preliminaries 
+
+We briefly review the necessary concepts and notation. 
+
+Parametric vs. non-parametric. Consider a generic ma-chine learning setup [39], given a training set T = {(x, y)}
+
+with input x and ground-truth y, the goal of parametric 
+
+modeling is to learn the parameters θ of a model Fθ that minimizes a loss function L of the form min θ L(T , θ ) ≜
+
+min θ
+
+P 
+
+> (x,y)∈T
+
+ℓ(Fθ (x), y). Here, ℓ is a suitable loss func-tion for the task. At test-time, a parametric prediction 
+
+ˆyp ≜ Fθ⋆ (x) (1) relies solely on the test sample x and the learned parame-ters θ⋆. This means that all the information from the train-ing set T is implicitly encoded within the model parameters 
+
+θ⋆. Consequently, it is not straightforward to parse out the contribution of an individual training data point x from θ⋆.In contrast, non-parametric models [49, 57] make pre-dictions by explicitly referencing the training set T , which remains available at test time. Commonly, non-parametric models H(x, T ) utilize a subset of the training data, i.e ., a neighborhood N (x; T ), based on the test data x and aggre-gate their labels to make a prediction 
+
+ˆynp ≜ H(x, T ) = X  
+
+> (xi,yi)∈N (x;T)
+
+k(xi, x) yi, (2) where the weights k(xi, x) ≥ 0, and P 
+
+> i
+
+k(xi, x) = 1 , are determined by a similarity kernel. With the explicit form in Eq. (2), the contribution of each training example can be reasoned through k(xi, x).
+
+Machine unlearning. Given a set of samples to be un-learned U, the oracle unlearned parameters θ′ are obtained by retraining a model without U, i.e ., 
+
+θ′ ≜ arg min 
+
+> θ
+
+L(T \ U , θ ). (3) In practice, retraining according to Eq. (3) is computa-tionally expensive. Therefore, unlearning algorithms are designed to efficiently update the parameters of a trained model, θ∗ using U to produce an approximation ˜θ of the oracle unlearned parameters. That is, the updated model’s output should closely match that of the oracle model: 
+
+F˜θ (x) ≈ Fθ′ (x), ∀x. (4) Importantly, the unlearning procedure must be more effi-cient than retraining from scratch as in Eq. (3). 
+
+4. Designing to Forget 
+
+Our goal is to design effective models that are inherently suitable for unlearning . As motivation, unlearning in K-nearest neighbors (KNN) is straightforward: a datapoint can be removed by simply excluding it from the set of neighbors at test-time. This simplicity highlights the ad-vantage of non-parametric models in unlearning. How-ever, non-parametric models often fall short in a strong task performance. To address this gap, we propose semi-parametric models (SPMs), which have the ease of unlearn-ing of non-parametric models with the strong task perfor-mance of parametric models. Different from parametric Fθ (x) in Eq. (1), at test-time, a trained SPM Gθ⋆ takes in the test data x, and the training dataset T . An SPM’s prediction has the form 
+
+ˆy = Gθ⋆ (x, T ), (5) which explicitly depends on the training data T , resembling a non-parametric prediction in Eq. (2). For clarity, we refer to the test-time provided T in Eq. (5) as “the inputted set”. 
+
+Unlearning through test-time deletion. As a result, un-learning the set U of SPM can be done by deleting that data at test-time: 
+
+ˆy = Gθ⋆ (x, T \ U ) (6) without modifying the trained parameters θ⋆. There is a caveat : this approach does not hold for all SPMs. Con-sider an extreme case, where the model Gθ disregards the inputted set T , then the SPM prediction in Eq. (5) falls back to a parametric model. In this work, we propose a set of design principles and effective modules to build SPMs Gθ that can be unlearned efficiently by using test-time deletion in Eq. (6), while matching the competitive performance to existing paramet-ric models. In Sec. 4.1, we start with an abstract SPM framework, followed by specific instantiations of SPM for classification and generative tasks in Sec. 4.2 and 4.3. 
+
+4.1. SPM architectures for unlearning 
+
+Our proposed deep SPM consists of three modules: a) Fusion module g : Rd × S → Rd that fuses the para-metric and non-parametric branch by mapping a pair consisting of a vector and a set to a vector, where S de-notes the space of sets {s1, s2, . . . } with each si ∈ Rd.b) Non-parametric module h : S → S that transforms a set into another set. This module processes each of the dat-apoints in T into an “instance embedding” for fusion. c) Parametric module f : Rd → Rd that maps a vector to another vector through standard deep-net layers. For readability, we use the same dimensionality d for the inputs and outputs of all layers, and omit explicit notation for learnable parameters. Using these three types of module g, h, and f , we con-struct the semi-parametric model Gθ (x, T ). An illustra-tion of SPM for a diffusion model is provided in Fig. 2. The architecture consists of two branches: An input branch (shown in blue) and a set branch (shown in orange). At each layer in the input branch, features from the set branch are fused to generate latent features z(l). At each set branch’s layer, it iteratively computes instance features S(l) over the input dataset T .Formally, an SPM’s forward pass is given by: 
+
+z(l+1) = f (l)  g(l)(z(l), S(l)) and 
+
+S(l+1) = h(l)(S(l)), ∀l ∈ { 0, . . . , L }, (7) where the superscript (l) indicates the layer index. We ini-tialize with z(0) ≜ x and S(0) ≜ T . We now elaborate on the high-level design of each module. 
+
+Fusion module g. This module connects the parametric and non-parametric components of the model. For unlearning to be effective, the fusion module must meaningfully incorpo-rate the set of instance embeddings S. To encourage this behavior, we design g to be a weighted combination: 
+
+g(z, S) ≜ X 
+
+> si∈S\{ sz}
+
+α(z, si) · si, (8) where α(·) ∈ R is a function that returns a scalar weight between the input latent z and si instance embedding cor-responding to the i-th input xi ∈ T . During training, the latent z is extracted from the training set. Without loss of generality, we denote the associated sample as the z-th dat-apoint xz . We exclude the corresponding instance embed-ding sz from the summation in Eq. (8). The intuition is to encourage the model to learn features 
+
+relative to the rest of the dataset, similar to the spirit of non-parametric methods. This prevents the model from ignoring other datapoints and relying solely on the parametric mod-ules. Additionally, the fusion in Eq. (8) is permutation in-variant because summation is orderless, i.e ., permuting the indices of si ∈ S yields the same outcome, which improves data efficiency during training. 
+
+Non-parametric module h. This module transforms the Inputted dataset …     
+
+> …
+> bird
+> Input s
+> bird is
+> generated
+> bird
+> removed
+> bird is
+> unlearned
+> Unlearn dataset
+> bird
+> Input s
+> SPM architecture overview
+> Unlearning SPM via test -time deletion
+> cat
+> frog
+> horse
+> airplane
+> car
+> bird
+> cat
+> frog
+> horse
+> airplane
+> car
+> set features
+> input features
+> Non -parametric module
+> parametric module fusion module
+> …
+> …
+> attention
+
+Figure 2. Unlearning with Generative SPM. It consists of three types of layers: (a) Fusion module g connects parametric and non-parametric modules; (b) Non-parametric module h maps a set to another set; (c) Parametric module f maps a vector to a vector. The first row illustrates a standard pipeline for generating a ‘bird’. The second row presents unlearning ‘bird’ via test-time deletion. 
+
+input training set T into instance embeddings S(l) to pre-serve non-parametric behavior. In Eq. (7), h(l) denotes the 
+
+l-th set-branch layer, implemented as a shared instance-wise transformation on S(l) for efficiency and permutation equivariance. The module h is trained end-to-end with f
+
+and g: it encodes samples in T into instance features that are fused with parametric representations through g. The main design requirement for this module is permutation equivari-ance. That is, a permutation on the input elements would result in the same permutation at the output, formally, 
+
+h([ sπ(1) , . . . , sπ(|S| )]) = [ hπ(1) , . . . , h π(|S| )], (9) where π denotes any permutation of the element’s indices. Architectures that are permutation equivariant are well studied, such as deep sets [63], graph networks [3] (with a complete graph), transformer-based architectures [35, 54] (treating each datapoint as a token). For a large dataset, maintaining this non-parametric module is expen-sive. Hence, we propose a clustering or retrieval-based method to reduce the size of the set S. The exact archi-tecture and reduction method are task dependent, which we defer to Sec. 4.2 and Sec. 4.3. 
+
+Parametric module f . For this module, any existing para-metric deep-net can be used. In fact, we deliberately design SPM Eq. (7) in a two-branch structure, such that pre-trained parametric models can be adapted into SPMs. 
+
+Label-permutation augmentation. Despite the careful de-sign, it is still possible for SPM to ignore the input training dataset T = {(x, y)}. For the class-conditioned generation task, the input class label y is represented with a one-hot vector. We find that the model would ignore x and use the one-hot vectors as a “bias” term to turn the non-parametric branch into a parametric one. To prevent such behavior, we shuffle the index of the one-hot vector during training. At each gradient update, a randomly generated permutation matrix is applied to y for all data. This forces the model to use the image x from the training set, as just y alone does not contain enough information. 
+
+4.2. SPM for image classification 
+
+As motivated, our proposed design allows existing paramet-ric models to be adapted into SPMs via supervised fine-tuning. For image classification, the training set T =
+
+{(xi, yi)} consists of images xi and the corresponding la-bels yi. In our experiment, we use a ResNet [24] as the parametric module h to extract the input latent z(L), which corresponds to the features from the last block. For the non-parametric module, we use the simplest per-mutation equivariant model, which processes each training sample independently and concatenates with its label, i.e ., 
+
+S(l) ≜
+
+nh 
+
+h(l)(s(l) 
+
+> i
+
+), yi
+
+io |T | 
+
+> i=1
+
+, (10) where the first layer s(0)  
+
+> i
+
+≜ xi. Since the same h(l) is 
+
+shared across the set elements, this module is permutation equivariant. We also implemented a more expressive non-parametric module using a class-aware GNN with multi-head graph attention, which improves CIFAR-10 accuracy from 94.1% to 94.4%, highlighting the benefit of structured relational modeling and the generality of our framework. Table 1. Classification accuracy on CIFAR10 and ImageNet. 
+
+We experiment with subsampling 5%, 10%, and 100% of the train-ing data, either using (R)etrival or (C)lustering based method.                                                 
+
+> CIFAR10 ImageNet
+> Acc. ↑Run Time (s) ↓Acc. ↑Run Time (s )↓
+> ResNet18 94.9 0.7 68.93 26.1 ResNet18-KNN (5%) 94.5 ±0.02 1.1 61.5 ±0.08 34.4 ResNet18-KNN (10%) 94.5 ±0.05 1.1 63.4 ±0.23 34.5 ResNet18-KNN (100%) 94.5 1.5 66.9 63.7 SPM-R (5%) 94.1 ±0.02 1.0 52.0 ±0.12 33.8 SPM-R (10%) 94.1 ±0.03 1.1 54.8 ±4.16 34.2 SPM-R (100%) 94.1 2.1 59.9 61.2 SPM-C (5%) 94.5 ±0.02 0.7 66.1 ±0.07 31.3 SPM-C (10%) 94.5 ±0.02 0.7 66.6 ±0.12 31.3 SPM-C (100%) 94.5 0.7 67.1 31.3
+
+To make a final prediction, we fuse the set of instance embeddings S(L) with the input latent z(L), using an attention-like mechanism (excluding its own element): 
+
+ˆy = X   
+
+> [s(L)
+> i,yi]∈S (L)\{ [s(L)
+> z,yz]}
+
+α(z(L), s(L) 
+
+> i
+
+) · yi, (11) where the weights 
+
+α(z(L), s(L) 
+
+> i
+
+) ≜
+
+exp 
+
+
+
+(W (L) 
+
+> q
+
+z(L))⊤(W (L) 
+
+> k
+
+s(L) 
+
+> i
+
+)
+
+P 
+
+> j
+
+exp 
+
+
+
+(W (L) 
+
+> q
+
+z(L))⊤(W (L) 
+
+> k
+
+s(L) 
+
+> j
+
+)
+
+ (12) is similar to a cross-attention layer, where z(L) is the query, and s(L) is the key. Lastly, we improve the efficiency of the model by re-ducing the size of S in two ways. First, a retrieval-based approach where we approximate S by retrieving the nearest neighbors. Second, a clustering approach where we create “average instances” ¯sc by taking an average over all the si
+
+with class label c. Both of which reduce the size of S to a constant size. 
+
+4.3. SPM for image generation 
+
+We consider the class-conditioned image generation task, where the model is given class-label yi to generate an image 
+
+xi with the respective class. Our SPM design is based on the popular UNet [43] architecture used in diffusion models. The architecture consists of a series of down/mid/up blocks. We treat the down and up blocks as the parametric module 
+
+f . Specifically, the down blocks encode the input image into a compact latent representation z(l) = f (l−1) ◦ · · · ◦ 
+
+f (1) (x), while the up blocks decode the latents to denoise the image, i.e ., ˆx = f (L) ◦ · · · ◦ f (l)(z(l+1) ).For the non-parametric module, we followed the same design in Eq. (10), which independently processes each dat-apoint to produce an instance embedding set S(l). In our implementation, patch-level features are extracted from the UNet encoder down blocks, and each training instance in T
+
+is encoded independently to obtain its corresponding patch representations. To integrate the two branches, we replace the mid block of UNet with a fusion module. 
+
+Table 2. FID comparisons on CIFAR-10. |T | is the size of the inputted set. Runtime (RT) is for generating 1,000 images.                                      
+
+> DDPM GMM SPM
+> |T | = 10 |T | = 20 |T | = 50 |T | = 100 |T | = 1024
+> FID 7.28 198.42 7.71 ±0.20 7.30 ±0.09 7.17 ±0.18 7.09 ±0.06 7.04 ±0.13
+> RT (s) 42 0.42 52 63 101 173 1486 Rel. RT (%) +0% -99% +23% +50% +140% +311% +3404%
+
+The fusion module’s design aims to spatially align the local regions of the parametric feature and the instance em-beddings. To do so, we perform the fusion at a patch level. Let z(l)[p] ∈ Rd′
+
+denote the p-th patch for latent z(l) and 
+
+s(l) 
+
+> j
+
+[p] to denote the p-th patch of the j-th instance embed-ding. We denote the set of all instance embedding patches from an image with class c as 
+
+˜S(l) 
+
+> c
+
+≜
+
+> |S|
+
+[
+
+> j=1
+
+n
+
+[s(l) 
+
+> j
+
+[p], yj = c]
+
+oPS
+
+> p=1
+
+, (13) where PS is the number of patches extracted from each s(l).The fused latent patch z(l+1) [p] is given by 
+
+X 
+
+> s(l)
+> j[p]∈Q
+
+α
+
+
+
+z(l)[p], s(l) 
+
+> j
+
+[p]
+
+
+
+·
+
+
+
+W (l) 
+
+> k
+
+s(l) 
+
+> j
+
+[p]
+
+
+
+, (14) where Q ≜ ˜S(l) 
+
+> c
+
+\
+
+n
+
+[s(l) 
+
+> z
+
+[p], yz ]
+
+o
+
+. Recall, we use z to denote the index of the sample (xz , yz ) for which z is extracted from. That is, we exclude the sample for which the latent is extracted from the attention. The weight α follows a variant of Bahdanau attention [1] defined as: 
+
+Softmax 
+
+
+
+w⊤ · κ(W (l) 
+
+> q
+
+z(l)[p] + W (l) 
+
+> k
+
+s(l) 
+
+> j
+
+[p] + b(l))
+
+
+
+, (15) where Softmax is normalized over Q and κ is the ReLU activation, and w is a linear layer shared by all the patches. 
+
+5. Task Performance Experiments 
+
+To justify the need for unlearning SPMs, we first demon-strate that SPM’s performance in image classification and generation is competitive with that of existing paramet-ric models. The unlearning experiments are presented in Sec. 6. Implementation details are in Appendix Sec. A. 
+
+5.1. Image classification 
+
+Setup & baselines. We conduct experiments on CIFAR-10 [33] and ImageNet-1K [13]. To evaluate the models, we report the top-1 accuracy (Acc.) and runtime over the test set. We consider the baselines of: (a) a parametric model (ResNet18 [24]), (b) a non-parametric model of KNN [11] using features from ResNet18, and (c) our SPM built on top of a ResNet18 using the retrieval (SPM-R)/clustering (SPM-C) approach. Finally, we study how the training set’s size |T | at test-time affects performance. 
+
+Classification results. Tab. 1 reports the accuracy and run-time for each of the methods. Compared to the parametric Table 3. CIFAR-10 class-wise unlearning on classification averaged over 10 classes. SPMs achieve close performance to the retrained SPM with a fast unlearning time. The UA, RA, and TA values are reported in parentheses with the corresponding gaps.                                                                                                                                                                                                      
+
+> Backbone Method Unlearn 1 Class (10 %)Unlearn 5 Classes (50 %)PG H↓PG S↓∆UA ↓∆RA ↓∆TA ↓Time MU (s) ↓PG H↓PG S↓∆UA ↓∆RA ↓∆TA ↓Time MU (s) ↓
+> ResNet18 Retrain 0.00 0.00 0.00 (100.00) 0.00 (100.00) 0.00 (94.76) 2317.6 0.00 0.00 0.00 (100.00) 0.00 (100.00) 0.00 (96.06) 1284.9 GA [52] 18.48 0.99 5.80 (94.20) 5.64 (94.36) 6.42 (88.34) 8.90 32.62 2.86 0.00 (100.00) 15.51 (84.49) 14.23 (81.77) 41.3 FT [56] 13.11 0.48 66.25 (33.75) 0.15 (99.85) 0.32 (94.44) 148.7 26.21 0.72 34.76 (65.24) 0.06 (99.94) 0.59 (96.65) 81.8 IU [31] 55.93 3.51 0.00 (100.00) 54.13 (45.87) 50.70 (44.06) 17.7 75.71 424.85 0.00 (100.00) 79.97 (20.03) 76.04 (20.02) 16.8 BE [10] 15.43 0.71 23.01 (76.99) 1.81 (98.19) 2.68 (92.08) 15.1 46.00 2.11 64.21 (35.79) 0.40 (99.60) 0.17 (95.89) 81.6 BS [10] 15.28 0.71 23.10 (76.90) 1.74 (98.26) 2.59 (92.17) 28.1 44.01 1.95 62.25 (38.75) 0.40 (99.60) 0.04 (96.02) 159.7
+> ℓ1-sparse [29] 13.03 0.46 60.26 (39.74) 0.22 (99.78) 0.55 (94.21) 148.8 26.12 0.72 34.94 (65.30) 0.06 (99.94) 0.59 (96.65) 82.8 SalUn [16] 9.76 0.32 0.90 (99.10) 0.06 (99.94) 0.14 (94.90) 137.8 25.84 0.74 1.98 (98.02) 0.03 (99.97) 0.82 (96.88) 142.9 MUNBa [60] 16.92 0.50 8.47 (91.53) 0.22 (99.78) 0.55 (94.21) 369.1 29.38 1.46 0.00 (91.53) 0.22 (99.78) 1.85 (94.21) 369.1 ResNet18-KNN Retrain 0.00 0.00 0.00 (100.00) 0.00 (100.00) 0.00 (93.22) 2317.6 0.00 0.00 0.00 (100.00) 0.00 (99.59) 0.00 (96.07) 1284.9 Deletion 8.10 0.55 0.00 (100.00) 0.44 (99.56) 1.77 (94.99) <117.81 0.67 0.00 (100.00) 0.13 (99.72) 0.88 (96.95) <1
+> ResNet18-SPM Retrain 0.00 0.00 0.00 (100.00) 0.00 (99.98) 0.00 (94.38) 3288.9 0.00 0.00 0.00 (100.00) 0.00 (99.99) 0.00 (95.73) 1841.6 (Ours) Deletion 8.62 0.27 0.00 (100.00) 0.00 (99.98) 0.52 (94.90) <121.20 0.52 0.00 (100.00) 0.01 (99.98) 1.23 (96.96) <1
+
+ResNet, we observe that SPM-C achieves competitive per-formance in both accuracy and runtime. Compared to the non-parametric KNN, SPM-C achieves higher accuracy and a lower runtime. Notably, our method requires only half the runtime of ResNet18-KNN (31.3s vs. 63.7s). Next, we observe that using a larger T at test-time improves model performance, for both the KNN and our SPMs. This indicates that SPM can utilize the additional training set samples at test-time. Finally, when compar-ing SPM-R and SPM-C, we observe that clustering achieves lower runtime and improved accuracy. Overall, these results suggest that SPM matches the performance of a parametric model and exhibits similar non-parametric dependencies to the training set at test-time, i.e ., SPMs leverage the inputted set T to make predictions. 
+
+5.2. Class-conditioned image generation 
+
+Setup & baselines. We evaluate SPM on the CIFAR-10 dataset based on DDPM [27]. We report the Fr´ echet In-ception Distance (FID) [26], and the generation time is for 1,000 images for evaluation. We use the same U-Net as in DDPM. For a non-parametric baseline, we compare with the Gaussian Mixture Model (GMM) [12], which shares similar characteristics to KNN but can be directly applied to generative modeling. 
+
+Generation results. Tab. 2 reports the FID on CIFAR-10. We observe that when the size of the inputted set |T | = 50 ,SPM achieves a lower FID than DDPM while maintaining a reasonable generation speed. In general, as |T | increases, the FID score consistently decreases but at the cost of a longer runtime. As for GMM, while it has a fast genera-tion time, its FID is much worse, indicating that it fails to capture the complex data distribution of CIFAR-10. 
+
+6. Unlearning Performance Experiments 
+
+We strictly follow prior works’ evaluation to demonstrate that SPMs can be unlearned more easily and efficiently, via test-time deletion. 
+
+6.1. Unlearning for classification 
+
+Following prior work [16, 29], we evaluate class-wise un-learning using CIFAR-10 and ImageNet-1K. Additional experiments on unlearning random subsets are in Ap-pendix Sec. D. 
+
+Existing metrics. Prior work [16, 29] evaluates an MU al-gorithm in two dimensions, its efficiency, and unlearning quality. For efficiency, the wall time for each MU algorithm (Time MU ) is reported. For quality, prior works report the ac-curacy gap 
+
+∆Acc (D) ≜ |Acc ( ˜F , D) − Acc (F ′, D)| (16) between the unlearned model ˜F and the oracle F ′ (Eq. (3)) over a dataset D. Prior works considered Eq. (16) over three dataset splits, leading to the following metrics (lower the better): • ∆UA evaluates the Unlearned set, i.e ., D ≜ U.• ∆RA evaluates the Remaining set, i.e ., D ≜ T \ U .• ∆TA evaluates the Test set V.
+
+Rethinking unlearning metrics. While the accuracy gap in Eq. (16) is one way to measure the difference between the unlearned and oracle model, a small accuracy gap does not always mean the unlearned/oracle models are similar in all their predictions . The models can make different mistakes on a dataset yet achieve the same accuracy. To address this, we propose Hard/ Soft Prediction Gaps 
+
+for evaluation, which directly measure the difference in pre-diction on the test-set V defined as PG H( ˜F , F ′) = 1
+
+|V| 
+
+X
+
+> x∈V
+
+1[ ˜ y(x)̸ = y′(x)] , (17) where ˜y = arg max y ˜F (x)[ y] is the hard prediction from the unlearned model ˜F . Similarly, y′ is the prediction from the oracle. Here, 1[·] denotes the indicator function. For soft-predictions where ˜F and F ′ output the class probabilities, we measure the difference using KL diver-gence, i.e ., PG S( ˜F , F ′) = 1
+
+> |V|
+
+X
+
+> x∈V
+
+DKL 
+
+  ˜F (x), F ′(x). (18) Table 4. ImageNet 1-class unlearning on classification averaged over 10 classes. We observe that SPMs achieve close performance to the retrained model with a low unlearning time. 
+
+Backbone Method PG H ↓ PG S↓ ∆UA ↓ ∆RA ↓ ∆TA ↓ Time MU (s) ↓
+
+ResNet18 Retrain 0.00 0.00 0.00 (100.00) 0.00 (68.19) 0.00 (68.13) 226025.4 GA [52] 30.47 0.78 7.31 (92.69) 3.41 (64.78) 2.72 (65.41) 24.8 FT [56] 29.68 0.53 0.01 (99.99) 5.68 (62.51) 3.84 (64.29) 11361.4 IU [31] 39.18 1.10 4.15 (95.85) 13.71 (54.48) 10.85 (57.28) 5684.0 BE [10] 33.94 0.92 3.96 (96.04) 7.17 (61.02) 5.79 (62.34) 47.0 BS [10] 35.45 0.99 1.99 (98.01) 8.84 (59.35) 7.18 (60.95) 44.5 
+
+ℓ1-sparse [29] 31.29 0.57 0.00 (100.00) 7.99 (60.19) 5.53 (62.60) 11236.7 SalUn [16] 25.72 0.42 22.43 (77.57) 0.19 (68.00) 0.39 (68.52) 225519.2 MUNBa [60] 34.05 0.65 0.00 (100.00) 11.64 (56.55) 8.45 (59.68) 16685.9 ResNet18-KNN Retrain 0.00 0.00 0.00 (100.00) 0.00 (65.94) 0.00 (66.15) 226025.4 Deletion 18.99 2.54 0.00 (100.00) 2.72 (63.22) 1.71 (64.44) <1
+
+ResNet18-SPM Retrain 0.00 0.00 0.00 (100.00) 0.00 (65.20) 0.00 (67.10) 268803.5 (Ours) Deletion 14.60 0.12 0.00 (100.00) 0.19 (65.01) 0.00 (67.10) <1
+
+Table 5. CIFAR-10 class-wise forgetting on generation. We experiment on 5 unlearning scenarios with unlearning classes: Automobile ,
+
+Cat , Dog , Horse , and Truck . We observe that our method achieves close performance to the retrained model with a low unlearning time.                                                                                                                                             
+
+> Backbone Method Automobile Cat Dog Horse Truck Time MU (s) ↓
+> FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓
+> DDPM Retrain 0.00 0.00 (100.00) 0 .00 (11.21) 0.00 0.00 (99.98) 0.00 (10.84) 0.00 0.00 (100.00) 0.00 (10.88) 0.00 0.00 (99.98) 0.00 (10.00) 0.00 0.00 (99.90) 0.00 (10.15) 145601.4 SA [25] 31.00 0.00 (100.00) 12.35 (23.56) 32.54 14.18 (85.80) 10.50 (21.34) 32.03 8.60 (91.40) 11.11 (21.19) 477.61 0.02 (100.00) 11.13 (21.13) 35.79 0.10 (100.00) 18.89 (29.04) 18711.0 SalUn [16] 6.30 0.20 (99.80) 10.02 (21.23) 6.88 1.38 (98.60) 9.45 (20.29) 6.93 0.00 (100.00) 9.30 (20.18) 6.11 0.58 (99.40) 10.70 (20.70) 3.59 0.70 (99.20) 10.30 (20.45) 493.2 SFR-on [28] 25.69 0.00 (100.00) 9.49 (20.70) 41.68 7.38 (92.60) 7.60 (18.44) 41.30 0.20 (99.80) 8.01 (18.89) 91.48 0.02 (100.00) 9.93 (19.93) 42.70 0.10 (100.00) 10.46 (20.61) 23.8 SPM Retrain 0.00 0.00 (99.76) 0.00 (7.40) 0.00 0.00 (99.26) 0.00 (7.15) 0.00 0.00 (99.78) 0.00 (6.52) 0.00 0.00 (99.84) 0.00 (6.89) 0.00 0.00 (99.64) 0.00 (7.28) 90935.9 Ours 1.97 0.10 (99.86) 0.38 (7.78) 1.85 0.04 (99.22) 0.50 (7.65) 1.80 0.04 (99.82) 0.08 (6.60) 1.90 0.08 (99.76) 0.29 (7.18) 1.97 0.06 (99.58) 0.40 (7.68) <1
+
+We note that the proposed prediction gap is stricter than the accuracy gap in Eq. (16), i.e ., an upper bound. 
+
+Claim 1. Given that the oracle margin γ(x) = F ′(x)[ y1]−
+
+F ′(x)[ y2] ≥ γmin > 0 for all x ∈ V , where y1, y 2 denote the indices of the largest and second predicted probabilities from the oracle model. We have 
+
+∆Acc (V) ≤ PG H( ˜F , F ′) ≤√2
+
+γmin 
+
+q
+
+PG S( ˜F , F ′). (19) 
+
+Proof. The proof is based on the triangle inequality of total variation; We defer it to Appendix Sec. B. 
+
+Baselines. Experiments are conducted on ResNet18, for which we adapted our SPM. For parametric models, we compare eight MU algorithms: (1) gradient ascent (GA) [52] that reverses training using gradient ascent on unlearned data, (2) fine-tuning (FT) [56] that fine-tunes the model on the remaining data, (3) influence unlearning (IU) [31] that leverages influence functions, two boundary unlearning methods, (4) boundary expansion (BE) and (5) 
+
+boundary shifting (BS) [10], (6) ℓ1-sparsity [29] that intro-duces weight sparsity for unlearning, (7) SalUn [16] and 
+
+(8) MUNBa [60] that aim to erase the influence of un-learned data in models. For non-parametric models, we compare with KNN using ResNet18’s last layer embedding. Finally, we report the performance of oracle unlearned mod-els, which are retrained from scratch. 
+
+Results on CIFAR-10. Tab. 3 reports the results for un-learning one class and five selected classes. We observe that SPM achieves the lowest soft prediction gap, demon-strating strong similarity between the unlearned and oracle (retrained) model. SPM also yields the smallest ∆UA and 
+
+∆RA, along with a minimal ∆TA, indicating its effective-ness in forgetting targeted concepts while preserving perfor-mance on the remaining classes. Also, SPM has the lowest unlearning time. Unlike parametric methods that require it-erative updates, neither KNN nor SPM modifies the model weights. Hence, unlearning time only involves indexing the data points, which is less than a second. 
+
+Results on ImageNet-1K. Tab. 4 presents the results for unlearning on ImageNet-1K. As in CIFAR-10, SPM out-performs all baselines across all metrics. Notably, SPM achieves a low performance gap. SPM maintains near-zero values for ∆UA and ∆RA, and ∆TA. In terms of unlearn-ing time, prior methods often require multiple hours; SPM and KNN are significantly faster, as these models do not require updates in the parameters. 
+
+6.2. Unlearning for generation. 
+
+Baselines. Following Huang et al. [28], we evaluate class-conditioned unlearning on CIFAR-10. Our method is com-pared against SalUn [16], along with two other gradient-based approximate unlearning approaches: Selective Am-nesia (SA) [25] and SFR-on [28]. 
+
+Metrics. Prior works report unlearning time (Time MU )and performance gap ( ∆) between retrained/oracle model, where performance is measured by the following: • Unlearning Accuracy (UA): A trained classifier Cp is used to measure the accuracy on the set of images gen-Class 0 - 4 Class 5 - 9 
+
+planes cars birds cats deer dogs frogs horses ships trucks Pre-trained SPM 
+
+Unlearn 0 - 4 
+
+Unlearn 5 - 9 
+
+Figure 3. Qualitative results for unlearned SPM . When a class is unlearned ( e.g ., cats or frogs framed in red), the model avoids generating that concept and produces samples resembling remaining classes ( e.g ., a truck replacing a cat or a plane replacing a frog). Additionally, the generations from the remaining classes are left unchanged (framed in blue). Table 6. Ablation study of label permutation. We experiment on CIFAR-10 class-wise forgetting on generation with SPMs, and the results show that removing label permutation leads to a large gap in UA.                                                                                          
+
+> Method Automobile Cat Dog Horse Truck FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓FID O↓∆UA ↓∆FID R↓
+> Retrain 0.00 0.00 (99.76) 0.00 (7.40) 0.00 0.00 (99.26) 0.00 (7.15) 0.00 0.00 (99.78) 0.00 (6.52) 0.00 0.00 (99.84) 0.00 (6.89) 0.00 0.00 (99.64) 0.00 (7.28) w/o perm. 2.88 0.82 (98.94) 2.66 (4.74) 5.08 3.13 (96.13) 2.68 (4.47) 3.39 83.61 (16.17) 2.15 (4.37) 3.87 60.89 (38.95) 2.22 (4.67) 2.90 1.56 (98.08) 2.58 (4.70) Ours 1.97 0.10 (99.86) 0.38 (7.78) 1.85 0.04 (99.22) 0.50 (7.65) 1.80 0.04 (99.82) 0.08 (6.60) 1.90 0.08 (99.76) 0.29 (7.18) 1.97 0.06 (99.58) 0.40 (7.68)
+
+erated by the model for the unlearned class. An image is successfully unlearned if the classifier does not predict the unlearned class. • Fr´ echet Inception Distance (FID R): Prior work reports the FID on the Remaining classes of an unlearned model. The FID is computed with respect to the real images from the dataset. Intuitively, an unlearned model should gener-ate high-quality images for the remaining classes. Next, we propose Oracle Fr´ echet Inception Distance (FID O), which measures the FID between the generated im-ages from the unlearned model and those from the oracle model for all the classes. This metric quantifies how closely the unlearned model matches the oracle, providing a more direct measure of unlearning effectiveness. 
+
+Quantitative results. We report class-conditioned unlearn-ing performance in Tab. 5. We found SPM consistently achieves the smallest FID O, showing it matches the oracle model’s behavior. Some prior works resort to degrading the unlearned classes, thus resulting in a large FID O (more than 30). Additionally, SPM maintains a low ∆UA (below 0.1) and ∆FID R (below 0.5), indicating improved unlearning ca-pability and high image quality for the remaining classes. In terms of efficiency, SPM introduces negligible unlearn-ing time, whereas baseline methods require between 23.8 seconds (SFR-on) and over 18,711 seconds (SA). 
+
+Qualitative results. Fig. 3 shows qualitative results for SPM unlearning, where five CIFAR-10 classes are removed at a time. We visualize generated samples for both the un-learned and remaining classes. The samples corresponding to the forgotten classes ( e.g ., Classes 0 – 4 for Unlearn 0 – 4) display totally different objects, confirming that the model no longer generates images of the removed categories. No-tably, the image quality is high for the remaining classes. These results demonstrate that the proposed SPM supports precise, class-level forgetting without harming the genera-tion quality of the remaining categories. 
+
+Ablation study of label permutation. We conduct an ab-lation on the proposed label permutation augmentation for SPM. In Tab. 6, we report the unlearning results on CIFAR-10 for SPMs trained with and without label permutation. The model trained without label permutation tends to mem-orize label mappings within the model weights and fails to unlearn, as can be seen from the higher ∆FID O, ∆UA and 
+
+∆FID R. These results demonstrate the efficacy of the pro-posed label permutation. 
+
+7. Conclusion 
+
+We introduced DTF, a family of SPMs for unlearning. The proposed SPMs enable unlearning through test-time dele-tion of samples from an inputted set, without modifying trained parameters. Empirical results on image classifica-tion and generation demonstrate that SPMs achieve com-petitive performance compared to existing parametric mod-els, while enabling fast and faithful unlearning that closely matches a fully retrained oracle. We hope this work in-spires future research on machine unlearning beyond post-hoc methods and encourages model designs suitable for unlearning. We believe SPMs are a viable path towards privacy-compliant AI systems where support for rapid data removal requests is required. 
+
+Acknowledgements: This project is supported in part by an NSF Award #2420724, and a Google Research Scholar Award. References 
+
+[1] Dzmitry Bahdanau, Kyunghyun Cho, and Yoshua Bengio. Neural machine translation by jointly learn-ing to align and translate. In Proc. ICLR , 2015. 5 [2] Fazl Barez, Tingchen Fu, Ameya Prabhu, Stephen Casper, Amartya Sanyal, Adel Bibi, Aidan O’Gara, Robert Kirk, Ben Bucknall, Tim Fist, et al. Open problems in machine unlearning for ai safety. arXiv preprint arXiv:2501.04952 , 2025. 2 [3] Peter W Battaglia, Jessica B Hamrick, Victor Bapst, Alvaro Sanchez-Gonzalez, Vinicius Zambaldi, Ma-teusz Malinowski, Andrea Tacchetti, David Raposo, Adam Santoro, Ryan Faulkner, et al. Relational induc-tive biases, deep learning, and graph networks. arXiv preprint arXiv:1806.01261 , 2018. 4 [4] Yoshua Bengio, S¨ oren Mindermann, Daniel Privit-era, Tamay Besiroglu, Rishi Bommasani, et al. In-ternational AI safety report. Technical Report DSIT 2025/001, 2025. 2 [5] Andreas Blattmann, Robin Rombach, Kaan Oktay, Jonas M¨ uller, and Bj¨ orn Ommer. Retrieval-augmented diffusion models. In Proc. NeurIPS , 2022. 2 [6] Lucas Bourtoule, Varun Chandrasekaran, Christo-pher A Choquette-Choo, Hengrui Jia, Adelin Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. Ma-chine unlearning. In IEEE SSP , 2021. 2 [7] Manuel Brack, Felix Friedrich, Dominik Hintersdorf, Lukas Struppek, Patrick Schramowski, and Kristian Kersting. SEGA: Instructing text-to-image models us-ing semantic guidance. In Proc. NeurIPS , 2023. 2 [8] Miles Brundage, Shahar Avin, Jack Clark, Helen Toner, Peter Eckersley, Ben Garfinkel, Allan Dafoe, Paul Scharre, Thomas Zeitzoff, Bobby Filar, et al. The malicious use of artificial intelligence: Fore-casting, prevention, and mitigation. arXiv preprint arXiv:1802.07228 , 2018. 2 [9] Yinzhi Cao and Junfeng Yang. Towards making sys-tems forget with machine unlearning. In IEEE SSP ,2015. 2 [10] Min Chen, Weizhuo Gao, Gaoyang Liu, Kai Peng, and Chen Wang. Boundary unlearning: Rapid forgetting of deep networks via shifting the decision boundary. In Proc. CVPR , 2023. 2, 6, 7, 15 [11] Thomas Cover and Peter Hart. Nearest neighbor pat-tern classification. IEEE TIT , 1967. 1, 5 [12] Arthur P Dempster, Nan M Laird, and Donald B Ru-bin. Maximum likelihood from incomplete data via the EM algorithm. Journal of the royal statistical so-ciety , 1977. 6 [13] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchi-cal image database. In Proc. CVPR , 2009. 5 [14] Matthijs Douze, Alexandr Guzhva, Chengqi Deng, Jeff Johnson, Gergely Szilvasy, Pierre-Emmanuel Mazar´ e, Maria Lomeli, Lucas Hosseini, and Herv´ eJ´ egou. The FAISS library. IEEE TBD , 2025. 12 [15] European Union. Regulation (EU) 2016/679 of the eu-ropean parliament and of the council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (general data protection regulation), 2016. OJ L 119, 4.5.2016, p. 1–88. 1 [16] Chongyu Fan, Jiancheng Liu, Yihua Zhang, Eric Wong, Dennis Wei, and Sijia Liu. SalUn: Empow-ering machine unlearning via gradient-based weight saliency in both image classification and generation. In Proc. ICLR , 2024. 2, 6, 7, 12, 15 [17] Rohit Gandikota, Joanna Materzy´ nska, Jaden Fiotto-Kaufman, and David Bau. Erasing concepts from dif-fusion models. In Proc. CVPR , 2023. 2 [18] Rohit Gandikota, Hadas Orgad, Yonatan Belinkov, Joanna Materzy´ nska, and David Bau. Unified concept editing in diffusion models. In Proc. WACV , 2024. 2 [19] Antonio Ginart, Melody Guan, Gregory Valiant, and James Y Zou. Making ai forget you: Data deletion in machine learning. In Proc. NeurIPS , 2019. 2 [20] Shashwat Goel, Ameya Prabhu, Amartya Sanyal, Ser-Nam Lim, Philip Torr, and Ponnurangam Kumaraguru. Towards adversarial evaluations for inexact machine unlearning. arXiv preprint arXiv:2201.06640 , 2022. 2 [21] Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal sunshine of the spotless net: Selective forgetting in deep networks. In Proc. CVPR , 2020. 2 [22] Chuan Guo, Tom Goldstein, Awni Hannun, and Lau-rens Van Der Maaten. Certified data removal from machine learning models. In Proc. ICML , 2020. 1, 2 [23] Balint Gyevnar and Atoosa Kasirzadeh. Ai safety for everyone. Nature Machine Intelligence , 2025. 2 [24] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In 
+
+Proc. CVPR , 2016. 4, 5 [25] Alvin Heng and Harold Soh. Selective amnesia: A continual learning approach to forgetting in deep gen-erative models. In Proc. NeurIPS , 2023. 2, 7 [26] Martin Heusel, Hubert Ramsauer, Thomas Un-terthiner, Bernhard Nessler, and Sepp Hochreiter. GANs trained by a two time-scale update rule con-verge to a local Nash equilibrium. In NeurIPS , 2017. 6[27] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denois-ing diffusion probabilistic models. In Proc. NeurIPS ,2020. 6 [28] Zhehao Huang, Xinwen Cheng, JingHao Zheng, Hao-ran Wang, Zhengbao He, Tao Li, and Xiaolin Huang. Unified gradient-based machine unlearning with re-main geometry enhancement. In Proc. NeurIPS , 2024. 2, 7, 12 [29] Jinghan Jia, Jiancheng Liu, Parikshit Ram, Yuguang Yao, Gaowen Liu, Yang Liu, Pranay Sharma, and Sijia Liu. Model sparsity can simplify machine unlearning. In Proc. NeurIPS , 2023. 2, 6, 7, 15 [30] Sanghyun Kim, Seohyeon Jung, Balhae Kim, Moon-seok Choi, Jinwoo Shin, and Juho Lee. Towards safe self-distillation of internet-scale text-to-image diffu-sion models. In ICML Workshop on Challenges in Deployable Generative AI , 2023. 2 [31] Pang Wei Koh and Percy Liang. Understanding black-box predictions via influence functions. In Proc. ICML , 2017. 6, 7, 15 [32] Jannik Kossen, Neil Band, Clare Lyle, Aidan Gomez, Tom Rainforth, and Yarin Gal. Self-attention be-tween datapoints: Going beyond individual input-output pairs in deep learning. In Proc. NeurIPS , 2021. 2[33] Alex Krizhevsky. Learning multiple layers of fea-tures from tiny images. Technical report, University of Toronto, 2009. 5 [34] Nupur Kumari, Bingliang Zhang, Sheng-Yu Wang, Eli Shechtman, Richard Zhang, and Jun-Yan Zhu. Ab-lating concepts in text-to-image diffusion models. In 
+
+Proc. ICCV , 2023. 2 [35] Juho Lee, Yoonho Lee, Jungtaek Kim, Adam Kosiorek, Seungjin Choi, and Yee Whye Teh. Set transformer: A framework for attention-based permutation-invariant neural networks. In Proc. ICML , 2019. 4 [36] Sijia Liu, Yuanshun Yao, Jinghan Jia, Stephen Casper, Nathalie Baracaldo, Peter Hase, Yuguang Yao, Chris Yuhao Liu, Xiaojun Xu, Hang Li, et al. Re-thinking machine unlearning for large language mod-els. Nature Machine Intelligence , 2025. 2 [37] Ananth Mahadevan and Michael Mathioudakis. Cer-tifiable machine unlearning for linear models. arXiv preprint arXiv:2106.15093 , 2021. 2 [38] Nahema Marchal, Rachel Xu, Rasmi Elasmar, Ia-son Gabriel, Beth Goldberg, and William Isaac. Generative AI misuse: A taxonomy of tactics and insights from real-world data. arXiv preprint arXiv:2406.13843 , 2024. 2 [39] Kevin P Murphy. Probabilistic machine learning: an introduction . MIT press, 2022. 2 [40] Seth Neel, Aaron Roth, and Saeed Sharifi-Malvajerdi. Descent-to-delete: Gradient-based methods for ma-chine unlearning. In Algorithmic Learning Theory .PMLR, 2021. 1, 2 [41] Quoc Phong Nguyen, Bryan Kian Hsiang Low, and Patrick Jaillet. Variational Bayesian unlearning. Proc. NeurIPS , 2020. 1, 2 [42] Xiaojuan Qi, Qifeng Chen, Jiaya Jia, and Vladlen Koltun. Semi-parametric image synthesis. In Proc. CVPR , 2018. 2 [43] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-Net: Convolutional networks for biomedical image segmentation. In Proc. MICCAI , 2015. 5 [44] Patrick Schramowski, Manuel Brack, Bj¨ orn Deis-eroth, and Kristian Kersting. Safe latent diffu-sion: Mitigating inappropriate degeneration in diffu-sion models. In Proc. CVPR , 2023. 2 [45] Matthias Seeger. Gaussian processes for machine learning. International journal of neural systems , 14, 2004. 2 [46] Ayush Sekhari, Jayadev Acharya, Gautam Kamath, and Ananda Theertha Suresh. Remember what you want to forget: Algorithms for machine unlearning. In 
+
+Proc. NeurIPS , 2021. 1, 2 [47] Thanveer Shaik, Xiaohui Tao, Haoran Xie, Lin Li, Xi-aofeng Zhu, and Qing Li. Exploring the landscape of machine unlearning: A comprehensive survey and taxonomy. IEEE TNNLS , 2024. 2 [48] Shelly Sheynin, Oron Ashual, Adam Polyak, Uriel Singer, Oran Gafni, Eliya Nachmani, and Yaniv Taig-man. KNN-diffusion: Image generation via large-scale retrieval. In Proc. ICLR , 2023. 2 [49] Jeffrey S Simonoff. Smoothing methods in statistics .Springer Science & Business Media, 2012. 2 [50] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In Proc. ICLR ,2021. 12 [51] Ayush Kumar Tarun, Vikram Singh Chundawat, Mu-rari Mandal, and Mohan Kankanhalli. Deep regression unlearning. In Proc. ICML , 2023. 2 [52] Anvith Thudi, Gabriel Deza, Varun Chandrasekaran, and Nicolas Papernot. Unrolling SGD: Understand-ing factors influencing machine unlearning. In Proc. EuroS&P , 2022. 6, 7, 15 [53] Enayat Ullah, Tung Mai, Anup Rao, Ryan A Rossi, and Raman Arora. Machine unlearning via algorith-mic stability. In Proc. COLT , 2021. 2 [54] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In Proc. NeurIPS , 2017. 4 [55] Weiqi Wang, Zhiyi Tian, Chenhan Zhang, and Shui Yu. Machine unlearning: A comprehensive survey. 
+
+arXiv preprint arXiv:2405.07406 , 2024. 2 [56] Alexander Warnecke, Lukas Pirch, Christian Wress-negger, and Konrad Rieck. Machine unlearning of features and labels. arXiv preprint arXiv:2108.11577 ,2021. 6, 7, 15 [57] Larry Wasserman. All of nonparametric statistics .Springer, 2006. 2 [58] Andrew Gordon Wilson, Zhiting Hu, Ruslan Salakhut-dinov, and Eric P Xing. Deep kernel learning. In Proc. AISTATS , 2016. 2 [59] Ga Wu, Masoud Hashemi, and Christopher Srinivasa. PUMA: Performance unchanged model augmentation for training data removal. In Proc. AAAI , 2022. 1, 2 [60] Jing Wu and Mehrtash Harandi. MUNBa: Machine unlearning via Nash bargaining. In Proc. ICCV , 2025. 6, 7, 12, 15 [61] Jing Wu, Trung Le, Munawar Hayat, and Mehrtash Harandi. Erasing undesirable influence in diffusion models. In Proc. CVPR , 2025. 12, 13 [62] Ryota Yoshihashi, Wen Shao, Rei Kawakami, Shaodi You, Makoto Iida, and Takeshi Naemura. Classification-reconstruction learning for open-set recognition. In Proc. CVPR , 2019. 2 [63] Manzil Zaheer, Satwik Kottur, Siamak Ravanbakhsh, Barnabas Poczos, Russ R Salakhutdinov, and Alexan-der J Smola. Deep sets. In Proc. NeurIPS , 2017. 4 [64] Gong Zhang, Kai Wang, Xingqian Xu, Zhangyang Wang, and Humphrey Shi. Forget-me-not: Learning to forget in text-to-image diffusion models. In Proc. CVPR , 2024. 2 [65] Amber Yijia Zheng and Raymond A Yeh. Imma: Immunizing text-to-image models against malicious adaptation. In Proc. ECCV , 2024. 2 [66] Amber Yijia Zheng and Raymond A Yeh. Multi-concept model immunization through differentiable model merging. In Proc. AAAI , 2025. [67] Amber Yijia Zheng, Chiao-An Yang, and Raymond A Yeh. Learning to obstruct few-shot image classifica-tion over restricted classes. In Proc. ECCV , 2024. [68] Amber Yijia Zheng, Site Bai, Brian Bullins, and Ray-mond A. Yeh. Model immunization from a condition number perspective. In Proc. ICML , 2025. 2 Appendix 
+
+The appendix is organized as follows: 
+
+• Implementation and experimental details are presented in Sec. A. • The complete proof of Claim 1 is provided in Sec. B. • Additional qualitative results for GMM generation are included in Sec. C. • Additional results on random unlearning for classification are reported in Sec. D. 
+
+A. Implementation and Experiment Details 
+
+Details for task performance experiments. For SPM on classification, ResNet18 is trained using SGD with a learning rate of 0.1 and a batch size of 256. We train from scratch for 100 epochs on CIFAR-10 and fine-tune the ImageNet-pretrained model for 160 epochs on ImageNet. For each mini-batch, we pair each query with 1,024 randomly sampled instances from the training set, which serve as the inputted set during training. All experiments are repeated with five random seeds. As for SPM on generation, we train a DDPM for 2,000 epochs with a learning rate of 0.0005 and a batch size of 256. During training, each batch is paired with an inputted set of 256 samples drawn from the training set, serving as the non-parametric memory for SPM. During evaluation, we generate 5,000 samples per class using DDIM [50] with 50 sampling steps. Runtime is measured based on the time required to generate 1,000 images. All the experiments are conducted on Nvidia L40S. 
+
+Baselines for task performance. For classification, we adopt ResNet18 and ResNet18-KNN as the parametric and non-parametric baselines, respectively. We train ResNet18 by following the implementation details provided by Fan et al. [16]. ResNet18-KNN performs K-nearest neighbor classification on the embeddings extracted from ResNet18, with the optimal value of K determined to be 50 for achieving the highest accuracy. In both ResNet18-KNN and SPM-R, the samples from the inputted set with the minimum L2 distance to the query are retrieved, with a retrieval size set of 256. This retrieval process is implemented using the FAISS (Facebook AI Similarity Search) library [14], which enables efficient similarity search through product quantization (PQ) codes, allowing for comparison of quantized representations and significantly reducing retrieval latency. For generation, we adopt DDPM and GMM as the parametric and non-parametric baselines, respectively. We train DDPM following the implementation provided by Fan et al. [16]. For GMM, we model the target distribution pc(x) for each class using 1,000 Gaussian components, with the mean μi and diagonal covariance Σi of each component estimated using the Expectation-Maximization (EM) algorithm. The resulting model can be expressed as: 
+
+pc(x) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+N (x|μi, Σi), (20) where N (x|μi, Σi) represents the Gaussian distribution with mean μi and covariance Σi for the i-th component, and n is the total number of Gaussian components. 
+
+Details for unlearning performance experiments. For SPM in classification, we construct the inputted set using the re-maining classes, i.e ., T \ U . Then, we apply the clustering strategy to aggregate the embeddings of samples from each class into an average. For SPM on generation, if the class is unlearned, the inputted set is composed of images from another remaining class. For example, if the model is supposed to unlearn cat, we can use the images of planes to replace images of cats as the inputted set. Otherwise, the inputted set is sampled from the target class. 
+
+Baselines for unlearning performance. We utilize the code released from Fan et al. [16] and Wu and Harandi [60] for classification, and from Huang et al. [28] for generation, adhering to their instructions to obtain the baseline results. 
+
+Comparison with EraseDiff We utilize the code provided by EraseDiff [61] and present our results in Tab. 7. However, we were unable to fully replicate the results reported in their original paper. Furthermore, it is worth noting that their study presents results for only a single class in the class-wise unlearning experiment. This limited evaluation makes it challenging to assess the general effectiveness of the approach across a broader range of classes. 
+
+More qualitative results Fig. 4 shows more qualitative results for SPM unlearning, where five CIFAR-10 classes are removed simultaneously. We visualize generated samples for both the unlearned and remaining classes. These results demonstrate that the proposed SPM supports precise, class-level forgetting without harming the generation quality of the remaining categories. Backbone Method Automobile Cat Dog Horse Truck tsetup (s) ↓                                                                           
+
+> ∆UA ↓∆FID R↓∆UA ↓∆FID R↓∆UA ↓∆FID R↓∆UA ↓∆FID R↓∆UA ↓∆FID R↓
+> DDPM Retrain 0.00 (100.00) 0.00 (11.21) 0.00 (99.98) 0.00 (10.84) 0.00 (100.00) 0.00 (10.88) 0.00 (99.98) 0.00 (10.00) 0.00 (99.90) 0.00 (10.15) 145601.4 EraseDiff [61] 28.06 (71.94) 2.66 (8.55) 72.42 (27.56) 1.96 (8.88) 51.40 (48.60) 2.16 (8.72) 42.24 (57.76) 1.20 (8.80) 38.10 (61.80) 1.80 (8.35) 1429.6 SPM Retrain 0.00 (99.76) 0.00 (7.40) 0.00 (99.26) 0.00 (7.15) 0.00 (99.78) 0.00 (6.52) 0.00 (99.84) 0.00 (6.89) 0.00 (99.64) 0.00 (7.28) 90935.9 Ours 0.10 (99.86) 0.38 (7.78) 0.04 (99.22) 0.50 (7.65) 0.04 (99.82) 0.08 (6.60) 0.08 (99.76) 0.29 (7.18) 0.06 (99.58) 0.40 (7.68) <1
+
+Table 7. CIFAR-10 class-wise forgetting on generation. Comparison with EraseDiff. 
+
+Class 0 - 4 Class 5 - 9 
+
+planes cars birds cats deer dogs frogs horses ships trucks Pre-trained SPM 
+
+Unlearn 0 - 4 
+
+Unlearn 5 - 9 
+
+Figure 4. Qualitative comparison of unlearned SPM . When a class is unlearned ( e.g ., cats or frogs framed in red), the model avoids generating that concept and produces samples resembling remaining classes ( e.g ., a truck replacing a cat). Additionally, the generations from the remaining classes are left unchanged (framed in blue). 
+
+B. Proof of Claim 1 
+
+Claim 1. Given that the oracle margin γ(x) = F ′(x)[ y1] − F ′(x)[ y2] ≥ γmin > 0 for all x ∈ V , where y1, y 2 denote the indices of the largest and second predicted probabilities from the oracle model. We have 
+
+∆Acc (V) ≤ PG H( ˜F , F ′) ≤√2
+
+γmin 
+
+q
+
+PG S( ˜F , F ′). (19) 
+
+Proof. Proof of the first inequality in Eq. (19) . For every x ∈ V , let y⋆(x) be the ground-truth label. Then 
+
+1[ ˜ y(x) = y⋆(x)] − 1[y′(x) = y⋆(x)] ≤ 1[ ˜ y(x)̸ = y′(x)] . (21) Averaging over x ∈ V yields 
+
+∆ Acc( V) ≤ PG H( ˜F , F ′). (22) Proof of the second inequality in Eq. (19) . Fix x ∈ V and recall the oracle margin γ(x) = F ′(x)[ y1] − F ′(x)[ y2] ≥
+
+γmin > 0, where y1, y 2 are the indices of the largest and second largest coordinates of F ′(x). If ˜y(x) = y′(x) = y1, then 
+
+1[ ˜ y(x)̸ = y′(x)] = 0 . Otherwise, set ˜y = ˜ y(x)̸ = y1. Since F ′(x)[ ˜ y] ≤ F ′(x)[ y2], we have 
+
+γ(x) ≤ F ′(x)[ y1] − F ′(x)[ ˜ y]. (23) Adding and subtracting ˜F (x)[ y1] and ˜F (x)[ ˜ y], and using ˜F (x)[ y1] ≤ ˜F (x)[ ˜ y], we obtain 
+
+γ(x) ≤ F ′(x)[ y1] − ˜F (x)[ y1] + F ′(x)[ ˜ y] − ˜F (x)[ ˜ y] (24) 
+
+≤ ˜F (x) − F ′(x) 1. (25) Hence, 
+
+1[ ˜ y(x)̸ = y′(x)] ≤
+
+˜F (x) − F ′(x) 1
+
+γmin 
+
+. (26) By Pinsker’s inequality, 
+
+˜F (x) − F ′(x) 1 ≤
+
+q
+
+2 DKL 
+
+  ˜F (x), F ′(x). (27) Therefore, 
+
+1[ ˜ y(x)̸ = y′(x)] ≤√2
+
+γmin 
+
+q
+
+DKL 
+
+  ˜F (x), F ′(x). (28) Averaging over x ∈ V and applying Jensen’s inequality to t 7 → √t yields PG H( ˜F , F ′) ≤√2
+
+γmin 
+
+s 1
+
+|V| 
+
+X
+
+> x∈V
+
+DKL 
+
+  ˜F (x), F ′(x) =
+
+√2
+
+γmin 
+
+q
+
+PG S( ˜F , F ′). (29) Combining the two parts gives 
+
+∆ Acc( V) ≤ PG H( ˜F , F ′) ≤√2
+
+γmin 
+
+q
+
+PG S( ˜F , F ′). (30) 
+
+C. Qualitative Results from GMM 
+
+Fig. 5 presents the qualitative results of GMM on CIFAR-10. Since GMM generates images by superimposing multiple Gaussian components, the generated images exhibit significant noise and blurriness. This highlights the limitations of tradi-tional semi/non-parametric models in handling complex generative tasks, underscoring the necessity of integrating parametric models to effectively address such challenges. 
+
+D. Random Unlearning Results on Classification 
+
+In Tab. 8, we present the results of random unlearning on CIFAR-10 classification. Our proposed method achieves low PG H
+
+and PG S in both the 10% and 50% random unlearning scenarios. Moreover, the gaps between our unlearned model and the retrained model in terms of ∆UA, ∆RA, and ∆TA are minimal, demonstrating the effectiveness of our approach. It is worth noting that evaluating this task solely based on UA is not meaningful, since the unlearned data in random unlearning are essentially unseen samples to the model. Consequently, the model is expected to generalize to such data. Therefore, PG H and PG S serve as more appropriate evaluation metrics in this context, as they measure how closely the unlearned model approximates the logits of the retrained model. planes cars birds cats deer dogs frogs horses ships trucks 
+
+Figure 5. Generated images of GMM on CIFAR-10. The low-quality outputs demonstrate the limitations of traditional non-parametric models in handling complex generative tasks. 
+
+Backbone Method Random Unlearning (10 %) Random Unlearning (50 %)PG H ↓ PG S↓ ∆UA ↓ ∆RA ↓ ∆TA ↓ PG H ↓ PG S↓ ∆UA ↓ ∆RA ↓ ∆TA ↓
+
+ResNet18 Retrain 0.00 0.00 0.00 (5.35) 0.00 (100.00) 0.00 (94.25) 0.00 0.00 0.00 (8.48) 0.00 (100.00) 0.00 (91.08) GA [52] 5.23 0.17 4.80 (0.55) 4.80 (99.52) 0.48 (94.57) 8.05 0.37 7.94 (0.54) 0.49 (99.51) 3.45 (94.53) FT [56] 5.89 0.19 4.46 (0.89) 0.16 (99.84) 0.32 (93.93) 8.50 0.36 7.52 (0.96) 0.18 (99.82) 2.67 (93.75) IU [31] 26.60 1.69 17.15 (22.50) 22.32 (77.68) 21.09 (73.16) 83.63 8.29 74.83 (83.32) 83.29 (16.71) 74.53 (16.55) BE [10] 5.30 0.17 4.83 (0.52) 0.48 (99.52) 0.29 (94.54) 34.70 1.22 17.33 (25.81) 25.93 (74.07) 23.37 (67.71) BS [10] 5.31 0.17 4.82 (0.53) 0.49 (99.51) 0.28 (94.53) 26.55 0.85 8.82 (17.30) 17.36 (82.64) 15.39 (75.69) 
+
+ℓ1-sparse [29] 6.03 0.19 4.29 (1.06) 0.24 (99.76) 0.50 (93.75) 8.53 0.35 7.53 (0.95) 0.14 (99.86) 2.67 (93.75) SalUn [16] 5.40 0.15 3.89 (1.46) 0.14 (99.86) 0.08 (94.17) 7.94 0.33 7.34 (1.14) 0.52 (99.48) 2.53 (93.61) MUNBa [60] 5.39 0.14 4.39 (0.96) 0.03 (99.97) 0.19 (94.44) 12.94 1.50 2.62 (5.86) 3.26 (96.74) 2.09 (88.99) ResNet18-KNN Retrain 0.00 0.00 0.00 (0.02) 0.00 (99.98) 0.00 (94.45) 0.00 0.00 0.00 (0.02) 0.00 (99.98) 0.00 (94.45) ResNet18-SPM Retrain 0.00 0.00 0.00 (0.18) 0.00 (99.43) 0.00 (93.89) 0.00 0.00 0.00 (4.89) 0.00 (95.96) 0.00 (91.08) Ours 5.54 0.19 0.16 (0.02) 0.55 (99.98) 0.56 (94.45) 7.83 0.36 4.87 (0.02) 4.02 (99.98) 3.37 (94.45) 
+
+Table 8. CIFAR-10 random unlearning on classification. Results are averaged over 10 scenarios. We observe that our method can achieve close performance to the retrained model. The UA, RA, and TA values are reported in parentheses with the corresponding gaps.

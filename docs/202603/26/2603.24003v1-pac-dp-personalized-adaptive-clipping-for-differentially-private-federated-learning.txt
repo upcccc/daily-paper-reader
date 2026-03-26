@@ -1,0 +1,2141 @@
+Title: PAC-DP: Personalized Adaptive Clipping for Differentially Private Federated Learning
+
+URL Source: https://arxiv.org/pdf/2603.24003v1
+
+Published Time: Thu, 26 Mar 2026 00:40:45 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+> 1
+
+# PAC-DP: Personalized Adaptive Clipping for Differentially Private Federated Learning 
+
+Hao Zhou, Siqi Cai, Hua Dai*, Geng Yang, Jing Luo, Hui Cai 
+
+Abstract —Differential privacy (DP) is crucial for safeguard-ing sensitive client information in federated learning (FL), yet traditional DP-FL methods rely predominantly on fixed gradient clipping thresholds. Such static clipping neglects significant client heterogeneity and varying privacy sensitivities, which may lead to an unfavorable privacy–utility trade-off. In this paper, we propose PAC-DP, a Personalized Adaptive Clipping framework for federated learning under record-level local differential privacy .PAC-DP introduces a Simulation-CurveFitting approach lever-aging a server-hosted public proxy dataset to learn an effective mapping between personalized privacy budgets ε and gradient clipping thresholds C, which is then deployed online with a lightweight round-wise schedule. This design enables budget-conditioned threshold selection while avoiding data-dependent tuning during training. We provide theoretical analyses establish-ing convergence guarantees under the per-example clipping and Gaussian perturbation mechanism and a reproducible privacy accounting procedure. Extensive evaluations on multiple FL benchmarks show that PAC-DP surpasses conventional fixed-threshold approaches under matched privacy budgets, improving accuracy by up to 26% and accelerating convergence by up to 45.5% in our evaluated settings. 
+
+I. I NTRODUCTION 
+
+The proliferation of mobile and IoT devices in the big data era has led to the generation of vast volumes of decentralized and heterogeneous data [8], [4], [15], [16]. Individually, these data sources often lack the volume or variety required for effective model training. At the same time, traditional data collection methods have become infeasible due to privacy reg-ulations, commercial constraints, and growing public concern over data misuse [20], [26], [40]. Federated Learning (FL) has emerged as a promising dis-tributed machine learning paradigm that enables collaborative model training without exposing raw user data [37], [28]. Clients train models locally and transmit model updates (e.g., gradients) to a central server for aggregation. FL has found 
+
+H. Zhou is with the school of computer science, Nanjing University of Post and Telecommunication, the State Key Laboratory of Tibetan Intelligence, and the State Key Laboratory for Novel Software Technology,Nanjing University, Nanjing, P.R. China. E-mail: haozhou@njupt.edu.cn. S. Cai, H. Dai, G. Yang, J. Luo, H. Cai are are with the school of computer science, Nanjing University of Post and Telecommunication, Nanjing 210023, China. E-mail: {1024041101, daihua, yangg, 1024041121, carolinecai }@njupt.edu.cn. This work is supported by the National Natural Science Foundation of China (62372244, 62572253), Jiangsu Provincial Natural Science Foundation (Youth Fund) (BK20250683), Natural Science Foundation of Nanjing Univer-sity of Posts and Telecommunications(NY224058, NY225124), Young Elite Scientists Sponsorship Program by CAST (JSTJ-2025-641), Basic Science (Natural Science) Research Project of Higher Education Institutions in Jiangsu Province (25KJB520040), Open Project of State Key Laboratory for Novel Software Technology (KFKT2025B68), and China Postdoctoral Special Grant Foundation (2024T170432). 最精简 框架图 
+
+w 1w
+
+…  
+
+> 1DDataset
+> 1CClient
+> 1wmodel Local
+> train
+> 6444432222
+> Norm
+> Clipping
+> Grad Clipped
+> noise Gaussian
+> grad DP
+
+…… 
+
+…  
+
+> mDDataset
+> mCClient
+> mwmodel Local
+> train
+> )(*
+> FCm
+
+ww )(*    
+
+> FC
+> 1
+> m
+> 
+> 2
+> )1()(fFCm
+> 
+> 
+> 
+> Server
+
+…      
+
+> D' dataset Proxy R2= 0.9623
+> ),(*
+> jiC
+> 
+> )(*
+> FCFitting Curve
+> model Global
+
+Fig. 1: Personalized Adaptive Clipping Mechanism successful applications in diverse domains such as healthcare, finance, agriculture, and transportation systems [29], [21], [6], [33]. However, despite avoiding raw data sharing, FL remains susceptible to privacy attacks: model updates can still leak sensitive information [32], [24], including user participation or partial data reconstruction [31]. Additionally, FL incurs high communication overhead and depends on the stability and trustworthiness of participating devices [14], [23]. Federated learning has adopted differential privacy (DP) as its de-facto compliance layer. By perturbing model updates on-device before they ever traverse a network boundary, DP provides formal guarantees that limit information leakage from uploaded messages, which can mitigate membership and reconstruction risks under standard threat models [7], [10], [11], [35]. Recent advances introduced personalized DP frameworks and mechanisms, allowing heterogeneous clients to specify varying privacy levels while maintaining acceptable utility [39], [9], [6], [5], [25], [34], [44], [41], [45], [38], [3]. Yet, practical integration of DP into FL systems faces critical challenges, especially regarding gradient clipping for a crucial preprocessing step influencing noise calibration and learning performance. Most DP-FL methods apply fixed gradient clipping thresh-olds, neglecting non-IID data distributions, varying gradient magnitudes, and personalized privacy preferences [39], [9]. Existing adaptive clipping methods typically rely on heuristic strategies (e.g., historical gradient percentiles) lacking theoret-ical rigor, potentially degrading model performance or even exposing privacy vulnerabilities when gradient distributions 
+
+> arXiv:2603.24003v1 [cs.CR] 25 Mar 2026 2
+
+change rapidly [9], [36], [27]. This gap raises a critical design question: given target privacy loss and evolving non-IID gradient distributions, how can we dynamically determine the optimal clipping bound to maximize utility while respecting diverse client privacy budgets? To tackle these issues, we introduce PAC-DP , a Personal-ized Adaptive Clipping framework that enhances differential privacy in federated learning. PAC-DP uniquely employs a Simulation-CurveFitting strategy using a server-side proxy dataset, dynamically establishing mappings between personal-ized privacy budgets ε and optimal adaptive gradient clipping thresholds C∗. Departing from existing heuristic-based ap-proaches (e.g., rPDP-FL’s percentile clipping [19] or NbAFL’s fixed global bound [32]) PAC-DP adopts a data-driven opti-mization strategy by constructing an empirical mapping F( ϵ)between user-specified privacy budgets and optimal clipping thresholds through systematic offline simulation on a proxy dataset and assigns budget-conditioned clipping thresholds across heterogeneous clients via the learned mapping F (ε)
+
+and a shared schedule λ(t), without using any client-data-dependent threshold selection. Beyond algorithmic design, PAC-DP also advances the theo-retical understanding of personalized DP in federated settings. Unlike existing methods that either lack convergence analysis or rely on fixed clipping, PAC-DP offers rigorous convergence guarantees under non-convex , convex , and strongly convex set-tings, while explicitly modeling the interaction between clip-ping thresholds, privacy budgets, and utility degradation. More importantly, PAC-DP theoretically explains why PAC-DP’s simulation-fitted function F (ε) achieves better performance than heuristic or fixed-threshold approaches. Such privacy-budget-aware convergence analysis is absent in prior works and offers new insights into privacy-utility trade-offs in DP-FL. Our primary contributions include:  
+
+> •
+
+Proposing PAC-DP, an adaptive gradient clipping method enabling personalized differential privacy tailored explic-itly for heterogeneous federated learning scenarios.  
+
+> •
+
+Providing convergence guarantees and a reproducible privacy accounting procedure under record-level local DP with practical client participation.  
+
+> •
+
+Extensive empirical validation demonstrating PAC-DP’s superior performance compared to fixed-threshold ap-proaches, achieving up to 26% accuracy improvement, 45.5% faster convergence, and enhanced privacy-utility trade-offs. II. R ELATED WORK 
+
+Differential Privacy in Federated Learning. Differential Privacy (DP) has become a foundational technique for safe-guarding user data in Federated Learning (FL). It provides formal guarantees that the inclusion or exclusion of a single individual’s data does not significantly affect the output of an algorithm, thereby mitigating risks of inference or membership attacks [31], [30], [43], [42]. In FL, DP mechanisms are typically applied by injecting noise into model updates or gradients before aggregation, with early methods such as DP-SGD [1] demonstrating the feasibility of privacy-preserving optimization via Gaussian perturbations. Subsequent research has extended DP to the federated setting in more complex sce-narios. For instance, NbAFL [32] applies local noise addition at each client before model aggregation, enabling client-level DP and analyzing the trade-off between privacy guarantees and convergence behavior. The Dordis protocol [13] further opti-mizes DP-FL execution under unreliable or dropping clients, reducing synchronization overhead and improving protocol robustness. Recent efforts have also integrated DP with back-door defense strategies to simultaneously mitigate privacy and security threats in FL [43], [42]. A critical challenge in this area is the privacy-utility trade-off, particularly under non-IID data distributions, which are common in real-world FL deployments. Uniform noise addition can disproportionately affect clients with rare or skewed data, leading to substantial utility degradation [32]. Techniques such as cross-silo FL with personalized DP [18] aim to address this by assigning distinct privacy budgets to each data record or client, enhancing flexibility but complicating privacy accounting and system design. 
+
+Gradient Clipping in Differentially Private Optimiza-tion. Unfortunately, the one-size-fits-all clipping rule inherited from DP-SGD ignores two realities of federated ecosystems: (i) gradient norms vary by task domain (e.g., radiology vs. keyboard prediction) and by client hardware, and (ii) pri-vacy budgets now differ per tenant under multi-silo FL [1], [12]. To mitigate the limitations of fixed clipping, several adaptive gradient clipping techniques have been proposed. Adaptive Quantile Clipping (AQC) [12] estimates a target quantile of gradient norms to dynamically adjust the clipping threshold. This approach reduces unnecessary information loss and improves utility. Similarly, Andrew et al. [2] propose tracking gradient norms over multiple rounds to tune clipping levels in response to training dynamics. In federated settings, adaptive clipping methods are increasingly integrated with DP mechanisms to handle gradient heterogeneity and non-IID data. Fu et al. [11] and Liu et al. [18] propose heuristics that adjust clipping thresholds using historical gradient statistics, which can help balance privacy-utility trade-offs. However, these methods often rely on empirical hyperparameters such as fixed percentiles and historical window sizes, which may be difficult to tune and fail to adapt in dynamic environments. Recent works such as DP-FedMeta [39] and SqueezingFL [27] incorporate adaptive clipping into federated meta-learning frameworks. These methods use past differentially private gradients to estimate new clipping thresholds while attempting to maintain privacy guarantees. Yet, a common limitation across existing approaches is the lack of principled analysis connecting the clipping threshold to the privacy budget ε or learning objective. Moreover, reliance on historical gradients may lead to stale estimates that misalign with heterogeneous privacy budgets and round-wise training dynamics, especially in systems with high client variability. 
+
+Positioning of This Work. In contrast to prior work, our method PAC-DP aims to bridge the gap between theory and practice by explicitly modeling the relationship between 3
+
+the privacy budget ε and the optimal clipping threshold C∗.Instead of relying on heuristic tuning or fixed historical statistics, PAC-DP leverages a Simulation-CurveFitting ap-proach to learn the ε 7 → C∗ mapping from a server-side proxy dataset. This enables principled, real-time adaptation of clipping thresholds per training round, allowing clients to receive clipping levels consistent with their personalized DP budgets and heterogeneous privacy budgets and round-wise training dynamics. To our knowledge, this is the first work to provide both theoretical analysis and practical mechanisms for privacy-budget-aligned adaptive clipping in federated learning. III. P RELIMINARIES 
+
+In federated learning each client i ∈ {1, . . . , N } holds local dataset Di, and model updates are computed locally and aggregated by a central server without exchanging raw data [22]. The global objective is: 
+
+w∗ = arg min 
+
+> wN
+
+X
+
+> i=1
+
+piFi(w), pi = |D i|
+
+P 
+
+> j
+
+|D j | ,
+
+where Fi(w) is the empirical loss on client i. The server aggregates updates as: 
+
+w =
+
+> N
+
+X
+
+> i=1
+
+piwi.
+
+This process iterates over local training, server aggregation, and global model broadcasting until convergence. 
+
+Definition 1 ((ε, δ )-DP) . A randomized mechanism M satis-fies (ε, δ )-DP if for any two adjacent datasets D, D ′ and any measurable set S [7]: 
+
+Pr[ M(D) ∈ S] ≤ eε Pr[ M(D′) ∈ S] + δ. 
+
+The Gaussian mechanism adds ξ ∼ N (0 , (z ∆s)2I), where 
+
+z is the noise multiplier. To achieve (ε, δ )-DP, it suffices to set 
+
+z ≥
+
+p2 ln(1 .25 /δ )
+
+ε .
+
+In FL, DP is typically enforced via local noise addition to gradients or model updates. 
+
+Definition 2 (Record-level Local DP) . For client i in round t,let Bti be the local minibatch used to compute the update. Two minibatches Bti and Bti 
+
+> ′
+
+are adjacent if they differ in exactly one record. A client-side mechanism Mti satisfies (εti, δ )-local DP if for all adjacent Bti , B ti 
+
+> ′
+
+and all measurable sets S [7]: 
+
+Pr[ Mti(Bti ) ∈ S] ≤ eεti Pr[ Mti(Bti
+
+> ′
+
+) ∈ S] + δ. 
+
+Threat Model We consider an honest-but-curious server that observes the participation set St and all uploaded mes-sages (perturbed gradients or model updates) from partic-ipating clients, as well as the broadcast global model in each round. The adversary does not observe any raw client data, per-example gradients, or intermediate unclipped values. Our privacy guarantee is defined with respect to the server’s observable view and does not rely on secure channels. We do not provide privacy guarantees for client participation (i.e., whether a client participates in a given round); our guarantees focus on record-level privacy within the uploaded messages. IV. P ROBLEM FORMULATION 
+
+We consider a federated learning system consisting of a central server and N clients, where each client i ∈ { 1, . . . , N }
+
+holds a private local dataset Di. The global objective is to learn a model parameter vector w ∈ Rd by minimizing a weighted empirical loss: 
+
+min 
+
+> w∈Rd
+
+F (w) := 
+
+> N
+
+X
+
+> i=1
+
+piFi(w), where pi = |D i|
+
+P 
+
+> j
+
+|D j | (1) where Fi(w) denotes the local loss function on client i.Each client computes a stochastic gradient gti of the loss with respect to the local model at training round t. To enforce 
+
+(εi, δ )-local differential privacy (LDP) for each client, noise must be added to the gradients prior to upload. However, the magnitude of the required noise is tied to the sensitivity of the gradient, which is controlled by gradient clipping. 
+
+Record-level Local DP via Per-example Clipping. In round t, client i samples a local minibatch Bti of size B and computes per-example gradients gti (x) for x ∈ Bti . It applies per-example ℓ2 clipping: 
+
+˜gti (x) = gti (x) · min 
+
+
+
+1, Cti
+
+∥gti (x)∥2
+
+
+
+. (2) Then it forms the averaged clipped gradient: 
+
+¯gti = 1
+
+B
+
+X
+
+> x∈Bti
+
+˜gti (x), (3) and adds Gaussian noise using a noise multiplier zti :
+
+ˆgti = ¯ gti + ξti , ξti ∼ N 0,
+
+
+
+zti
+
+Cti
+
+B
+
+2
+
+I
+
+!
+
+. (4) This mechanism satisfies (εi, δ )-DP for each client. How-ever, selecting an inappropriate Cti can lead to large Cti with higher noise (weakened utility) and small Cti with excessive clipping (information loss). 
+
+Adaptive Clipping for Personalized DP. Our central goal is to design an adaptive clipping mechanism that dynamically selects the optimal clipping threshold Cti per client and round, guided by the client’s privacy budget εi and heterogeneous privacy budgets and round-wise training dynamics. We define the optimal clipping threshold C∗(εi) for client 
+
+i as the value minimizing expected utility loss under a fixed privacy budget: 
+
+C∗(εi) = arg min  
+
+> C> 0
+
+E [L(C, ε i)] , (5) where L(C, ε i) captures the degradation in model utility due to the combined effect of clipping and noise at threshold C.In practice, directly solving Eq. (5) is challenging, as L(·)
+
+is not available in closed form and depends on task-specific distributions. We therefore seek to approximate C∗(εi) via empirical simulation and curve fitting over a proxy dataset—a strategy formalized in our proposed method, PAC-DP. 4
+
+V. F EDERATED LEARNING WITH ADAPTIVE GRADIENT 
+
+CLIPPING PERSONALIZED DP We consider a standard federated learning setting with a central server and N edge clients. Each client i ∈ { 1, . . . , N }
+
+holds a private dataset Di and participates in collaboratively learning a global model w ∈ Rd. The objective is to minimize a weighted empirical loss function: 
+
+min 
+
+> w∈Rd
+
+F (w) := 
+
+> N
+
+X
+
+> i=1
+
+piFi(w), where pi = |D i|
+
+PNj=1 |D j | . (6) Here, Fi(w) := Ez∼D i [ℓ(w; z)] denotes the expected loss on client i.To protect user data, each client must satisfy (εi, δ )-local differential privacy. The gradient update is therefore perturbed locally before transmission: 
+
+ˆgti = ¯ gti + ξti , ξti ∼ N 0,
+
+
+
+zti
+
+Cti
+
+B
+
+2
+
+I
+
+!
+
+, (7) where ¯gti = 1
+
+> B
+
+P
+
+> x∈Bti
+
+clip( gti (x), C ti ) is the minibatch average of per-example clipped gradients. The choice of Cti critically impacts both the amount of noise added and the amount of information retained from the gradient, thus influencing the privacy-utility trade-off. 
+
+A. Challenges in Personalized DP Clipping 
+
+The design of an effective personalized DP mechanism for FL presents several key challenges:  
+
+> •
+
+Heterogeneous Gradients : Due to non-IID data across clients, gradient magnitudes vary significantly, rendering fixed clipping thresholds suboptimal.  
+
+> •
+
+Personalized Privacy Budgets : Clients may select dif-ferent εi values based on sensitivity or regulatory com-pliance, requiring clipping thresholds to be tailored ac-cordingly.  
+
+> •
+
+Efficiency and Scalability : Clipping threshold selection must be computationally efficient and avoid real-time hyperparameter tuning or storage of historical gradients. Existing approaches often rely on static heuristics (e.g., fixed percentiles) or historical statistics, which are brittle in dynamic or heterogeneous environments and lack theoretical foundations. 
+
+B. Solution Overview 
+
+To address these challenges, we propose PAC-DP , a fed-erated optimization framework that enables adaptive gradient clipping under personalized DP constraints . The key idea is to learn a smooth, parameterized function F (ε) that maps each privacy budget ε to its corresponding optimal clipping threshold C∗, i.e., 
+
+C∗ = F (ε).
+
+This mapping is computed offline using a server-side proxy dataset through a simulation-curve fitting process, and then used online during training to assign each client its personal-ized clipping threshold. An overview of the PAC-DP workflow is shown in Fig. 2. Specifically, the PAC-DP framework consists of two core phases:  
+
+> •
+
+Offline Phase: The server constructs a proxy dataset ˆD
+
+that reflects the global data distribution, simulates training under various (ε, C ) configurations, and fits a function 
+
+F (ε) using regression.  
+
+> •
+
+Online Phase: During each round of FL, clients compute 
+
+Cti = F (εi) locally and perform DP-SGD with clipping and noise injection. The server aggregates the perturbed updates to refine the global model. 
+
+C. Round-wise Schedule for Clipping 
+
+PAC-DP sets the per-round clipping bound as 
+
+Cti = F (εi) · λ(t), (8) where F (εi) is the offline learned budget-conditioned mapping and λ(t) is a lightweight round-wise schedule shared across clients. 
+
+a) Schedule design.: Let T be the total number of communication rounds and t ∈ { 0, 1, . . . , T − 1}. We use a plateau-then-decay schedule: 
+
+λ(t) = 
+
+
+
+1, 0 ≤ t < T s,λmin + (1 − λmin ) · 1+cos (π· t−Ts T −Ts ) 
+
+> 2
+
+, Ts ≤ t ≤ T − 1,
+
+(9) where Ts = ⌊rsT ⌋, rs ∈ (0 , 1) controls when the decay starts, and λmin ∈ (0 , 1] is the final minimum scaling factor. By construction, λ(t) ∈ [λmin , 1] and is non-increasing. Unless otherwise stated, we fix (rs, λ min ) = (0 .6, 0.1) 
+
+for all datasets and model architectures. This avoids data-dependent tuning and ensures reproducibility. Early in training, gradients typically have larger norms and an aggressive decay may induce excessive clipping bias; hence we keep λ(t) = 1 for the first rsT rounds. In later stages, decreasing λ(t) reduces the DP noise scale (which is proportional to Cti in our mechanism), improving stability and final utility. 
+
+D. Adaptive Personalized DP Training Algorithm 
+
+We formalize the PAC-DP training procedure in the follow-ing algorithm: PAC-DP ensures that each client applies a clipping threshold tailored to their privacy budget, minimizing the impact of noise on utility. The use of F (ε) enables real-time inference of C∗
+
+with negligible overhead. VI. P RIVACY AND UTILITY ANALYSIS 
+
+We present the theoretical foundations of PAC-DP by an-alyzing its privacy guarantees and utility convergence un-der adaptive gradient clipping. Our analysis formalizes how PAC-DP achieves (ε, δ )-differential privacy per client, and demonstrates how adaptive clipping guided by C∗ = F (ε)
+
+yields tighter convergence bounds compared to fixed-clipping baselines. 5  
+
+> 
+> N
+> i
+> i
+> iw
+> D
+> D
+> w1Server
+
+w 1w
+
+…  
+
+> 1DDataset
+> 1CClient
+> 1wmodel Local
+> train
+> 6444432222
+> Norm
+> Clipping Grad Clipped
+> noise Gaussian
+> grad DP
+
+…… 
+
+…         
+
+> mDDataset
+> mCClient
+> mwmodel Local
+> train
+> )(*
+> FCmww)(*
+> FC
+> 1
+> m
+> 
+> 2
+> )1()(fFCt
+> m
+> 
+> 
+> 
+> ),(jiC
+> 
+
+…
+
+> 1DDataset
+> 1CClient
+> 1wmodel Local
+> train
+
+…
+
+> mDDataset
+> mCClient
+> mwmodel Local
+> train
+
+…      
+
+> D' dataset
+> proxy Construct ①
+> R2= 0.9623
+> ),(*
+> jiC
+> 
+> )(*
+> FC
+> ),(jiC
+> 
+
+…… 
+
+> 1w
+
+w mww
+
+Phase Offline Phase Online 
+
+  
+
+> 
+> N
+> i
+> i
+> iw
+> D
+> D
+> w1Server
+
+  simulation from Learn εF②
+
+    
+
+> gradients perturb and Clip
+> Compute i
+> t
+> iεFC③
+
+Fig. 2: Overview of the PAC-DP framework. A proxy dataset is used to simulate privacy-utility trade-offs and fit a mapping 
+
+C∗ = F (ε), which guides personalized clipping and noise injection during training. 
+
+Algorithm 1 Adaptive Gradient Clipping Personalized DP Federated Learning (PAC-DP) 
+
+Require: Total rounds T , initial model w(0) , privacy budgets 
+
+{εi}Ni=1 , proxy dataset ˆD
+
+Ensure: Final model w(T )
+
+1: [Offline Phase] 
+
+2: Construct proxy dataset ˆD from public data 
+
+3: Learn F (ε) from simulation (see Algorithm 2) 
+
+4: [Online Training Phase] 
+
+5: for t = 1 to T do 
+
+6: Server samples client subset St ⊆ { 1, . . . , N }
+
+7: for each client i ∈ S t do 
+
+8: Compute clipping threshold: Cti = F (εi) · λ(t)
+
+9: Compute per-example gradients gti (x) for x ∈ Bti
+
+and clip: ˜gti (x) = gti (x) min(1 , C ti /∥gti (x)∥2)
+
+10: Average and perturb: ¯gti = 1
+
+> B
+
+P
+
+> x∈Bti
+
+˜gti (x), ˆgti =¯gti + N (0 , (zti Cti /B )2I)
+
+11: Update local model: 
+
+w(t) 
+
+> i
+
+← w(t−1)  
+
+> i
+
+− ηˆgti
+
+12: end for 
+
+13: Server aggregates: 
+
+w(t) ← X
+
+> i∈S t
+
+piw(t)
+
+> i
+
+14: end for 
+
+15: return w(T )
+
+A. Privacy Objectives 
+
+PAC-DP satisfies differential privacy by combining three mechanisms: (1) per-client gradient clipping with norm bound 
+
+C∗; (2) Gaussian noise addition calibrated to the sensitivity; and (3) composition across training rounds per client using an RDP accountant. We begin by recalling the standard Gaussian mechanism. Applying this to client-side clipped gradients: 
+
+Theorem 1 (Per-round Record-level Local DP) . In round t,for client i, the mechanism in Eq. (4) satisfies (εti, δ )-local DP under record-level adjacency, where 
+
+εti =
+
+p2 ln(1 .25 /δ )
+
+zti
+
+.
+
+Proof. Replacing one record in Bti changes the averaged clipped gradient ¯gti by at most Cti /B in ℓ2 norm, hence the sensitivity is ∆2 = Cti /B . The Gaussian mechanism with noise standard deviation zti ∆2 = zti Cti /B achieves (εti, δ )-DP with εti = p2 ln(1 .25 /δ )/z ti .
+
+Corollary 1 (Per-client Composition over Participation Rounds) . Let Ti = {t : i ∈ S t}. Under basic composition, composing per-round (εti, δ rd ) guarantees yields 
+
+εbasic  
+
+> i
+
+= X
+
+> t∈T i
+
+εti, δbasic  
+
+> i
+
+≤ |T i| · δrd .
+
+In this paper, however, we do not report δbasic  
+
+> i
+
+. Instead, we fix a final δ and compute εi via an RDP accountant. 
+
+We implement an RDP accountant to compute each client’s final εi based on its realized participation count |T i| and per-round noise multipliers {zti }t∈T i .
+
+Lemma 1 (Per-round RDP of the Gaussian mechanism) . In a participation round t, client i applies per-example clipping and adds Gaussian noise with standard deviation (zti Cti /B )
+
+to the minibatch-averaged clipped gradient. Let zti denote the noise multiplier w.r.t. the ℓ2-sensitivity ∆2 = Cti /B . Then the mechanism satisfies (α, ρ ti(α)) -RDP with 
+
+ρti(α) = α
+
+2( zti )2 , ∀α > 1.
+
+For client i, let Ti = {t : i ∈ S t} be its realized participation set. Since we do not use privacy amplification by subsampling, we compose only over Ti:
+
+ρi(α) = X
+
+> t∈T i
+
+ρti(α) = X
+
+> t∈T i
+
+α
+
+2( zti )2 .
+
+Given a fixed δ (e.g., δ = 10 −5), client i satisfies (εi, δ )-DP with 
+
+εi = min 
+
+> α∈A
+
+
+
+ρi(α) + ln(1 /δ )
+
+α − 1
+
+
+
+, A = {2, 3, . . . , 64 }.6
+
+B. Utility Objectives 
+
+We now analyze PAC-DP’s convergence behavior under smooth loss functions. The key idea is that reducing the product zC max /B (noise scale times sensitivity) leads to im-proved optimization performance. The use of adaptive clipping 
+
+C∗ = F (ε) minimizes this product relative to fixed thresholds. We make the following assumptions: 
+
+(A1) Each local function fi(w) is L-smooth: 
+
+∥∇ fi(w) − ∇ fi(w′)∥ ≤ L∥w − w′∥.
+
+(A2) Per-example gradients are clipped so that the minibatch-averaged clipped gradient satisfies ∥g(t) 
+
+> i
+
+∥2 ≤ Cmax .
+
+(A3) Each client adds Gaussian noise ξ(t) 
+
+> i
+
+∼N (0 , (z(t)Cmax /B )2I) to the averaged clipped gradient. 
+
+(A4) Clients are sampled uniformly at random with probability 
+
+q ∈ (0 , 1] .In analysis, we use a uniform upper bound Cmax such that 
+
+∥g(t) 
+
+> i
+
+∥2 ≤ Cmax for all participating clients and rounds, where 
+
+g(t) 
+
+> i
+
+denotes the minibatch average of per-example clipped gradients. This is satisfied by setting Cmax := max i,t Cti under our threshold policy. For simplicity, we write Cmax (instead of client- and round-specific Cti ) in the convergence bounds. We now state convergence results under three canonical objective classes. 
+
+Theorem 2 (Non-convex Convergence) . Let f (w) =PNi=1 pifi(w) be L-smooth and non-convex. Under Assump-tion A1-A4, and using an adaptive gradient clipping threshold determined by PAC-DP, with step size η = O(1 /√T ), PAC-DP algorithm guarantees: 
+
+1
+
+T
+
+> T
+
+X
+
+> t=1
+
+E ∇f (w(t)) 2
+
+≤ O 
+
+ 1
+
+√M T + zC max 
+
+B√M
+
+
+
+.
+
+where Cmax = max i,t Cti is the uniform upper bound induced by the threshold policy. Proof. Since each fi is L-smooth, the global objective f is also L-smooth. Thus, by the standard descent lemma we have for any iterate w(t):
+
+f (w(t+1) ) ≤f (w(t)) + 
+
+D
+
+∇f (w(t)), w (t+1) − w(t)E
+
++ L
+
+2 ∥w(t+1) − w(t)∥2.
+
+In the PAC-DP algorithm, the global model is updated via: 
+
+w(t+1) = w(t) − η G (t),
+
+where the aggregated update is given by 
+
+G(t) = 1
+
+M
+
+X
+
+> i∈S t
+
+ˆg(t) 
+
+> i
+
+,
+
+and each client i employs clipped and noise-perturbed gradi-ents: 
+
+ˆg(t) 
+
+> i
+
+= g(t) 
+
+> i
+
++ξ(t) 
+
+> i
+
+, ∥g(t) 
+
+> i
+
+∥2 ≤ C∗, ξ(t) 
+
+> i
+
+∼ N 0,
+
+
+
+z(t) C∗
+
+B
+
+2
+
+I
+
+!
+
+.
+
+By substituting the update rule into the descent lemma and taking expectation conditioned on w(t), we have: 
+
+E
+
+h
+
+f (w(t+1) )
+
+i
+
+≤f (w(t)) − η E
+
+hD 
+
+∇f (w(t)), G (t)Ei 
+
++ Lη 2
+
+2 E
+
+h
+
+∥G(t)∥2i
+
+.
+
+Next, we decompose the aggregated gradient G(t) into the true gradient (or a proxy thereof) plus error. Under our assumptions and with appropriate clipping (which bounds the bias or error introduced), one can bound: 
+
+E
+
+h
+
+G(t)i
+
+≈ ∇ f (w(t)),
+
+and the variance term can be decomposed into two parts: the variance due to the stochasticity of the gradients and the variance due to the added Gaussian noise, which, by independence, scales as 
+
+E
+
+ 1
+
+M
+
+X
+
+> i∈S t
+
+ξ(t)
+
+> i
+> 2
+
+ ≤ (z(t))2(Cmax )2
+
+M B 2 .
+
+If each client further uses a mini-batch of size B, standard results in SGD analyses indicate that the intrinsic stochastic gradient variance contributes on the order of 1√M T to the convergence error. With standard algebra (see, e.g., the convergence analysis for DP-SGD), one obtains an inequality of the form: 
+
+1
+
+T
+
+> T
+
+X
+
+> t=1
+
+E∥∇ f (w(t))∥2 ≤O 
+
+ 1
+
+ηT 
+
+
+
+f (w(0) ) − f (w(T ))
+
+
+
++ O (Lη V ) ,
+
+where V is an upper bound on the aggregated variance. For our setting, 
+
+V = O
+
+ 1
+
+M B + (z(t))2(Cmax )2
+
+M B 2
+
+
+
+.
+
+Choosing the step size η = Θ(1 /√T ) optimally balances the decrease and variance terms. Specifically, after substituting 
+
+η = O(1 /√T ) and re-arranging the inequality, one obtains 
+
+1
+
+T
+
+> T
+
+X
+
+> t=1
+
+E∥∇ f (w(t))∥2 ≤ O 
+
+ 1
+
+√M T 
+
+
+
++ O
+
+ zC max 
+
+B√M
+
+
+
+.
+
+The first term, O
+
+
+
+1/√M T 
+
+
+
+, represents the convergence error due to stochastic gradients in the absence of privacy noise. The second term, O
+
+
+
+zC max /B √M
+
+
+
+, quantifies the additional error incurred by the Gaussian noise added for privacy. Thus, the adaptive clipping (through the parameter 
+
+Cmax ) directly influences the noise term, and the overall bound can be succinctly expressed as: 
+
+1
+
+T
+
+> T
+
+X
+
+> t=1
+
+E∥∇ f (w(t))∥2 ≤ O 
+
+ 1
+
+√M T + zC max 
+
+B√M
+
+
+
+.7
+
+Theorem 3 (Convex Convergence) . If f is convex and L-smooth, then: 
+
+E[f ( ¯ w)] − f (w∗) ≤ O 
+
+ 1
+
+√T + zC max 
+
+B√M
+
+
+
+,
+
+where ¯w := 1
+
+> T
+
+PTt=1 w(t) is the average model. Proof. Convexity and the Descent Lemma. Since f is convex, for any iterate w and the optimal point w∗, we have 
+
+f (w) − f (w∗) ≤ ⟨∇ f (w), w − w∗⟩.
+
+Moreover, f being L-smooth implies 
+
+f (w(t+1) ) ≤ f (w(t))+ ⟨∇ f (w(t)), w (t+1) −w(t)⟩+ L
+
+2 ∥w(t+1) −w(t)∥2.
+
+Update Rule and Error Decomposition. In PAC-DP, the update at round t is given by 
+
+w(t+1) = w(t) − η g (t),
+
+where the aggregated noisy gradient g(t) is computed from a set of M sampled clients. Each client’s update is based on a gradient that has been clipped to norm Cmax and perturbed by Gaussian noise: 
+
+ˆg(t) 
+
+> i
+
+= g(t) 
+
+> i
+
++ ξ(t) 
+
+> i
+
+, ∥g(t) 
+
+> i
+
+∥2 ≤ Cmax ,
+
+where ξ(t) 
+
+> i
+
+∼ N
+
+
+
+0,  z(t) Cmax 
+
+> B
+
+2 I
+
+
+
+. Aggregating over the sampled clients, 
+
+g(t) = 1
+
+M
+
+X
+
+> i∈S t
+
+ˆg(t) 
+
+> i
+
+.
+
+We assume that after clipping, the bias introduced is controlled so that g(t) is an approximate (possibly biased) estimator of ∇f (w(t)). The error in g(t) can be decomposed into two main parts: (1) Stochastic Gradient Variance: Intrinsic randomness in mini-batch sampling, which typically scales as 
+
+O(1 /B ); (2) Privacy Noise: each client adds Gaussian noise with standard deviation z(t)Cmax /B to the minibatch-averaged clipped gradient; after averaging across M sampled clients, the aggregated DP-noise variance scales as O
+
+ (z(t))2(Cmax )2
+
+> M B 2
+
+
+
+.
+
+Progress per Iteration. Using standard SGD analysis (see, e.g., [Bubeck, 2015] for convex SGD) for a convex, L-smooth function, we derive that for each iteration: 
+
+E
+
+h
+
+f (w(t+1) ) − f (w∗)
+
+i
+
+≤E
+
+h
+
+f (w(t)) − f (w∗)
+
+i
+
+− η E
+
+h
+
+⟨∇ f (w(t)), g (t)⟩
+
+i
+
++ Lη 2
+
+2 E
+
+h
+
+∥g(t)∥2i
+
+.
+
+By telescoping this inequality over T iterations and sum-ming, we obtain an upper bound that consists of two main terms: (1) A bias term reflecting the optimization error which decays as 1 
+
+> ηT
+
+; (2) A variance term due to stochastic gradients and privacy noise that scales as η
+
+ 1 
+
+> B
+
++ z2(Cmax )2
+
+> M B 2
+
+
+
+.
+
+Choice of Step Size. To balance these two terms, we choose the step size η = Θ(1 /√T ). Substituting the step size and normalizing by T gives the following bound for the averaged iterate ¯w:
+
+E[f ( ¯ w)] − f (w∗) ≤ O 
+
+ 1
+
+√T
+
+
+
++ O
+
+
+
+η
+
+ z2(Cmax )2
+
+M B 2
+
+ 
+
+.
+
+With η = Θ(1 /√T ), the variance term becomes: 
+
+O
+
+ z2(Cmax )2
+
+√T M B 2
+
+
+
+.
+
+Taking square roots or, more directly, interpreting this term in light of the noise standard deviation (which is zC max ) over mini-batch B, we express the noise-induced error as: 
+
+O
+
+ zC max 
+
+B√M
+
+
+
+.
+
+Combining the optimization error and the additional privacy noise term, we arrive at the final convergence bound: 
+
+E[f ( ¯ w)] −f (w∗) ≤ E[f ( ¯ w)] −f (w∗) ≤ O 
+
+ 1
+
+√T + zC max 
+
+B√M
+
+
+
+.
+
+The result indicates that with an appropriate choice of the step size (and under our assumptions), the error in the averaged iterate decays at a rate of 1/√T , with an additional penalty proportional to the scaled noise zC max that is ameliorated by increasing the batch size B.
+
+Theorem 4 (Strongly Convex Convergence) . If f is μ-strongly convex and L-smooth, PAC-DP achieves: 
+
+E[f ( ¯ w)] − f (w∗) ≤ O 
+
+ 1
+
+μT + zC max 
+
+μB √M
+
+
+
+.
+
+Proof. We follow a standard strongly-convex SGD analysis and keep only the terms relevant to the record-level local DP noise scaling. Let F (·) be μ-strongly convex and L-smooth. In round t,the server update uses the averaged noisy gradient 
+
+ˆg(t) := 1
+
+M
+
+X
+
+> i∈S t
+
+ˆg(t) 
+
+> i
+
+= 1
+
+M
+
+X
+
+> i∈S t
+
+g(t) 
+
+> i
+
++ 1
+
+M
+
+X
+
+> i∈S t
+
+ξ(t) 
+
+> i
+
+,
+
+where g(t) 
+
+> i
+
+denotes the minibatch average of per-example clipped gradients on client i (hence ∥g(t) 
+
+> i
+
+∥2 ≤ Cmax ), and the record-level local DP noise is 
+
+ξ(t) 
+
+> i
+
+∼ N 0,
+
+
+
+z(t) Cmax 
+
+B
+
+2
+
+I
+
+!
+
+.
+
+Therefore, the aggregated DP noise has second moment scal-ing 
+
+E 1
+
+M
+
+X
+
+> i∈S t
+
+ξ(t)
+
+> i
+> 22
+
+≤ (z(t))2(Cmax )2
+
+M B 2 ,
+
+absorbing dimension-dependent constants into O(·).Define the gradient-oracle variance bound 
+
+Vt := E ˆg(t) − ∇ F (w(t)) 22 = O
+
+ 1
+
+M B + (z(t))2(Cmax )2
+
+M B 2
+
+
+
+,
+
+where the 1 
+
+> M B
+
+term comes from stochastic minibatch sampling and the second term comes from record-level local DP noise. 8
+
+Using the standard recursion for μ-strongly convex and 
+
+L-smooth objectives with a diminishing stepsize (e.g., ηt = 
+
+> 2
+> μ(t+1)
+
+), one obtains 
+
+EF (w(T )) − F (w∗) = O
+
+ 1
+
+μT 
+
+
+
++ O 1
+
+μT 
+
+> T
+
+X
+
+> t=1
+
+Vt
+
+!
+
+.
+
+Substituting the bound on Vt and using a constant upper bound 
+
+z(t) ≤ z yields 
+
+EF (w(T )) − F (w∗)
+
+=O
+
+ 1
+
+μT 
+
+
+
++ O
+
+ z2(Cmax )2
+
+μM B 2
+
+
+
+=O
+
+ 1
+
+μT + zC max 
+
+μB √M
+
+
+
+,
+
+where the last step uses the standard conversion from variance to a first-order (root-variance) term, consistent with the statement. TABLE I: Convergence bounds of PAC-DP under different objective classes.              
+
+> Setting Convergence Rate
+> Non-convex O
+> 1√M T +zC max
+> B√M
+> 
+> Convex O
+> 1√T+zC max
+> B√M
+> 
+> Strongly Convex O
+> 1
+> μT +zC max
+> μB √M
+> 
+
+a) Bias–variance view of choosing C(ε).: Under record-level local DP, the noise standard deviation scales as z(ε) ·
+
+C/B while clipping introduces bias that decreases with C. We therefore view the choice of C as minimizing a bias–variance surrogate: 
+
+J (C; ε) = h(C) + κ
+
+
+
+z(ε) CB
+
+2
+
+,
+
+where h(C) upper-bounds the clipping bias and is non-increasing in C. This implies that the optimal Cmax (ε) is non-decreasing in ε (equivalently non-increasing in z(ε)), motivating a monotone budget-conditioned mapping C = f (ε)
+
+learned via our simulation-and-fitting procedure. We analyze the communication and computational overhead of PAC-DP during both the federated training and the offline precomputation phase. 
+
+Theorem 5 (PAC-DP Approximates Theoretically Optimal Clipping) . Let Cmax (ε) denote the theoretically optimal clip-ping threshold that minimizes expected utility loss under privacy budget ε, and let ˆC(ε) be the function learned via simulation-curve fitting in PAC-DP using a finite proxy dataset. Assume the true loss function L(C, ε ) is Lipschitz-continuous in C with constant LL. Then the expected utility gap incurred by using ˆC(ε) instead of Cmax (ε) is bounded by: 
+
+L( ˆC(ε), ε ) − L (Cmax (ε), ε ) ≤ LL · ˆC(ε) − Cmax (ε) .
+
+Moreover, under standard polynomial regression assump-tions, the expected fitting error satisfies: 
+
+Eε
+
+
+
+ˆC(ε) − Cmax (ε) 2
+
+≤ σ2sim 
+
+n + η2,
+
+where σ2sim is the variance of simulation noise, n is the number of sampled budgets, and η denotes the approximation error of the chosen polynomial class. Proof. The first inequality is a direct result of the Lipschitz continuity of the utility loss function L(C, ε ) with respect to C, which holds in most DP-FL setups due to smooth dependence of utility on clipping and noise scale. Therefore, a small deviation in ˆC leads to proportionally bounded utility degradation. The second inequality follows standard supervised regres-sion error decomposition: the total squared error can be split into variance (due to stochasticity in simulation measurements) and bias (due to function class mismatch). If the true mapping 
+
+Cmax (ε) lies within a smooth function class (e.g., piecewise-smooth or Lipschitz), and we fit a polynomial of degree k, then approximation error η typically decreases with k and dataset richness. Thus, with sufficiently many simulation points n, low simulation noise σ2sim , and a well-chosen function class (e.g., quadratic), PAC-DP ensures the learned mapping ˆC(ε) remains close to the theoretical optimum Cmax (ε), guaranteeing prov-able near-optimal utility. This theorem provides a theoretical foundation for PAC-DP’s empirical design. It shows that as long as the simulation process is sufficiently accurate (low noise) and the fitting model is expressive enough (e.g., polynomial regression), the learned clipping function closely approximates the optimal clipping boundary. 
+
+Theorem 6 (Efficiency of PAC-DP) . Let M be the total number of clients, d the model dimension, q ∈ (0 , 1] the client sampling rate, and R the number of local SGD steps. Then:  
+
+> •
+
+Per-round communication cost is O(qM d ). 
+
+> •
+
+Per-client computational cost per round is O(Rd ). 
+
+> •
+
+The server-side precomputation phase incurs offline com-plexity O(nmT pre d), where n and m are the numbers of candidate privacy budgets and clipping thresholds, respectively. Proof. Communication: Each participating client sends a d-dimensional model vector per round. With qM active clients, total communication is O(qM d ) per round. 
+
+Computation: Each client performs R local steps, each involving gradient computation ( O(d)), clipping ( O(d)), noise addition ( O(d)), and parameter update ( O(d)), giving O(Rd )
+
+per client. 
+
+Precomputation: For each of n × m configurations, PAC-DP simulates a training process of Tpre steps on the proxy dataset, with each step costing O(d). Thus, the total offline complexity is O(nmT pre d), amortized over all training rounds. The training-time overhead of PAC-DP matches that of stan-dard DP-FL schemes (e.g., DP-FedAvg), with only negligible 9
+
+additional cost from personalized clipping. The main cost lies in the offline precomputation, which is amortized once and enables efficient real-time adaptation of privacy-preserving parameters across clients and rounds. 
+
+Key Insight: PAC-DP adaptively calibrates gradient clip-ping using a learned mapping F (ε), reducing noise magnitude and improving convergence. This results in provable privacy with tighter utility bounds than existing fixed-clipping DP-FL methods. VII. S ELECTING CLIPPING THRESHOLDS VIA 
+
+SIMULATION -C URVE FITTING 
+
+The clipping threshold Cmax is a critical hyperparameter in differentially private optimization. A suboptimal value may ei-ther cause excessive gradient distortion or require unnecessar-ily large noise addition, thereby degrading utility. In PAC-DP, we address this by empirically learning a mapping function 
+
+F (ε) from privacy budgets to optimal clipping thresholds: 
+
+Cmax = F (ε),
+
+where F is learned via simulation on a proxy dataset and approximated by a low-degree polynomial. 
+
+A. Offline Simulation on Proxy Data 
+
+To avoid privacy leakage, PAC-DP simulates privacy-utility trade-offs on a public or synthetic proxy dataset ˆD that ap-proximates the distribution of the federated data. We construct the proxy dataset ˆD from public or synthetic data. The proxy task is used only to estimate the empirical mapping between privacy budgets and clipping thresholds under the same DP mechanism as in online training. 
+
+Empirical Estimation of Cmax (ε). We define a finite set of privacy budgets {ε1, . . . , ε n} and candidate clipping thresholds {C1, . . . , C m}. For each pair (εi, C j ), the server simulates DP-FL training on ˆD, adds Gaussian noise scaled by Cj , and evaluates the test accuracy: 
+
+ai,j := TestAcc (Cj , ε i).
+
+This produces a performance matrix: 
+
+P = [ ai,j ] ∈ Rn×m.
+
+For each privacy level εi, the optimal threshold is chosen as: 
+
+Cmax = arg max 
+
+> Cj
+
+ai,j .
+
+B. Polynomial Curve Fitting 
+
+We assume that the empirical relationship between ε and 
+
+Cmax is smooth and approximately quadratic. We fit a poly-nomial of the form: 
+
+F (ε) = αε 2 + βε + γ, 
+
+where α, β, γ ∈ R are learned via least-squares regression. Outliers in the (εi, C max ) pairs (e.g., caused by simulation in-stability) are removed using interquartile range (IQR) filtering to ensure robustness. 
+
+Algorithm 2 Offline Simulation and Curve Fitting for PAC-DP 
+
+Require: Privacy budgets {εi}ni=1 , clipping thresholds 
+
+{Cj }mj=1 , proxy dataset ˆD
+
+Ensure: Fitted mapping F (ε) 
+
+> 1:
+
+for each εi ∈ { ε1, . . . , ε n} do  
+
+> 2:
+
+for each Cj ∈ { C1, . . . , C m} do  
+
+> 3:
+
+Simulate DP-FL using (εi, C j ) on ˆD 
+
+> 4:
+
+Record test accuracy ai,j  
+
+> 5:
+
+end for  
+
+> 6:
+
+Select Cmax = arg max j ai,j  
+
+> 7:
+
+end for  
+
+> 8:
+
+Fit regression model F (ε) to pairs (εi, C max ) 
+
+> 9:
+
+return F
+
+Generalization. The fitted function F generalizes to unseen privacy levels via interpolation (for ε in training range) or extrapolation (for new budgets), enabling real-time inference of Cmax without retraining. 
+
+Justification. Our DP mechanism implies that, for a fixed 
+
+δ, achieving a larger privacy budget ε requires a smaller noise multiplier z(ε), while the clipping–noise trade-off sug-gests that the empirically optimal clipping bound is a mono-tone, smooth function of ε over practical budget ranges. Therefore, we fit the simulated pairs {(ε, C max (ε)) } using a low-complexity function class (e.g., quadratic, power-law, or piecewise-linear). We select the function class based on validation error on the proxy task, and optionally enforce monotonicity to improve stability. 
+
+Integration with federated training. In online training, each participating client i sets the per-example clipping bound deterministically as 
+
+Cti = F (εi) · λ(t),
+
+where λ(t) is a deterministic schedule defined in Eq. (9) (plateau + cosine decay). Importantly, Cti depends only on the target privacy budget and the training round, and is indepen-dent of client data . This ensures that the record-level local DP analysis applies directly without introducing additional privacy leakage from data-dependent threshold selection. 
+
+C. Discussion and Insights 
+
+Advantages over Heuristic Methods. Unlike percentile-based adaptive clipping methods, PAC-DP: (1) Avoids reliance on historical gradients or windowed statistics; (2) Is privacy-budget aware by design; (3) Provides a consistent trade-off model across rounds and clients. 
+
+Amortized Overhead. The cost of simulation and fitting is incurred once and amortized over all future training rounds. This makes PAC-DP both practically efficient and scalable to real-world FL deployments. 
+
+Practical Deployment. The curve fitting strategy is agnostic to model architecture and dataset, making it suitable for tasks ranging from image classification to time-series forecasting. Moreover, it can be bootstrapped from publicly available or synthetically generated data without violating client privacy. 10 
+
+VIII. SIMULATION RESULTS In this section, we present a comprehensive empirical analysis to evaluate the performance of our proposed PAC-DP method. We conduct experiments on four diverse bench-marks—MNIST, CIFAR-10, CIFAR-100, and the Heart Dis-ease dataset—and compare PAC-DP with state-of-the-art per-sonalized DP federated learning methods NbAFL [32] and rPDP-FL [19], as well as two representative adaptive clipping baselines: CGM Medium from [2], which tailors client-wise clipping thresholds based on individual privacy budgets, and Adaptive Quantile Clipping (AQC) [12], which adjusts clip-ping bounds online using gradient quantiles. We also include the privacy-free FedAvg baseline [17]. The FedAvg variant employs a fixed clipping threshold and uniform privacy budget across all clients, serving as a reference to assess the utility gains enabled by personalization and adaptive clipping. For all DP baselines, we ensure comparable privacy guarantees by matching per-client (ε, δ )-differential privacy budgets under standard composition. Our experiments are structured into three subsections: (1) We evaluate the effectiveness of the server-side computation and curve fitting strategy, demonstrating the correlation be-tween the clipping threshold C and the privacy budget ε;(2) We compare PAC-DP with two alternative methods: a fixed clipping threshold approach and the rPDP-FL method, highlighting the advantages of our adaptive strategy; (3) We analyze the communication and computational overhead of PAC-DP, showing that it achieves comparable test accuracy with fewer communication rounds. 
+
+A. Experimental Setup 
+
+Datasets and Partitioning. We evaluate our method on four benchmarks: MNIST (70,000 grayscale images), CIFAR-10 (60,000 color images), CIFAR-100 (60,000 fine-grained color images), and the Heart Disease dataset—a real-world medical record collection comprising 920 patient samples from four hospitals [18]. For MNIST, CIFAR-10, and CIFAR-100, we adopt a non-IID partitioning strategy that assigns data to clients while preserving approximate global label distributions to simulate statistical heterogeneity. For the Heart Disease dataset, we follow the cross-silo setup in [18], where each of the four hospitals constitutes one client, resulting in a naturally non-IID and highly heterogeneous partition due to institutional differences in patient populations and diagnostic criteria. To assess the robustness and generalizability of our PAC-DP framework, the proxy datasets used for curve fitting are constructed with minimal preprocessing, and their quality is not tightly coupled to the target clients’ data. This design choice demonstrates that PAC-DP’s fitting mechanism does not rely on high-fidelity public data: even when the proxy dataset diverges in sample complexity, feature dimensionality, or label balance—such as between simple grayscale images (MNIST), complex natural images (CIFAR-10 and CIFAR-100), and low-dimensional tabular medical records (Heart Disease)—the learned mapping F (ε) remains highly effective across all domains. 
+
+Network Architectures. For MNIST, a lightweight CNN is employed with two convolutional layers followed by ReLU activations, max pooling, and a final log-softmax layer. For CIFAR-10, we adopt a modified ResNet-18, integrating dropout regularization before the fully connected output layer to improve generalization. For CIFAR-100, we use a ResNet-34 variant adapted to 32×32 inputs (with a 3×3 stem and no initial max-pooling) and a 100-class classification head. For the Heart Disease dataset, we employ both a logistic regression model and a shallow DNN with one hidden layer, configured for its 13-dimensional features and binary output. 
+
+Training Configurations. We use SGD (lr=0.01 for MNIST and CIFAR-100, lr=0.001 for CIFAR-10, lr=0.005 for Heart Disease), with batch size 128 for MNIST and CIFAR-10, 64 for CIFAR-100, and 16 for Heart Disease, reflecting their data scale and modality. All clients perform 5 local epochs per round. The total number of clients is 50 for MNIST and CIFAR-10 (25 selected per round), 100 for CIFAR-100 (50 selected), and 4 for Heart Disease (all participate). We adopt a lightweight CNN for MNIST, ResNet-18 for CIFAR-10, ResNet-34 adapted to 32×32 inputs for CIFAR-100, and logistic regression or a shallow DNN for Heart Disease, with all 4 clients participating in every round under a fixed cross-silo setting. Unless otherwise specified, PAC-DP uses the clipping schedule in Eq. (9) with (rs, λ min ) = (0 .6, 0.1) for all datasets and model architectures. 
+
+Privacy Accounting and Reproducibility. We report final per-client record-level local differential privacy guarantees 
+
+(εi, δ ). In each round t where client i participates, the client applies per-example clipping with bound Cti and adds Gaus-sian noise with standard deviation (zti Cti /B ) to the minibatch-averaged clipped gradient, where B is the local minibatch size. To compute the final εi under the fixed δ, we use an RDP accountant that composes per-round Gaussian mechanisms over the realized participation set Ti. We assume fixed-size client sampling and do not use privacy amplification by subsampling in the accounting. Concretely, for each order 
+
+α ∈ { 2, 3, . . . , 64 } we accumulate the per-round RDP costs to obtain ρi(α), and then convert ρi(α) to (εi, δ ) via the standard RDP-to-DP conversion. Privacy is reported as final per-client 
+
+(εi, δ ) with fixed δ = 10 −5. We summarize εi across clients by (min/median/max). 
+
+B. Learning the Optimal Clipping Boundary via Privacy-Budget-Guided Simulation 
+
+To validate the feasibility of approximating optimal clip-ping thresholds using precomputed simulation, we conducted server-side curve fitting experiments on MNIST and CIFAR-10. Specifically, we learned a functional mapping ˆC(ε) be-tween the privacy budget ε and the empirically optimal clip-ping threshold Cmax . Outliers were removed to mitigate noise, and regression curves were fitted to minimize generalization error. The results, shown in Fig. 3, highlight the key property that Cmax can be effectively predicted from ε, laying the foundation for our PAC-DP method. 
+
+MNIST. A quadratic regression yields C = −5.5235 · ε2 +12 .0719 · ε + 1 .4004 , with R2 = 0 .9806 , indicating a strong 11 0.01       
+
+> 0.05
+> 0.1
+> 0.2
+> 0.4
+> 0.8
+> 1.4
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> C
+> Privacy Budget and Optimal CFitting Curve
+> C = -5.5235 * 2+ 12.0719 * + 1.4004
+> Filtered data
+> Fitted curve ( R2= 0.9806)
+
+(a) MNIST 0.1        
+
+> 0.5 1
+> 1.5 2
+> 3
+> 5
+> 7.5
+> 10
+> 2
+> 4
+> 6
+> 8
+> 10
+> C
+> Privacy Budget and Optimal CFitting Curve
+> C = -0.0426 * 2+ 1.2900 * + 1.1060
+> Filtered data
+> Fitted curve ( R2= 0.9490)
+
+(b) CIFAR-10 
+
+Fig. 3: Relationship between Privacy Budget ε and Optimal Clipping Threshold Cmax on MNIST and CIFAR-10 Datasets. Despite dataset complexity differences, the fitted mapping remains stable and generalizable. and stable correlation. The high coefficient of determination suggests that in low-dimensional, well-structured domains, the optimal clipping threshold increases with the privacy budget but exhibits diminishing returns. 
+
+CIFAR-10. In contrast, a flatter curve is learned: C =0.0426 ·ε2+1 .2900 ·ε+1 .1060 , with R2 = 0 .9490 . This reflects increased complexity and variance in CIFAR-10’s gradient distributions, but still confirms a reliable trend that PAC-DP leverages. 
+
+Implications. These findings demonstrate that Cmax is a function of ε that is predictable, dataset-agnostic to some extent, and amenable to theoretical analysis. The ability to pre-learn this function is crucial: PAC-DP’s adaptive strategy circumvents the need for trial-and-error tuning or hand-crafted heuristics, and its learned policy remains effective across datasets with varying complexity. This substantiates the key innovation of PAC-DP—bridging theory and practice through simulation-informed clipping optimization. 
+
+C. Performance Evaluation 
+
+Evaluation on MNIST. Figure 4 compares PAC-DP with fixed-threshold and adaptive baselines (rPDP-FL, NbAFL, CGM Medium, and AQC) under different privacy budgets 
+
+ε. As shown in (a) and (c), PAC-DP consistently achieves higher final accuracy, particularly under tight privacy con-straints ( ε = 0 .1), reaching 94.3% versus 62.4% (rPDP-FL), 30.5% (NbAFL), 58.1% (CGM Medium), and 49.7% (AQC). Both CGM Medium and AQC set clipping thresholds based on a fixed quantile of observed gradient norms, with initial values typically chosen heuristically; this often leads to overly conservative clipping in early rounds, resulting in slower initial accuracy gains compared to PAC-DP. Training curves in (b) and (d) further illustrate that PAC-DP converges faster and more stably than all baselines, benefiting from its privacy-aware, simulation-guided threshold initialization. 
+
+Evaluation on CIFAR-10. Figure 5 shows that PAC-DP maintains strong performance under more complex data. At 
+
+ε = 1, PAC-DP achieves 44.2% accuracy, outperforming fixed threshold baselines by up to 36%. It also exhibits faster and more stable convergence throughout training. In contrast, CGM Medium and AQC—while adaptive in principle—rely 0.05 0.1 0.2 0.4 0.8 
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Accuracy
+> Comparison of Final Training Results
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(Fixed C)
+> NbAFL
+> CGM-Median
+> AQC
+
+(a) Final Accuracy (Fixed Threshold) 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 
+
+> Round
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Accuracy
+> Comparison of Single Training Process
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(Fixed C)
+> NbAFL
+> CGM-Median
+> AQC
+
+(b) Training Dynamics (Fixed Threshold) 0.05 0.1 0.2 0.4 0.8 1.4 2.8 5.6 11.2 
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Accuracy
+> Comparison of Final Training Results
+> PAC-DP
+> rPDP-FL
+
+(c) Final Accuracy (rPDP-FL) 1 2 3 4 5 6 7 8 9
+
+> 10
+> 11
+> 12
+> 13
+> 14
+> 15
+> 16
+> 17
+> 18
+> 19
+> 20
+> 21
+> 22
+> 23
+> 24
+> 25
+> Round
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Accuracy
+> Comparison of Single Training Process
+> PAC-DP
+> rPDP-FL
+
+(d) Training Dynamics (rPDP-FL) 
+
+Fig. 4: Performance Comparison on MNIST under Various Privacy Budgets. PAC-DP achieves consistent accuracy gains and faster convergence across both fixed and adaptive base-lines. 0.1 0.2 0.4 0.8 1.6 
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Accuracy
+> Comparison of Final Training Results
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> PAC-DP(C=10)
+> NbAFL
+> CGM-Median
+> AQC
+
+(a) Final Accuracy (Fixed Threshold) 1 2 3 4 5 6 7 8 9
+
+> 10
+> 11
+> 12
+> 13
+> 14
+> 15
+> 16
+> 17
+> 18
+> 19
+> 20
+> 21
+> 22
+> 23
+> 24
+> 25
+> Round
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Accuracy
+> Comparison of Single Training Process
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=1)
+> PAC-DP(C=10)
+> NbAFL
+> CGM-Median
+> AQC
+
+(b) Training Dynamics (Fixed Threshold) 
+
+Fig. 5: Performance Comparison on CIFAR-10 under Fixed Thresholds and PAC-DP. Despite higher data complexity, PAC-DP maintains robust convergence and superior accuracy. on empirically chosen initial clipping thresholds and gradi-ent norm quantiles; their default configurations, effective on simpler tasks, degrade significantly on larger-scale datasets like CIFAR-10, yielding notably lower accuracy and unstable training compared to PAC-DP. TABLE II: Test Accuracy Comparison on MNIST (Personal-ized Budgets) 
+
+Round 5 10 15 20 25 PAC-DP 0.845 0.880 0.903 0.898 0.902 rPDP-FL 0.214 0.427 0.517 0.621 0.642 NbAFL 0.145 0.110 0.105 0.094 0.102 
+
+Heterogeneous Privacy Settings (MNIST). To emulate realistic user preferences, we assign privacy budgets from 
+
+{0.05 , 0.1, 1.0} using sampling weights {0.6, 0.3, 0.1}. As 12 1 2 3 4 5 6 7 8 9
+
+> 10
+> 11
+> 12
+> 13
+> 14
+> 15
+> 16
+> 17
+> 18
+> 19
+> 20
+> 21
+> 22
+> 23
+> 24
+> 25
+
+Round 
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+> Accuracy
+
+Comparison of Single Training Process 
+
+> PAC-DP(C*)
+> PAC-DP(C=0.1)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> PAC-DP(C=10)
+> rPDP-FL
+> NbAFL
+> CGM-Median
+> AQC
+
+Fig. 6: Training Performance under Personalized Privacy Bud-gets on MNIST. PAC-DP adapts effectively to heterogeneous constraints, achieving high accuracy and early convergence. shown in Figure 6 and Table II, PAC-DP adapts to varying bud-gets and consistently outperforms both rPDP-FL and NbAFL in both early and final rounds. Notably, PAC-DP achieves over 90% accuracy by round 5, while others remain below 65%. 1 2 3 4 5 6 7 8 9
+
+> 10
+> 11
+> 12
+> 13
+> 14
+> 15
+> 16
+> 17
+> 18
+> 19
+> 20
+> 21
+> 22
+> 23
+> 24
+> 25
+
+Rounds 
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+> test_accuracy
+
+Comparison of Single Training Process 
+
+FedAvg 
+
+PAC-DP(C*) 
+
+PAC-DP(hot_start) 
+
+rPDP-FL 
+
+NbAFL 
+
+CGM-Median 
+
+AQC 
+
+Fig. 7: Testing accuracy on CIFAR-10 under Personalized Privacy Budgets. PAC-DP and PAC-DP(hot start) significantly outperform all baselines. 
+
+Heterogeneous Privacy Settings (CIFAR-10). We repeat the personalized budget setting on CIFAR-10 with ε ∈{0.5, 1.0, 5.0} and weights {0.6, 0.3, 0.1}. Figure 7 shows that PAC-DP steadily improves over rounds, reaching 44% accuracy. Its variant PAC-DP(hot start) further boosts early convergence, achieving 55% by the end. In contrast, rPDP-FL and NbAFL stagnate below 20%. 
+
+Evaluation on Heart Disease. Figure 8 shows that PAC-DP achieves robust performance on the real-world, low-dimensional tabular dataset with inherent non-IID and hetero-geneous data distribution. At ε = 0 .1, PAC-DP reaches 74.4% accuracy, outperforming all fixed threshold baselines and significantly surpassing NbAFL, CGM Medium, and AQC. While CGM Medium and AQC exhibit better performance than NbAFL and some fixed-threshold variants due to their 0.01 0.02 0.04 0.08 0.16 
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Accuracy
+> Comparison of Final Training Results
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=0.1)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> PAC-DP(C=10)
+> rPDP-FL
+> NbAFL
+> CGM-Median
+> AQC
+
+(a) Final Accuracy (Fixed Threshold) 1 2 3 4 5 6 7 8 910 11 12 13 14 15 16 17 18 19 20 
+
+> Rounds
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> test_accuracy
+> Comparison of Single Training Process
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=0.1)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> PAC-DP(C=10)
+> rPDP-FL
+> NbAFL
+> CGM-Median
+> AQC
+
+(b) Training Dynamics (Fixed Threshold) 
+
+Fig. 8: Performance Comparison on Fed-Heart-Disease under Fixed Thresholds and PAC-DP. Despite higher data com-plexity, PAC-DP maintains robust convergence and superior accuracy. adaptive clipping strategies, they still lag behind PAC-DP in both final accuracy and convergence stability, highlighting the advantage of our privacy-conditioned threshold design over heuristic-based quantile methods. 1 2 3 4 5 6 7 8 910 11 12 13 14 15 16 17 18 19 20 
+
+Rounds 
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1.0 
+
+> test_accuracy
+
+Comparison of Single Training Process 
+
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=0.1)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> PAC-DP(C=10)
+> rPDP-FL
+> NbAFL
+> CGM-Median
+> AQC
+
+Fig. 9: Testing accuracy on Fed-Heart-Disease under Person-alized Privacy Budgets. PAC-DP outperform all baselines. 
+
+Heterogeneous Privacy Settings (Heart Disease). We eval-uate PAC-DP under a realistic heterogeneous privacy setting on the Fed-Heart-Disease dataset, where clients are assigned personalized privacy budgets ε ∈ { 0.01 , 0.05 , 0.5} with corre-sponding proportions [0 .6, 0.3, 0.1] . Figure 9 shows that PAC-DP achieves stable and rapid convergence, reaching 75.6% test accuracy by the end of training. In contrast, fixed-threshold baselines such as PAC-DP( C = 0 .1), PAC-DP( C = 1 ), and PAC-DP( C = 10 ) exhibit poor performance due to suboptimal clipping, while NbAFL stagnates below 40%. This demon-strates that PAC-DP’s adaptive clipping mechanism effectively aligns privacy constraints with heterogeneous privacy budgets and round-wise training dynamics, enabling superior utility in highly heterogeneous cross-silo environments. 
+
+Evaluation on CIFAR-100. Under a uniform privacy bud-get ( ε = 5.0), PAC-DP achieves a final testing accuracy of 35.6% , outperforming all the fixed-threshold baselines, as shown in Figure 10. This improvement demonstrates that adaptive clipping better balances noise injection and gradient 13 1 6 11 16 21 26 31 36 41 46 51 56 61 66 71 76 81 86 91 96 
+
+> Rounds
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> test_accuracy
+
+Comparison of Single Training Process 
+
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> PAC-DP(C=10)
+> PAC-DP(C=15)
+> NbAFL
+> CGM-Median
+> AQC
+
+Fig. 10: Testing accuracy on CIFAR-100 under Fixed Thresh-olds and PAC-DP. fidelity compared to static thresholds. Similar to the observa-tions on CIFAR-10, CGM Medium and AQC perform poorly on CIFAR-100, as their heuristic choices of initial thresholds and quantile levels—tuned for simpler settings—fail to gener-alize to this more complex and high-dimensional task. 1 6 11 16 21 26 31 36 41 46 51 56 61 66 71 76 81 86 91 96 
+
+> Rounds
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> test_accuracy
+
+Comparison of Single Training Process 
+
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> PAC-DP(C=10)
+> PAC-DP(C=15)
+> NbAFL
+> CGM-Median
+> AQC
+
+Fig. 11: Testing accuracy on CIFAR-100 under Personalized Privacy Budgets. PAC-DP outperform all baselines. 
+
+Heterogeneous Privacy Settings (CIFAR-100). We eval-uate PAC-DP under a realistic heterogeneous privacy setting on the CIFAR-100 dataset, where clients are assigned person-alized privacy budgets ε ∈ { 3.0, 5.0, 10 .0} with correspond-ing proportions [0 .6, 0.3, 0.1] . PAC-DP attains a final Testing accuracy of 27.9% , surpassing the strongest fixed-threshold baseline ( 23.2% ) by 20.2% , as illustrated in Figure 11. This confirms that tailoring clipping thresholds to individual privacy budgets effectively preserves model utility in heterogeneous environments. 
+
+D. Robustness to Optimizer Choice 
+
+To evaluate the robustness of PAC-DP to different opti-mization strategies, we replace the standard SGD optimizer with Adam—a popular adaptive optimizer known for its fast 1 2 3 4 5 6 7 8 9
+
+> 10
+> 11
+> 12
+> 13
+> 14
+> 15
+> 16
+> 17
+> 18
+> 19
+> 20
+> 21
+> 22
+> 23
+> 24
+> 25
+> Rounds
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> test_accuracy
+
+Comparison of Single Training Process 
+
+> FedAvg
+> PAC-DP(C*)
+> NbAFL
+
+Fig. 12: Testing accuracy on CIFAR-10 using the Adam Optimizer under a Fixed Clipping Threshold. PAC-DP achieve higher performance than NbAFL. convergence and reduced sensitivity to learning rate tuning. Figure 12 shows the testing accuracy on CIFAR-10 when all methods use Adam with a fixed clipping threshold. Despite the change in optimizer dynamics, PAC-DP consistently out-performs NbAFL throughout training, demonstrating that our adaptive clipping mechanism remains effective under different gradient update rules. 
+
+E. Communication and Computational Efficiency 1 2 3 4 5 6 7 8 9 10 11 
+
+> Round
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Accuracy
+> Comparison of Rounds to Achieve 90% Accuracy
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> NbAFL
+
+(a) MNIST 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20  
+
+> Round
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Accuracy
+> Comparison of Rounds to Achieve 30% Accuracy
+> FedAvg
+> PAC-DP(C*)
+> PAC-DP(C=1)
+> PAC-DP(C=5)
+> NbAFL
+
+(b) CIFAR-10 
+
+Fig. 13: Communication Efficiency Comparison on MNIST and CIFAR-10. PAC-DP significantly reduces the number of rounds needed to reach target accuracy. To evaluate communication and convergence efficiency, we compare PAC-DP with fixed-threshold baselines and NbAFL on MNIST and CIFAR-10 under IID settings. The privacy budget is set to ε = 0 .1.As shown in Figure 13, PAC-DP reaches 90% test accuracy on MNIST in only 6 rounds—saving 45.5% and 33.3% of communication rounds compared to C = 1 (11 rounds) and 
+
+C = 5 (9 rounds), respectively. On CIFAR-10, PAC-DP achieves 30% accuracy in 9 rounds, outperforming C = 1 
+
+(15 rounds) and NbAFL (20 rounds), while matching the convergence speed of C = 5 .The efficiency gains stem from PAC-DP’s two-phase opti-mization design: (1) a lightweight precomputation stage that predicts clipping thresholds based on a fitted ε-C∗ curve, 14 
+
+avoiding manual tuning; and (2) a training stage with adaptive clipping that stabilizes convergence and mitigates oscillation caused by static thresholds. Notably, while C = 5 matches PAC-DP’s convergence speed on CIFAR-10, it performs significantly worse on MNIST (18.2% lower final accuracy), underscoring its lack of gener-alizability. In contrast, PAC-DP maintains consistently high accuracy across tasks by tailoring the clipping threshold to both privacy constraints and gradient dynamics. IX. C ONCLUSION AND FUTURE WORK 
+
+In this paper, we introduced PAC-DP, a Personalized Adap-tive Clipping framework for federated learning with het-erogeneous privacy preferences under record-level local dif-ferential privacy. Unlike traditional fixed-threshold methods that apply a one-size-fits-all clipping bound, PAC-DP em-ploys a Simulation-CurveFitting approach leveraging a server-side public/synthetic proxy dataset. This approach learns a lightweight mapping between personalized privacy budgets ε
+
+and clipping thresholds, which can be applied online with a round-wise schedule, enabling budget-conditioned calibration with minimal overhead. Our theoretical analysis provides convergence guarantees in non-convex, convex, and strongly convex settings that are aligned with the per-example clipping and Gaussian perturba-tion mechanism and a reproducible privacy accounting pro-cedure. These results support the role of budget-conditioned clipping in improving the privacy–utility trade-off relative to static clipping. Comprehensive experiments on federated learning bench-marks (MNIST and CIFAR-10) empirically validate PAC-DP’s advantages under matched privacy budgets. Across the evalu-ated settings, PAC-DP achieves substantial accuracy improve-ments (up to 26%) and faster convergence (up to 45.5%) com-pared to fixed-threshold baselines, while incurring minimal computational overhead during online training by amortizing costs through offline precomputation. In conclusion, PAC-DP addresses an important limitation in personalized DP-FL by providing a principled and practically efficient approach to selecting clipping thresholds under heterogeneous privacy budgets. While the results validate the benefits of budget-conditioned clipping, several avenues remain open for further exploration:  
+
+> •
+
+Extension to More Complex Settings: Extending PAC-DP to additional modalities (e.g., sequential or graph data) and larger-scale deployments with more pronounced system heterogeneity.  
+
+> •
+
+Dynamic Privacy Budgeting: Integrating dynamic pri-vacy budgeting schemes that adjust client-specific budgets over time, together with consistent privacy accounting.  
+
+> •
+
+Empirical Privacy Risk Evaluation: Complementing formal DP guarantees with broader empirical privacy risk assessments under standard threat models and attack protocols.  
+
+> •
+
+Tighter Theoretical Bounds: Deriving tighter conver-gence and privacy bounds by leveraging refined op-timization analyses and tighter composition/accounting techniques.  
+
+> •
+
+Resource-Constrained Environments: Optimizing PAC-DP for resource-constrained devices by balancing computation, communication, and privacy-utility performance. REFERENCES [1] M. Abadi, A. Chu, I. Goodfellow, H. B. McMahan, I. Mironov, K. Talwar, and L. Zhang, “Deep learning with differential privacy,” in 
+
+Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security . ACM, 2016, pp. 308–318. [2] G. Andrew, O. Thakkar, H. B. McMahan, and S. Ramaswamy, “Dif-ferentially private learning with adaptive clipping,” arXiv preprint arXiv:1905.03871 , 2019. [3] D. Chen, L. Yao, D. Gao, B. Ding, and Y. Li, “Efficient personalized federated learning via sparse model-adaptation,” in International con-ference on machine learning . PMLR, 2023, pp. 5234–5256. [4] R. Chen, Q. Wan, X. Zhang, X. Qin, Y. Hou, D. Wang, X. Fu, and M. Pan, “Eefl: High-speed wireless communications inspired energy efficient federated learning over mobile devices,” in MobiSys , 2023, pp. 544–556. [5] L. Collins, H. Hassani, A. Mokhtari, and S. Shakkottai, “Exploiting shared representations for personalized federated learning,” in Interna-tional conference on machine learning . PMLR, 2021, pp. 2089–2099. [6] Y. Deng, M. M. Kamani, and M. Mahdavi, “Adaptive personalized federated learning,” arXiv preprint arXiv:2003.13461 , 2020. [7] C. Dwork and A. Roth, “The algorithmic foundations of differential privacy,” Foundations and Trends in Theoretical Computer Science ,vol. 9, no. 3-4, pp. 211–407, 2013. [8] T. Fan, H. Gu, X. Cao, C. S. Chan, Q. Chen, Y. Chen, Y. Feng, Y. Gu, J. Geng, B. Luo, S. Liu, W. Ong, C. Ren, J. Shao, C. Sun, X. Tang, H. X. Tae, Y. Tong, S. Wei, F. Wu, W. Xi, M. Xu, H. Yang, X. Yang, J. Yan, H. Yu, H. Yu, T. Zhang, Y. Zhang, X. Zhang, Z. Zheng, L. Fan, and Q. Yang, “Ten challenging problems in federated foundation models,” 
+
+IEEE Trans. Knowl. Data Eng. , vol. 37, no. 7, pp. 4314–4337, 2025. [9] J. Fu, Z. Chen, and X. Han, “Adap dp-fl: Differentially private federated learning with adaptive noise,” in IEEE International Conference on Computer Communications (INFOCOM) , Austin, TX, USA, December 2022, pp. 1–9, arXiv:2211.15893. [10] J. Fu, Y. Hong, X. Ling, L. Wang, Z. Sun, W. Hui Wang, Z. Chen, and Y. Cao, “Differentially private federated learning: A systematic review,” 
+
+arXiv preprint arXiv:2405.08299 , 2024. [11] J. Fu, Q. Ye, H. Hu, Z. Chen, L. Wang, K. Wang, and X. Ran, “Dpsur: Accelerating differentially private stochastic gradient descent using selective update and release,” Proc. VLDB Endow , vol. 17, no. 6, pp. 1200–1213, 2024. [12] R. C. Geyer, T. Klein, and M. Nabi, “Differentially private federated learning: A client level perspective,” arXiv preprint arXiv:1712.07557 ,2017. [13] Z. Jiang, W. Wang, and R. Chen, “Dordis: Efficient federated learning with dropout-resilient differential privacy,” in Nineteenth European Conference on Computer Systems (EuroSys ’24) . Athens, Greece: ACM, April 2024, pp. 1–17. [Online]. Available: https: //doi.org/10.1145/3627703.3629559 [14] J. Konecny, H. B. McMahan, F. X. Yu, P. Richt´ arik, A. T. Suresh, and D. Bacon, “Federated learning: Strategies for improving communication efficiency,” arXiv preprint arXiv:1602.05629 , vol. 8, 2016. [15] H. Lee, S. H. Lee, and T. Q. S. Qu, “Deep learning for distributed optimization: Applications to wireless resource management,” IEEE Journal on Selected Areas in Communications , vol. 37, no. 10, pp. 2251– 2266, Oct 2019. [16] L. Li, Y. Fan, M. Tse, and K.-Y. Lin, “A review of applications in federated learning,” Computers and Industrial Engineering , vol. 149, p. 106854, 2020. [17] Y. Li, T.-H. Chang, and C.-Y. Chi, “Secure federated averaging algorithm with differential privacy,” in 2020 IEEE 30th international workshop on machine learning for signal processing (MLSP) . IEEE, 2020, pp. 1–6. [18] J. Liu, J. Lou, L. Xiong, J. Liu, and X. Meng, “Cross-silo federated learn-ing with record-level personalized differential privacy,” in Proceedings of the 2024 ACM SIGSAC Conference on Computer and Communications Security . Salt Lake City, UT, USA: ACM, 2024, p. 15. [19] Z. Liu, S. Hu, Z. S. Wu, and V. Smith, “On privacy and personalization in cross-silo federated learning,” in NeurIPS , 2022, pp. 5925–5940. 15 
+
+[20] J. Ma, Q. Zhang, J. Lou, L. Xiong, and J. C. Ho, “Communication efficient federated generalized tensor factorization for collaborative health data analytics,” in Proceedings of the Web Conference , 2021, pp. 171–182. [21] P. M. Mammen, “Federated learning: Opportunities and challenges,” in 
+
+Proceedings of ACM Conference . New York, NY, USA: ACM, 2021, p. 5. [22] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. Aguera y Arcas, “Communication-efficient learning of deep networks from de-centralized data,” in AISTATS , 2017, pp. 1273–1282. [23] H. B. McMahan, E. Moore, D. Ramage, and B. Ag¨ uera y Arcas, “Communication-efficient learning of deep networks from decentralized data,” arXiv preprint arXiv:1602.05629 , 2016. [Online]. Available: http://arxiv.org/abs/1602.05629 [24] H. B. McMahan, D. Ramage, K. Talwar, and L. Zhang, “Learn-ing differentially private recurrent language models,” arXiv preprint arXiv:1710.06963 , 2017. [25] A. Shamsian, A. Navon, E. Fetaya, and G. Chechik, “Personalized federated learning using hypernetworks,” in International conference on machine learning . PMLR, 2021, pp. 9489–9502. [26] A. Z. Tan, H. Yu, L. Cui, and Q. Yang, “Towards personalized federated learning,” IEEE Transactions on Neural Networks and Learning Systems ,vol. 34, no. 12, pp. 9587–9603, 2023. [27] N. Wang, Y. Xiao, Y. Chen, N. Zhang, W. Lou, and Y. T. Hou, “Squeezing more utility via adaptive clipping on differentially private gradients in federated meta-learning,” in Annual Computer Security Applications Conference (ACSAC ’22) . ACM, 2022. [28] S. Wang, Y. Xu, Z. Wang, T. Chang, T. Q. S. Quek, and D. Sun, “Beyond ADMM: A unified client-variance-reduced adaptive federated learning framework,” in Thirty-Seventh AAAI Conference on Artificial Intelligence, Washington, DC, USA, February 7-14, 2023 . AAAI Press, 2023, pp. 10 175–10 183. [29] S. Wang, Y. Xu, Y. Yuan, and T. Q. S. Quek, “Toward fast personalized semi-supervised federated learning in edge networks: Algorithm design and theoretical guarantee,” IEEE Trans. Wirel. Commun. , vol. 23, no. 2, pp. 1170–1183, 2024. [30] Y. Wang, Q. Shi, and T.-H. Chang, “Why batch normalization damage federated learning on non-iid data?” IEEE Transactions on Neural Networks and Learning Systems , 2023. [31] Y. Wang, Y. Xu, Q. Shi, and T.-H. Chang, “Quantized federated learning under transmission delay and outage constraints,” IEEE Journal on Selected Areas in Communications , vol. 40, no. 1, pp. 323–341, 2022. [32] K. Wei, J. Li, M. Ding, C. Ma, H. H. Yang, F. Farhad, S. Jin, T. Q. Quek, and H. V. Poor, “Federated learning with differential privacy: Algorithms and performance analysis,” IEEE Transactions on Information Forensics and Security , vol. 15, pp. 3454–3469, 2020. [33] Q. Wu, X. Chen, Z. Zhou, and J. Zhang, “Fedhome: Cloud-edge based personalized federated learning for in-home health monitoring,” IEEE Transactions on Mobile Computing , vol. 21, no. 8, pp. 2818–2832, 2020. [34] Y. Wu, S. Zhang, W. Yu, Y. Liu, Q. Gu, D. Zhou, H. Chen, and W. Cheng, “Personalized federated learning under mixture of distribu-tions,” in International Conference on Machine Learning . PMLR, 2023, pp. 37 860–37 879. [35] Z. Xiang, T. Wang, W. Lin, and D. Wang, “Practical differentially private and byzantine-resilient federated learning,” in Proceedings of the ACM on Management of Data , vol. 1, no. 2, 2023, pp. 1–26. [36] Z. Xu, S. Shi, A. X. Liu, J. Zhao, and L. Chen, “An adaptive and fast convergent approach to differentially private deep learning,” in IEEE International Conference on Computer Communications (INFOCOM) ,Austin, TX, USA, April 2020, pp. 1–9. [37] E. Yang, Y. Xiong, W. Yuan, W. Pan, Q. Yang, and Z. Ming, “A survey on cross-user federated recommendation,” Sci. China Inf. Sci. , vol. 68, no. 4, 2025. [Online]. Available: https://doi.org/10.1007/s11432-024-4310-7 [38] L. Yang, J. Huang, W. Lin, and J. Cao, “Personalized federated learning on non-iid data via group-based meta-learning,” ACM Transactions on Knowledge Discovery from Data , vol. 17, no. 4, pp. 1–20, 2023. [39] T. Yang and X. Ma, “Adadp-cfl: Cluster federated learning with adaptive clipping threshold differential privacy,” in Proceedings of IEEE/ACM 32nd International Symposium on Quality of Service (IWQoS ’24) .IEEE, 2024. [40] Z. Yao, J. Liu, H. Xu, L. Wang, C. Qian, and Y. Liao, “Ferrari: A personalized federated learning framework for heterogeneous edge clients,” IEEE Transactions on Mobile Computing , 2024. [41] R. Ye, Z. Ni, F. Wu, S. Chen, and Y. Wang, “Personalized federated learning with inferred collaboration graphs,” in International Conference on Machine Learning . PMLR, 2023, pp. 39 801–39 817. [42] J. Zhang, C. Zhu, C. Ge, C. Ma, Y. Zhao, X. Sun, and B. Chen, “Badcleaner: Defending backdoor attacks in federated learning via attention-based multi-teacher distillation,” IEEE Trans. Dependable Secur. Comput. , vol. 21, no. 5, pp. 4559–4573, 2024. [Online]. Available: https://doi.org/10.1109/TDSC.2024.3354049 [43] J. Zhang, C. Zhu, X. Sun, C. Ge, B. Chen, W. Susilo, and S. Yu, “Flpurifier: Backdoor defense in federated learning via decoupled contrastive training,” IEEE Trans. Inf. Forensics Secur. , vol. 19, pp. 4752–4766, 2024. [Online]. Available: https://doi.org/10.1109/TIFS. 2024.3384846 [44] X. Zhang, Y. Li, W. Li, K. Guo, and Y. Shao, “Personalized federated learning via variational bayesian inference,” in International Conference on Machine Learning . PMLR, 2022, pp. 26 293–26 310. [45] X. Zhou, Q. Yang, X. Zheng, W. Liang, K. I.-K. Wang, J. Ma, Y. Pan, and Q. Jin, “Personalized federated learning with model-contrastive learning for multi-modal user modeling in human-centric metaverse,” 
+
+IEEE Journal on Selected Areas in Communications , vol. 42, no. 4, pp. 817–831, 2024.

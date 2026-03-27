@@ -1,0 +1,394 @@
+Title: TAMI-MPC:Trusted Acceleration of Minimal-Interaction MPC for Efficient Nonlinear Inference
+
+URL Source: https://arxiv.org/pdf/2603.24861v1
+
+Published Time: Fri, 27 Mar 2026 00:18:10 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# TAMI-MPC: T rusted A cceleration of M inimal- Interaction MPC for Efficient Nonlinear Inference 
+
+# Zhuoran Li †∗ , Hanieh Totonchi Asl †∗ , Yifei Cai ‡, Ebrahim Nouri †, Danella Zhao †
+
+> †
+
+Department of Electrical and Computer Engineering, University of Arizona, Tucson, United States {zli1122, haniehta, ebinouri, danellazhao}@arizona.edu 
+
+> ‡
+
+Department of Computer Science, Iowa State University, Ames, United States yifeic@iastate.edu 
+
+## Abstract 
+
+Secure multi-party computation (MPC) offers a practical foundation for privacy-preserving machine learning at the edge. However, cur-rent MPC systems rely heavily on communication and computation-intensive primitives—such as secure comparison-for nonlinear in-ference, which are often impractical on resource-constrained plat-forms. To enable real-time inference under resource-constrained platform, we introduce a T rusted A cceleration of M inimal- Interaction MPC framework, TAMI-MPC, for nonlinear evaluation. Specifically, we reduce communication cost by redesigning the core primitives, leaf comparison and tree merge, reducing the interactive round from log 2 𝑛 to just 1 per operation. Furthermore, unlike prior work that heavily relies on oblivious transfer (OT), a well-known compu-tational bottleneck, we leverage synchronized seeds inside the TEE to eliminate OT for the vast majority of our designs, along with a correlated-randomness reuse technique that keeps new designs computationally lightweight. To fully realize the potential, we de-sign a specialized accelerator that restructures the dataflow across stages to enable continuous, fine-grained streaming and high paral-lelism, reducing memory overhead. Our design achieves up to 4.86 ×
+
+speedup on ResNet-50 inference, compared with state-of-the-art CNN frameworks, and achieves up to 7.44 × speedup on BERT-base inference, compared with state-of-the-art LLM frameworks. 
+
+## Keywords 
+
+Security & Privacy, Multiparty Computation, Trusted Execution Environment, FPGA acceleration 
+
+ACM Reference Format: 
+
+Zhuoran Li †∗ , Hanieh Totonchi Asl †∗ , Yifei Cai ‡, Ebrahim Nouri †, Danella Zhao †, [4pt] †Department of Electrical and Computer Engineering, Univer-sity of Arizona, Tucson, United States, {zli1122, haniehta, ebinouri, danel-lazhao}@arizona.edu, ‡Department of Computer Science, Iowa State Univer-sity, Ames, United States, yifeic@iastate.edu, [4pt] . 2026. TAMI-MPC: Trusted Acceleration of M inimal- Interaction MPC for Efficient Nonlinear Inference. In . ACM, New York, NY, USA, 8 pages. https://doi.org/10.1145/nnnnnnn. nnnnnnn  
+
+> Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> Conference’17, Washington, DC, USA
+> ©2026 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-x-xxxx-xxxx-x/YYYY/MM https://doi.org/10.1145/nnnnnnn.nnnnnnn
+
+Figure 1: ResNet-50 inference performance with Cheetah [ 8]. 
+
+## 1 Introduction 
+
+To address privacy concerns in machine learning as a service (MLaaS), privacy-preserving MLaaS (PPMLaaS) employs cryptographic prim-itives to protect sensitive data [ 9 , 15 , 18 , 19 , 23 ]. Among these primitives, multiparty computation (MPC) has gained adoption for its effectiveness in handling nonlinear operations [ 8, 13 , 16 , 17 , 22 ]. A key module in this context is secure comparison, as many non-linear functions such as ReLU, GELU, Max-pooling, and Softmax, ultimately reduce to comparison operations. Modern PPMLaaS sys-tems [ 5 , 8, 13 , 16 ] widely adopt the Millionaires’ protocol from Cryptflow2 [ 17 ], as it provides the state-of-the-art balance of low communication, high throughput, and seamless compatibility with secret sharing, making it particularly well-suited for large-scale deep learning inference. 
+
+Motivations. While the cost of the Millionaires’ protocol is often moderate under fast network conditions and on consumer-grade hardware (e.g., smartphone or desktop-class CPUs), it becomes a major bottleneck in real-world inference with resource-constrained networks and client devices (e.g., IoT sensors, wearables, or portable medical devices with limited memory [ 2 , 24 ]). Figure 1 presents a time breakdown for state-of-the-art ResNet-50 inference under two resource settings: (i) moderate and (ii) constrained. The nonlinear phase incurs about a 9× slowdown in the constrained setting. This overhead is driven primarily by the communication and computa-tion costs of the two core operations: OT-based leaf comparison and tree merge via Beaver-triple–based multiplication. 
+
+Communication Overhead. First, although OT-based leaf com-parison and tree merge via Beaver’s triple–based multiplication offer a favorable trade-off in state-of-the-art PPMLaaS frameworks, their communication costs (data volume and number of interactive rounds) remain substantial. These costs are often acceptable on high-bandwidth, low-latency LANs, but they become a dominant bottleneck on constrained networks (e.g., limited bandwidth and high latency) [ 7, 14 , 20 ]. Second, on resource-constrained clients, insufficient memory precludes pre-generating and storing the large 
+
+> arXiv:2603.24861v1 [cs.AR] 25 Mar 2026
+
+volumes of correlated randomness required by these protocols. As a result, inference must be partitioned into small batches, and corre-lated randomness is produced just in time, which further increases the number of interactive rounds, leading to significant slowdowns in nonlinear evaluation. 
+
+Computation Overhead. First, the two core operations, leaf comparison and tree merge, heavily rely on pre-generated corre-lated randomness (e.g., random oblivious transfer (ROT)), which has been reported as a computational bottleneck—exacerbated on resource-constrained devices—due to cache pressure [ 11 , 12 ] and limited opportunity for parallel execution. Second, in resource-constrained environments, the data movement and memory access patterns induce imbalanced dataflow, underutilize available com-pute resources, and saturate memory bandwidth due to the 1-bit nature of the tree-merge Boolean operations, which are executed on byte-addressable CPUs, forcing each bit to be stored and accessed as a full byte. As a result, system performance becomes constrained by memory throughput rather than raw computational capability. The contributions are summarized as: 
+
+• We present, Trusted Acceleration of Minimal-Interaction MPC, namely TAMI-MPC, a framework that (i) yields an 8×
+
+reduction in communication cost (in bits) and reduces the interactive round complexity of leaf comparison and tree merge from 2 and log 2 𝑛 to 1, respectively (§5.2), and (ii) eliminates all interaction for offline correlated-randomness generation by deriving it from synchronized TEE seeds with a security-preserving randomness-reuse optimization, which avoids batch-by-batch communication under constrained clients and reduces TEE-side generation cost by over 79 ×.
+
+• We design a specialized accelerator to further boost non-linear evaluation, which (i) addresses the well-known ROT-generation computation overhead in leaf comparison via a 
+
+pipeline-aware interleaving of core operations (e.g., key ex-pansion and AES encryption), improving efficiency by 3.97 ×,and (ii) reduces data-movement overhead during tree merge through a memory-efficient data-management scheme that ex-ploits parallelism via packed polynomial execution , achieving a speedup of 80 .15 ×.
+
+## 2 Background and Security Definition 2.1 Secure Comparison (Millionaires’ Protocol) 
+
+Prior works such as CryptFlow2 [ 17 ] employ the Millionaires’ pro-tocol for secure comparison, which has become a standard primitive in state-of-the-art PPMLaaS frameworks [ 8 , 13 , 16 ]. The Million-aires’ protocol consists of two key steps: (1) OT-based leaf com-parisons, FComp , over smaller input blocks, and (2) a tree merge phase, FTreeMerge , implemented via Beaver’s triple–based secure multiplications FMult to obtain the final secure comparison result, as shown in Figure 2. In FComp (Step #1), an offline phase prepares correlated random-ness via ROT to mask the online OT messages. This preprocessing consumes 𝑘 × ROT instances ( 𝑘 is input bitlength of 𝑦 𝑗 ) and incurs computation and communication overhead [ 11 , 12 ], while the on-line phase completes in two rounds. Specifically, the online input 𝑥 𝑗 
+
+is masked with a pre-generated selection bit 𝑐 as 𝑡𝑚𝑝 = 𝑥 𝑗 ⊕ 𝑐 , and 
+
+𝑡𝑚𝑝 is sent from the receiver to the sender. Given its input 𝑦 𝑗 , the 
+
+Figure 2: Illustration of Millionaires’ protocol. 
+
+sender prepares oblivious messages 𝑚 𝑖 = 1{𝑦 𝑗 < 𝑖 } ⊕ ⟨ 𝑙𝑡 ⟩𝑆 ⊕𝑢 𝑡𝑚𝑝 ⊕𝑖 ,for all 𝑖 ∈ { 0, 2𝑘 − 1}. Messages 𝑚 𝑖 contain the leaf comparison result of the sender’s input 𝑦 𝑗 and the receiver’s input 𝑥 𝑗 , but is masked with the ROT-generated randomness 𝑢 𝑡𝑚𝑝 ⊕𝑖 , which is in-dexed via the masked choice 𝑡𝑚𝑝 . Therefore, by the mechanics of OT, in the online phase the receiver can use 𝑢 𝑐 to decrypt only the message corresponding to its selection choice 𝑐 , and in this way it obtains the matching share ⟨𝑙𝑡 ⟩𝑅 .To avoid the exponential blow-up of comparing wide integers directly, for example, 232 OT messages for 32-bit, each input is partitioned into 8×4-bit chunks, so each 4-bit comparison needs only 24 online OT messages during the leaf comparison phase (Step #1). However, this blockwise merging design introduces an expensive communication cost: the per-block comparison bits must be securely multiplied layer by layer via Beaver’s triple–based multiplication to produce the final result (Step#2, FTreeMerge ). Each merge point requires 2×Beaver’s triple-based secure multiplications. Under the standard ROT-to-triple construction, this consumes 4×
+
+ROTs per merge. Therefore, the merging step contributes 4(𝑛 − 1)
+
+additional ROTs on top of the 𝑛 × 𝑘 ROTs already incurred by 
+
+𝑛 × FComp . As observed in [ 11 , 12 ], ROT generation dominates both computation and communication in practice, making it the primary bottleneck across both steps of the protocol. Moreover, even when all branches execute in parallel, the online communication depth remains log 2 𝑛 for 𝑛 chunks, introducing log 2 𝑛 round-trip latency barriers that constitute another major bottleneck. 
+
+## 2.2 Security Definition 
+
+The key difference between TAMI-MPC and previous TEE-based MPC systems lies in the security boundary as shown in Figure 3. Prior work [ 25 , 26 ] imports secret inputs (e.g., client data) into the TEE for online computation, requiring the TEE to protect these se-crets during inference. In contrast, TAMI-MPC derives its inference security from MPC rather than the TEE: the TEE is restricted to offline phase input-independent tasks (e.g., correlated randomness generation), while inference is performed entirely via MPC primi-tives in the untrusted domain. Thus, the TEE is not involved during Figure 3: Comparison of security boundary between state-of-the-art TEE-based works [25, 26] and TAMI-MPC. 
+
+online inference; even if the TEE is compromised at this stage, both client and server secrets remain protected by MPC. 
+
+## 3 TAMI-MPC Secure Comparison FMill 
+
+In this section, we present the two core primitives—TEE-assisted leaf comparison FComp and tree merge FPolyMult —which together enable two-round (including offline and online) secure comparison (Millionaires’ protocol, denoted as FMill ). We then further optimize this design by interleaving the two primitives and reusing correlated randomness, substantially improving the performance. 
+
+## 3.1 TEE-assisted Leaf Comparison FComp 
+
+As shown in Figure 2, state-of-the-art leaf comparison builds on 1-out-of-2 OT and requires two online rounds. In the first round, the receiver sends 𝑥 𝑗 ⊕ 𝑐 to the sender as the OT selection mask. This round can be eliminated if both parties locally derive 𝑥 𝑗 and the selection bit 𝑐 from synchronized seeds via a pseudorandom generator (PRG) inside their TEEs. Our key observation is that, in OT-based leaf comparison for nonlinear evaluation, one of the two OT inputs is always an input-independent random value [ 8, 13 ,16 , 17 ]. Concretely, after a linear layer computation (e.g., a convo-lution), the server returns a homomorphically encrypted output 
+
+Enc (𝑜𝑢𝑡𝑝𝑢𝑡 ) masked by a one-time mask 𝑀 , so the client receives 
+
+Enc (𝑜𝑢𝑡𝑝𝑢𝑡 ) − 𝑚𝑎𝑠𝑘 . This masking protects the server’s secrets (e.g., model weights). The next step runs the Millionaires’ protocol on (𝑜𝑢𝑡𝑝𝑢𝑡 − 𝑚𝑎𝑠𝑘, 𝑚𝑎𝑠𝑘 ). Because 𝑚𝑎𝑠𝑘 is independent of the client input and can be derived within the TEE, these masks can be generated offline without communication while preserving se-curity. In our leaf comparison, the input 𝑥 equals the 𝑚𝑎𝑠𝑘 ; hence 
+
+𝑥 𝑗 (Figure 4) can be deterministically generated on both sides via synchronized PRG within TEE during the offline phase. The remaining challenge is the selection bit 𝑐 : in standard pro-tocols, 𝑐 is produced during ROT generation and revealed only to the receiver. Building on SilentFlow [ 11 ], which derives ROTs non-interactively inside the TEE, we observe that 𝑐 appears as an internal intermediate that is normally discarded. Our key idea is to retain 𝑐 inside the TEE at both parties (never exposing it to the host), so each side deterministically derives the same structured random-ness for 𝑐 from synchronized seeds. Combined with locally deriving the input-independent mask 𝑥 𝑗 , this removes the first online round in Figure 2. It should be noted that 𝑥 𝑗 and 𝑐 are input-independent, yet retain-ing them in the TEE poses a security risk if the TEE is compromised. For example, knowing 𝑥 𝑗 could reveal the receiver’s parameters (e.g., model weights), while knowing 𝑐 could expose related OT values. In our design, only 𝑡𝑚𝑝 is needed during the online phase 
+
+Figure 4: Design of FComp 
+
+Figure 5: Design of FPolyMult 
+
+for secure comparison; 𝑥 𝑗 and 𝑐 are discarded after computing 𝑡𝑚𝑝 .This ensures the protocol remains secure without relying on TEE protection during the online phase , aligning with our goal of main-taining online phase security even if the TEE is breached—a key distinction from prior TEE-based approaches [7, 25]. 
+
+## 3.2 TEE-assisted Tree Merge FPolyMult 
+
+State-of-the-art tree merge operation ( FTreeMerge ) can be viewed as a sequence of multiplications. In current methods, each level must wait for the previous level’s outputs, leading to log 2 𝑛 online rounds (Figure 2) and intensive offline work to prepare Beaver triples. To remove this sequential dependency, we perform a one-round polynomial multiplication that merges all 𝑛 inputs at once as shown in Figure 5. Specifically, we rewrite the product in masked form and expand it under the additive secret sharing form: 
+
+> 𝑛 −1
+
+Ö
+
+> 𝑗 =0
+
+𝑙𝑡 𝑗 =
+
+> 𝑛 −1
+
+Ö
+
+> 𝑗 =0
+
+𝑙𝑡 𝑗 ⊕ 𝑟 𝑗 ⊕ 𝑟 𝑗 
+
+ =
+
+> 𝑛 −1
+
+Ö
+
+> 𝑗 =0
+
+(
+
+> 1
+
+∑︁  
+
+> 𝑠 𝑗 =0
+
+(𝑙𝑡 𝑗 ⊕ 𝑟 𝑗 )𝑠 𝑗 𝑟 1⊕𝑠 𝑗  
+
+> 𝑗
+
+), (1) expanding this expression gives every term as a subset-product of 
+
+𝑙𝑡 𝑗 − 𝑟 𝑗 factors and a subset-product of the 𝑟 𝑗 ’s. The only messages that need to be exchanged online are the masked differences 𝑙𝑡 𝑗 −𝑟 𝑗 .Each party obtains these by exchanging their additive shares ⟨𝑙𝑡 𝑗 ⟩⊕ ⟨𝑟 𝑗 ⟩ and reconstructing 𝑙𝑡 𝑗 ⊕ 𝑟 𝑗 . After this one exchange, each side completes its output share locally using pre-shared subset-product shares of the 𝑟 𝑗 ’s. One challenge is that such subset-product shares of 𝑟 𝑗 are typi-cally generated with communication-heavy cryptographic primi-tives such as ROT. Instead, we derive them non-interactively from synchronized seeds inside the TEE, eliminating the reported ROT generation computation and communication overhead [ 8, 13 , 16 , 17 ]. Consequently, the log 2 𝑛 online rounds plus 4×( 𝑛 −1) ROTs generation collapse to a single round that exchanges the 𝑙𝑡 𝑗 ⊕ 𝑟 𝑗 values; all remaining work is local. We use the product of 𝑛 = 3 terms as an illustrative example to explain the one-round polynomial multiplication; the actual tree-merge formulation based on our one-round polynomial multiplica-tion is presented in §3.3. Specifically, consider the one-round poly-nomial multiplication for 𝑛 = 3. Define ˜𝑙𝑡 0 = 𝑙𝑡 0 ⊕ 𝑟 0, ˜𝑙𝑡 1 = 𝑙𝑡 1 ⊕ 𝑟 1,and ˜𝑙𝑡 2 = 𝑙𝑡 2 ⊕ 𝑟 2. Let 𝑝 ∈ { 0, 1} denote the party ( 𝑝 = 0 for the client and 𝑝 = 1 for the server). The secure product can then be expanded and evaluated locally as follows: 
+
+Î2 
+
+> 𝑗 =0
+
+𝑙𝑡 𝑗 = ( ˜𝑙𝑡 0 ⊕ 𝑟 0)( ˜𝑙𝑡 1 ⊕ 𝑟 1)( ˜𝑙𝑡 2 ⊕ 𝑟 2) (2) 
+
+= ˜𝑙𝑡 0 ˜𝑙𝑡 0 ˜𝑙𝑡 0 ⊕ 𝑟 0 ˜𝑙𝑡 1 ˜𝑙𝑡 2 ⊕ 𝑟 1 ˜𝑙𝑡 0 ˜𝑙𝑡 2 ⊕ 𝑟 2 ˜𝑙𝑡 0 ˜𝑙𝑡 1
+
+⊕ 𝑟 0𝑟 1 ˜𝑙𝑡 2 ⊕ 𝑟 0𝑟 2 ˜𝑙𝑡 1 ⊕ 𝑟 1𝑟 2 ˜𝑙𝑡 0 ⊕ 𝑟 0𝑟 1𝑟 2.
+
+The parties compute local shares as 
+
+⟨Î2
+
+> 𝑗 =0
+
+𝑙𝑡 𝑗 ⟩𝑝 = ⟨𝑟 0⟩𝑝 ˜𝑙𝑡 1 ˜𝑙𝑡 2 ⊕ ⟨ 𝑟 1⟩𝑝 ˜𝑙𝑡 0 ˜𝑙𝑡 2 ⊕ ⟨ 𝑟 2⟩𝑝 ˜𝑙𝑡 0 ˜𝑙𝑡 1 (3) 
+
+⊕ ⟨ 𝑟 0𝑟 1⟩𝑝 ˜𝑙𝑡 2 ⊕ ⟨ 𝑟 0𝑟 2⟩𝑝 ˜𝑙𝑡 1 ⊕ ⟨ 𝑟 1𝑟 2⟩𝑝 ˜𝑙𝑡 0 ⊕ 𝑝 ⟨𝑟 0𝑟 1𝑟 2⟩𝑝 .
+
+## 3.3 Further Optimization 
+
+Opt.#1: Interleaving leaf comparison and tree-merge to re-duce half of the communication. Because the inputs of tree merge multiplication FPolyMult are produced by the leaf comparison, we note that on one side (e.g., the sender in Figure 4), the output 
+
+⟨𝑙𝑡 𝑗 ⟩𝑆 is an input-independent, locally generated share (Algorithm 1 in [ 17 ]). Thus, we move this input-generation step into the TEE, en-abling both parties to derive it via synchronized seeds during the of-fline phase. In the subsequent FPolyMult , the receiver no longer needs to obtain ⟨𝑙𝑡 𝑗 ⟩𝑆 ⊕ ⟨ 𝑟 𝑗 ⟩𝑆 from the sender; it is already available from the leaf comparison step inside the TEE. The masked difference can then be formed locally as 𝑙𝑡 𝑗 ⊕𝑟 𝑗 = (⟨ 𝑙𝑡 𝑗 ⟩𝑅 ⊕ ⟨ 𝑟 𝑗 ⟩𝑅 ) ⊕ (⟨ 𝑙𝑡 𝑗 ⟩𝑆 ⊕ ⟨ 𝑟 𝑗 ⟩𝑆 ),with the sender’s term released from the TEE. This removes one of the two cross-party messages in the FPolyMult , effectively halving its communication cost. 
+
+Opt.#2: Reusing correlated randomness during FPolyMult . The general case of the tree merge polynomial can be defined as 
+
+FTreeMerge (𝑥, 𝑦 ; 𝑚, 𝑛 ) :=
+
+> 𝑚 −1
+
+∑︁ 
+
+> 𝑖 =0
+
+𝑛 −1Ö
+
+> 𝑗 =0
+
+(𝑥 𝑗 ⊕ 𝑦 𝑗 )𝐸 𝑖,𝑗 
+
+
+
+, (4) where 𝐸 𝑖,𝑗 ∈ N is the exponent of (𝑥 𝑗 ⊕ 𝑦 𝑗 ) in polynomial 𝑖 , and 
+
+𝑥 and 𝑦 are the sender and receiver shares, respectively. In the baseline protocol of Figure 5, the required correlated randomness (e.g., subset products of 𝑟 𝑗 ) grows as 
+
+𝑁 naive =
+
+> 𝑚 −1
+
+∑︁ 
+
+> 𝑖 =0
+
+(2   
+
+> Í𝑛 −1
+> 𝑗 =0𝐸 𝑖,𝑗
+
+− 1). (5) The first observation is that, viewed row-wise , all shares in each 
+
+FPolyMult are Boolean. Hence, for bits 𝑎, 𝑏 ∈ { 0, 1} and any integer 
+
+𝑛 ≥ 1, (𝑎 ⊕ 𝑏 )𝑛 = 𝑎 ⊕ 𝑏 . Equivalently, for each term (𝑥 𝑗 ⊕ 𝑦 𝑗 )𝐸 𝑖,𝑗 
+
+the exponent does not change the value, i.e., (𝑥 𝑗 ⊕ 𝑦 𝑗 )𝐸 𝑖,𝑗 = 𝑥 𝑗 ⊕ 𝑦 𝑗 ,and 𝑁 naive simplifies to 
+
+𝑁 opt =
+
+> 𝑚 −1
+
+∑︁ 
+
+> 𝑖 =0
+
+(2𝑛 −1 − 1). (6) 
+
+Figure 6: Toy example of correlated randomness reuse. 
+
+The second observation is that, viewed column-wise , multiple polynomials often contain the same factor (𝑥 𝑗 ⊕ 𝑦 𝑗 ), so the cor-responding correlated randomness can be safely reused without weakening security. Let 𝐸 ∈ N𝑚 ×𝑛 be the exponent matrix; a reuse opportunity exists whenever if column 𝑗 has more than one positive entry 𝐸 𝑖,𝑗 > 0. For each row 𝑖 , define the active index set 𝐴 𝑖 := { 𝑗 ∈ { 0, . . . , 𝑛 − 1} : 𝐸 𝑖,𝑗 > 0}. For any index subset 
+
+𝑇 ⊆ { 0, . . . , 𝑖 − 1}, write 𝐴 𝑇 := Ñ𝑡 ∈𝑇 𝐴 𝑡 . The number of correlated randomness required is 
+
+𝑁 𝑓 𝑖𝑛𝑎𝑙 = 
+
+> 𝑖 −1
+
+∑︁ 
+
+> ℓ=0
+
+(− 1)ℓ∑︁    
+
+> 𝑇 ∈𝐶 𝑖 −1
+> ℓ
+
+
+
+2 𝐴 𝑖 ∩𝐴 𝑇 − 1
+
+
+
+, (7) where 𝐶 𝑖 −1 
+
+> ℓ
+
+denotes all ℓ-element subsets of {0, . . . , 𝑖 −1}. Intuitively, whenever two rows 𝑖 and 𝑞 share positions 𝑗 with 𝐸 𝑖,𝑗 > 0 and 
+
+𝐸 𝑞,𝑗 > 0, the associated randomness for (𝑥 𝑗 ⊕ 𝑦 𝑗 ) is reusable. A toy example is shown in Figure 6. The first row 𝑅 1 has no reuse because it is the initial allocation. For the second row 𝑅 2, reusable randomness is determined by the overlap of active sets 𝐴 1 and 𝐴 2,i.e., 𝐴 1 ∩ 𝐴 2. Similarly, for the third row 𝑅 3, reuse is computed from the pairwise overlaps 𝐴 1 ∩ 𝐴 3 and 𝐴 2 ∩ 𝐴 3. Importantly, the triple overlap 𝐴 1 ∩ 𝐴 2 ∩ 𝐴 3 must also be accounted for via inclusion– exclusion to avoid double subtraction when computing the total reusable randomness. 
+
+## 4 TAMI-MPC Hardware Architecture 
+
+In this section, we present an FPGA-based architecture design for TAMI-MPC’s core primitives, TEE-assisted leaf comparison FComp 
+
+and tree merge FPolyMult , as shown in Figure 7. 
+
+## 4.1 Overall Architecture 
+
+The leaf-comparison module mainly comprises a correlated OT (COT) generator [ 11 ] and a comparison unit ( FComp , Figure 4) whose compute core contains multiple subunits of correlation-robust hash (CRH) [ 6]. The CRH derives the required ROT from the initial COT Figure 7: System-level accelerator architecture of TAMI-MPC. 
+
+and prepares the mask used to decrypt the oblivious messages 𝑚 𝑖 re-ceived from the sender, during online inference. The CRH operation and COT generation are the primary computational bottlenecks in leaf comparison; we mitigate it via pipeline-aware interleav-ing within each CRH core. The tree-merge module consists of two units, data exchange and polynomial evaluation ( FPolymult , Figure 5). The polynomial-evaluation stage incurs frequent data movement (e.g., reading pre-generated correlated randomness), which forms a major bottleneck; our memory-efficient data-management scheme alleviates this overhead. 
+
+## 4.2 Pipeline-Aware Interleaved Leaf Comparison FComp 
+
+CRH is used in OT to preserve the security of messages even when their inputs are correlated—for example, the message 𝑚 𝑖 computed during leaf comparison. A typical AES-based CRH consists of two stages: seed-based key expansion and AES encryption. The key expansion stage derives a sequence of round keys from a seed, and the AES encryption applies the round function [ 4] to produce pseu-dorandom outputs that serve as the hash values. State-of-the-art works [ 8, 17 ] suffer from a loop-carried dependency induced by a read-modify-write pattern between these two stages, i.e., AES en-cryption must wait for key expansion to produce the corresponding round keys (Figure 8(a)). Even worse, strictly sequential execution typically requires storing intermediate key-expansion results be-fore they are consumed by the AES rounds, incurring additional memory traffic during the encryption phase. To overcome these limitations, we propose an architecture that exploits data layout transformation and spatial parallelism . Instead of generating the key schedule for each AES block in sequence, our design interleaves the round keys of multiple independent blocks. This reorganization enables a deeply pipelined streaming archi-tecture (Figure 8(b)), allowing key expansion and encryption for multiple blocks to proceed concurrently. By eliminating the need to store intermediate key schedules, the proposed design achieves higher memory efficiency and substantially improves throughput. In our design, four parallel Key Expansion and AES units are in-stantiated to fully utilize the dataflow resources. The theoretical advantages of this proposed architecture are sum-marized in Table 1. The table provides an analytical comparison of computation cycles and memory transfers required to process 
+
+𝑁 data blocks, benchmarked against a conventional pipelined de-sign. As shown, the proposed approach substantially reduces both computational complexity and memory traffic. The reduction in ... ... ... ... ... 
+
+> ...
+
+Figure 8: Pipeline demonstration of the hash function. 
+
+memory transfers, from 58 𝑁 to only 6.25 𝑁 , is particularly signifi-cant, as it alleviates bandwidth bottlenecks by enabling local data reuse within the parallel processing units and fully utilizing the 512-bit AXI interface. 
+
+Table 1: Analytical comparison of conventional and proposed CRH evaluation architectures for processing 𝑁 blocks.                       
+
+> Method Computation Cycles Memory Transfers
+> CPU (11 𝑁 +100 )KE + ( 11 𝑁 +42 )AES 22 𝑁 KE +36 𝑁 AES
+> Proposed 𝑚𝑎𝑥 (13 𝑁 /4KE ,18 𝑁 /4AES )12 𝑁 /4KE +13 𝑁 /4AES
+
+## 4.3 Memory-Efficient Management for Tree Merge FPolyMult 
+
+The TEE-assisted tree merge typically comprises two stages: a one-round data exchange and local polynomial computation. During the exchange, the receiver send masked values ⟨𝑙𝑡 𝑗 ⟩𝑅 ⊕ ⟨ 𝑟 𝑗 ⟩𝑅 and locally reconstruct 𝑙𝑡 𝑗 ⊕ 𝑟 𝑗 via TEE (§3.3, Opt.#1) for subsequent computation. These operations involve only lightweight XORs. However, the dominant bottleneck is data movement: buffering the exchanged values requires large on-chip storage, and fetching the correctly indexed correlated randomness triggers intensive memory reads. To address the memory bottleneck, we introduce a memory-efficient data-management scheme. Our key observation is that the access pattern for reading the corresponding correlated random-ness is fixed across different comparisons and independent of the values 𝑙𝑡 𝑗 ; only the randomness (e.g., the mask 𝑟 𝑗 ) is updated, with-out branching on 𝑙𝑡 𝑗 , yielding a deterministic sequence of indices. This determinism enables a precomputed LUT, delivering a 4.89 ×
+
+speedup. Furthermore, by prefetching randomness and optimizing the dataflow in masked reconstruction, the masked data can be streamed directly to the final stage, reducing memory overhead and providing an additional 5.56 × gain. We further reformulate the algorithm to exploit parallelism via a 
+
+packed polynomial execution model . The approach is driven by two observations: (1) the original data layout creates a stage imbalance— data exchange runs nearly four times faster than polynomial evalu-ation; and (2) the computations across leaf comparisons are inde-pendent and use only simple Boolean logic. We therefore encode multiple leaf comparisons into contiguous memory locations via the data type adaptor module (Figure 7), enabling parallel polyno-mial evaluation followed by an XOR reduction. This fully packed layout exploits parallel evaluation of multiple comparisons per memory access, balances pipeline latency across stages, increases throughput, and improves memory efficiency. Consequently, up to 
+
+512 /𝑛 comparisons ( 𝑛 is the number of chunks during leaf compar-ison) and data transfers are completed per transmission, yielding an additional 154 .84 × speedup. 
+
+## 5 Experiments 5.1 Experiment Setup 
+
+We conduct our evaluation under three representative network set-tings: (1) a LAN scenario with 3 Gbps bandwidth and 0.3 ms latency, (2) a WAN-like configuration with 200 Mbps bandwidth and 50 ms latency, and (3) a mobile scenario with 100 Mbps bandwidth and 80 ms latency. For the secure computation primitives, we imple-ment TAMI-MPC on a low-end Zynq-7000 SoC FPGA running at 170 MHz, synthesized using Vitis High-Level Synthesis [ 1 ]. We de-fine the client profile as a constrained configuration representative of typical IoT sensors (single-core 800MHz CPU, 512MB memory). In order to be able to run LLM (BERT-base) frameworks, we use a AMD 3995 64-core CPU as our edge server to reflect a realistic edge-AI resource profile.Intel SGX [3] is used as the TEE testbed. 
+
+## 5.2 Analysis of FComp and FPolyMult 
+
+First, as shown in Table 2, the communication of TEE-assisted leaf-comparison drops from 𝑛 (𝑘 + 2𝑘 ) to 𝑛𝑘 , and the number of interaction rounds reduces to one. Second, for tree merge, unlike prior approaches that generate ROT and then derive Beaver triples-based [ 5, 12 ] multiplication, our design produces the required shares directly inside the TEE, eliminating the ROT-to-triple operation and its well-known cache-bound overhead [ 11 , 12 ]. As a result, the offline phase is fully communication-free, and the online phase collapses from log 2 𝑛 to 1 with one-eighth the communication vol-ume under Opt.#1 in §3.3. A potential concern with our one-round tree-merge protocol is that it appears to require exponential-level growth of correlated-randomness generation. However, with our reuse design in Opt.#2 (§3.3), we eliminate the bulk of randomness-generation work, making its cost negligible. As shown in Figure 9, evaluating secret input bitlengths from 32 to 64 bits yields two orders of magnitude improvement—up to 584 × speedup. 
+
+## 5.3 FPGA Acceleration 
+
+Table 3 summarizes the post-place-and-route hardware utilization and timing results running a data size of 2×10 5 for the CRH module, the leaf-comparison unit, the tree-merge stage, and the overall Millionaires’ protocol during the online inference phase. We use 𝛍 
+
+Figure 9: Correlated randomness generation comparison in tree merge (a) Volume (KB) (b) Time ( 𝜇 s). The y-axis is shown on a logarithmic scale. 
+
+Figure 10: TAMI-MPC performance on different nonlinear activation layers. Input data size is 2 × 10 5.
+
+Cheetah as our CPU baseline for comparison. Our pipeline-aware interleaving strategy achieves a 3.97 × speedup for the CRH module, which in turn enables a 2.72 × speedup in the leaf-comparison stage. Our memory-efficient data-management scheme reduces memory overhead and balances the performance–resource trade-off between stages, yielding a 80 .15 × reduction in latency compared to Beaver’s triple-based approach. Overall, the design uses about 30% BRAM and 1% DSP on a Z-7030, showing suitability for resource-limited embedded platforms. 
+
+## 5.4 Nonlinear Evaluation 
+
+We evaluate TAMI-MPC on nonlinear activation microbenchmarks— ReLU, Softmax, and GeLU—summarized in Figure 10. All three frameworks rely heavily on secure comparisons, which constitute the primary bottleneck. Beyond secure comparisons, the Softmax and GeLU layers are also approximated via polynomial evaluation (e.g., reciprocal, exponential) [ 13 , 16 ]. To compute these polynomi-als, we replace the original Beaver-triple–based polynomial multi-plications with our FPolymult to further optimize the computation. Our implementations follow Bumblebee’s Softmax and GeLU [ 13 ]and Cheetah’s ReLU [ 8] protocol. With our design, the speedups are substantial: up to 7× over Cheetah’s ReLU in the WAN-network setting, and 8.8× and 10 × over Bumblebee’s Softmax and GeLU, respectively. As network quality improves and communication overhead becomes negligible, the gains increase further, e.g., GeLU reaching up to 17 × with FPGA acceleration. 
+
+## 5.5 End-to-end Framework 
+
+In Table 4, we compare our framework against state-of-the-art PPM-LaaS systems for CNNs and LLMs, including CryptFlow2, Cheetah, and Bumblebee. We evaluate three models: SqueezeNet (lightweight CNN), ResNet-50 (large-scale CNN), and BERT-base (lightweight Table 2: Complexity comparison with state-of-the-art Millionaires’ protocols. We use: 𝑛 = number of chunks; 𝑘 = input bitlength (bits); 𝜆 = security parameter (default 𝜆 = 128 ). Schemes Leaf comparison ( FComp ) Tree merge ( FPolyMult )
+
+Computation Operations Communication Cost (bits) Computation Operations Communication Cost (bits) Offline Offline Online Round Offline Offline Online Round Cryptflow2 [17], BOLT [16] 𝑛𝑘 ×  21
+
+-ROT (IKNP [10]) 2𝜆𝑛𝑘 𝑛 (𝑘 + 2𝑘 ) 2 4(𝑛 − 1) ×  21
+
+-ROT 8(𝑛 − 1)( 𝜆 + 1) 8(𝑛 − 1) log 2 𝑛 
+
+Cheetah [8], Bumblebee [13] 𝑛𝑘 ×  21
+
+-ROT (Ferret [21]) 𝜆 2 (log 2 𝑛𝑘 )/ 𝑛𝑘 𝑛 (𝑘 + 2𝑘 ) 2 4(𝑛 − 1) ×  21
+
+-ROT 4(𝑛 − 1) 8(𝑛 − 1) log 2 𝑛 
+
+TAMI-MPC 𝑛𝑘 ×  21
+
+-ROT (SilentFlow) [11] 0 𝑛𝑘 1 Eq. 7 0 𝑛 − 1 1
+
+Table 3: Accelerator performance on the Zynq-7030 FPGA. Cheetah runs on an 800 MHz CPU with 512 MB of memory. 
+
+Module FPGA resources Latency (ms) 
+
+BRAM DSP FF LUT Base Ours Spd. CRH 182 0 5082 13448 716.713 - -29 1 14352 12114 - 180.451 3.97 ×
+
+FComp 15 2 28721 20679 486.496 179.205 2.72 ×
+
+FPolyMult 21 0 10100 5515 117.017 1.46 80 .15 ×
+
+FMill 38 2 41565 27758 608.271 179.909 3.38 ×
+
+LLM). Under a mobile network setting, our design completes in-ference in 108s for ResNet-50 and 24s for SqueezeNet, achieving 
+
+4.86 ×∼ 4.95 × speedups over prior frameworks. For LLMs, we ob-tain a 7.44 × speedup under the same setting. This improvement is even more pronounced than for CNNs, primarily because existing state-of-the-art frameworks rely heavily on approximating Softmax and GeLU via polynomial-based multiplication, which becomes a critical bottleneck; thus, nonlinear layer evaluation is far more dominant in LLM workloads. Overall, our design primarily tar-gets nonlinear evaluation and demonstrates its effectiveness under resource-constrained devices and network conditions. 
+
+Table 4: Performance comparison with state-of-the-art CNN&LLM PPMLaaS frameworks. 
+
+Frame work Model LAN WAN Mobile 
+
+Base Ours Spd. Base Ours Spd. Base Ours Spd. Cryptflow2 [ 17 ]SqueezeNet 335 178 1.88 × 550 182 3.02 × 821 206 3.98 ×
+
+ResNet-50 427 162 2.63 × 1034 292 3.54 × 1662 376 4.42 ×
+
+Cheetah [8] SqueezeNet 101 23 4.39 × 203 43 4.72 × 317 64 4.95 ×
+
+ResNet-50 168 88 1.9 × 381 97 3.92 × 525 108 4.86 ×
+
+Bumblebee [ 13 ]BERT-base 701 272 2.57 × 1761 309 5.69 × 2828 380 7.44 ×
+
+## 6 Conclusion 
+
+Secure MPC-based PPML inference is now within reach for resource-constrained platforms, as our design tackles the dominant perfor-mance bottlenecks in the underlying MPC primitives. TAMI-MPC employs a trusted-acceleration, minimally interactive MPC archi-tecture that supports ResNet-50 inference in 108 s over mobile net-works on hardware comparable to IoT sensors or wearables, deliv-ering a 4.86 × speedup. For LLMs such as BERT-base, TAMI-MPC finishes inference under 380s, achieving a 7.44 × speedup. 
+
+## References 
+
+[1] AMD. 2024. Vitis High-Level Synthesis User Guide (UG1399) . https://docs.amd. com/r/en-US/ug1399-vitis-hls. [2] Amin Aminifar, Matin Shokri, and Amir Aminifar. 2024. Privacy-preserving edge federated learning for intelligent mobile-health systems. Future Generation Computer Systems 161 (2024), 625–637. doi:10.1016/j.future.2024.07.035 [3] Victor Costan and Srinivas Devadas. 2016. Intel SGX explained. Cryptology ePrint Archive (2016). [4] Morris J Dworkin, Elaine Barker, James R Nechvatal, James Foti, Lawrence E Bassham, E Roback, James F Dray Jr, et al . 2001. Advanced encryption standard (AES). (2001). [5] Jun Feng, Yefan Wu, Hong Sun, Shunli Zhang, and Debin Liu. 2025. Panther: Prac-tical secure 2-party neural network inference. IEEE Transactions on Information Forensics and Security (2025). [6] Chun Guo, Jonathan Katz, Xiao Wang, Chenkai Weng, and Yu Yu. 2020. Bet-ter Concrete Security for Half-Gates Garbling (in the Multi-instance Setting). In 
+
+Advances in Cryptology – CRYPTO 2020: 40th Annual International Cryptology Con-ference, CRYPTO 2020, Santa Barbara, CA, USA, August 17–21, 2020, Proceedings, Part II (Santa Barbara, CA, USA). Springer-Verlag, Berlin, Heidelberg, 793–822. doi:10.1007/978-3-030-56880-1_28 [7] Pengzhi Huang, Thang Hoang, Yueying Li, Elaine Shi, and G Edward Suh. 2024. Efficient Privacy-Preserving Machine Learning with Lightweight Trusted Hard-ware. Proceedings on Privacy Enhancing Technologies (2024). [8] Zhicong Huang, Wen-jie Lu, Cheng Hong, and Jiansheng Ding. 2022. Cheetah: Lean and fast secure Two Party deep neural network inference. In 31st USENIX Security Symposium (USENIX Security 22) . 809–826. [9] Chiraag Juvekar, Vinod Vaikuntanathan, and Anantha Chandrakasan. 2018. GAZELLE: A low latency framework for secure neural network inference. In 
+
+27th USENIX security symposium (USENIX security 18) . 1651–1669. [10] Vladimir Kolesnikov and Ranjit Kumaresan. 2013. Improved OT extension for transferring short secrets. In Advances in Cryptology–CRYPTO 2013: 33rd Annual Cryptology Conference, Santa Barbara, CA, USA, August 18-22, 2013. Proceedings, Part II . Springer, 54–70. [11] Zhuoran Li, Hanieh Totonchi Asl, Ebrahim Nouri, Yifei Cai, and Danella Zhao. 2026. Silentflow: Leveraging Trusted Execution for Resource-Limited MPC via Hardware-Algorithm Co-design. In 31th Asia and South Pacific Design Automation Conference (ASP-DAC) .[12] Chenqi Lin, Kang Yang, Tianshi Xu, Ling Liang, Yufei Wang, Zhaohui Chen, Run-sheng Wang, Mingyu Gao, and Meng Li. 2025. Ironman: Accelerating Oblivious Transfer Extension for Privacy-Preserving AI with Near-Memory Processing. 
+
+MICRO-58: 58th Annual IEEE/ACM International Symposium on Microarchitecture 
+
+(2025). [13] Wen-jie Lu, Zhicong Huang, Zhen Gu, Jingyu Li, Jian Liu, Cheng Hong, Kui Ren, Tao Wei, and WenGuang Chen. 2025. Bumblebee: Secure two-party inference framework for large transformers. Network and Distributed Systems Security (NDSS) Symposium (2025). [14] Kiwan Maeng and G Edward Suh. 2024. Accelerating relu for mpc-based private inference with a communication-efficient sign estimation. Proceedings of Machine Learning and Systems 6 (2024), 128–147. [15] Pratyush Mishra, Ryan Lehmkuhl, Akshayaram Srinivasan, Wenting Zheng, and Raluca Ada Popa. 2020. Delphi: A cryptographic inference system for neural networks. In Proceedings of the 2020 Workshop on Privacy-Preserving Machine Learning in Practice . 27–30. [16] Qi Pang, Jinhao Zhu, Helen Möllering, Wenting Zheng, and Thomas Schneider. 2024. Bolt: Privacy-preserving, accurate and efficient inference for transformers. In 2024 IEEE Symposium on Security and Privacy (SP) . IEEE, 4753–4771. [17] Deevashwer Rathee, Mayank Rathee, Nishant Kumar, Nishanth Chandran, Divya Gupta, Aseem Rastogi, and Rahul Sharma. 2020. Cryptflow2: Practical 2-party secure inference. In Proceedings of the 2020 ACM SIGSAC Conference on Computer and Communications Security (CCS) . 325–342. [18] M Sadegh Riazi, Mohammad Samragh, Hao Chen, Kim Laine, Kristin Lauter, and Farinaz Koushanfar. 2019. XONN: oblivious deep neural network inference. In 
+
+28th USENIX Security Symposium (USENIX Security 19) . 1501–1518. [19] Bita Darvish Rouhani, M Sadegh Riazi, and Farinaz Koushanfar. 2018. Deepsecure: Scalable provably-secure deep learning. In Proceedings of the 55th annual Design Automation Conference (DAC) . 1–6. [20] Théo Ryffel, Pierre Tholoniat, David Pointcheval, and Francis Bach. 2022. AriaNN: Low-Interaction Privacy-Preserving Deep Learning via Function Secret Sharing. 
+
+Proceedings on Privacy Enhancing Technologies 1 (2022), 291–316. [21] Kang Yang, Chenkai Weng, Xiao Lan, Jiang Zhang, and Xiao Wang. 2020. Ferret: Fast extension for correlated OT with small communication. In Proceedings of the 2020 ACM SIGSAC Conference on Computer and Communications Security (CCS) .1607–1626. [22] Qiao Zhang, Tao Xiang, Chunsheng Xin, and Hongyi Wu. 2024. From Individual Computation to Allied Optimization: Remodeling Privacy-Preserving Neural Inference with Function Input Tuning. In 2024 IEEE Symposium on Security and Privacy (SP) . IEEE, 4810–4827. [23] Qiao Zhang, Chunsheng Xin, and Hongyi Wu. 2021. GALA: Greedy computation for linear algebra in privacy-preserved neural networks. Network and Distributed Systems Security (NDSS) Symposium (2021). [24] Mengyao Zheng, Dixing Xu, Linshan Jiang, Chaojie Gu, Rui Tan, and Peng Cheng. 2019. Challenges of Privacy-Preserving Machine Learning in IoT. In Proceedings of the First International Workshop on Challenges in Artificial Intelligence and Machine Learning for Internet of Things (AIChallengeIoT) (New York, NY, USA). Association for Computing Machinery, New York, NY, USA, 1–7. doi:10.1145/3363347.3363357 [25] Xing Zhou, Zhilei Xu, Cong Wang, and Mingyu Gao. 2022. PPMLAC: high per-formance chipset architecture for secure multi-party computation. In Proceedings of the 49th Annual International Symposium on Computer Architecture . 87–101. [26] Yuxuan Zhou, Zihan Wang, Lichao Wu, et al . 2022. Efficient privacy-preserving image classification for resource-constrained edge devices. In Proceedings of the 29th ACM Conference on Computer and Communications Security (CCS) .

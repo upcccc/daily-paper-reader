@@ -6,70 +6,49 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-26
-- 运行时间：2026-03-26 19:58:19 UTC
+- 最新运行日期：2026-03-27
+- 运行时间：2026-03-27 19:45:42 UTC
 - 运行状态：成功
-- 本次总论文数：16
-- 精读区：5
-- 速读区：11
+- 本次总论文数：9
+- 精读区：3
+- 速读区：6
 
 ### 今日简报（AI）
-今日深挖 16 篇前沿成果，重点攻克联邦学习在差分隐私下的个性化适配与公平性难题。
-满分论文 PAC-DP 提出的自适应剪裁技术与隐私约束下的公平分类方案最值得关注。
-建议开发者重点研究隐私计算与算法公平性的融合，以应对复杂多端的分布式协作场景。
-- 详情：[/202603/26/README](/202603/26/README)
+今日聚焦隐私计算底层创新，深度解析组合隐私数学建模与差分隐私增强技术。
+重点推荐利用 Birkhoff 多胞体优化多方聚合，以及通过随机裁剪实现“零成本” Patch 级差分隐私性能飞跃。
+建议关注隐私保护与硬件加速、联邦检索的跨界融合，探索更具鲁棒性的分布式智能方案。
+- 详情：[/202603/27/README](/202603/27/README)
 
 ### 精读区论文标签
-1. [PAC-DP: Personalized Adaptive Clipping for Differentially Private Federated Learning](/202603/26/2603.24003v1-pac-dp-personalized-adaptive-clipping-for-differentially-private-federated-learning)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：联邦学习中针对记录级本地差分隐私的个性化自适应裁剪
-2. [Federated fairness-aware classification under differential privacy](/202603/26/2603.24392v1-federated-fairness-aware-classification-under-differential-privacy)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：差分隐私下的联邦分类
-3. [Adaptive Federated Fine-Tuning of Self-Supervised Speech Representations](/202603/26/2603.21888v2-adaptive-federated-fine-tuning-of-self-supervised-speech-representations)  
+1. [Combinatorial Privacy: Private Multi-Party Bitstream Grand Sum by Hiding in Birkhoff Polytopes](/202603/27/2603.22808v2-combinatorial-privacy-private-multi-party-bitstream-grand-sum-by-hiding-in-birkhoff-polytopes)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：联邦学习中的隐私保护微调
-4. [On Gossip Algorithms for Machine Learning with Pairwise Objectives](/202603/26/2603.24128v1-on-gossip-algorithms-for-machine-learning-with-pairwise-objectives)  
+   evidence：多方求和的有限样本差分隐私分析
+2. [Amplified Patch-Level Differential Privacy for Free via Random Cropping](/202603/27/2603.24695v1-amplified-patch-level-differential-privacy-for-free-via-random-cropping)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：通过机器学习训练中的随机裁剪增强差分隐私
+3. [Spiking Personalized Federated Learning for Brain-Computer Interface-Enabled Immersive Communication](/202603/27/2603.22727v1-spiking-personalized-federated-learning-for-brain-computer-interface-enabled-immersive-communication)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：用于去中心化多智能体优化和学习的 Gossip 算法
-5. [HEART-PFL: Stable Personalized Federated Learning under Heterogeneity with Hierarchical Directional Alignment and Adversarial Knowledge Transfer](/202603/26/2603.24209v1-heart-pfl-stable-personalized-federated-learning-under-heterogeneity-with-hierarchical-directional-alignment-and-adversarial-knowledge-transfer)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：异构环境下的个性化联邦学习
+   evidence：防止敏感脑信号信息泄露的个性化联邦学习模型
 
 ### 速读区论文标签
-1. [ALMAB-DC: Active Learning, Multi-Armed Bandits, and Distributed Computing for Sequential Experimental Design and Black-Box Optimization](/202603/26/2603.21180v1-almab-dc-active-learning-multi-armed-bandits-and-distributed-computing-for-sequential-experimental-design-and-black-box-optimization)  
+1. [TAMI-MPC:Trusted Acceleration of Minimal-Interaction MPC for Efficient Nonlinear Inference](/202603/27/2603.24861v1-tami-mpctrusted-acceleration-of-minimal-interaction-mpc-for-efficient-nonlinear-inference)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于黑盒优化的分布式异步计算
-2. [Knowledge Priors for Identity-Disentangled Open-Set Privacy-Preserving Video FER](/202603/26/2603.21387v2-knowledge-priors-for-identity-disentangled-open-set-privacy-preserving-video-fer)  
+   evidence：使用安全多方计算的隐私保护机器学习
+2. [Revealing the influence of participant failures on model quality in cross-silo Federated Learning](/202603/27/2603.25289v1-revealing-the-influence-of-participant-failures-on-model-quality-in-cross-silo-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：隐私保护的视频面部表情识别
-3. [FedCVU: Federated Learning for Cross-View Video Understanding](/202603/26/2603.21647v1-fedcvu-federated-learning-for-cross-view-video-understanding)  
+   evidence：联邦学习中的可靠性与参与者故障
+3. [Supercharging Federated Intelligence Retrieval](/202603/27/2603.25374v1-supercharging-federated-intelligence-retrieval)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于跨视图视频理解的隐私保护联邦学习
-4. [PlanTwin: Privacy-Preserving Planning Abstractions for Cloud-Assisted LLM Agents](/202603/26/2603.18377v1-plantwin-privacy-preserving-planning-abstractions-for-cloud-assisted-llm-agents)  
+   evidence：基于机密计算的安全联邦RAG系统
+4. [Social Hippocampus Memory Learning](/202603/27/2603.25614v1-social-hippocampus-memory-learning)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：联邦学习中的隐私保护协作
+5. [Variational Encrypted Model Predictive Control](/202603/27/2603.19450v1-variational-encrypted-model-predictive-control)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：云辅助规划的隐私保护架构
-5. [Communication Lower Bounds and Algorithms for Sketching with Random Dense Matrices](/202603/26/2603.20966v1-communication-lower-bounds-and-algorithms-for-sketching-with-random-dense-matrices)  
+   evidence：通过加密模型预测控制实现隐私保护分布式优化
+6. [Secure Two-Party Matrix Multiplication from Lattices and Its Application to Encrypted Control](/202603/27/2603.22857v1-secure-two-party-matrix-multiplication-from-lattices-and-its-application-to-encrypted-control)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：机器学习中用于草图绘制的分布式内存算法
-6. [Knowledge Priors for Identity-Disentangled Open-Set Privacy-Preserving Video FER](/202603/26/2603.21387v1-knowledge-priors-for-identity-disentangled-open-set-privacy-preserving-video-fer)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：面部表情识别的隐私保护框架
-7. [Designing to Forget: Deep Semi-parametric Models for Unlearning](/202603/26/2603.22870v1-designing-to-forget-deep-semi-parametric-models-for-unlearning)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：通过半参数模型实现隐私保护的机器遗忘
-8. [A Critical Review on the Effectiveness and Privacy Threats of Membership Inference Attacks](/202603/26/2603.22987v1-a-critical-review-on-the-effectiveness-and-privacy-threats-of-membership-inference-attacks)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：成员推理攻击作为机器学习隐私度量标准的综述
-9. [PoiCGAN: A Targeted Poisoning Based on Feature-Label Joint Perturbation in Federated Learning](/202603/26/2603.23574v1-poicgan-a-targeted-poisoning-based-on-feature-label-joint-perturbation-in-federated-learning)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：联邦学习中的投毒攻击与防御机制
-10. [DP^2-VL: Private Photo Dataset Protection by Data Poisoning for Vision-Language Models](/202603/26/2603.23925v1-dp2-vl-private-photo-dataset-protection-by-data-poisoning-for-vision-language-models)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：视觉语言模型的隐私保护
-11. [Uncovering Memorization in Timeseries Imputation models: LBRM Membership Inference and its link to attribute Leakage](/202603/26/2603.24213v1-uncovering-memorization-in-timeseries-imputation-models-lbrm-membership-inference-and-its-link-to-attribute-leakage)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：机器学习模型中的隐私问题和推理攻击
+   evidence：用于隐私保护的安全两方计算
 
 
 <div class="dpr-home-promo-card">

@@ -1,0 +1,730 @@
+Title: mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption
+
+URL Source: https://arxiv.org/pdf/2603.22437v1
+
+Published Time: Wed, 25 Mar 2026 00:06:43 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption 
+
+# Tanvir Ahmed 
+
+Cornell Tech New York, New York, USA tanvir@infosci.cornell.edu 
+
+# Yixuan Gao 
+
+Cornell Tech New York, New York, USA yixuan@cs.cornell.edu 
+
+# Adnan Armouti 
+
+Cornell Tech New York, New York, USA armouti@cs.cornell.edu 
+
+# Rajalakshmi Nandakumar 
+
+Cornell Tech New York, New York, USA rajalakshmi.nandakumar@cornell.edu 
+
+## Abstract 
+
+We present mmFHE, the first system that enables fully ho-momorphic encryption (FHE) for end-to-end mmWave radar sensing. mmFHE encrypts raw range profiles on a light-weight edge device and executes the entire mmWave signal-processing and ML inference pipeline homomorphically on an untrusted cloud that operates exclusively on ciphertexts. At the core of mmFHE is a library of seven composable, data-oblivious FHE kernels that replace standard DSP routines with fixed arithmetic circuits. These kernels can be flexi-bly composed into different application-specific pipelines. We demonstrate this approach on two representative tasks: vital-sign monitoring and gesture recognition. We formally prove two cryptographic guarantees for any pipeline as-sembled from this library: input privacy, the cloud learns nothing about the sensor data; and data obliviousness , the execution trace is identical on the cloud regardless of the data being processed. These guarantees effectively neutralize various supervised and unsupervised privacy attacks on raw data, including re-identification and data-dependent privacy leakage. Evaluation on three public radar datasets (270 vital-sign recordings, 600 gesture trials) shows that encryption introduces negligible error: HR/RR MAE < 10 −3 bpm versus plaintext, and 84.5% gesture accuracy (vs. 84.7% plaintext) with end-to-end cloud GPU latency of 103 s for a 10 s vital-sign window and 37 s for a 3 s gesture window. These results show that privacy-preserving end-to-end mmWave sensing is feasible on commodity hardware today. 
+
+## 1 Introduction 
+
+Millimeter-wave (mmWave) radar has emerged as a new sensing modality for mobile health and ubiquitous com-puting, enabling continuous and unobtrusive monitoring of physiological and behavioral metrics such as respiration [ 2 ], heart rate [ 8 ], gait [ 30 ], sleep stages [ 47 ], fall detection [ 20 ]. Compared with cameras, radar operates unobtrusively in the background, provides privacy and avoids capturing identify-ing visual information, properties that make it well suited for continuous in-home health monitoring. However, as the complexity of mmWave applications in-creases, so does the required computation. Edge devices of-ten need to offload heavy computation (data processing, ML model inference) to cloud services. But offloading raw sensor data to a server introduces privacy risks on multiple fronts. First, transferring raw data to a remote server is inherently risky as not all cloud servers can be trusted. Second, raw radar data encodes far more than the target task requires, and an untrusted server can extract unintended information from it. For instance, a server running a gesture recognition system receives raw signals that also contain the user’s heart-beat, respiration, and biometric identity. Third, even without accessing data content, a server can exploit data-dependent execution patterns in the processing pipeline to infer the input [ 33 ]. The same risk applies to sensing pipelines, where data-dependent DSP routines expose scene content through execution behavior. One solution is to perform all computations on the device without sending data to the cloud. However, that signifi-cantly limits the applications that can be achieved. Recent work, RPRS [ 44 ], has explored using fully homomorphic en-cryption (FHE) as a cryptographic tool to partially address this problem: the entire upstream DSP chain executes in plaintext on the device, and only the final representation is encrypted before being sent to the cloud for neural-network inference. This protects the model weights, but not the user: all intermediate representations remain visible to the local server, and data-dependent DSP on unencrypted inputs can still leak information through timing side channels. We present mmFHE, the first system to encrypt the entire mmWave DSP and ML inference pipeline end to end. Raw range profiles are encrypted on the edge client using the Cheon-Kim-Kim-Song (CKKS) FHE scheme; the ciphertexts are sent to an untrusted cloud that executes the full pipeline  
+
+> arXiv:2603.22437v1 [cs.CR] 23 Mar 2026 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al.
+
+and returns an encrypted result; the client decrypts only the authorized outputs, Heart Rate (HR)/ Respiration rate (RR) in BPM, or a gesture logit vector. The cloud never ob-serves any plaintext value at any stage. mmFHE provides two formal privacy guarantees: input privacy: the cloud learns nothing about the content of the encrypted sensor stream (Theorem 4.1) and data obliviousness: the execution trace is identical regardless of what is being sensed (Proposition 4.2). The main challenge is that FHE frameworks support only three operations on encrypted data: addition, multiplication, and rotation. Typical mmWave sensing pipelines, however, rely on standard DSP that are incompatible with these opera-tions: FFT operation chains many sequential multiplications, CFAR detection branches on adaptive thresholds, target de-tection and phase extraction relies on argmax, vital sign re-covery requires arctan , ML inference depends on non-linear activations such as ReLU. For mmWave sensing, none of these have yet a direct equivalent under FHE. To address this, we redesign each stage as a fixed arith-metic circuit using only FHE-compatible operations. We re-place FFTs with plaintext matrix-vector products that achieve the same computation at a fraction of the multiplicative cost, replace CFAR and argmax with a branch-free soft power at-tention mechanism that processes every bin uniformly, and approximate arctan via a fixed-order Taylor expansion. The result is a library of seven composable FHE-compatible DSP kernels—energy integration, soft power attention, DFT, Soft I/Q extraction, FIR filtering, notch masking, and differential phase extraction. We verify each kernel outputs matching its plaintext counterpart, and provide formal proofs of input pri-vacy (Theorem 4.1) and data obliviousness (Proposition 4.2) for the end-to-end system. We summarize the contributions as follows: 
+
+• End-to-end encrypted radar pipeline. mmFHE is the first system to encrypt the entire mmWave DSP and ML inference pipeline, from raw range profiles through detection, feature extraction, and classifica-tion, on an untrusted cloud. No intermediate repre-sentation is ever exposed in plaintext, and two formal guarantees are provided: input privacy (Theorem 4.1) and data obliviousness (Proposition 4.2). 
+
+• FHE-friendly DSP kernel library. We design seven composable kernels: energy integration, soft-argmax, Doppler DFT, phase extraction, FIR filtering, notch masking, and Taylor arctan, each data-oblivious and fitting within a shared multiplicative depth budget without bootstrapping. 
+
+• Experimental validation. We evaluate on three pub-lic radar datasets (270 vital-sign recordings, 600 gesture trials). The encrypted pipeline achieves HR/RR MAE 
+
+< 10 −3 bpm with per-kernel encryption noise below 
+
+10 −5, and 84.5% gesture accuracy (vs. 84.7% plaintext, 99.8% prediction agreement). On a single GPU, end-to-end latency is 103 s for a 10 s vital-signs window and 37 s for a 3 s gesture window. Under mmFHE, all privacy attacks reduce to chance level, versus 99.9% user re-identification from plaintext intermediates. 
+
+## 2 Motivation 
+
+Consider a mmWave radar deployed for sleep stage classifica-tion. The inference pipeline is computationally heavy, so raw sensor data must be offloaded to the cloud. But the cloud now receives far more than what the task requires: the same raw stream encodes breathing patterns, heart rate, and biometric motion signatures that identify the individual—and nothing prevents the cloud from extracting all of it. We demonstrate this concretely on two public datasets, neither of which was collected for the inferences we show are possible. 
+
+User re-identification from gesture data. On a 60 GHz ges-ture dataset [ 37 ] (12 users, 5 gesture types), a random-forest classifier trained on 186 features from the raw IQ stream can achieve 99.9% user re-identification accuracy within a session (temporal 70/30 split) and 78.6% across physically different gesture types (train on {1,2,3}, test on {6,7}). So, the user identity is encoded in the same raw signal features that encodes the gestures. 
+
+Unsupervised linkability. An untrusted cloud may not have any labeled data to train, unlike the previous case. But the labels may not be necessary to make unauthorized biometric inferences: computing pairwise cosine distances over stan-dardized features, without training any classifier, suffices to link recordings to the same person. On a 77 GHz vital-sign dataset [ 46 ] of 50 children, this zero-knowledge attack achieves AUC = 0.981 (Figure 1, left). On the gesture dataset, AUC = 0.876. UMAP projections confirm that per-user clus-ters emerge without supervision (Figure 1, right). 
+
+Execution trace leakage from data-dependent algorithms. 
+
+Beyond data content, the execution trace of a sensing pipeline can itself reveal information without accessing any data value. Ohrimenko et al. [ 33 ] show that ML algorithms leak sensitive information through their execution patterns: the same program runs differently depending on what data it processes, and anyone observing how long it takes or how much memory it accesses can infer the input. In a radar pipeline, a routine that processes more data when more peo-ple are in the room, or runs longer when a target is moving, exposes scene information through timing alone, without ever seeing the encrypted data. This is the leakage channel formalized in Proposition 2.2. These risks share the same root cause: processing raw data encodes more information than the intended application mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Figure 1: Unsupervised privacy leakage from raw mmWave data. a): Linkability ROC on 50 children (AUC = 0.981). b): UMAP of gesture features (12 users); per-user clusters form without labels. 
+
+requires, and data-dependent DSP amplifies the privacy risks through observable execution behavior. We formalize these observations into the following propositions: 
+
+Proposition 2.1 (Inseparability Property and Biomet-ric Leakage of Coherent Radar Streams). Let {z[𝑟, 𝑡 ]} 𝐹 𝑡 =1
+
+be a plaintext FMCW range-profile stream with carrier wave-length 𝜆 , slow-time sampling rate 𝑓 𝑠 ≥ 2𝑓 𝜇 (where 𝑓 𝜇 is the highest micro-motion frequency of interest), and observation duration 𝐹 /𝑓 𝑠 ≥ 𝑇 min . Any protocol that grants a semi-honest server plaintext access to these stream, even for a limited task such as gesture recognition or presence detection, necessarily leaks sufficient information to reconstruct the target’s biomet-ric information (that are encoded in frequencies up to 𝑓 𝜇 ) such as heartbeat, respiration, gait. 
+
+Proposition 2.2 (Side-Channel Leakage from Data-De-pendent DSP). Standard radar DSP routines (e.g., CFAR de-tection, Kalman filtering) contain data-dependent control flow that branches on input values. A semi-honest server can dis-tinguish radar scenes from the observed execution trace alone, without accessing any data value. 
+
+mmFHE addresses both by encrypting raw radar data be-fore it leaves the client and executing the entire pipeline as fixed arithmetic circuits on ciphertexts. 
+
+## 3 mmFHE 
+
+mmFHE enables privacy preserving mmWave sensing with end-to-end fully homomorphic encryption (FHE). It starts by encrypting raw mmWave complex range profiles on the edge and sending the encrypted data to cloud, which exe-cutes the entire DSP and inference pipeline on encrypted data. Figure 2 illustrates the end-to-end architecture: the client encrypts the radar output; the cloud chains a library of FHE-compatible kernels over encrypted radar data and sends back the encrypted result; the client then decrypts only the authorized scalar outputs. The cloud never observes any unencrypted intermediate results at any stage. 
+
+## 3.1 Threat Model 
+
+Adversary. We adopt the semi-honest (honest-but-curious) model: the cloud faithfully executes a provided protocol but may analyze all observed inputs, intermediate values, and execution timing. Two independent leakage channels arise: (1) content leakage from plaintext data access, and (2) side-channel leakage from data-dependent execution traces. The adversary is computationally bounded and cannot break the Ring-LWE assumption (a cryptographic hardness assump-tion where it is computationally infeasible to distinguish noisy, structured polynomial equations from truly random ones). 
+
+Trust boundary. The client (edge radar device) is trusted: it generates cryptographic keys, holds the secret key, enforces output disclosure policies, and encrypts radar output into ciphertexts. The cloud receives only ciphertexts and public evaluation keys. Physical side-channel attacks on the client are out of scope. 
+
+Security goals. mmFHE provides two formal guarantees: in-put privacy : the cloud learns nothing about the content of the encrypted sensor stream (Theorem 4.1: input is indistinguish-able from noise) and data obliviousness : the execution trace is identical regardless of what is being sensed (Proposition 4.2). Proofs appear in §4. 
+
+Assumptions and limitations. mmFHE assumes the client device is trusted and physically secure; attacks on the client hardware are out of scope. The system does not protect against a malicious cloud that deviates from the protocol (like not running the provided code faithfully or returning values not computed on the original client’s data), only semi-honest adversaries are considered. Metadata such as the timing and frequency of sensing sessions is also not protected. 
+
+## 3.2 Homomorphic Encryption Primer 
+
+In mmFHE, the client encrypts its input, sends the cipher-text to the server, and the server returns an encrypted result that only the client can decrypt, all based on the CKKS FHE scheme [ 11 ]. CKKS is designed for approximate arithmetic on real and complex numbers, suitable for mmWave sens-ing. CKKS security relies on the Ring Learning with Errors (RLWE) problem [ 28 ], believed to resist both classical and quantum attacks. We follow the HE Standard [ 6 ] to achieve 
+
+≥ 128 -bit security. 
+
+Key Generation. The client runs KeyGen once to produce four artifacts: a secret key 𝑠𝑘 , a public encryption key 𝑝𝑘 , a relinearization key 𝑟𝑙𝑘 , and a set of Galois keys 𝑔𝑘 . The secret key 𝑠𝑘 is used for decryption and never leaves the client. The public key 𝑝𝑘 encrypts plaintext vectors into ciphertexts. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. Trusted Client Semi-honest Cloud       
+
+> Radar
+> Capture Encryption
+> CKKS Key
+> Gen
+> Public
+> Key
+> Rotation
+> Key
+> Relin.
+> Key
+> Secret
+> Key
+> Decryption Result
+> K1: Energy
+> Integration
+> K2: Soft
+> Power Attn.
+> K3: DFT via
+> Block-Diag.
+> Matmul
+> K4: Soft I/Q
+> Peak Bin
+> Extraction
+> K5: FIR
+> Filtering
+> K6: Notch
+> Mask
+> K7: Diff.
+> Phase Ext.
+> ML
+> Inference
+> Wireless Sensing
+> Pipeline Circuit
+> Composed of
+> mmFHE Kernels:
+> CKi1Ki2Kin
+> z[t]
+> raw ADC / rangeFFT
+> pk
+> gk
+> rlk
+> sk
+> result = Dec sk (C(Enc pk (z[t])))
+> Enc pk (z[t])
+> C(Enc pk (z[t])) mmFHE Kernels
+
+Figure 2: mmFHE end-to-end architecture. The trusted edge client encrypts raw range-FFT profiles under CKKS and sends ciphertexts to an untrusted cloud, which executes the entire DSP and ML inference pipeline using composable FHE kernels (K1–K7) over encrypted data. The cloud never observes any plaintext value. The client decrypts only authorized outputs (HR/RR BPM or waveform, or classification logits). Legend: black arrows = unencrypted plaintext, teal arrows = encrypted ciphertext, dashed arrows = keys. 
+
+The relinearization key 𝑟𝑙𝑘 is required after every ciphertext-ciphertext multiplication to reduce the ciphertext back to two polynomials; without it, ciphertext size grows with each multiplication operation. Galois keys 𝑔𝑘 enable slot rotations; one key is needed per distinct rotation amount 𝑘 . The client sends (𝑝𝑘, 𝑟𝑙𝑘, 𝑔𝑘 ) to the cloud along with the encrypted data. The cloud uses these keys during homomorphic evaluation but cannot decrypt any result. 
+
+Encoding and Batching. A single ciphertext packs up to 
+
+𝑁 /2 real values into parallel slots. All arithmetic applies slot-wise, so one ciphertext operation processes upto 𝑁 /2 values simultaneously. With 𝑁 =32768 , a single encrypted add or multiply acts on 16,384 values at once. This single instruction, multiple data (SIMD) batching makes encrypted radar DSP practical: an entire range profile or Doppler spectrum fits in one ciphertext. 
+
+Three Primitive Operations. All encrypted computation is built from three operations. Addition: Enc (a) + Enc (b) =
+
+Enc (a + b), slot-wise, free in depth. Multiplication: Enc (a) · 
+
+Enc (b) = Enc (a ⊙ b), slot-wise, consumes one depth level. 
+
+Rotation: Rot (Enc (a), 𝑘 ) cyclically shifts the slot vector by 𝑘 
+
+positions, free in depth but requires Galois keys. Non-linear functions such as arg max , comparison, and arctan have no direct encrypted counterpart and must be approximated as polynomial circuits subject to a depth budget 𝐿 .
+
+Depth Budget. Every CKKS ciphertext carries a finite mul-tiplicative depth budget 𝐿 . Each ciphertext-ciphertext mul-tiplication consumes one level; after 𝐿 multiplications the ciphertext cannot be used further. Addition is free. The entire DSP pipeline must be expressed as a circuit with at most 𝐿 
+
+sequential multiplications. Deeper circuits require either a larger 𝑁 or bootstrapping, a costly operation that refreshes the depth budget. mmFHE pipelines are designed to fit within their budgets without bootstrapping. 
+
+## 3.3 System Design 
+
+3.3.1 Overview. mmFHE prevents both biometric and side-channel leakage, and breaks the inseparability identified in Prop. 2.1 and 2.2, by encrypting outgoing radar streams on the client and executing the entire signal-processing and in-ference chain over ciphertexts on the cloud. Our key contribu-tion is a set of data-oblivious, FHE-compatible mmWave sens-ing kernels that enable the cloud to execute standard DSP-like algorithms without ever accessing plaintext data. Be-cause the cloud never observes plaintext values, mmFHE pre-vents the biometric leakage in Prop. 2.1. Moreover, data obliv-iousness closes both the content leakage and side-channel leakage identified in §3.1. These kernels can be composed into complete mmWave sensing pipelines: the cloud chains them over ciphertexts, and the trusted client decrypts only the authorized scalar outputs. Figure 2 summarizes the sys-tem architecture, which consists of two main components: (1) Trusted Client does the following: 
+
+Pre-encryption stage: after receiving the range FFT from the mmWave sensor, removes clutter and normalizes the data. 
+
+Encryption stage: generates CKKS keys (𝑝𝑘, 𝑠𝑘, 𝑟𝑙𝑘, 𝑔𝑘 ). The secret key 𝑠𝑘 never leaves the trusted client device(s). The client encrypts the normalized data using 𝑝𝑘 , packs the en-crypted data, and sends the ciphertext together with 𝑔𝑘 to the cloud. 
+
+Decryption and output stage: after receiving encrypted results from the cloud, decrypts them using 𝑠𝑘 and recovers only the authorized outputs, such as HR/RR waveforms, HR/RR mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+BPM values, a target-bin index, or the logit vector for classi-fication. (2) Semi-honest Cloud receives the ciphertext and 𝑟𝑙𝑘, 𝑝𝑘, 𝑔𝑘 
+
+from the client. It selects and chains kernels from the mmFHE library according to the target application. Each kernel is a fixed arithmetic circuit, and some kernels require 𝑔𝑘 to oper-ate on ciphertexts. The cloud returns the encrypted result to the client and never observes any plaintext value. 
+
+3.3.2 Pre-Cloud Client-Side Algorithms. The pre-cloud client-side algorithms in mmFHE depend on the type of radar stream available at the client: (i) raw I/Q data, (ii) range-FFT data, or (iii) highly processed lossy data. Since most commercial, non-research-grade radars directly provide a range-FFT-like stream, we assume type (ii) in this paper. However, as will become clear shortly, mmFHE can also be integrated with type (i) radars. 
+
+Preprocessing. We start from the range FFT (Eq. 14) for each antenna and chirp across 𝑅 range bins, and apply clutter removal through mean subtraction: ˜z[𝑡 ] = z[𝑡 ] − 1
+
+> 𝐹
+
+Í𝑙 z[𝑙 ].The resulting values are then scaled to a numerically stable range for FHE. 
+
+Encryption and Packing. CKKS operates on real-valued slot vectors, complex radar data ˜z[𝑡 ] = v(re ) + 𝑗 · v(im ) is split into separate real and imaginary ciphertexts: ˆv(re ) =
+
+Enc 𝑝𝑘 (v(re ) ), ˆv(im ) = Enc 𝑝𝑘 (v(im ) ), where {v(re ) , v(im ) } ∈ 
+
+R𝑁 /2 is an encrypted frame. The ciphertext packing can be simple or optimized, depending on the downstream applica-tion. For example: 
+
+Vital signs: each frame is packed across 𝑅 range bins into the first 𝑅 slots. 
+
+Doppler pipelines (e.g., dynamic classification): to reduce the number of rotations required in the later stages, per-frame data from 𝐴 antennas × 𝑅 range bins × 𝐷 chirps is inter-leaved using slot [𝑎 · 𝑅𝐷 + 𝑟 · 𝐷 + 𝑐 ], yielding 𝐴𝑅𝐷 active slots out of 𝑁 /2 total. This layout places each antenna-range group’s 𝐷 chirps in contiguous slots, enabling the block-diagonal Doppler DFT to operate via slot rotations within each 𝐷 -element block. 
+
+3.3.3 Cloud-Side Algorithms. The cloud receives ciphertexts and public parameters from the client, and evaluates application-specific signal-processing kernels directly on encrypted data. In a conventional plaintext sensing pipeline, these operations include power computation, highest-energy-bin selection, phase extraction, CFAR, FIR filtering, FFT computation, fre-quency estimation, and related steps. A primer on conven-tional FMCW signal-processing algorithms is provided in Appendix A. The main challenge is that many standard DSP algorithms are not directly compatible with FHE. In particular, FHE does not support data-dependent branching or operations that cannot be expressed as compositions of addition, multiplica-tion, and rotation. As a result, a plaintext sensing pipeline cannot be ported to FHE by simply replacing plaintext values with ciphertexts. To address this gap, mmFHE provides a library of cloud-side kernels that together replicate the functionality of a plaintext DSP pipeline over ciphertexts. For operations that are naturally compatible with FHE, such as DFT and FIR filtering, mmFHE redesigns them to execute efficiently un-der homomorphic constraints. For operations that are not directly compatible with FHE, such as highest-energy-bin se-lection, phase extraction, and CFAR, mmFHE constructs FHE-friendly approximations that preserve the intended function-ality. These kernels can be used individually or composed into complete sensing pipelines. All mmFHE kernels are data-oblivious: they execute the same sequence of additions, multiplications, and rotations regardless of the encrypted input. As a result, the cloud-side execution trace does not reveal information about the underlying radar scene. We describe these kernels below. 
+
+Kernel 1: Energy Integration. This kernel computes the per-bin signal power. For each range bin 𝑟 , the cloud evaluates: 
+
+𝐸 𝑟 =
+
+> 𝐹
+
+∑︁  
+
+> 𝑡 =1
+
+
+
+Re ( ˜𝑧 𝑟 [𝑡 ]) 2 + Im ( ˜𝑧 𝑟 [𝑡 ]) 2
+
+. (1) This is the standard energy accumulation step used to identify bins with consistently strong reflections over time. Under FHE, the cloud computes 𝐸 𝑟 on a fresh ciphertext, which consumes one multiplicative level, and then accumu-lates the result across frames using homomorphic additions, which are depth-free. The output is a single packed cipher-text containing the energies of all 𝑅 range bins. 
+
+Kernel 2: Soft Power Attention. This kernel replaces stan-dard radar CFAR thresholding or hard argmax in mmFHE with a branch-free polynomial attention mechanism that processes every bin uniformly. Given an energy profile 𝐸 𝑟 ,mmFHE computes the power-weighted statistics: 
+
+𝑤 𝑟 = 𝐸 𝛾 𝑟 , 𝑁 =
+
+> 𝑅 −1
+
+∑︁  
+
+> 𝑟 =0
+
+𝑟 𝑤 𝑟 , 𝐷 =
+
+> 𝑅 −1
+
+∑︁  
+
+> 𝑟 =0
+
+𝑤 𝑟 , (2) where the sharpening exponent 𝛾 controls how strongly the weights concentrate on dominant bins. When 𝛾 =1, the weighted statistics reduce to an energy centroid; as 𝛾 → ∞ ,the weight concentrates on the maximum-energy bin, ap-proaching hard argmax. This enables a first-moment estimate of the target bin, ˆ𝑟 = 𝑁 /𝐷 .This formulation is easily implemented in FHE because it avoids data-dependent branching. The weights 𝑤 𝑟 are com-puted through sequential square operations, each consuming depth 1; larger 𝛾 yields sharper selection at the cost of higher Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+depth. In our experiments, 𝛾 =2 is sufficient for range-energy profiles, while 𝛾 =4 provides sharper selection when applied to higher-dimensional sensing maps such as range-angle maps, and range-Doppler maps. 
+
+Kernel 3: DFT via Block-Diagonal Matmul. The DFT is a core operation in radar sensing, used to transform tem-porally or spatially organized measurements into Doppler or angle-domain representations. In plaintext systems, this transform is typically implemented using FFT butterflies. Un-der FHE, however, each butterfly stage consumes one mul-tiplicative depth level, making the standard FFT realization inefficient. To reduce this cost, mmFHE instead expresses the windowed, shifted DFT as a plaintext matrix-vector multi-plication, which decomposes into additions, multiplications by plaintext constants, and rotations while consuming only a single depth level. This matrix-vector product is imple-mented using the Halevi-Shoup diagonal method [ 18 ] with baby-step/giant-step (BSGS) scheduling, which groups and reuses rotations to substantially reduce the number of ci-phertext rotations and required rotation keys in practice. The windowed DFT kernel ( 𝐷 × 𝐷 ) is: 
+
+W = 𝑊 𝑑,𝑛 = 𝑤 [𝑛 ] · 𝑒 − 𝑗 2𝜋 𝐷 𝜎 (𝑑 ) · 𝑛 , 𝑑, 𝑛 ∈ [ 𝐷 ] (3) where 𝑤 [𝑛 ] is the Hanning window and 𝜎 is the fftshift 
+
+permutation ( 𝜎 (𝑑 ) = (𝑑 + 𝐷 /2) mod 𝐷 ). Splitting W into real and imaginary parts, C = W(re ) and S = W(im ) , and then tiling them block-diagonally 𝐴𝑅 times to match the slot layout, gives: 
+
+ˆd(re ) = ˜C · ˆv(re ) − ˜S · ˆv(im ) , ˆd(im ) = ˜S · ˆv(re ) + ˜C · ˆv(im ) , (4) where ˜C = I𝐴𝑅 ⊗ C and ˜S = I𝐴𝑅 ⊗ S are the block-diagonal replications. This makes the DFT practical under FHE while preserving the same linear transform. 
+
+Kernel 4: Soft I/Q Extraction of Highest-Energy Bin. In vital-sign sensing, phase is typically extracted from the range bin with the highest energy. Under FHE, however, hard bin selection is not possible because it requires data-dependent control flow. mmFHE therefore replaces this step with a soft, branch-free alternative. For each frame 𝑡 , the cloud computes a per-frame energy mask that concentrates on the highest-energy range bin and uses it to extract soft-weighted I/Q scalars: 
+
+𝑚 𝑟 [𝑡 ] = [Re ( ˜z𝑟 [𝑡 ]) 2 + Im ( ˜z𝑟 [𝑡 ]) 2]𝑃 𝜙 , (5) 
+
+𝐼 [𝑡 ] =
+
+> 𝑅 −1
+
+∑︁  
+
+> 𝑟 =0
+
+𝑚 𝑟 [𝑡 ] · Re ( ˜z𝑟 [𝑡 ]) , 𝑄 [𝑡 ] =
+
+> 𝑅 −1
+
+∑︁  
+
+> 𝑟 =0
+
+𝑚 𝑟 [𝑡 ] · Im ( ˜z𝑟 [𝑡 ]) .
+
+(6) As 𝑃 𝜙 increases, the mask becomes more concentrated on the dominant range bin, making (I, Q) = (𝐼 [𝑡 ], 𝑄 [𝑡 ]) approach the I/Q values of the highest-energy bin. The resulting en-crypted outputs remain in ciphertext form and feed directly into subsequent kernels without intermediate decryption. In our experiments, 𝑃 𝜙 = 4 − 5 is sufficient. 
+
+Kernel 5: FIR Filtering. FIR (finite impulse response) fil-tering is easily translated to FHE because it is purely feed-forward: each output is a weighted sum over a fixed input window, with no data-dependent control flow. For each pass-band 𝑏 , the filtered I/Q signals are expressed as: 
+
+I(𝑏 ) 
+
+> 𝑓
+
+= T(𝑏 ) I, Q(𝑏 ) 
+
+> 𝑓
+
+= T(𝑏 ) Q, (7) where T(𝑏 ) is the Toeplitz matrix formed from the plain-text filter taps of pass-band 𝑏 . This requires only plaintext-ciphertext multiplication together with additions and rota-tions. 
+
+Kernel 6: Notch Mask. For static clutter removal in the range-Doppler domain under FHE, mmFHE applies a fixed binary plaintext mask: 
+
+𝑚 [𝑑 ] =
+
+(
+
+0, 𝑑 ∈ [⌊ 𝐷 /2⌋, ⌈𝐷 /2⌉) 
+
+1, otherwise (8) This mask suppresses the near-zero Doppler region associ-ated with static clutter while preserving all other bins. The mask is a public constant, so it can be realized as a single depth-free plaintext-ciphertext multiplication. 
+
+Kernel 7: Differential Phase Extraction via Taylor Series Ap-proximation. To extract phase under FHE, mmFHE replaces 
+
+arctan (𝑄 /𝐼 ) with a low-order Taylor approximation that op-erates directly on consecutive filtered samples. Given 
+
+𝑦 [𝑡 ] = Q𝑓 [𝑡 ] I𝑓 [𝑡 −1] − I𝑓 [𝑡 ] Q𝑓 [𝑡 −1],𝑥 [𝑡 ] = I𝑓 [𝑡 ] I𝑓 [𝑡 −1] + Q𝑓 [𝑡 ] Q𝑓 [𝑡 −1],
+
+Δ𝜙 [𝑡 ] ≈ 𝑦 [𝑡 ] 𝑥 [𝑡 ]2 − 13 𝑦 [𝑡 ]3, (9) mmFHE uses a third-order Taylor expansion of arctan (𝑦 /𝑥 ),which requires three ciphertext-ciphertext multiplicative lev-els. This approximation avoids division and inverse trigono-metric evaluation, both of which are expensive under FHE. For low-SNR scenarios where |Δ𝜙 | ≪ 1, a first-order ap-proximation Δ𝜙 ≈ 𝑦 is often sufficient, trading accuracy for a shallower circuit. 
+
+Encrypted ML Inference. Following standard practice for encrypted neural inference [ 22 , 44 ], mmFHE uses a fully connected (FC) network with square activations, 𝜎 (𝑥 ) = 𝑥 2.The trained weights {W(ℓ ) , b(ℓ ) } are provided to the cloud as public plaintext parameters. For each layer ℓ = 1, . . . , 𝐿 :
+
+h(ℓ ) =
+
+(  W(ℓ ) h(ℓ −1) + b(ℓ ) ◦2 ℓ < 𝐿, 
+
+W(𝐿 ) h(𝐿 −1) + b(𝐿 ) ℓ = 𝐿, (10) mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+where (·) ◦2 denotes element-wise squaring. 
+
+Weight folding. The soft-power normalization factor 𝑠 𝛾 /𝐹 
+
+and the column permutation that reorders the encrypted slot layout to match the training feature order are both folded into W(1) at setup time. These are plaintext operations on the weight matrix and therefore incur zero depth cost. Here, 
+
+𝑠 = 𝑅 · 𝐴 · ( Í𝑛 𝑤 [𝑛 ]) 2 denotes the expected spectral energy scale. Depth consumed: 2𝐿 − 1.
+
+3.3.4 Post-Cloud Client-Side Result Recovery. After cloud execution, the client selectively decrypts only the outputs authorized for the target application. The client decrypts the returned ciphertexts results using 𝑠𝑘 :
+
+Dec 𝑠𝑘 (Enc 𝑝𝑘 (result )) 
+
+for result ∈ { HR, heart waveform, RR, respiration waveform, target bin N/D, ML logits }. No post-processing beyond scalar division and plaintext argmax are required. 
+
+3.3.5 Example Application Pipelines. We demonstrate mmFHE on two standard radar pipelines. The underlying plaintext algorithms follow Alizadeh et al. [ 8] for vital signs and Li et al. [25] for gesture recognition. 
+
+Encrypted Vital Signs. The vital-signs pipeline composes K1 →K2 →K4 →K5 →K7 →K3 →K1 →K2. K1 computes per-bin energy, and K2 localizes the target bin, yielding the first decrypted output, ˆ𝑟 = 𝑁 /𝐷 . K4 extracts soft I/Q samples from the selected range region, K5 filters them into the respi-ration (0.1–0.6 Hz) and heart-rate (0.8–2.5 Hz) bands, and K7 recovers differential phase. Over the resulting phase trace, K3 computes a narrowband DFT, K1 computes the power spectrum |𝑋 [𝑘 ]| 2, and K2 performs spectral sharpening and weighted frequency averaging to produce the second de-crypted output, HR/RR in BPM. The total circuit depth is 11 with third-order Taylor approximation, or 9 with first-order approximation. Optionally, the encrypted phase waveform after K5 can be returned for client-side visualization. See Table 1 for the full depth accounting. 
+
+Encrypted Dynamic Radar Classification The classifica-tion pipeline processes 𝐹 frames and composes K3 →K1 →K2+K6 before a final encrypted FC pass. For each frame, K3 com-putes the encrypted range-Doppler spectrum, K1 computes its power map, and K2 together with K6 applies soft power attention with notch masking ( 𝛾 =4) to produce weighted fea-tures. These features are accumulated across frames through homomorphic addition. The final accumulated vector is then passed through the encrypted FC network (§3.3.3): FC 1 →(·) ◦2 → FC 2 → (·) ◦2 → FC 3. The total circuit depth is 11. The client decrypts the 5-class logit vector and applies plaintext argmax. See Table 1. 
+
+Table 1: Multiplicative depth accounting for both mmFHE pipelines. Each pipeline encrypts the input into fresh depth-0 ciphertexts.                                                                                    
+
+> Stage Depth ΣOperation
+> Pipeline 1: Vital Signs (depth 11, 𝑁 =32768 )
+> Energy integ. 11Re 2+Im 2
+> Soft attention 12𝐸 2
+> 𝑟 (𝛾 =2)[→ ˆ𝑟 ]
+> Phase extr. 13( | 𝑧 |2)2·𝑧 , sum FIR filter 14pt-ct tap accumulation Taylor arctan 37𝑦𝑥 2−𝑦 3/3(3rd-order) Window + DFT 18pt-ct inner product
+> |𝑋 |219Re 2+Im 2
+> Merge + sharp 2110 Merge + squaring Wt. freq. avg. 111 pt-ct + sum [→ BPM ]
+> Pipeline 2: Dynamic Classification (depth 11, 𝑁 =32768 )
+> Doppler DFT 11BSGS block-diag mat-mul
+> |𝑧 |212Re 2+Im 2
+> Notch mask 13Plaintext ×cipher Soft power 𝛾 =425Two squarings Feature weighting 16𝑝 ×𝑤
+> Frame accum. 06Addition only FC 1+ square 28Matmul + 𝑥 2
+> FC 2+ square 210 Matmul + 𝑥 2
+> FC 3111 Matmul (final logits)
+
+## 4 Security Analysis 
+
+mmFHE promises the two security properties: Input Privacy 
+
+and Data Obliviousness under the CKKS scheme [ 11 ]. In this section we formally prove that we achieve the security guar-antees as properties of the mmFHE system design. 
+
+## 4.1 Input Privacy and Data Obliviousness of mmFHE 
+
+Input Privacy: Since ˜z[𝑡 ] is the input to mmFHE, we need to prove that the cloud learns nothing about the mmWave radar data input when it is encrypted under the CKKS scheme. 
+
+Theorem 4.1 (Input Privacy guarantee of mmFHE). 
+
+Let E be an IND-CPA-secure CKKS scheme. For any two se-quences of sensor inputs {˜z0 [𝑡 ]} 𝐹 𝑡 =1 and {˜z1 [𝑡 ]} 𝐹 𝑡 =1, no PPT ad-versary can distinguish {Enc ( ˜z0 [𝑡 ])} from {Enc ( ˜z1 [𝑡 ])} with non-negligible advantage. 
+
+The proof follows a hybrid argument over 𝐹 frames: if an adversary can distinguish the encrypted sensor streams of two different inputs, it can also break the IND-CPA security of the underlying CKKS scheme, which is assumed secure. Full proof in Appendix C. 
+
+Remark on public parameters. The DFT kernel W (Eq. 3), notch mask 𝑚 [𝑑 ] (Eq. 8), FIR filter taps T(𝑏 ) (Eq. 7), and FC weights W(ℓ ) , b(ℓ ) (Eq. 10) are public model parameters Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+shared with the cloud. They contain no user-specific infor-mation and do not require privacy protection. Input Privacy protects the sensor data, not the processing circuit. 
+
+Data Obliviousness: mmFHE protects the computation trace by design: each kernel is implemented as a fixed arithmetic circuit, and their sequential composition inherits oblivious-ness by a standard argument [16]. 
+
+Theorem 4.2 (Data Obliviousness Guarantee of mmFHE). 
+
+Any cloud-side pipeline composed exclusively of mmFHE ker-nels (K1–K7) and FC inference layers is data-oblivious: for any two ciphertext inputs of the same dimension, the execu-tion trace (sequence of operations, memory addresses read and written) is identical. 
+
+The proof first shows that each kernel is individually data-oblivious by construction (its operation sequence depends only on public parameters, not on the encrypted input), then uses induction to show that sequential composition of obliv-ious kernels preserves obliviousness. Full proof in Appen-dix D. 
+
+## 4.2 Leakage Profile 
+
+We explicitly quantify the residual information exposed to the cloud. 
+
+Leakage 1: Protocol interaction pattern. The protocol is unidirectional per window: client sends encrypted data, cloud evaluates, client decrypts. Ciphertext count and size are fixed by public configuration, not input data. All ciphertexts are IND-CPA secure (Theorem 4.1). 
+
+Leakage 2: Public configuration metadata. The cloud ob-serves 𝑅, 𝐷, 𝐴, 𝐹, 𝛾 , filter order, Taylor order, FC architecture, and session timing—all fixed prior to deployment. 
+
+Leakage 3: Public model parameters. DFT kernel W,notch mask 𝑚 [𝑑 ], FIR taps T(𝑏 ) , and FC weights W(ℓ ) , b(ℓ ) —analogous to circuit descriptions in standard FHE protocols. In summary, total leakage consists exclusively of public metadata and model parameters. No range-bin index, phase value, energy distribution, or vital-sign waveform is exposed. 
+
+## 4.3 Defense Against CKKS-Specific Attacks 
+
+The CKKS scheme introduces unique security considerations due to its approximate arithmetic semantics. 
+
+Noise-growth analysis. In branching circuits, CKKS noise variance can differ depending on the computation path, po-tentially leaking the branch condition. Because mmFHE exe-cutes a fixed circuit with no branching (Theorem 4.2), noise growth is identical for all inputs at every ciphertext level. An adversary analyzing output noise variance learns nothing beyond the public parameters. 
+
+Approximate arithmetic. Each CKKS rescaling introduces rounding error 𝑂 (2−Δ). For the vital signs pipeline ( Δ=40 bits, 
+
+Table 2: Radar and dataset configurations. All datasets are publicly available.                          
+
+> Dataset Task Radar 𝑓 𝑐 BW FPS Subj. GT
+> (GHz) (GHz) (Hz) Children [46] Vital IWR6843 60 3.75 20 50 BSM6501K Parralejo [36] Vital IWR6843ISK 60.25 0.48 10 110 ECG Zenodo [37] Gesture BGT60TR13C 60.5 433 8Labels
+
+𝐿 =14 ), cumulative error is ∼ 14 × 2−40 ≈ 1.3 × 10 −11 . For the dynamic classification pipeline ( Δ=50 bits, 𝐿 =11 ), cumulative error is ∼ 11 × 2−50 ≈ 9.8 × 10 −15 . Both are orders of mag-nitude below the radar sensor noise floor (typically > 10 −6
+
+in normalized units). The rounding artifacts do not create a distinguishable side channel. 
+
+IND-CPA 𝐷 and passive decryption attacks. Li and Mic-ciancio [ 24 ] showed that CKKS is vulnerable to chosen-ciphertext attacks where an adversary recovers the secret key from approximate decryption results. In mmFHE, the cloud never receives decrypted outputs—all decryption oc-curs on the trusted client—so the IND-CPA 𝐷 vector does not apply. 
+
+## 5 Evaluation 5.1 Setup 
+
+Datasets. We evaluate mmFHE on three public FMCW radar datasets spanning two sensing applications. Table 2 summa-rizes the radar configuration for each dataset. For vital signs we use Children [ 46 ] (pediatric subjects) and Parralejo [ 36 ](lying/sitting conditions). For gesture recognition we use Zenodo 60 GHz [ 37 ] (21,000 samples, 5 classes, 6 environ-ments). 
+
+Processing configuration. For the vital-signs pipeline we use 𝑅 =64 range bins and 𝐹 =200 frames, corresponding to a 10 s sample window for Children (20 Hz) and a 20 s sample window for Parralejo (10 Hz), yielding 6 bpm and 3 bpm fre-quency resolution respectively. For the gesture pipeline, we retain 𝑅 =16 range bins and 𝐶 =32 chirps across 𝐴 =3 anten-nas, yielding 𝐴𝑅𝐶 =1,536 active slots per ciphertext out of 
+
+𝑁 /2=2,048 available. 
+
+Baselines. We compare mmFHE against the following three baselines. (1) Standard DSP on Plaintext : standard DSP algo-rithms executed on unencrypted data; (2) mmFHE on Plain-text : identical DSP kernels executed on unencrypted data; and (3) RPRS [ 44 ] on plaintext feature maps : encrypted post-processed radar features with FHE CNN inference. 
+
+Metrics. For vital signs application pipeline we compare mmFHE against baseline (2) described above; HR/RR MAE is the mean absolute difference in the estimated rate (bpm), waveform MSE is the mean squared error of the extracted phase signal per window, and latency is GPU wall-clock mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 3: Per-kernel encryption noise (encrypted vs. plaintext execution of the identical pipeline).                          
+
+> Kernel MSE Max |err |Depth
+> K1: Energy integ. 4.1×10 −14 1.5×10 −61K2: Soft attention 5.5×10 −66.9×10 −32K3: Doppler DFT 4.8×10 −22 7.8×10 −11 1K4: Phase extr. 4.6×10 −14 1.0×10 −63K5: FIR filter 1.5×10 −14 5.2×10 −74K6: Notch mask 8.2×10 −24 7.0×10 −12 3K7: Taylor arctan 5.3×10 −15 2.3×10 −75
+
+time per second of sensor data recording. For gesture clas-sification we report top-1 accuracy under 6-fold leave-one-environment-out cross-validation. 
+
+Training. The FC networks are trained offline in plaintext using the exact feature computation required for inference. After convergence the weights are frozen and shipped to the cloud as public plaintext parameters. 
+
+Implementation. We implement both application pipelines using OpenFHE [ 5 ] (CPU, Python/C++) and FIDESlib [ 4](GPU, C++) CKKS libraries with parameters listed in Ta-ble 1. All experiments run on a single workstation with an AMD Ryzen 9 5950X (16C/32T), 64 GB RAM, and an NVIDIA RTX 3090 Ti (24 GB, CUDA 12.9). Client-side encryption and decryption is run on the same machine for benchmarking; in deployment they would execute on an edge device co-located with the radar sensor. 
+
+## 5.2 Kernel Fidelity and Noise Budget 
+
+Table 3 reports the per-kernel encryption noise : the MSE be-tween encrypted and plaintext execution of the identical pipeline, isolating the error introduced by CKKS ciphertext arithmetic alone. Each row is measured cumulatively (i.e., af-ter all preceding kernels), over 3 test recordings per pipeline. All kernels achieve encryption noise below 10 −5, confirming that CKKS arithmetic does not meaningfully perturb kernel outputs at any stage. 
+
+FHE-friendly approximation fidelity (Baseline 1). Of the seven kernels, four (K1, K3, K5, K6) are mathematically equivalent to their standard DSP counterparts—energy sum-mation, DFT via matrix multiply, FIR convolution via Toeplitz multiply, and elementwise masking introduce no approxi-mation error beyond CKKS noise. The remaining kernels replace non-polynomial operations with FHE-compatible al-ternatives: K4 uses soft weighted I/Q extraction instead of hard peak selection, and K7 uses a first-order Taylor cross-product instead of atan2 followed by phase unwrapping and differentiation. To quantify this trade-off, we compare the phase signals produced by the FHE-friendly pipeline (K4+K7) against a standard DSP reference (hard argmax →
+
+atan2 → unwrap → differentiation) across 40 recordings K1        
+
+> (d=1)
+> K2
+> (d=2)
+> K4
+> (d=3)
+> K5
+> (d=4)
+> K7
+> (d=5)
+> PSD
+> (d=10)
+> 10 13
+> 10 11
+> 10 9
+> 10 7
+> MSE (enc. vs plaintext)
+> (a) Vital Signs
+> K3
+> (d=1)
+> K1
+> (d=2)
+> K6
+> (d=3)
+> K2
+> (d=5)
+> Feat
+> (d=6)
+> FC
+> (d=11)
+> 10 23
+> 10 21
+> 10 19
+> (b) Gesture Recognition
+
+Figure 3: Per-kernel encryption noise (MSE between encrypted and plaintext execution of the identical pipeline) at each stage. Bars are not monotonically increasing: kernels that contract the value range (e.g., plaintext rescaling in K4) reduce absolute error, while those that amplify it (K2 squaring, FC matmul) increase it. 
+
+from three datasets. The mean phase-signal MSE is 0.153 for the respiratory band and 0.182 for the heart-rate band, yet the end-to-end HR/RR estimates remain within <10 −3 bpm of the plaintext baseline (Table 4), confirming that the polynomial approximations are a practical trade-off for FHE compatibil-ity. Figure 3 tracks the encryption noise at each kernel output as multiplicative depth grows through the pipeline. For the vital-signs pipeline ( 𝐿 =10 ), K2 exhibits the highest encryp-tion noise ( ∼4×10 −6) because squaring large energy values amplifies the output magnitude; subsequent kernels drop back to ∼10 −14 as K4’s plaintext rescaling ( 1/frame_max via plaintext ×ciphertext multiplication) contracts the output range. The final PSD output at depth 10 reaches ∼5×10 −12 .For the gesture pipeline ( 𝐿 =11 ), encryption noise remains below 10 −21 through the DSP stages and reaches ∼5×10 −19 
+
+at the FC output, where matrix–vector accumulation over thousands of terms raises the noise floor. The bars are not monotonically increasing because absolute CKKS error scales with output magnitude, not just multiplicative depth: kernels that contract the value range (e.g., plaintext rescaling in K4, small FIR taps in K5) reduce the absolute noise envelope, while operations that amplify magnitude (K2 squaring, FC matmul) increase it. In both pipelines the encryption noise remains orders of magnitude below the signal, confirming that the CKKS noise budget is comfortably within operating margins. 
+
+## 5.3 End-to-End Accuracy 
+
+Vital Signs. Table 4 compares the plaintext and encrypted pipelines across two vital-signs datasets comprising 270 total recordings. All metrics measure the discrepancy between the plaintext baseline (2) and the mmFHE encrypted pipeline. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+Table 4: Vital-signs fidelity: plaintext vs. encrypted pipeline. †Lying, ‡Sitting.                         
+
+> Wave. MSE ↓Rate MAE Dataset 𝑛 HR RR (bpm) ↓Lat. ↓
+> Children 50 0.264 0.181 <10 −310.3 s Parralejo †110 0.064 0.074 <10 −36.6 s Parralejo ‡110 0.136 0.179 <10 −36.6 s
+
+Table 5: Gesture classification accuracy (5-class, Zen-odo 60 GHz). 6-fold leave-one-environment-out cross-validation.                         
+
+> Fold Plaintext mmFHE Agreement
+> e1 72.0% 72.0% 100% e2 88.0% 88.0% 100% e3 82.0% 82.0% 100% e4 92.0% 92.0% 100% e5 86.0% 85.0% 99% e6 88.0% 88.0% 100%
+> Mean 84.7% 84.5% 99.8%
+
+The encrypted pipeline produces outputs indistinguishable from the baseline at the rate level ( < 10 −3 bpm), with wave-form MSE dominated by the first-order Taylor arctan approx-imation rather than CKKS noise. 
+
+Gesture Classification. Table 5 reports per-environment classification accuracy for the 5-class Zenodo gesture dataset for baseline (2) for 100 test recording per fold. The plaintext pipeline achieves 84.7% mean accuracy under 6-fold cross-validation; the encrypted pipeline matches at 84.5% with 99.8% prediction agreement, as the CKKS noise floor ( ∼ 10 −10 )does not perturb the argmax of the output logits in all but one recording. 
+
+## 5.4 Computational Overhead 
+
+Table 6 breaks down per-stage GPU latency for both pipelines. FIR+Taylor arctan dominates the vital-signs pipeline (42% of total), followed by PSD peak detection (28%) and phase extraction (15%). Both stages perform per-frame ciphertext– ciphertext multiplications over all 𝐹 =200 frames. The PSD stage cost scales linearly with the number of frequency bins searched: at 10 Hz frame rate (Parralejo), the HR band con-tains 53 DFT bins vs. 26 at 20 Hz (Children), doubling PSD time to 57 s and raising total latency to 132 s. For the gesture pipeline (3-second windows), the GPU achieves 36.6 s per inference. 
+
+Amortized cost. The Children pipeline processes 200 frames (10 s at 20 Hz) in 103 s on GPU, yielding an amortized cost of 517 ms per frame (10.3 s per second of sensor data). The Parralejo pipeline processes 200 frames (20 s at 10 Hz) in 132 s, 
+
+Table 6: Per-stage latency breakdown. Plaintext times in ms; encrypted times in seconds.                                     
+
+> Stage Plain (ms) GPU (s)
+> Pipeline 1: Vital Signs (Children, 200 fr @ 20 Hz)
+> Context + keygen —3.84 Encrypt + K1: Energy 0.119 11.66 K2: Soft attention 0.010 0.05 Encrypt + K4: Phase 2.551 15.91 K5+K7: FIR + Taylor 0.016 43.22 DFT + PSD + decrypt 0.094 28.64
+> Total 2.790 103.32
+> Slowdown 1×37 ,033 ×
+> Pipeline 2: Dynamic Classification (100 fr @ 33 Hz)
+> Context + keygen —3.69 Encrypt —6.17 DSP (K3+K1+K6+K2+feat.) 13.298 20.96 FC1 + sq 0.138 4.43 FC2 + sq 0.109 3.91 FC3 0.001 1.09 Decrypt —0.01
+> Total 13.55 36.56
+> Slowdown 1×2,699 ×
+
+yielding 660 ms per frame (6.6 s per second). The gesture pipeline packs 𝐹 =100 frames (3 s at 33 Hz) per ciphertext, giving 366 ms per frame. 
+
+Communication and resource overhead. Table 7 reports per-window communication costs, client-side encryption latency, and cloud GPU memory. Both pipelines use ring dimension 𝑁 =32 ,768 (128 -bit security), yielding ciphertexts of 5.5–6.0 MB each. The vital-signs pipeline encrypts 800 ciphertexts per 10 s window (two per frame for K1 and K4, each packing Re/Im over range bins), totalling 4.3 GB uplink. The gesture pipeline encrypts 200 ciphertexts per 3 s window (1.2 GB uplink). Key material (public, relinearization, and Galois rotation keys) is a one-time setup cost of 3.1 GB (vital, 140 rotation indices) and 7.5 GB (gesture, 188 indices); in practice, this is transmitted once at enrollment and cached on the cloud. On a single CPU core, the client encrypts a full vital-signs window in 26 s ( ∼33 ms per ciphertext) and a gesture window in 6.7 s, which can be further reduced with multi-threading. The cloud GPU (RTX 3090 Ti, 24 GB) peaks at 20.7 GB during vital-signs inference and 4.3 GB during gesture inference. 
+
+## 5.5 Privacy Analysis 
+
+mmFHE vs. RPRS. Table 8 compares mmFHE against the RPRS [ 44 ] baseline (3) and plaintext baseline (1). Since RPRS’s original dataset is not publicly available, we report their CNN-only FHE approach on the public Zenodo 60 GHz gesture dataset for a fair comparison. mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 7: Communication and resource overhead per sensing window. Key material is a one-time setup cost; uplink/downlink are per window.                            
+
+> Metric Vital Signs Gesture
+> Ring dimension 𝑁 32,768 32,768 Ciphertext size 5.5 MB 6.0 MB Input cts / window 800 200 Uplink / window 4.3 GB 1.2 GB Downlink / window 11 MB 6 MB Key material (one-time) 3.1 GB 7.5 GB Public key 5.5 MB 6.0 MB Relin. key 22.5 MB 46.5 MB Galois keys 3.1 GB 7.5 GB Client encrypt (CPU, 1 core) 26.1 s 6.7 s Client encrypt / ct 33 ms 33 ms Cloud GPU memory (peak) 20.7 GB 4.3 GB
+
+Table 8: Three-way gesture classification comparison on the Zenodo 60 GHz dataset (6-fold CV, 𝑛 =100 per fold).         
+
+> Method Accuracy Latency
+> Plaintext 95.0% 0.04 ms RPRS (repro.) 95.0% 14.09 s mmFHE (ours) 84.5% 36.56 s
+
+RPRS achieves the same accuracy as the plaintext baseline (95.0%), since its CNN input is computed in cleartext. mmFHE achieves 84.5% under full encryption; however, our plaintext pipeline (identical DSP and CNN, no encryption) reaches 84.67%, confirming that CKKS introduces less than 0.2 pp accuracy loss. The remaining gap to 95.0% stems from the different feature extraction pipelines, not from encryption error. In terms of latency, the encrypted DSP stage accounts for the bulk of mmFHE’s overhead (20.96 s per inference). Notably, mmFHE’s CNN-only FHE latency (9.42 s) is lower than RPRS’s (14.03 s) despite a deeper circuit (depth 11 vs. 5), because of GPU acceleration. Table 9 summarises the CKKS parameters of both systems. 
+
+## 6 Related Work 
+
+Privacy Risks of Wireless Sensing. mmWave FMCW radar is now a mature modality for contactless monitoring of vital signs [ 2 , 42 ], sleep [ 47 ], gait [ 30 ], gesture [ 25 , 26 ], falls [ 20 ], and elderly care [ 7, 17 ]. However, the same sig-nal richness that enables these applications creates serious privacy risks: mmWave radar can eavesdrop on phone calls via vocal-cord vibrations [ 9], re-identify individuals from gait signatures [ 41 ], and infer sensitive attributes from beam 
+
+Table 9: CKKS parameter comparison. RPRS values are from [44]; entries marked “—” were not reported.                   
+
+> Parameter RPRS mmFHE (ours)
+> FHE scheme CKKS CKKS Library MS SEAL 4.1 (CPU) OpenFHE + FIDESlib (GPU) Polynomial degree 8,192 32,768 Slots 4,096 2,048 Encrypted stages CNN only DSP + CNN Multiplicative depth —11 Security level —128-bit classic Scaling technique —FlexibleAuto
+
+patterns [ 45 ]. Wi-Fi signals pose similar threats, enabling 3D person re-identification [ 39 ]. A recent systematization of over 169 wireless sensing privacy papers [ 40 ] concludes that effective defenses for protecting raw sensor data during cloud-side computation remain largely absent. 
+
+Privacy Defenses for Wireless Sensing. Existing defenses fall into three families, none of which provides cryptographic data-in-use confidentiality for outsourced computation. 
+
+Data perturbation: Differential privacy destroys the sub-millimeter phase precision vital signs demand [ 43 ]; training-time poi-soning (e.g., Poison to Cure [ 19 ]) protects learned models but not raw sensor streams. 
+
+Physical-layer: MIMOCrypt [ 27 ], and VitalHide, PrivyWave [ 14 ,15 ] use MIMO channel encryption and decoy signal injection, respectively, but both require physical-layer control over the sensing environment and do not address cloud outsourcing. 
+
+Federated learning: FL protects training data, not inference-time confidentiality of streaming sensors [ 40 ], yet the privacy threat in deployed radar systems is during continuous cloud-side processing. 
+
+Homomorphic Encryption for Sensing and Inference. 
+
+FHE has been applied to protect ML inference, but prior work encrypts only the classification stage. HEAR [ 22 ] runs CKKS-encrypted CNN inference on pre-extracted skeleton joints for fall detection (86% sensitivity, 1.2–2.4 s), while RPRS [ 44 ]pairs an mmWave radar with an FHE server for trajectory recognition. Critically, RPRS encrypts only the CNN: the en-tire upstream DSP pipeline (range-FFT, Doppler-FFT, CFAR) executes in plaintext, leaving all intermediate representa-tions exposed. NeuJeans [ 21 ] and MetaKernel [ 13 ] accelerate homomorphic convolution ( 5.68 ×) and encrypted inference kernels ( 1.75 –11 .84 ×), respectively. For encrypted signal pro-cessing, QASP [ 32 ] demonstrates FHE for audio STFT/MFCC, visionary work by Melchor et al. [ 3 ] and Lagendijk et al. [ 23 ]predicted FHE-based DSP but predated CKKS, and Mazzone et al. [ 29 ] benchmark encrypted argmax at 12.8–14.2 s on CPU. 
+
+FHE Systems and Acceleration. Several open-source CKKS libraries underpin modern FHE applications: OpenFHE [ 5]Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+(C++, bootstrapping, Chebyshev evaluation, Intel HEXL), Microsoft SEAL [ 38 ] (simpler API, no bootstrapping), and TenSEAL [ 10 ] (Python/PyTorch bindings over SEAL); we use OpenFHE and FIDESlib. Algorithmic advances further reduce overhead: minimax composite polynomials [ 12 ] cut encrypted comparison cost by ∼45% , and P2P-CKKS [ 34 ] opti-mizes encrypted FFT via dynamic padding. GPU-accelerated frameworks [ 4 , 35 ] achieve 100 –2000 × speedups, bringing even bootstrapping into the sub-second regime on modern hardware. Taken together, these library, algorithmic, and hardware advances have shifted FHE from a theoretical cu-riosity to a deployable systems primitive. mmFHE builds directly on this maturing ecosystem: its entire encrypted radar pipeline runs end-to-end on commodity hardware to-day, and each generation of CKKS tooling narrows the gap to real-time operation. 
+
+## 7 Limitations and Future Work 
+
+Computational and communication cost. The primary cost of end-to-end encryption is latency: the vital-signs pipeline runs at ∼37 ,000 × slowdown over plaintext (103 s for a 10 s window), and the gesture pipeline at ∼2,700 × (37 s for a 3 s window). Communication overhead is also substantial: 4.3 GB uplink per vital-signs window and 1.2 GB per gesture window, plus a one-time key transfer of 3–7.5 GB. These costs are dominated by the FHE library runtime, not by al-gorithmic inefficiency in our kernels. GPU-accelerated FHE backends such as FIDESlib [ 4 ] have already improved cipher-text throughput by 10 –100 × over CPU-only implementa-tions. Dedicated FHE accelerators under active development (Intel HERACLES [ 31 ], DARPA DPRIVE [ 1 ]) target further orders-of-magnitude gains. Because mmFHE’s kernels are fixed-depth arithmetic circuits, they will directly benefit from faster FHE primitives without any algorithmic changes. We view the current overhead as a snapshot of the FHE ecosys-tem’s maturity rather than a fundamental barrier. On the application side, restricting the number of active range bins based on the sensing environment can reduce the ciphertext count and hence both latency and communication cost. Our evaluation is offline and batch-mode; real-time streaming would require pipelining encryption with cloud inference, an engineering challenge we leave to future work. Current hardware limitations also limit circuit depth; extending to deeper architectures (e.g., multi-layer CNNs or transformers) would require bootstrapping support at significant additional cost. 
+
+Starting from range FFT. mmFHE encrypts range-FFT out-put rather than raw ADC samples (§3.3.2). This is a deliberate design choice: many commercial radar modules output range profiles by default (e.g., the TI IWR6843 streams range-profile data over UART, and the Infineon BGT60TR13C exports range spectra), while raw ADC capture typically requires specialized hardware such as the TI DCA1000 evaluation board, limiting it to research-grade setups. Starting from raw ADC is nevertheless feasible using our K3 kernel for the range FFT at additional depth and latency cost. We validated this by processing a 60-frame recording (at 10 fps) on our RTX 3090 Ti at maximum capacity for the vital-sign pipeline, achieving 7.6 bpm HR error within 13 mul-tiplicative levels at 128-bit security. A practical challenge is finding a proper normalization factor to stabilize CKKS oper-ations without performing spectral computation on the client. We find that a Parseval-based energy estimate with an empir-ically calibrated correction factor ( |𝑋 peak |/ √︁ Í𝑘 |𝑥 𝑘 |2 ≈ 0.74 
+
+for the gesture dataset) provides an 𝑂 (𝑁 ) client-side nor-malization that requires no spectral computation. A practi-cal general solution is to calibrate for a few scenarios and reuse the normalization factor for later deployments. Fur-ther validation is limited by the scarcity of publicly available raw-ADC mmWave datasets; the majority of vital-sign and gesture benchmarks provide range-FFT or range–Doppler outputs. 
+
+Kernel Design. Multi-antenna beamforming under FHE is architecturally feasible using Bartlett’s method. However, our system’s performance drops in multi-target scenarios, as the current soft power attention collapses multiple targets into a single bin. Future work could be adapting to multi-person sensing. Finally, the accuracy gap between mmFHE and RPRS on the gesture task (84.5% vs. 95.0%) stems from the different feature extraction pipelines, not from encryp-tion error; closing this gap through improved FHE-friendly feature engineering is an open direction. 
+
+## 8 Conclusion 
+
+We presented mmFHE, the first system to execute the en-tire mmWave radar DSP and ML inference pipeline on en-crypted data. By replacing standard signal-processing rou-tines with seven FHE-compatible kernels—energy integra-tion, soft power attention, DFT, soft I/Q extraction, FIR fil-tering, notch masking, and Taylor-series phase extraction— mmFHE enables an untrusted cloud to process raw sensor streams without ever observing plaintext values. Evaluation on three public datasets (270 vital-sign recordings, 600 ges-ture trials) shows HR/RR estimation within < 10 −3 bpm of the plaintext baseline and 84.5% gesture accuracy with 99.8% prediction agreement, while reducing all privacy attacks to chance level. Formal analysis establishes input privacy and data obliviousness for any pipeline composed from the ker-nel library. The computational overhead, while significant today, is bounded by FHE library performance and will de-crease as GPU-accelerated and hardware-accelerated FHE mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+backends mature. mmFHE demonstrates that end-to-end en-crypted cloud sensing is practical and opens a path toward privacy-preserving ubiquitous health monitoring, smart en-vironments, and security applications. 
+
+## Acknowledgment 
+
+This research was supported by the Digital Life Initiative at Cornell Tech. 
+
+## References 
+
+[1] [n. d.]. DPRIVE: Data Protection in Virtual Environments |DARPA. https://www.darpa.mil/research/programs/data-protection-in-virtual-environments [2] Fadel Adib, Hongzi Mao, Zachary Kabelac, Dina Katabi, and Robert C Miller. 2015. Smart homes that monitor breathing and heart rate. In 
+
+Proceedings of the 33rd annual ACM conference on human factors in computing systems . 837–846. [3] Carlos Aguilar-Melchor, Simon Fau, Caroline Fontaine, Guy Gogniat, and Renaud Sirdey. 2013. Recent advances in homomorphic encryption: A possible future for signal processing in the encrypted domain. IEEE Signal Processing Magazine 30, 2 (2013), 108–117. [4] Carlos Agulló-Domingo, Óscar Vera-López, Seyda Guzelhan, Lohit Daksha, Aymane El Jerari, Kaustubh Shivdikar, Rashmi Agrawal, David Kaeli, Ajay Joshi, and José L Abellán. 2025. Fideslib: A fully-fledged open-source FHE library for efficient CKKS on GPUs. In 2025 IEEE International Symposium on Performance Analysis of Systems and Soft-ware (ISPASS) . IEEE, 1–3. [5] Ahmad Al Badawi, Jack Bates, Flavio Bergamaschi, David Bruce Cousins, Saroja Erabelli, Nicholas Genise, Shai Halevi, Hamish Hunt, Andrey Kim, Yongwoo Lee, et al . 2022. Openfhe: Open-source fully homomorphic encryption library. In proceedings of the 10th workshop on encrypted computing & applied homomorphic cryptography . 53–63. [6] Martin Albrecht, Melissa Chase, Hao Chen, Jintai Ding, Shafi Gold-wasser, Sergey Gorbunov, Shai Halevi, Jeffrey Hoffstein, Kim Laine, Kristin Lauter, et al . 2022. Homomorphic encryption standard. In 
+
+Protecting privacy through homomorphic encryption . Springer, 31–62. [7] Abdullah K Alhazmi, Mubarak A Alanazi, Awwad H Alshehry, Saleh M Alshahry, Jennifer Jaszek, Cameron Djukic, Anna Brown, Kurt Jackson, and Vamsy P Chodavarapu. 2024. Intelligent millimeter-wave system for human activity monitoring for telemedicine. Sensors 24, 1 (2024), 268. [8] Mostafa Alizadeh, George Shaker, João Carlos Martins De Almeida, Plinio Pelegrini Morita, and Safeddin Safavi-Naeini. 2019. Remote monitoring of human vital signs using mm-wave FMCW radar. IEEE Access 7 (2019), 54958–54968. [9] Suryoday Basak and Mahanth Gowda. 2022. mmspy: Spying phone calls using mmwave radars. In 2022 IEEE Symposium on Security and Privacy (SP) . IEEE, 1211–1228. [10] Ayoub Benaissa, Bilal Retiat, Bogdan Cebere, and Alaa Eddine Belfed-hal. 2021. Tenseal: A library for encrypted tensor operations using homomorphic encryption. arXiv preprint arXiv:2104.03152 (2021). [11] Jung Hee Cheon, Andrey Kim, Miran Kim, and Yongsoo Song. 2017. Homomorphic encryption for arithmetic of approximate numbers. In 
+
+International conference on the theory and application of cryptology and information security . Springer, 409–437. [12] Jung Hee Cheon, Wootae Kim, and Jai Hyun Park. 2022. Efficient homomorphic evaluation on large intervals. IEEE Transactions on Information Forensics and Security 17 (2022), 2553–2568. [13] Yingjun Du, Haoliang Sun, Xiantong Zhen, Jun Xu, Yilong Yin, Ling Shao, and Cees GM Snoek. 2022. MetaKernel: Learning variational random features with limited labels. IEEE transactions on pattern analysis and machine intelligence 46, 3 (2022), 1464–1478. [14] Yixuan Gao, Tanvir Ahmed, Zekun Chang, Thijs Roumen, and Rajalak-shmi Nandakumar. 2025. PrivyWave: Privacy-Aware Wireless Sensing of Heartbeat. arXiv preprint arXiv:2511.02993 (2025). [15] Yixuan Gao, Tanvir Ahmed, Zekun Chang, Thijs Roumen, and Rajalak-shmi Nandakumar. 2025. VitalHide: Enabling Privacy-Aware Wireless Sensing of Vital Signs. In Proceedings of the 26th International Workshop on Mobile Computing Systems and Applications . 37–42. [16] Oded Goldreich and Rafail Ostrovsky. 1996. Software protection and simulation on oblivious RAMs. Journal of the ACM (JACM) 43, 3 (1996), 431–473. [17] Kai Guo, Chang Liu, Shasha Zhao, Jingxin Lu, Senhao Zhang, and Hongbo Yang. 2021. Design of a millimeter-wave radar remote moni-toring system for the elderly living alone using WIFI communication. 
+
+Sensors 21, 23 (2021), 7893. [18] Shai Halevi and Victor Shoup. 2014. Algorithms in helib. In Annual Cryptology Conference . Springer, 554–571. [19] Jingzhi Hu, Xin Li, Jin Gan, and Jun Luo. 2025. Poison to Cure: Privacy-preserving Wi-Fi Multi-User Sensing via Data Poisoning. In Proceedings of the 31st Annual International Conference on Mobile Computing and Networking . 47–62. [20] Feng Jin, Arindam Sengupta, and Siyang Cao. 2020. mmfall: Fall detec-tion using 4-d mmwave radar and a hybrid variational rnn autoencoder. 
+
+IEEE Transactions on Automation Science and Engineering 19, 2 (2020), 1245–1257. [21] Jae Hyung Ju, Jaiyoung Park, Jongmin Kim, Minsik Kang, Donghwan Kim, Jung Hee Cheon, and Jung Ho Ahn. 2024. Neujeans: Private neural network inference with joint optimization of convolution and fhe bootstrapping. In Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security . 4361–4375. [22] Miran Kim, Xiaoqian Jiang, Kristin Lauter, Elkhan Ismayilzada, and Shayan Shams. 2022. Secure human action recognition by encrypted neural network inference. Nature communications 13, 1 (2022), 4799. [23] Reginald L Lagendijk, Zekeriya Erkin, and Mauro Barni. 2012. En-crypted signal processing for privacy protection: Conveying the utility of homomorphic encryption and multiparty computation. IEEE Signal Processing Magazine 30, 1 (2012), 82–105. [24] Baiyu Li and Daniele Micciancio. 2021. On the Security of Homomor-phic Encryption on Approximate Numbers. In Advances in Cryptology – EUROCRYPT 2021 . Springer, 648–677. doi:10.1007/978-3-030-77870-5_23 [25] Yadong Li, Dongheng Zhang, Jinbo Chen, Jinwei Wan, Dong Zhang, Yang Hu, Qibin Sun, and Yan Chen. 2022. Di-gesture: Domain-independent and real-time gesture recognition with millimeter-wave signals. In GLOBECOM 2022-2022 IEEE Global Communications Confer-ence . IEEE, 5007–5012. [26] Yadong Li, Dongheng Zhang, Jinbo Chen, Jinwei Wan, Dong Zhang, Yang Hu, Qibin Sun, and Yan Chen. 2022. Towards domain-independent and real-time gesture recognition using mmwave signal. 
+
+IEEE Transactions on Mobile Computing 22, 12 (2022), 7355–7369. [27] Jun Luo, Hangcheng Cao, Hongbo Jiang, Yanbing Yang, and Zhe Chen. 2024. MIMOCrypt: Multi-user privacy-preserving Wi-Fi sensing via MIMO encryption. In 2024 IEEE Symposium on Security and Privacy (SP) . IEEE, 2812–2830. [28] Vadim Lyubashevsky, Chris Peikert, and Oded Regev. 2010. On ideal lattices and learning with errors over rings. In Annual international conference on the theory and applications of cryptographic techniques .Springer, 1–23. [29] Federico Mazzone, Maarten Everts, Florian Hahn, and Andreas Peter. 2025. Efficient Ranking, Order Statistics, and Sorting under {CKKS }.In 34th USENIX Security Symposium (USENIX Security 25) . 8541–8558. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+[30] Zhen Meng, Song Fu, Jie Yan, Hongyuan Liang, Anfu Zhou, Shilin Zhu, Huadong Ma, Jianhua Liu, and Ning Yang. 2020. Gait recognition for co-existing multiple people using millimeter wave sensing. In Proceedings of the AAAI conference on artificial intelligence , Vol. 34. 849–856. [31] n.a. [n. d.]. Intel’s Heracles Chip Speeds Up FHE Computing - IEEE Spectrum. https://spectrum.ieee.org/fhe-intel [32] Tu Duyen Nguyen, Adrien Lesage, Clotilde Cantini, and Rachid Riad. 2025. Quantized Approximate Signal Processing (QASP): Towards Homomorphic Encryption for audio. arXiv preprint arXiv:2505.10500 
+
+(2025). [33] Olga Ohrimenko, Felix Schuster, Cédric Fournet, Aastha Mehta, Se-bastian Nowozin, Kapil Vaswani, and Manuel Costa. 2016. Oblivious 
+
+{Multi-Party } machine learning on trusted processors. In 25th USENIX Security Symposium (USENIX Security 16) . 619–636. [34] Franco Osei-Wusu, Elvis Antwi Sarfo, and Emmanuel Ahene. 2025. P2P-CKKS: enhancing homomorphic encryption efficiency via dy-namic power-of-two vector padding. Journal of Electrical Systems and Information Technology 12, 1 (2025), 83. [35] Ali Şah Özcan, Can Ayduman, Enes Recep Türkoğlu, and Erkay Savaş. 2023. Homomorphic encryption on GPU. IEEE Access 11 (2023), 84168– 84186. [36] F. Parralejo, J. A. Paredes, F. J. Álvarez, and Á. Vicario. 2026. Extensive Age-Balanced and Subject-Varied mmWave Radar Dataset of Referenced Records for Vital Signs . doi:10.5281/zenodo.18599983 [37] F. Parralejo, J. A. Paredes, F. J. Álvarez, and Á. Vicario. 2026. Extensive Age-Balanced and Subject-Varied mmWave Radar Dataset of Referenced Records for Vital Signs . doi:10.5281/zenodo.18599983 [38] Zhiniang Peng. 2019. Danger of using fully homomorphic encryption: A look at Microsoft SEAL. arXiv preprint arXiv:1906.07127 (2019). [39] Yili Ren, Yichao Wang, Sheng Tan, Yingying Chen, and Jie Yang. 2023. Person re-identification in 3d space: A {WiFi } vision-based approach. In 32nd USENIX Security Symposium (USENIX Security 23) . 5217–5234. [40] Wei Sun, Tingjun Chen, and Neil Gong. 2022. Sok: Secure human-centered wireless sensing. arXiv preprint arXiv:2211.12087 (2022). [41] Baptist Vandersmissen, Nicolas Knudde, Azarakhsh Jalalvand, Ivo Couckuyt, Andre Bourdoux, Wesley De Neve, and Tom Dhaene. 2018. Indoor person identification using a low-power FMCW radar. IEEE Transactions on Geoscience and Remote Sensing 56, 7 (2018), 3941–3952. [42] Alexander Vilesov, Pradyumna Chari, Adnan Armouti, Ananya De-oghare, Laleh Jalilian, and Achuta Kadambi. 2022. Blending camera and 77 GHz radar sensing for equitable, robust plethysmography. (2022). [43] Ningning Wang, Tianya Zhao, Shiwen Mao, and Xuyu Wang. 2025. Privacy-preserving wi-fi data generation via differential privacy in diffusion models. In IEEE INFOCOM 2025-IEEE Conference on Computer Communications . IEEE, 1–10. [44] Haoyang Wu, Xiaodong Cai, Yichuan Gao, and Chenlu Miao. 2025. RPRS: Real-Time Privacy mm-Wave Radar Sensing System. In 2025 IEEE/MTT-S International Microwave Symposium-IMS 2025 . IEEE, 1009– 1012. [45] Rui Xiao, Xiankai Chen, Yinghui He, Jun Han, and Jinsong Han. 2025. Lend Me Your Beam: Privacy Implications of Plaintext Beamforming Feedback in WiFi.. In NDSS .[46] Sungwon Yoo, Shahzad Ahmed, Sun Kang, Duhyun Hwang, Jungjun Lee, Jungduck Son, and Sung Ho Cho. 2021. Radar recorded child vital sign public dataset and deep learning-based age group classification framework for vehicular application. Sensors 21, 7 (2021), 2412. [47] Mingmin Zhao, Shichao Yue, Dina Katabi, Tommi S Jaakkola, and Matt T Bianchi. 2017. Learning sleep stages from radio signals: A conditional adversarial architecture. In International conference on machine learning . PMLR, 4100–4109. 
+
+## A FMCW Radar Sensing Primer 
+
+FMCW Sensing. A Frequency-Modulated Continuous Wave (FMCW) radar transmits a chirp waveform for sensing, a sinusoidal linear chirp of duration 𝑇 𝑐 and slew rate 𝑏 is: 
+
+𝑠 𝑡 (𝑡 ) = 𝑒 𝑗 2𝜋     
+
+> 
+> 𝑓 𝑐 𝑡 +𝑏𝑡 22
+> 
+
+, 0 ≤ 𝑡 ≤ 𝑇 𝑐 (11) where 𝑓 𝑐 is the carrier frequency. If the signal reflects off a target at distance 𝑑 and is received as an attenuated, delayed echo: 
+
+𝑠 𝑟 (𝑡 ) = 𝛼 · 𝑠 𝑡 (𝑡 − 𝜏 ) · 𝑒 𝑗 2𝜋 𝑓 𝑑 𝑡 (12) where 𝛼 is the attenuation factor, 𝜏 = 2𝑑 /𝑐 is the round-trip delay ( 𝑐 is the speed of light), and 𝑓 𝑑 is the Doppler frequency. 
+
+Mixing and IF Signal. The receiver multiplies the echo by the conjugate of the transmitted signal, producing an Intermediate Frequency (IF) signal: 
+
+𝑠 𝐼 𝐹 (𝑡 ) ≈ 𝜇 · 𝛼 · 𝑒 𝑗 (2𝜋 Δ𝑓 𝑡 +𝜑 (𝜏 ) ) (13) where Δ𝑓 ≈ 2𝑏𝑑 /𝑐 is the beat frequency proportional to target range, and 𝜑 (𝜏 ) ≈ 2𝜋 𝑓 𝑐 𝜏 encodes fine-grained range information. The IF signal is digitized by an ADC at rate 𝑓 𝑠 ,producing 𝑀 discrete samples 𝑥 [𝑛 ] = 𝐼 [𝑛 ] + 𝑗𝑄 [𝑛 ] per chirp per antenna. 
+
+Range FFT. Spectral estimation via an 𝑀 -point FFT on the IF samples resolves targets along the range axis, based on 
+
+Δ𝑓 . For antenna 𝑎 ∈ [ 𝐴 ] and chirp 𝑐 ∈ [ 𝐷 ]:
+
+𝑧 𝑎,𝑐 [𝑟 ] = 
+
+> 𝑀 −1
+
+∑︁ 
+
+> 𝑛 =0
+
+𝑥 𝑎,𝑐 [𝑛 ] 𝑒 − 𝑗 2𝜋 𝑀 𝑟𝑛 , 𝑟 ∈ [ 𝑅 ] (14) where 𝑅 is the number of range bins retained. The peak index in |𝑧 𝑎,𝑐 [𝑟 ]| localizes the target; the range resolution is 
+
+Δ𝑅 = 𝑐 /2𝐵 with chirp bandwidth 𝐵 = 𝑏𝑇 𝑐 .
+
+Doppler FFT. Each frame consists of 𝐷 chirps transmitted consecutively. For a fixed range bin 𝑟 and antenna 𝑎 , the sequence {𝑧 𝑎,𝑐 [𝑟 ]} 𝐷 −1 
+
+> 𝑐 =0
+
+across chirps encodes the Doppler (velocity) of targets at that range. A 𝐷 -point FFT across the chirp dimension produces the range-Doppler spectrum: 
+
+𝑍 𝑎 [𝑟, 𝑑 ] = 
+
+> 𝐷 −1
+
+∑︁ 
+
+> 𝑐 =0
+
+𝑤 [𝑐 ] · 𝑧 𝑎,𝑐 [𝑟 ] 𝑒 − 𝑗 2𝜋 𝐷 𝑑𝑐 , 𝑑 ∈ [ 𝐷 ] (15) where 𝑤 [𝑐 ] is a window function (e.g., Hanning) applied to reduce spectral leakage. Targets appear as peaks in the 2D range-Doppler map, with the Doppler index 𝑑 proportional to radial velocity. 
+
+Phase Tracking. Vital signs (breathing and heart rate) mani-fest as millimeter-level chest displacements too small to shift the range-bin peak. Instead, the phase of the complex signal at the target range bin encodes these micro-motions. Small radial displacement Δ𝑑 induces a phase shift: 
+
+Δ𝜑 = 4𝜋 Δ𝑑 𝜆 (16) mmFHE: mmWave Sensing with End-to-End Fully Homomorphic Encryption Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+When a human subject is at ˆ𝑟 in the sensing environment, extracting ∠𝑧 𝑎,𝑐 [ ˆ𝑟 ] across frames yields a time series propor-tional to chest displacement, processed via bandpass filter-ing (0.1–0.5 Hz for respiration, 0.8–2.0 Hz for heart rate) and spectral estimation to recover HR and RR. 
+
+Continuous Monitoring. The radar transmits 𝐹 frames, each containing 𝐷 chirps across 𝐴 antennas and 𝑅 range bins. A single frame yields a range-Doppler-antenna tensor 
+
+Z[𝑡 ] ∈ C𝐴 ×𝑅 ×𝐷 ; 𝑡 ∈ { 0, 1, 2, . . . , 𝐹 − 1}. Over 𝐹 frames, each element 𝑧 𝑎,𝑐 [𝑟, 𝑡 ] carries two channels: 
+
+• Magnitude |𝑧 |2: tracks macro-movement (target pres-ence, range). 
+
+• Phase ∠𝑧 : encodes micro-movement (sub-wavelength displacements such as breathing and heartbeat). This duality: both channels inseparably encoded in the same complex IQ samples; is the source of the biometric insepara-bility formalized in §3. 
+
+Standard Application Pipelines. Two canonical radar pro-cessing chains operate as follows: (1) Vital signs: range FFT → target detection (peak or CFAR) → phase extraction at target bin → bandpass filtering → PSD estimation → HR/RR. (2) Gesture recognition: range FFT → Doppler FFT → range-Doppler feature extraction → neural network classifier 
+
+→ gesture label. Both chains require spectral transforms, non-linear detection, and data-dependent operations that must be reformulated for encrypted computation (§3.3). 
+
+## B Proof of Inseparability (Proposition 2.1) 
+
+Theorem B.1 (Inseparability Property of Coherent Radar Streams). Let {z[𝑟, 𝑡 ]} 𝐹 𝑡 =1 be a plaintext FMCW range-profile stream with carrier wavelength 𝜆 , slow-time sampling rate 𝑓 𝑠 ≥ 2𝑓 𝜇 (where 𝑓 𝜇 is the highest micro-motion frequency of interest), and observation duration 𝐹 /𝑓 𝑠 ≥ 𝑇 min . Then any protocol that grants a semi-honest server plaintext access to this stream for energy-based target detection 𝑟 , necessarily leaks sufficient information to reconstruct the target’s radial micro-displacement signal at all frequencies up to 𝑓 𝜇 .
+
+Proof. Algebraic inseparability: Energy-based detection requires computing 𝐸 𝑘 [𝑡 ] = |z𝑘 [𝑡 ]| 2 from plaintext range-bin values z𝑘 [𝑡 ] ∈ C. To evaluate this, the server must receive the complex samples z𝑘 [𝑡 ]. Providing z𝑘 [𝑡 ] for magnitude-based detection therefore simultaneously and unavoidably discloses the phase 𝜙 𝑘 [𝑡 ]. A semi-honest server logs all in-puts, making this leakage immediate and irreversible. 
+
+Phase–displacement coupling: By the FMCW radar equation (§A), small radial displacements Δ𝑑 𝑘 [𝑡 ] of the target at range bin 𝑘 induce phase shifts Δ𝜑 𝑘 [𝑡 ] = 4𝜋 Δ𝑑 𝑘 [𝑡 ]/ 𝜆 . This map-ping is linear and invertible, so the adversary recovers Δ𝑑 𝑘 [𝑡 ]
+
+from the disclosed phase sequence. 
+
+Nyquist sufficiency: The adversary now holds 𝐹 samples of 
+
+Δ𝑑 𝑘 [𝑡 ] at rate 𝑓 𝑠 ≥ 2𝑓 𝜇 over a duration 𝐹 /𝑓 𝑠 ≥ 𝑇 min . By the Shannon–Nyquist theorem, this is sufficient to reconstruct the continuous-time micro-displacement signal and resolve its spectral components at all frequencies up to 𝑓 𝜇 . □
+
+## C Proof of Input Privacy (Theorem 4.1) 
+
+Proof. By a standard hybrid argument over the 𝐹 frames. Suppose a PPT adversary A distinguishes the two encrypted streams with advantage 𝜖 . We construct a reduction B that, given an IND-CPA challenge ciphertext for a single frame, embeds it at position 𝑡 ∗ (encrypting ˜z0 [𝑡 ] for 𝑡 < 𝑡 ∗ and ˜z1 [𝑡 ]
+
+for 𝑡 > 𝑡 ∗) and forwards the stream to A. By the hybrid lemma, B breaks IND-CPA with advantage ≥ 𝜖 /𝐹 , which must be negligible. Since 𝐹 is polynomial in 𝜆 , 𝜖 ≤ 𝐹 · negl (𝜆 )
+
+is itself negligible. Combined with Theorem B.1, this shows that mmFHE breaks the inseparability barrier: the cloud evaluates detec-tion, spectral processing, phase extraction, filtering, and clas-sification circuits on Enc ( ˜z[𝑡 ]) but cannot recover any plain-text value—neither the magnitude for unauthorized tracking nor the phase for unauthorized vital-sign extraction. □
+
+## D Proof of Data Obliviousness (Theorem 4.2) 
+
+Proof. The proof proceeds in two steps. 
+
+Step 1 (Per-kernel obliviousness). Each kernel 𝐾 𝑖 defines a fixed arithmetic circuit 𝐶 𝑖 over CKKS ciphertexts: the sequence of homomorphic operations (additions,multiplications,rotations) and their memory access pattern are determined entirely by the public configuration (𝑅, 𝐹, 𝐴, 𝐷, 𝛾, Taylor order , filter order ,
+
+FC dims ) and are independent of the encrypted input. We verify this for all seven kernels and the FC layer by construc-tion in §D.1. 
+
+Step 2 (Composition closure). Let 𝐶 1, 𝐶 2 be data-oblivious cir-cuits. The trace of their sequential composition satisfies 
+
+Trace (𝐶 2 ◦ 𝐶 1, x) = Trace (𝐶 1, x) ∥ Trace (𝐶 2, 𝐶 1 (x)) . Since 
+
+𝐶 1 is data-oblivious, the first component is identical for all x.Since 𝐶 2 is data-oblivious, the second component is identical for all inputs, including the varying intermediate ciphertexts 
+
+𝐶 1 (x). By induction over a chain of 𝑘 circuits, any pipeline composed from this kernel set has an input-independent trace. □
+
+## D.1 Per-Kernel Verification 
+
+We verify that each kernel defines a fixed arithmetic circuit whose trace depends only on public parameters. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Trovato et al. 
+
+K1: Energy Integration (§3.3.3). Circuit: one ct-ct squaring and one ct-ct addition per frame, repeated 𝐹 times. Trace fixed by (𝑅, 𝐹 ).
+
+K2: Soft Power Attention (§3.3.3). Circuit: log 2 𝛾 sequen-tial squarings, one pt-ct multiply (public index vector), and a rotation-based reduction. Trace fixed by (𝑅, 𝛾 ).
+
+K3: DFT via Block-Diagonal Matmul (§3.3.3). Circuit: BSGS diagonal method on the fixed block-diagonal matrix ˜C
+
+(Eq. 4). Trace fixed by (𝐷, window ).
+
+K4: Soft I/Q Extraction (§3.3.3). Circuit: computes (| 𝑧 |2)𝑃 𝜙 ·
+
+𝑧 and reduces via summation (Eq. 6). All 𝑅 bins processed identically. Trace fixed by (𝑅, 𝑃 𝜙 ).
+
+K5: FIR Filtering (§3.3.3). Circuit: pt-ct multiply with pub-lic FIR coefficients (Eq. 7). Backend (Toeplitz or rotation-based) selected at configuration time. Trace fixed by (filter order ,𝐹 ).
+
+K6: Notch Mask (§3.3.3). Circuit: single pt-ct multiply with a fixed binary mask (Eq. 8). Trace fixed by 𝐷 .
+
+K7: Differential Phase Extraction (§3.3.3). Circuit: evalu-ates the fixed polynomial Δ𝜙 [𝑡 ] ≈ 𝑦 [𝑡 ] 𝑥 [𝑡 ]2 − 13 𝑦 [𝑡 ]3 (Eq. 9). Trace fixed by (Taylor order ).
+
+FC Inference (§3.3.3). Circuit: 𝐿 pt-ct matmuls and 𝐿 −1
+
+ct-ct squarings (Eq. 10). The square activation 𝜎 (𝑥 ) = 𝑥 2 has no conditional branches. Trace fixed by (𝑑 0, 𝑑 1, . . . , 𝑑 𝐿 ).
+
+Remark. Per-frame amplitude normalization is performed client-side before encryption; it does not affect the cloud-side trace.

@@ -1,0 +1,1901 @@
+Title: Parallel-in-iteration optimization using multigrid reduction-in-time
+
+URL Source: https://arxiv.org/pdf/2603.20879v1
+
+Published Time: Tue, 24 Mar 2026 00:53:11 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+ETNA   
+
+> Kent State University and Johann Radon Institute (RICAM) Electronic Transactions on Numerical Analysis. Volume XX, pp. 1–yy, 20xx. Copyright ©20xx, Kent State University. ISSN 1068–9613. DOI:
+
+PARALLEL-IN-ITERATION OPTIMIZATION USING MULTIGRID REDUCTION-IN-TIME 
+
+G. H. M. ARAÚJO †, O. A. KRZYSIK ‡, AND H. DE STERCK †
+
+Abstract. Standard gradient-based iteration algorithms for optimization, such as gradient descent and its various proximal-based extensions to nonsmooth problems, are known to converge slowly for ill-conditioned problems, sometimes requiring many tens of thousands of iterations in practice. Since these iterations are computed sequentially, they may present a computational bottleneck in large-scale parallel simulations. In this work, we present a “parallel-in-iteration” framework that allows one to parallelize across these iterations using multiple processors with the objective of reducing the wall-clock time needed to solve the underlying optimization problem. Our methodology is based on re-purposing parallel time integration algorithms for time-dependent differential equations, motivated by the fact that optimization algorithms often have interpretations as discretizations of time-dependent differential equations (such as gradient flow). Specifically in this work, we use the parallel-in-time method of multigrid reduction-in-time (MGRIT), but note that our approach permits in principle the use of any other parallel-in-time method. We numerically demonstrate the efficacy of our approach on two different model problems, including a standard convex quadratic problem and the nonsmooth elastic obstacle problem in one and two spatial dimensions. For our model problems, we observe fast MGRIT convergence analogous to its prototypical performance on partial differential equations of diffusion type. Some theory is presented to connect the convergence of MGRIT to the convergence of the underlying optimization algorithm. Theoretically predicted parallel speedup results are also provided. 
+
+Key words. parallel in time, MGRIT, convex optimization, gradient descent, proximal gradient, elastic obstacle 
+
+AMS subject classifications. 65F10, 65K10, 65M55 
+
+1 Introduction Consider the unconstrained optimization problem, (1.1) min 
+
+> u∈RN
+
+f (u),
+
+with f : RN → R a convex and L-smooth function, i.e., a convex function with L-Lipschitz gradient: (1.2) ∥∇ f (u) − ∇ f (v)∥ ⩽ L∥u − v∥ ∀ u, v ∈ RN .
+
+Such optimization problems are ubiquitous throughout the sciences, with many theoretical properties established for them and applications in fields such as machine learning [44, 45], signal reconstruction [5, 8, 23], game theory [22], econometrics [2] and mathematical physics [39, 46]. Various iterative gradient-based optimization algorithms for solving unconstrained minimization problems, such as gradient descent and Nesterov’s accelerated gradient descent [33] take the form of 1- or 2-step updates. Generally, the convergence rates of these algorithms for convex functions can be slow. For example, gradient descent has a convergence rate of O( 1 
+
+> k
+
+) for problem (1.1), where k denotes the number of iterations; while Nesterov’s improved rate of O( 1 
+
+> k2
+
+) was shown in [34] to be optimal among all methods that only have information about the gradient of f for its updates. In practical terms, this means that many iterations are typically required to solve the problem; for example, tens of thousands of iterations is not uncommon [8, 36]. Related to (1.1) is the unconstrained problem of minimizing a sum of two functions (1.3) min 
+
+> u∈RN
+
+F (u), where F (u) := f (u) + g(u),
+
+where f : RN → R is convex and L-smooth, and g : RN → (−∞ , +∞] is continuous, convex and possibly nondifferentiable. The minimization problem (1.3) is typically solved by splitting algorithms [28], in which the differentiable f and possibly nondifferentiable g are handled differently. Many classical splitting algorithms also take the form of 1- or 2-step updates. Namely, the proximal gradient and FISTA algorithms [5] are generalizations of gradient descent and Nesterov’s accelerated gradient, respectively, for solving (1.3), maintaining the convergence rates of O( 1 
+
+> k
+
+) and O( 1 
+
+> k2
+
+) as their counterparts do for (1.1). The convergence rates of these optimization algorithms are also slow, in practice requiring many iterations to get close to the true optimum [5, 8]. If gradient evaluations take some nontrivial amount of compute time, we may have to wait for a long wall-clock time to get an accurate approximation to the optimum because the algorithms are sequential in k.
+
+> †
+
+Department of Applied Mathematics, University of Waterloo, Waterloo, Ontario, Canada ({ghmacieiradearaujo, hans.desterck}@uwaterloo.ca ). 
+
+> ‡
+
+Theoretical Division, Los Alamos Laboratory, Los Alamos, NM, USA (okrzysik@lanl.gov , https://orcid.org/ 0000-0001-7880-6512 ). The work of the second author has been funded by the Los Alamos National Laboratory Advanced Simulation and Computation program through Contract No. 89233218CNA000001. The research was performed under the auspices of the National Nuclear Security Administration of the U.S. Department of Energy at Los Alamos National Laboratory, managed by Triad National Security, LLC under contract 89233218CNA000001. LA-UR-25-27245. 1
+
+> arXiv:2603.20879v1 [math.NA] 21 Mar 2026
+
+ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+2 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+One can write 1-step algorithms in the form uk+1 = Φ( uk) + wk+1 , where Φ( ·) is a linear or nonlinear operator and wk+1 is a generic term that does not dpeend on uk, for example, to encode the initial condition or a forcing term. For example, we can write the gradient descent update for (1.1) given by (1.4) uk+1 = uk − s∇f (uk), k = 0 , 1, . . . 
+
+as (1.5) uk+1 = ( I − s∇f )( uk).
+
+Suppose we need K iterations to approximate the true optimum within the desired accuracy. Then, taking Φ := ( I −
+
+s∇f ), computing the K gradient descent iterations in parallel is equivalent to solving the below “all-at-once” system in parallel (1.6) A(u) = 
+
+
+
+I
+
+−Φ( ·) I
+
+. . . . . .
+
+−Φ( ·) I
+
+
+
+u0
+
+u1
+
+...
+
+uK
+
+ =
+
+
+
+w0
+
+w1
+
+...
+
+wK
+
+ = w,
+
+where for this particular case w0 is the initial condition and w1 = · · · = wK = 0. We note that some 2-step methods, such as Nesterov’s accelerated gradient descent [33] for solving (1.1), can be rewritten as 1-step algorithms of the form 
+
+[uk+1 vk+1 ]T = Φ([ uk vk]T ) for block vector inputs [uk vk]T , such that an analogous all-at-once system to (1.6) holds in such cases too. The system (1.6) is exactly of the kind which parallel-in-time algorithms solve for time-dependent evolution equations [19, 35]. For example, the parareal method [27] is a 2-level parallel-in-time method [21] which solves systems of differential equations by employing sequential coarse-grid solves to speed up solving the original fine-grid problem in parallel. However, parareal is limited in concurrency, as the coarse-grid solve is still sequential. Thus, the multigrid-reduction-in-time algorithm (MGRIT) [16] was developed as a multilevel generalization of parareal based on multigrid reduction (MGR) techniques [38]. In the linear case where Φ( uk) is computed by multiplying uk by the matrix Φ, MGRIT solves the system (1.6) via a coarse-grid system derived from an approximation to the Schur complement of (1.6) in terms of the coarse-level variables, and has a factor of m ∈ N fewer variables on each successively coarser grid. Here, m is called the coarsening factor. The biggest challenge in applying MGRIT is developing a suitable coarse-grid operator Φ∆ ≈ Φm, where 
+
+Φm is the operator appearing in the Schur complement. That is, Φ∆ should approximate m successive applications with Φ, but it should be computationally much less expensive than applying Φ m times; this cost reduction combined with a quickly converging method is what allows for speedup on a parallel machine. It has been well-documented that parallel-in-time methods such as parareal and MGRIT often work very well for diffusion-dominated (parabolic-type) partial differential equation (PDE) problems [14, 16, 25]. Advection-dominated (hyperbolic-type) problems are more challenging, but careful construction of coarse-grid operators may facilitate fast convergence [12, 13, 25]. This provides motivation for the use of parallel-in-time methods for optimization problems such as (1.1) and (1.3). For sufficiently small step lengths s as in (1.4), we can sometimes interpret optimization algorithms as discretizations of certain ordinary differential equations (ODEs), in which k acts as a “discrete time index,” and the step length s is related to the time-scale of the ODE. For example as s → 0, gradient descent can be thought of as an explicit Euler discretization of the gradient flow ODE, (1.7) ddt u = −∇ f (u(t)) , t > 0,
+
+and as s → 0, Nesterov’s accelerated gradient descent can be thought of as an explicit discretization [43] of the ODE, (1.8) d2
+
+dt2 u + 3
+
+t
+
+ddt u + ∇f (u(t)) = 0 , t > 0.
+
+With these connections between solving optimization problems in parallel and solving systems of differential equations using parallel-in-time methods, we present a framework for implementing MGRIT for solving optimization problems in the classes (1.1) and (1.3) in parallel. We describe two model problems belonging to the former and latter ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+3classes, and discuss the choices of fine- and coarse-grid operators for solving these problems with MGRIT. These operators are based on standard choices of algorithms for solving these problems sequentially, such that the MGRIT implementation can be interpreted as a sped-up version of these sequential algorithms. Parallel-in-time methods have been previously used in the context of solving PDE-constrained optimization problems either as preconditioners or for solving time-dependent subproblems that arise in the context of time-dependent PDE-constrained optimization, such as in optimal control [20, 29, 48, 49] or for computing the geometry of induction motors [24]. These previous applications differ from our approach, which is to use parallel-in-time methods to parallelize across iterations of some underlying sequential optimization method. The rest of this paper is organized as follows. Section 2 and Section 3 introduce the model problems and optimization algorithms that we use to solve them, respectively, with the latter elaborating on the interpretation of optimization methods as discretizations of time-dependent ODEs. Section 4 reviews the MGRIT parallel-in-time method. Section 5 discusses our methodology for solving optimization problems in parallel with MGRIT, which explores the aforementioned connections between ODEs for which parallel-in-time methods have originally been designed and optimization problems, providing the key insight behind this paper. Section 6 provides numerical results, while Section 7 provides theoretical speedup estimates. Section 8 explores the direct application of the proposed MGRIT approach to momentum-accelerated algorithms and discusses the difficulties that were encountered to obtain fast convergence of MGRIT iterations for this case. Section 9 features concluding remarks and ideas for future work. 
+
+2 Model problems We now introduce the two model problems considered throughout this paper. The first model problem is relatively simple, and serves largely as a stepping stone towards the more challenging second model problem, which presents a more realistic application of our proposed algorithm. The optimization problems we consider have a connection to discretizations of time-dependent heat or diffusion PDEs, and thus help to motivate our use of parallel-in-time methods. In what follows, we consider continuous optimization problems on d-dimensional domains Ω ⊂ Rd, d ∈ { 1, 2},with boundary denoted by ∂Ω. We let x ∈ Rd denote a coordinate on Ω, such that x = x when d = 1 and x = ( x, y )
+
+when d = 2 . The domain Ω is discretized with a mesh consisting of n + 2 total points, and n interior points, in each direction, equally separated by a distance of h > 0, with h = O( 1 
+
+> n
+
+). Of particular relevance to our model problems are finite-difference discretizations of (negative) Laplacian operators, which, on the interior mesh points, are defined as 
+
+A1 = − 1
+
+h2
+
+
+
+−2 11 −2 1
+
+. . . . . . . . .
+
+1 −2
+
+ ∈ Rn×n, and (2.1a) 
+
+A2 = − 1
+
+h2
+
+
+
+−T II −T I
+
+. . . . . . . . .
+
+I −T
+
+ ∈ Rn2×n2
+
+(2.1b) for d = 1 and d = 2 , respectively. Here, T ∈ Rn×n is a tridiagonal matrix with elements −1, 4 and −1 on the sub-, main and super-diagonals, respectively, and I ∈ Rn×n is the identity matrix. The 2-norm of A1 is ∥A1∥2 = 
+
+> 1
+> h2
+
+4 sin 2  nπ 
+
+> 2( n+1)
+
+
+
+≈ 4 
+
+> h2
+
+for h ≪ 1, while the 2-norm of A2 is ∥A2∥2 = 1 
+
+> h2
+
+8 sin 2  nπ 
+
+> 2( n+1)
+
+
+
+≈ 8 
+
+> h2
+
+for h ≪ 1.Throughout the paper, we refer to A1 and A2 as 1D and 2D Laplacian matrices, respectively. 
+
+2.1 Quadratic minimization problem (MP1) For our first model problem, we consider the straightforward problem of quadratic minimization, formulated as (2.2) min 
+
+> u∈RN
+
+12 ⟨A1u, u⟩ − ⟨ b, u⟩,
+
+where A1 is the 1D Laplacian matrix (2.1a) , such that N = n, and b ∈ RN is some prescribed vector. Since A1
+
+is symmetric positive definite (SPD), the objective function here f (u) = ⟨A1u, u⟩ − ⟨ b, u⟩ is strongly convex and 
+
+L-smooth, where L denotes the smallest Lipschitz constant of ∇f , which, in this case is L = ∥A1∥. Since A1 is SPD, and hence invertible, the unique solution of (2.2) is given by u = A−11 b, which is attained when ∇f (u) = 0.ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+4 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+2.2 Elastic obstacle problem (MP2) The elastic obstacle problem (EOP) [7] consists of finding the equilibrium state of an elastic membrane under a non-penetration constraint. The EOP we consider was initially motivated by mathematical physics [39] such as steady state fluid interaction, thin-plate solid dynamics and elastostatics [46]. Various stategies have been proposed for numerically solving the EOP, including multigrid approaches such as [1, 6, 30, 50]. The formulation we present here follows an L1 penalty approach [46]. Given an obstacle function ϕ(x) : Ω → R, the EOP seeks the location of a membrane bu(x) : Ω → R with the lowest elastic potential energy. Assuming the elastic potential energy of the membrane is proportional to its surface area, the EOP can be written as (2.3) min 
+
+> bu∈Ω
+
+Z
+
+> Ω
+
+q
+
+1 + ∥∇ bu∥22 dx s.t. bu ≥ ϕ on Ω, bu = 0 on ∂Ω.
+
+Here, ∇bu : Ω → Rd is the gradient field of bu, and the norm ∥ · ∥ 2 induced by the inner product ⟨· , ·⟩ is the standard 2-norm for functions over Ω. Note that we assume ϕ ≤ 0 on ∂Ω, so the boundary condition bu = 0 on 
+
+∂Ω is well-posed. An approximation of (2.3) can be obtained by linearization [50], based on the Maclaurin series √1 + x2 = 1 + 12 x2 + o  x4. Assuming that ∥∇ bu∥22 is sufficiently small such that we can ignore higher order terms, we have p1 + ∥∇ bu∥22 ≈ 1 + 12 ∥∇ bu∥22; further dropping the constant 1 gives the linearized obstacle problem (2.4) min 
+
+> bu∈Ω
+
+Z
+
+> Ω
+
+12 ∥∇ bu∥22 dx s.t. bu ≥ ϕ, bu = 0 on ∂Ω.
+
+In order to solve the linearized problem (2.4) we discretize it with finite differences on the aforementioned eq-uispaced meshes. Consider first the 1D case. Let xi, i ∈ { 1, . . . , n }, denote an interior mesh point, and let 
+
+bui ≈ bu(xi) be an approximation of v at this mesh point. Then the integral is discretized as R 
+
+> Ω12
+
+∥∇ bu(x)∥22dx ≈
+
+Pni=1 12 ∥∇ bu(xi)∥22 h ≈ h 
+
+> 2
+
+⟨A1 bu, bu⟩, where bu = ( bu1, . . . , bun) ∈ Rn, and A1 ∈ Rn×n is the 1D Laplacian matrix (2.1a) , which assumes zero boundary conditions. The approximation proceeds analogously in 2D, where now we let 
+
+(xi, y j ), i, j ∈ { 1, . . . , n }, denote an interior mesh point, and bui,j ≈ bu(xi, y j ). In this case, the integral is approximated as R 
+
+> Ω12
+
+∥∇ bu(x, y )∥22dxdy ≈ Pni,j =1 12 ∥∇ bu(xi, y j )∥22 h2 ≈ h2 
+
+> 2
+
+⟨A2 bu, bu⟩, where bu = ( bu1,1, . . . , bun,n ) ∈ Rn2
+
+and 
+
+A2 ∈ Rn2×n2
+
+is the 2D Laplacian matrix (2.1b). Ignoring the leading h or h2 factors, since this does not change the solution of the minimization problem, our discretized versions of (2.4) take the form (2.5) min 
+
+> bu∈RN
+
+12 ⟨Ad bu, bu⟩ s.t. bu ≥ ϕ, 
+
+where N = n for d = 1 , and N = n2 for d = 2 . Moreover, ϕ ∈ RN denotes the discretized version of ϕ(x) on the underlying mesh, and Ad the Laplacian matrix on this mesh. By making a change of variable u := bu − ϕ ≥ 0, we can write (2.5) in its shifted form: (2.6) min 
+
+> u∈RN
+
+12 ⟨Adu, u⟩ + ⟨Adϕ, u⟩ + 12 ⟨Adϕ, ϕ ⟩ s.t. u ≥ 0.
+
+Dropping the 12 ⟨Adϕ, ϕ ⟩ term (since it doesn’t influence the minimizer), choosing p = −Adϕ and using an indicator function i+ : RN → R, where i+(a) = 0 if (a)q ≥ 0 for all q and i+(a) = + ∞ if (a)q < 0 for any q, allows (2.6) to be written in unconstrained form as (2.7) min 
+
+> u∈RN
+
+12 ⟨Adu, u⟩ − ⟨ p, u⟩ + i+(u).
+
+However, we choose to work with an alternative unconstrained formulation, given by (2.8) min 
+
+> u∈RN
+
+12 ⟨Adu, u⟩ − ⟨ p, u⟩ + λ ∥(−u)+∥1 .
+
+where λ > 0 is a predefined penalty parameter and P 
+
+> i
+
+(−(u)i) + = ∥(−u)+∥1, where (a)+ = max {0, a } and 
+
+∥ · ∥ 1 denotes the L1 norm. For sufficiently large λ, the solution of (2.8) is the same as that of (2.7) [18, 31], hence approximating the solution of (2.4) after reversing the change of variables bu = u + ϕ. Throughout the rest of ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+5this paper, we refer to the shifted approximate obstacle problem in penalty form (2.8) as MP2-1D and MP2-2D, in the 1D and 2D cases, respectively. In our MP2-1D numerical experiments, we consider x ∈ Ω := [0 , 3π] and the obstacle ϕ(x) = max {0, sin x}, for which (2.4) has the exact solution given by bu(x) = sin x for x ∈ 0, 12 π or 
+
+x ∈  52 π, 3π and bu(x) = 1 for x ∈  12 π, 52 π; see Fig. 2.1. For MP2-2D, we consider (x, y ) ∈ Ω := [0 , 3π]2 and 
+
+ϕ(x, y ) = max {0, sin x} max {0, sin y}; see Fig. 2.1. We take λ = 900 in both the 1D and 2D cases, which is large enough such that solving (2.8) is equivalent to solving (2.7). Fig. 2.1 presents visualizations of the obstacles and corresponding solutions of MP2-1D and MP2-2D. Note that the solutions pictured in panels (b) and (d) are those on the interior of the domain, and hence with the boundary points 
+
+bu = 0 eliminated.                       
+
+> (a) Obstacle ϕ(b) Solution bu
+> (c) Obstacle ϕ(d) Solution bu
+> Fig. 2.1: (a) and (b): obstacle ϕand solution buof MP2-1D (2.8) . (c) and (d): obstacle ϕand solution buof MP2-2D (2.8) , computed numerically using the proximal gradient algorithm (3.8) .
+
+3 Optimization algorithms The algorithms we employ are based on gradients and proximals of functions; in the case of nondifferentiable convex functions, gradients are replaced by subgradients. Let us recall the definition of the proximal operator Pf of a function f : RN → R:(3.1) Pf (v) = 
+
+
+
+u ∈ RN : u = arg min 
+
+> z∈RN
+
+
+
+f (z) + 12 ∥z − v∥2
+
+ 
+
+.
+
+Under the assumption that f is convex and continuous, which holds throughout this paper,  f (·) + 12 ∥ · − v∥2 (z) is strongly convex, such that Pf (v) is single-valued. Recall the definition of ∂f , the subdifferential of f :(3.2) ∂f (u) = {z ∈ RN : ∀v ∈ RN , f (u) + ⟨v − u, z⟩ ≤ f (v)},
+
+where we call z ∈ ∂f (u) a subgradient of f at u; if f is differentiable at u, then ∂f (u) = {∇ f (u)}. We note that 
+
+u = Pf (v) if and only if v − u ∈ ∂f (u) or, equivalently, v ∈ u + ∂f (u) = ( I + ∂f )( u). Then, it follows that 
+
+u = ( I + ∂f )−1(v), such that we can characterize the proximal operator as the resolvent of the subdifferential operator: (3.3) Pf = ( I + ∂f )−1.ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+6 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+We now discuss the optimization algorithms that we apply to the discrete model problems from Section 2. The main algorithms we consider are gradient descent for MP1, (2.2), and proximal gradient descent for MP2, (2.8), whose convergence we attempt to speed up by means of parallelization-in-time. In our method, we also make use of two auxiliary algorithms on the coarse grid, namely proximal point for MP1 and alternating proximal mappings for MP2, which are closely related to gradient descent and proximal gradient descent, respectively. We refer the reader to [4, Chapters 26, 29-31] for further details on the convergence properties of these algorithms. 
+
+3.1 Optimization algorithms for MP1 Consider the problem of minimizing a convex and L-smooth function f ,(3.4) min 
+
+> u∈RN
+
+f (u).
+
+The first of two methods we consider for solving (3.4) is the classical gradient descent method. Given a starting point 
+
+u0 ∈ RN and a fixed positive scalar s > 0, the gradient descent iteration is given by (3.5) uk+1 = ( I − s∇f )( uk) =: Gsf (uk), k = 0 , 1, . . . . 
+
+The gradient descent sequence converges to a minimizer of function f for 0 < s < 2 
+
+> L
+
+with a convergence rate of 
+
+O(1 /k ); this means that if we want |f (uk) − f (u∗)| ≤ ϵ, where u∗ is a minimizer of f and ϵ > 0, we need O( 1 
+
+> ϵ
+
+)
+
+iterations of gradient descent. Under strong convexity, linear convergence is attained [34] and O  log   1
+
+> ϵ
+
+ are necessary asymptotically. We note that MP1 (2.2) is a case of (3.4) for the strongly convex function f (u) = ⟨A1u, u⟩ − ⟨ b, u⟩, with A1 the Laplacian (2.1a) . Moreover, ∂f (u) = {∇ f (u)}, ∇f (u) = A1u − b is L-Lipschitz with L = ∥A1∥2, such that f is 
+
+L-smooth. Therefore, the objective function f defined by (2.2) satisfies the conditions required for convergence of both (3.5) and (3.6). When it is necessary to take steps of size larger than the 2 
+
+> L
+
+limit for gradient descent, we substitute gradient descent steps by proximal point steps, which is stable for all s > 0. Given some starting point u0 and a positive scalar s > 0,the proximal point algorithm update for a continuous and convex f is given by (3.6) uk+1 = ( I + s∂f )−1 (uk) := Psf (uk) k = 0 , 1, . . . , 
+
+where we note that Psf is the proximal of sf (3.1); since s > 0, we have s∂f (·) = ∂(sf )( ·). The proximal point iteration (3.6) converges to a minimizer of f ; note that L-smoothness of f is not required for this convergence, unlike in the case of gradient descent. We note that for simple problems, such as MP1, the proximal point method can converge in one step. However, our interest here is not in the proximal point method itself, but in using proximal steps to approximate a fixed number of gradient descent steps, as discussed in Section 5.2. 
+
+3.2 Optimization algorithms for MP2 Consider the possibly nonsmooth problem of minimizing the sum of functions (3.7) min 
+
+> u∈RN
+
+F (u), where F (u) = f (u) + g(u),
+
+where f is convex and L-smooth, and g is continuous, convex and possibly nondifferentiable. We also assume that the set of minimizers of F is nonempty. Minimizers of F can be computed by splitting algorithms such as the proximal gradient method, which takes the form (3.8) uk+1 := Psg ◦ Gsf (uk) = ( I + s∂g )−1 (( I − s∇f )( uk)) , k = 0 , 1, . . . , 
+
+where 0 < s < 2 
+
+> L
+
+, where Psg is the proximal of sg (3.1) and Gsf is the gradient descent step for f of size s (3.5). The proximal gradient method is a composition of a gradient descent step over f and a proximal point step over g; we note that proximal gradient inherits the stability constraint of gradient descent that s < 2 
+
+> L
+
+. We also note that for f = 0 
+
+in (3.7) , iteration (3.8) reduces to the proximal point algorithm (3.6), while for g = 0 in (3.7) the iteration reduces to gradient descent (3.5). For MP2 (2.8) written in the form of (3.7) , we have f = 12 ⟨Adu, u⟩ − ⟨ p, u⟩ and g = λ ∥(−u)+∥1. Here, f is strongly convex and L-smooth, with L = ∥Ad∥2, where Ad is given by (2.1a) for d = 1 and by (2.1b) for d = 2 , and g
+
+is convex and continuous. Therefore, f and g satisfy the requirements for convergence of (3.8), which converges to a solution of (3.7) as desired. ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+7When it is necessary to take steps of size s > 2 
+
+> L
+
+, we substitute proximal gradient descent by the alternating proximal mappings method, with iteration given by (3.9) uk+1 := Psg ◦ Psf (uk) = ( I + s∂g )−1  (I + s∇f )−1 (uk) ,
+
+where Psg and Psf are proximals (3.1) of sg and sf , respectively, and we note that ∂f = {∇ f } since f is differentiable by assumption. This method (3.9) is a composition of two proximal steps over f and g. In particular, the sequence (3.9) converges to a minimizer of env( f ) + g [4, Proposition 31.1], where (3.10) env( f (u)) := min 
+
+> u∈RN
+
+
+
+f (Pf (u)) + 12 ∥u − Pf (u)∥2
+
+
+
+,
+
+is the Moreau envelope of f at u. This means that (3.9) does not generally converge to a minimizer of (3.7). 
+
+3.3 Optimization methods as ODE discretizations Here, we describe the connection between optimization algorithms and ODE discretizations, which provides key motivation for the parallel-in-iteration framework we outline in the next section. The connection between these has been well established in the literature; see [3, 37, 40, 43]. First, consider the gradient flow ODE of a convex and L-smooth function f , given by (3.11) ddt u(t) = −∇ f (u(t)) , u(0) = u0.
+
+Applying a forward finite-difference approximation of this equation yields the forward-Euler discretization (3.12) uk+1 = uk − s∇f (uk), k = 0 , 1, . . . , 
+
+where uk+1 ≈ u(tk + ∆ t), uk ≈ u(tk), and s = ∆ t. Observe that this forward Euler discretization is identical to the gradient descent iteration (3.5). Similarly, applying a backward finite-difference approximation to (3.11) yields the backward Euler discretization (3.13) uk+1 = uk − s∇f (uk+1 ), k = 0 , 1, . . . 
+
+Let us recall the proximal point method (3.6) and note that (3.14) 
+
+uk+1 = Psf (u) ⇐⇒ uk+1 = argmin 
+
+> u
+
+
+
+sf (u) + 12 ∥u − uk∥2
+
+
+
+⇐⇒ uk+1 = argmin 
+
+> u
+
+
+
+f (u) + 12s ∥u − uk∥2
+
+
+
+⇐⇒ 0 = ∇f (uk+1 ) + 1
+
+s (uk+1 − uk)
+
+⇐⇒ uk+1 = uk − s∇f (uk+1 ).
+
+Therefore, the proximal point algorithm (3.6) is equivalent to a backward Euler discretization of (3.11). Furthermore, the proximal point algorithm can be interpreted as an implicit variant of the gradient descent method (3.5). In the context of ODEs and PDEs, the forward Euler method as in (3.12) is known to have poor stability properties for stiff equations, putting strict requirements on the step size ∆t. On the other hand, the backward Euler discretization as in (3.13) has relatively improved stability properties for stiff equations, typically permitting much larger time step sizes. These stability properties influence the design of our parallel-in-iteration methodology described in the next section. In particular, the methodology requires us to take large steps on coarse grids, and we chose to use the proximal point method (3.6) when these steps are larger than s > 2 
+
+> L
+
+so as to avoid instability of gradient descent (3.5). Now, consider the gradient flow of f + g, assuming, for simplicity, that both f and g are differentiable. The associated gradient flow ODE is (3.15) ddt u(t) = −∇ f (u(t)) − ∇ g(u(t)) .
+
+Applying a forward Euler step on the ∇f term, and a backward Euler step on the ∇g term results in the implicit-explicit (IMEX) discretization (3.16) uk+1 = ( I + s∇g)−1 (( I − s∇f )( uk)) , k = 0 , 1, . . . 
+
+Observe that (3.16) is identical to (3.8), such that the proximal gradient method can be interpreted as an IMEX discretization of the corresponding gradient flow equation (3.15). Similarly, the alternating proximal mappings methods (3.9) is equivalent to a split fully backward-Euler-based discretization of (3.15). ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+8 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+4 Parallel-in-time methods In this section we outline our parallel-in-iteration strategy for the solution of the discrete optimization problems outlined in the previous section. As outlined in Section 1, the motivation for parallelizing over iteration is that convergence rates of these methods tend to be slow, and thus, in practice, they typically require many iterations to reach convergence. By re-purposing techniques for the parallel-in-time solution of ODEs and PDEs to parallelize over iterations of optimization algorithms, we aim to reduce the wall-clock time required to solve discrete optimization problems. Specifically in this work we focus on the parallel-in-time method known as MGRIT (multigrid reduction in time) [16]. However, we note that other suitable parallel-in-time methods can also be considered. For example, the parareal method [27] or the Parallel Full Approximation Scheme (FAS) in Space-Time (PFASST) method [15, 32]. 
+
+4.1 The MGRIT algorithm MGRIT [16] was developed as a multilevel generalization of the 2-level parareal method [27] for solving time-dependent systems of differential equations in parallel. To outline this method, let us consider a general initial-value ODE problem of the form (4.1) ddt u(t) = L(t, u(t)) , u(0) = u0, t ∈ (0 , T ].
+
+Discretizing this system of ODEs using a 1-step method (e.g., any Runge-Kutta method) results in a system of equations of the form (4.2) u0 = w0,
+
+ui = Φ i(ui−1) + wi, i = 1 , 2, . . . , N t,
+
+where w0 ≡ u0, and ti = i∆t, i = 0 , 1, . . . , N t is a temporal mesh with spacing ∆t = TNt , which we assume is constant for simplicity. Furthermore, ui ≈ u(ti) is the discrete approximation to u(t) at time ti, and Φi is the time-stepping operator , responsible for advancing the solution at ti−1 to ti; for simplicity, we further assume Φi is a time-independent operator, such that Φi(·) = Φ( ·) for all i = 1 , 2, . . . , N t. The vector wi represents solution-independent forcing terms in the discretized problem. We can then rewrite (4.2) as the following “all-at-once” system: (4.3) A(u) = 
+
+
+
+I
+
+−Φ( ·) I
+
+. . . . . .
+
+−Φ( ·) I
+
+
+
+u0
+
+u1
+
+...
+
+uNt
+
+ =
+
+
+
+w0
+
+w1
+
+...
+
+wNt
+
+ = w.
+
+For our purposes, it is also pertinent to introduce the associated residual vector, which, given some v ≈ u, is defined as 
+
+r(v) = w − A (v) = 
+
+
+
+w0 − v0
+
+w1 − [v1 − Φ( v0)] 
+
+...
+
+wNt − [vNt − Φ( vNt−1)] 
+
+ .(4.4) Instead of solving (4.2) sequentially with time-stepping, MGRIT aims to solve it iteratively and in parallel via the introduction of a coarser approximation of the problem. To this end, given an integer coarsening factor m > 1, we introduce a coarse temporal mesh Tj = j∆T , j = 0 , 1, . . . , N T , where NT = Nt 
+
+> m
+
+, with constant spacing ∆T = m∆t.This partitions the Nt points of the fine grid into two sets: 1. C-points , which are the NT points appearing exclusively on the coarse grid, and 2. F-points which are the remaining Nt − NT points that do not appear on the coarse grid. Fig. 4.1 illustrates the fine- and coarse-grid temporal meshes. As is standard for a multilevel method, an MGRIT iteration consists of a coarse-grid correction step sandwiched between pre- and post-relaxation steps. The standard relaxation, as used here, is known as FCF-relaxation [16], and combines so-called F- and C-relaxations, both of which can be performed in parallel. An F-relaxation is the process where, starting from a C-point, the time-stepping operator is used to update the values of the m − 1 F-points that follow it (that is, until the F-point that immediately precedes the next C-point). C-relaxation is the update of each C-point by stepping from the preceding F-point using Φ. FCF-relaxation is simply the application of F-,C- and F-relaxations in this order. The post relaxation is taken to be an F-relaxation. In between the pre- and post-relaxations, a coarse-grid correction problem is solved to provide a correction at C-points, as we now describe. MGRIT has both linear and FAS variants [25], suitable for linear and nonlinear Φ,ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+9
+
+Fig. 4.1: Fine- and coarse-grid discretization meshes with coarsening factor m. F-points (in black) are points ti for i = 1 , . . . , N t
+
+such that i̸ = jm for j = 1 , . . . , N T = Nt 
+
+> m
+
+, and C-points (in blue) are points Tj = tjm for j = 1 , . . . , N T = Nt 
+
+> m
+
+.
+
+respectively, and these variants differ in the way that coarse-grid correction is performed. Let us first explain how this works in the linear case, and to this end let us assume that Φi is a time-independent, linear operator, such that 
+
+Φi(ui−1) = Φ ui−1 corresponds to a matrix-vector product with matrix Φ. We also write the action of the space-time operator A(u) = Au as a matrix-vector product. From (4.2), we can then write, for coarse indices j = 1 , 2, . . . , N T ,(4.5) ujm = Φ ujm −1 + wjm = · · · = Φ mu(j−1) m + ewjm ,
+
+where ewjm = wjm + Φ wjm −1 + · · · + Φ m−1w(j−1) m+1 . Therefore, the fine-grid system (4.3) is equivalent to the following system written only in terms of the C-points: (4.6) u0 = w0,
+
+ujm = Φ mu(k−1) m + ewjm , j = 1 , 2, . . . , N T ,
+
+where Φm plays the role of time-stepping operator for this coarse system. Or, in block-matrix form (4.7) A∆u∆ =
+
+
+
+I
+
+−Φm I
+
+. . . . . .
+
+−Φm I
+
+
+
+u0
+
+um
+
+...
+
+uNT m
+
+ =
+
+
+
+w0
+
+ewm
+
+...
+
+ewNT m
+
+ = w∆.
+
+While system (4.7) has a factor of m fewer equations than (4.3) , it is no less expensive to solve because (naively) com-puting the action of Φm is m times as expensive as computing that of Φ. So, instead, MGRIT solves an approximation to the ideal coarse-grid system (4.7) arising from replacing the ideal coarse-grid time-stepping operator Φm with an approximation: (4.8) Φ∆ ≈ Φm.
+
+That is, rather than inverting A∆ in (4.7), one inverts the approximation B∆ given by (4.9) B∆ =
+
+
+
+I
+
+−Φ∆ I
+
+. . . . . .
+
+−Φ∆ I
+
+ .
+
+Let us now explain in more detail how MGRIT uses the approximation B∆ ≈ A ∆. Consider the coarse system 
+
+A∆u∆ = w∆ (4.7). Let v∆ ≈ u∆ be an approximate solution of (4.7) with error e∆ = u∆ − v∆. Then, note that (4.10) A∆e∆ = A∆u∆ − A ∆v∆ = w∆ − A v∆ = r∆,
+
+where r∆ denotes the coarse-grid residual. Since A∆ is invertible, it follows that e∆ = A−1∆ r∆, such that (4.11) u∆ = v∆ + e∆ = v∆ + A−1∆ r∆.
+
+Assuming that Φ∆ ≈ Φm such that B−1∆ ≈ A −1∆ , then (4.12) u∆ ≈ v∆ + B−1∆ r∆.ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+10 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+Let uk  
+
+> ∆k=0 ,1,...
+
+be a sequence of approximate solutions generated by the k = 0 , 1, . . . MGRIT iterations. Letting 
+
+uk+1 ∆ and uk 
+
+> ∆
+
+play the roles of u∆ and v∆, respectively, where we think of uk+1 ∆ as a better approximation of u∆ than 
+
+uk
+
+> ∆
+
+, we obtain the MGRIT residual correction scheme: (4.13) uk+1 ∆ = uk 
+
+> ∆
+
++ B−1∆
+
+ w∆ − A ∆uk
+
+> ∆
+
+ , k = 0 , 1, . . . 
+
+Component-wise, this may be written with Φ and Φ∆ as (4.14) uk+1 (j+1) m = Φ ∆uk+1  
+
+> jm
+
++ Φ mukjm − Φ∆ukjm + ew(j+1) m,
+
+where uk 
+
+> 0
+
+= w0.Now let us consider the MGRIT coarse-grid correction in the more general FAS case, where Φ( ·) in (4.3) is not (necessarily) a linear operator. Let v ≈ u be an approximate solution of A(u) = w in (4.3). After performing the FCF-relaxation step, the fine-grid approximation v and nonlinear residual w − A (v) are injected to the coarse-grid: (4.15) v∆ = RI (v), r∆ = RI (w − A (v)) ,
+
+where RI stands for the injection operator. The ideal FAS coarse-grid problem is then to solve the system (4.16) A∆ (u∆) = A∆ (v∆) + r∆
+
+for the coarse-grid solution u∆, where similarly to (4.7), (4.17) A∆(·) = 
+
+
+
+I
+
+−Φm(·) I
+
+. . . . . .
+
+−Φm(·) I
+
+ .
+
+The coarse-grid system (4.16) results from the elimination of F-points variables from the residual equation A(u) −A(v) = r(v). Similarly to the linear case, the MGRIT iteration solves an approximation of (4.16), (4.18) B∆ (u∆) = B∆ (v∆) + r∆,
+
+where B∆(·) ≈ A ∆(·) replaces the Φm(·) terms in A∆(·) by a computationally cheaper Φ∆(·) ≈ Φm(·). Letting uk+1 ∆
+
+and uk 
+
+> ∆
+
+play the roles of u∆ and v∆, respectively, the component-wise FAS residual correction scheme is then given by (4.19) uk+1 (j+1) m = Φ ∆
+
+ uk+1 
+
+> jm
+
+ + Φ 
+
+
+
+uk
+
+> (j+1) m−1
+
+
+
+− Φ∆
+
+ ukjm 
+
+ + w(j+1) m, j = 1 , 2, . . . , N T .
+
+We note that when Φ( ·) and Φ∆(·) are linear operators Φ and Φ∆, the FAS variant simplifies to the linear variant of MGRIT. While we have only described 2-level MGRIT methods, multilevel MGRIT schemes can be obtained by recursively applying the 2-level schemes. In our numerical tests, we apply the standard MGRIT scheme for MP1 (2.2) and the FAS-MGRIT scheme for MP2 (2.8). For both MP1 and MP2, MGRIT is iterated until the 2-norm of the residual (4.4) is reduced by 8 orders of magnitude from its initial value. We note that since the residual (4.4) is measured after performing the FCF-relaxations, the residual at the F-points will be zero, such that it is sufficient to measure the residual at the C-points. 
+
+5 MGRIT for solving optimization problems parallel-in-iteration In this section, we discuss our methodology for using MGRIT to solve optimization problems in a novel parallel-in-iteration framework, using our first model problem, MP1 (2.2), as an example. First, we show the equivalence between solving MP1 using the gradient descent algorithm (3.5) and solving the 1D heat equation, in terms of the all-at-once system in (4.3). Inspired by well-known established practices for solving ODEs, we then present our heuristic for choosing a suitable coarse-grid operator for MGRIT applied to gradient descent optimization of MP1. Finally, we present theoretical results relating the convergence of approximate solutions obtained for the all-at-once system solved by MGRIT and the convergence of the original, sequential optimization algorithm. ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+11 
+
+5.1 Links between solving ODEs using MGRIT and parallel-in-iteration optimization Recall that the ith gradient descent iteration (3.5) for MP1, (2.2), is given by (5.1) ui = ( I − s∇f )( ui−1) = ( I − sA 1)ui−1 + sb.
+
+Therefore, denoting Φ := ( I − sA 1) and wi = sb for i = 1 , . . . , N t, we can write Nt gradient descent iterations as (5.2) Au =
+
+
+
+I
+
+−Φ I
+
+. . . . . .
+
+−Φ I
+
+
+
+u0
+
+u1
+
+...
+
+uNt
+
+ =
+
+
+
+w0
+
+w1
+
+...
+
+wNt
+
+ = w.
+
+where u0 = w0 is the initial condition. Note that this is the same kind of system as in (4.3); in particular, it is the same system one would obtain from the forward Euler discretization of the 1D heat equation with Dirichlet boundary conditions and constant source term: (5.3) 
+
+∂∂t u(x, t ) − ∂2
+
+∂x 2 u(x, t ) = b, (x, t ) ∈ Ω × [0 , T ],u(x, 0) = u0(x), x ∈ Ω,
+
+where Ω ⊂ R.While previous research on solving (5.3) with MGRIT, namely [14, 16], certainly informs our investigation, differences in objective and approach justify a new exploration of this model problem, regardless of the similarities. First, both [14, 16] are strongly concerned with matching the accuracy of spatial and temporal discretizations of (5.3), with [16] testing different ratios between time step lengths and spatial mesh sizes and [14] employing higher-order time discretizations in order to match the spatial and temporal discretization orders. Secondly, with this accuracy concern in mind, [14, 16] mostly employ implicit discretizations, which are unconditionally stable in regards to time step lengths, on all levels. These objectives differ from ours significantly, as we are concerned with providing speedup over sequential solves for problems to which explicit optimization methods are typically applied, and in which the time step lengths follow a standard choice for the chosen method. Furthermore, the aforementioned accuracy concerns in both space and time are not present here, as our accuracy requirement is that the MGRIT solution at the final time points approximates the solution of the model problem to a similar tolerance accuracy as the sequential solve which we are trying to speed up. Therefore, it is necessary for us to provide our own numerical experiments and speedup estimates for this model problem, despite the similarities with [14, 16]. 
+
+5.2 Choice of Φ∆ for MP1 using gradient descent Inspired by the similarities between our model problem (2.2) and the 1D heat equation (5.3), in this paper we follow a simple heuristic inspired by [16] of simply replacing forward Euler steps on the finest level with backward Euler steps on the coarse s. Recall from (5.1) that Φ := I − sA 1.We further refine this by choosing the step size to be s = 1 
+
+> L
+
+, which is the classical choice for gradient descent. As discussed in Section 3.3, the natural implicit candidate for the coarse-grid operator is the one in (3.6): (5.4) Φ∆ := ( I + msA 1)−1.
+
+That is, we use the approximation (5.5) Φ∆ := ( I + msA 1)−1 ≈ (I − sA 1)m = Φ m.
+
+Intuitively, we are approximating m forward Euler time steps, each with step size s, with a single backward Euler time step of size ms . We recall that the proximal point method (3.6) converges for any s > 0, such that ms = mL is a feasible step size choice for any coarsening factor m. In a multilevel MGRIT setting of bℓ ≥ 2 levels, we take ℓ = 1 to refer to the fine grid. For 2 ≤ ℓ ≤ bℓ, the ℓth level employs the operator (5.6) Φℓ 
+
+> ∆
+
+:= ( I + mℓ−1sA 1)−1,
+
+an implicit operator similar to (5.4) with the appropriate time step coarsening; when ℓ = 2 , we omit the superscript. We note that the computation of the inverse matrices in (5.4) and (5.6) amounts to solving a linear system, which we do by means of LU-factorization; the L and U factors are stored, such that the factorization is computed only once per level. ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+12 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+5.3 Choice of Φ∆ for MP2 using proximal gradient descent The choice of coarse-grid operator for MP2, (2.8), is analogous to that for MP1 in that we choose Φ to be the proximal gradient descent operator (3.8) and Φ∆ to be its implicit analogue, the alternating proximals operator (3.9), with coarsened step size. Namely, we choose (5.7) Φ := Psg (I − sA d) and Φℓ 
+
+> ∆
+
+= Pmℓ−1sg (I + mℓ−1sA d)−1, 2 ≤ ℓ ≤ bℓ, 
+
+where g =: λ∥(−· )+∥, as in (2.8). The proximal operator Pg in (5.7) is then given entry-wise by (5.8)  Pλ∥(−· )+∥1 (u) 
+
+> i
+
+=
+
+
+
+(u)i + λ, (u)i + λ < 0,
+
+0, (u)i ≤ 0 ≤ (u)i + λ
+
+(u)i, (u)i > 0,,
+
+where the i subscript denotes the ith component of the corresponding vector. The coarse-grid operators in (5.7) are chosen under the assumption that, on the first coarse grid (i.e., ℓ = 2 ), (5.9) Φ∆ := Pmsg (I + msA d)−1 ≈ (Psg (I − sA d)) m = Φ m
+
+is a sufficiently accurate approximation, which is consistent with the assumption in (5.5). We note that the heuristic presented in Section 5.2 and Section 5.3, by which we replace gradient descent terms by proximals, can be applied to any gradient-based method. For nonquadratic objective functions, we may need to invert a nonlinear system to compute these proximals by means of (3.3). Alternatively, we can simply compute the proximals numerically by minimizing the function in the definition (3.1) using some iterative method; this computational approach is specially useful when the proximal for the relevant function does not have a closed form. We also note that replacing the explicit gradient steps by implicit proximal steps is only required when taking steps larger than the stability limit of the explicit method. In some machine learning contexts, for example, parameter training stages are performed using arbitrarily small steps well within the stability limit, such that (proximal) gradient descent could be used on coarse levels without drawbacks. Finally, we note that our heuristic still applies in principle to more complex methods with varying step sizes and/or additional parameters. However, determining effective Φ∆ can become a quite complicated task depending on the complexity of the Φ algorithm. 
+
+5.4 Gradient convergence Given the exact fine-grid trajectory {ui} and the MGRIT approximation {vi} of 
+
+{ui}, MGRIT convergence criteria in our numerical experiments are set in terms of the norm of the MGRIT coarse-grid residual r(v) = w − A (v) over the entire space-iteration domain, where v ∈ RN ·Nt (see (5.2)), while the sequential convergence is given in terms of the gradient of the objective function F (ui) at iteration i, where ui ∈ RN . The following lemma relates these two measures of convergence by establishing a bound for the (generalized) gradient of the MGRIT approximation vi at iteration i in terms of associated error ei = ui − vi and the (generalized) gradient of the exact ui. The setting for the lemma and subsequent remarks is the general problem of miniziming F = f + g as in (3.7), where f is a convex L-smooth function, and g is a continuous, convex and possibly nondifferentiable function. More specifically, we consider the proximal-gradient iteration for minimizing F = f + g, with its convergence measured in terms of the generalized gradient of F :(5.10) GsF (ui) := 1
+
+s [ui − Psg (ui − s∇f (ui))] = 1
+
+s (I − Psg ◦ Gsf (ui)) .
+
+Note that Psg ◦ Gsf is the same as the proximal gradient operator (3.8); in particular, Psg ◦ Gsf = I − sG sF .Furthermore, when g = 0 , F = f and GsF = Gsf . Therefore, the problem of minimizing f (3.4) using the gradient descent method (3.5) can be seen as a special case of the problem of minimizing F = f + g with the proximal gradient method (3.8). We note that for both MP1 and MP2, we take s = 1 
+
+> L
+
+. For MP1 and MP2-1D, we have that L = ∥A1∥2,where A1 is the 1D Laplacian matrix (2.1a), while for MP2-2D, we have that L = ∥A2∥2, where A2 is the 2D Laplacian matrix (2.1b). Moreover, we consider a general parallel-in-iteration method for an all-at-once system as in (4.3), such that the following results are not particular to the MGRIT method. LEMMA 5.1. Let f : RN → R be a convex and L-smooth function, g : RN → R a continuous convex function. Consider a parallel-in-iteration method described by an all-at-once system of the form (4.3) with Φ := I − sG sF the proximal gradient operator of f + g from (3.8) , with step size s = 1 
+
+> L
+
+. Let vi ≈ ui be an approximation of the ith component of the solution of (4.3) , with associated error ei = ui − vi. Then, the generalized gradient (5.10) of the approximate solution satisfies 
+
+(5.11) ∥GsF (vi)∥ ≤ L√2 ∥ei∥ + ∥GsF (ui)∥ .ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+13 
+
+Proof. Since ei = ui − vi, we can write vi = ui − ei. By [4, Proposition 29.1], Φ := I − sG sF is 2/3-averaged. Therefore, 
+
+(5.12) 
+
+12 ∥sG sF (vi) − sG sF (ui)∥2 ≤ ∥ vi − ui∥2 − ∥ (I − sG sF )( vi) − (I − sG sF )( ui)∥2
+
+≤ ∥ vi − ui∥2 = ∥ei∥2 .
+
+Taking the square root on both sides, we get 
+
+(5.13) ∥sG sF (vi) − sG sF (ui)∥ ≤ √2 ∥ei∥ .
+
+Using the triangle inequality, we get 
+
+(5.14) 
+
+∥sG sF (vi)∥ = ∥sG sF (vi) − sG sF (ui) + sG sF (ui)∥≤ ∥ sG sF (vi) − sG sF (ui)∥ + ∥sG sF (ui)∥≤ √2 ∥ei∥ + s ∥GsF (ui)∥ .
+
+Therefore, 
+
+(5.15) ∥GsF (vi)∥ ≤ √2
+
+s ∥ei∥ + ∥GsF (ui)∥
+
+= L√2 ∥ei∥ + ∥GsF (ui)∥ .
+
+Bound (5.11) in lemma 5.1 shows that, when ui approximates a minimizer of F (u) with accuracy ∥GsF (ui)∥,then our parallel-in-iteration method will approach the same accuracy ∥GsF (vi)∥ for vi if we run sufficient iterations of the parallel-in-iteration to make ∥ei∥ small relative to ∥GsF (ui)∥ 
+
+> L√2
+
+. This can also be restated in terms of residuals rather than errors; we present the result for the linear case in the following remark. REMARK 5.2. Recall the all-at-once system (4.3) and the related residual equation (4.4). If Φ is a linear operator such that lemma 5.1 holds, then Ae = r, such that e = A−1r. Therefore, ∥ei∥ ≤ ∥ e∥ = ∥A −1r∥ ≤ ∥A −1∥∥ r∥, which together with (5.11) implies (5.16) ∥GsF (vi)∥ ≤ L√2∥A −1∥∥ r∥ + ∥GsF (ui)∥ .
+
+As such, considering large i ≈ Nt, we find that a sufficiently small space-time residual implies accurate approximation of the minimizer. In particular, let uki be the approximate solution at time i and iteration k, and let eki = ui − uki be the error of the approximation. Similarly, let uk be the approximate solution vector at iteration k. Next, we consider the assumption of linear convergence of the all-at-once system. For MGRIT, linear convergence has been proven for certain linear problems as in [13, 14, 42], and widely observed numerically even for nonlinear problems [11, 17], including in the results we present in Section 6.2. REMARK 5.3. Suppose the parallel-in-iteration method described in lemma 5.1 converges linearly in error for the problem of minimizing F = f + g with convergence factor ρe, that is, (5.17) ek ≤ ρe ek−1 ≤ (ρe)k e0 .
+
+for ρe ∈ (0 , 1) some constant independent of k. Then, from (5.11) we get linear convergence of the gradient at any point i in time: (5.18) GsF 
+
+ uki
+
+ ≤
+
+
+
+L√2 e0 
+
+(ρe)k + ∥GsF (ui)∥ .
+
+In particular, suppose that after k = k∗ iterations  L√2 e0  (ρe)k∗ := ϵ∗ is some sufficiently small number. Then, (5.19) GsF 
+
+ uki
+
+ ≤ ϵ∗ + ∥GsF (ui)∥ .
+
+If we have linear convergence in the residual, that is, (5.20) rk ≤ ρr rk−1 ≤ (ρr)k r0 ,ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+14 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+for ρr ∈ (0 , 1) some constant independent of k, then from (5.16) we obtain an analogous result for convergence of the gradient in terms of the residual for a linear Φ:(5.21) GsF 
+
+ uki
+
+ ≤
+
+
+
+L√2 A−1 r0 
+
+(ρr)k + ∥GsF (ui)∥ .
+
+In particular, we conclude that when using MGRIT with the gradient descent fine-grid operator (3.5) for MP1 (2.2), and the proximal gradient descent fine-grid operator (3.8) for MP2 (2.8), minimizing the MGRIT residual implies minimizing the gradient of uki to a similar accuracy as that of ui, with (5.21) providing a bound that can inform the number of iterations required to make ∥GsF (uki )∥ close to ∥GsF (ui)∥. For example, assuming a desired accuracy of the minimizer of ∥GsF (uNt )∥ = τ , one could guarantee accuracy 2τ of the MGRIT approximation uk∗ 
+
+> Nt
+
+with at most 
+
+k∗ iterations, where k∗ is determined according to τ = L√2∥A −1∥∥ r0∥(ρr )k∗ .
+
+6 Numerical results Here, we present results of our parallel-in-iteration algorithm applied to the optimization problems MP1 (2.2) and MP2 (2.8) discretized with the optimization methods discussed in Section 3.1 and Section 3.2, respectively. It is important to note that we are not currently implementing MGRIT in parallel, which will be done in future work; the goal of the current paper is to present the method for optimization problems and investigate its convergence speed (the number of MGRIT iterations required to obtain an accurate solution) numerically, which is done using a serial implementation. In a later section, Section 7, we also provide estimates for speedup in a parallel setting. We note that while MGRIT by construction approximates the entire trajectory {ui}, 0 ≤ i ≤ Nt, of the sequential solve, we are for optimization problems really interested in calculating the final approximation uNt , which is the MGRIT approximate solution at the final iteration point Nt, such that we give special importance to uNt .First, we solve the problem sequentially using gradient descent or proximal gradient descent. Next, we solve the same problem with MGRIT, i.e., we use MGRIT aiming to accelerate the computation of the fine-grid trajectory {ui}
+
+in parallel. On coarse levels in the MGRIT hierarchy we use an implicit variant of the optimization method used on the finest level. We illustrate convergence results for a particular set of choices for the parameters N (dimension of the Laplacian matrix), m (coarsening factor) and bℓ (number of levels). Although we only present results for the fine-level step-size choice s = 1 
+
+> L
+
+, further tests (not shown here for brevity) indicate that MGRIT performs similarly well for larger step sizes up to the stability limit of 2 
+
+> L
+
+. For our initial examples, we chose bℓ = 2 and m = 4 . Later, we present results for different values of m, bℓ and N to analyze how MGRIT’s performance is affected by the choices of these parameters. We choose 10 −8 as the tolerance criteria for all iterative methods. For sequential solves, this applies to the reduction in the 2-norm of the gradient relative to its original value. For MGRIT solves, the tolerance criteria refers to the reduction on the 2-norm of the MGRIT residual, (4.4). For MP1, (2.2), we measure the gradient of the quadratic function f ,while for MP2, (2.8), we measure the generalized gradient, (5.10), of the EOP function of the form F := f + g. The initial MGRIT guess u0 ∈ RN is chosen to be random with components in [0 , 1] , after which the condition u0 = g0 is enforced. We note that the sequential solve provides us with Nt, exactly the number of iterations required for convergence within the given tolerance threshold, which we then use to specify the MGRIT fine-grid time domain to be 0, Nt−1
+
+> L
+
+,with Nt fine-grid time points. However, solving the problem sequentially before solving it with MGRIT is of course not recommended in practice. Instead, the final time should be chosen adaptively, for example, using the following strategy. Given some tolerance threshold to which we want to reduce the gradient to, we take an educated guess at the final time required to achieve this reduction. This guess can possibly be informed by theoretical or practically observed convergence rates of the underlying optimization method. Setting the MGRIT time window with this guess for the final time, we run MGRIT until either the gradient at the final point reaches the prescribed tolerance, or the gradient at the final point stalls. In the case where the gradient reaches the prescribed tolerance, we either have precisely guessed the correct final time, such that the number of time points is exactly what we would get by solving the problem sequentially first, or we have overestimated the final time such that we have too many time points. Otherwise, if the gradient at the final time point stalls, then we have underestimated the final time and do not have enough time points to achieve the desired gradient reduction. Iterating MGRIT past this point is redundant, since MGRIT will only reduce the residual of the underlying algebraic system (4.4), but without reducing the gradient. In that case, we must start a new MGRIT solve across a new time interval, starting from the final time point of the halted solve and setting the solution at the final time point of the halted solve as the initial guess for the new solve’s all-at-once system (4.3); essentially, this is the same as extending the original trajectory. Then, we take a new educated guess for the final time, which could be estimated based on the approximate convergence rate of the optimization method observed from the halted solve. Having set the new time horizon, we run MGRIT again and repeat this process until the desired gradient reduction is obtained. ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+15 Following this strategy, it may be that underestimating or overestimating the final time does not lead to performing any more work than when perfectly guessing the final time. However, we might lose some parallel speed-up efficiency, as in both cases we do more sequential work than when we work with the ideal number of time points, in which case the parallelization is perfectly optimized. For our discussion on parallel speed-up efficiency, see Section 7. 
+
+6.1 MGRIT for gradient descent applied to MP1 We solve (2.2) using gradient descent, (3.5). The 1D Laplacian matrix A1 ∈ Rn×n in (2.1a) with 2-norm L is taken with n = 40 , the coarsening factor is chosen to be 
+
+m = 4 and the number of levels to be bℓ = 2 . We also choose b ∈ Rn to be random with components in [0 , 1] .For MGRIT, we choose the proximal-point operator (3.6) as the coarse-grid operator. First, we solve the problem sequentially, with Nt = 8 , 503 iterations required for the convergence of the gradient descent algorithm (3.5). We then generate the MGRIT fine grid ti = i∆t, i = 0 , . . . , N t with ∆t = 1 
+
+> L
+
+. Next, we generate the coarse-grid Tj = j∆t,
+
+j = 0 , 1, . . . , N T , with ∆t = m∆t = 4 
+
+> L
+
+, such that the coarse grid has NT = 2 , 126 points. MGRIT then solves (4.3). Convergence for the sequential and MGRIT solves is illustrated in Fig. 6.1.                                  
+
+> (a) Sequential convergence (b) MGRIT convergence
+> Fig. 6.1: (a): Convergence of MP1, (2.2) , with a standard sequential solve using gradient descent method (3.5) ;∇f(uq)denotes the gradient of the qth sequential iterate. (b) Convergence of MP1, (2.2) , with MGRIT using gradient descent operator (3.5) on the fine grid and proximal point operator (3.6) on the coarse grid; rkdenotes residual (4.4) at iteration k,∇f(ukNt)denotes the gradient of the approximate solution at the final time point Ntand MGRIT iteration k,∇f(u0)denotes the gradient of the initial guess u0, and
+> r0denotes the initial MGRIT residual.
+
+In Fig. 6.1, we see the MGRIT convergence both in terms of the MGRIT residual and the gradient at the final time point Nt. We recall that the MGRIT convergence criteria is given in terms of space-time residual (4.4), but using the gradient of solution at the final time point ukNt of each MGRIT iteration as reference, we see that the gradient of the function is also reduced by a similar factor. Recalling remark 5.3, we can interpret (5.21) as follows: if we look at a semi-log plot of ∇f  uki
+
+ as a function of k, as in Fig. 6.1(b), then it will be upper bounded by a straight line with slope equal to ρr ∈ (0 , 1) , which is the slope of the residual curve, up until the point where 
+
+∥∇ f (ui)∥ ≈  L√2 A−1 r0  (ρr)k, at which point the curve flattens out to a constant value of ∥∇ f (ui)∥.Therefore, the numerical results presented here are consistent with our theoretical predictions in Section 5.4. In Fig. 6.2, we further explore the behavior of the gradient and the residual (4.4) as MGRIT converges. As expected, we see that as k increases, the gradient curve for the kth iteration in Fig. 6.2(a) approximates the curve in Fig. 6.1(a) increasingly closely. We note that in both Fig. 6.2(a) and (b), the gradient and MGRIT residual are reduced by a consistent factor for each iteration. We also note that the behavior on the initial time points of each iteration in Fig. 6.2(b) is consistent with the exactness property of MGRIT with FCF-relaxations; for m = 4 , at the kth MGRIT iteration, the first 2mk = 8 k fine points are solved exactly. Fig. 6.2(b) shows that MGRIT converges in a small number of iterations, which is crucial for obtaining parallel speedup; see Section 7. In Table 6.1, we present MGRIT convergence results for MP1 (2.2) with different coarsening factors m and number of MGRIT levels bℓ. We note that the larger the coarsening factor, the smaller the maximum number of allowed levels. From Section 5.1 we recall MP1’s (2.2) connection to the 1D heat equation, for which MGRIT convergence behavior is well understood [14, 16]. For parabolic problems, MGRIT has been observed to have a desirable property ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+16 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK                                 
+
+> (a) Gradient convergence by iteration (b) Residual convergence by iteration
+> Fig. 6.2: (a): 2-norm of ∇f uktC
+> , where ∇fis the gradient of f, and uktCis the approximate solution at coarse time point tCand iteration k. (b): 2-norm of rktC, where rktCis the residual (4.4) at coarse time point tCand iteration k.
+> Table 6.1: MGRIT convergence results for different values of mand bℓ, using gradient descent operator (3.5) on the fine grid and proximal point operator (3.6) on the coarse grid.
+
+bℓ = 2 bℓ = 3 bℓ = 4 bℓ = 5 bℓ = 6 bℓ = 7 
+
+m = 4 9 9 9 9 9 9
+
+m = 16 8 8 8
+
+m = 64 8 8
+
+m = 256 7     
+
+> (a) n= 40 ,Nt= 8 ,503
+
+of multigrid convergence known as h-independent convergence [47], which means that the convergence speed does not depend on the size of the fine grid. 
+
+6.2 MGRIT for proximal gradient applied to MP2 We now consider solving the EOP problem, MP2 (2.8), using proximal gradient method (3.8). For MGRIT, we choose the alternating proximals operator (3.9) to be the coarse-grid operator. We noted in Section 3.2 how the sequence generated by alternating proximals does not necessarily converge to the same set of minimizers as that of proximal gradient. However, the similarity between these operators justifies the use of the alternating proximal method as the coarse-grid method (recall discussions in Section 3.3 and Section 5 on choosing coarse-grid operators). 
+
+6.2.1 Numerical results for MP2-1D For the MP2-1D example, we consider MP2 in (2.8) with d = 1 and 
+
+N = n = 256 , with MGRIT parameters m = 4 and bℓ = 2 . We again start by presenting results for the sequential and MGRIT convergence in Fig. 6.3. In this example, the proximal gradient method requires Nt = 109 , 888 iterations to reach the prescribed halting tolerance, i.e., that the generalized gradient of F , GsF in (5.10), be reduced by 8 orders of magnitude. MGRIT reaches the prescribed residual tolerance in 10 iterations. As in Section 6.1, it is interesting to investigate the relation between the MGRIT residual (4.4) and the generalized gradient (5.10); see Fig. 6.4. Much like in Fig. 6.2(a), the gradient in Fig. 6.4(a) is consistently reduced across iterations. The space-time residual in Fig. 6.4(b), however, has an unusual behavior over the first coarse time points as the number of iterations increases. To further explore this, in Fig. 6.5 we look at the spatial components of MGRIT residual vector 
+
+rk (4.4) at iteration k in order to relate the residual to the exact solution bu and obstacle ϕ of the 1D EOP in (2.4); see Fig. 2.1. With the solution bu and obstacle ϕ in Fig. 2.1 overlaid on the residual (4.4) in Fig. 6.5, we see that the residual decreases more slowly and less smoothly around the spatial coordinates where the membrane attaches to the obstacle and the problem is nonsmooth. This nonsmoothness causes the slope of the convergence curves in Fig. 6.3(b) to taper off, compared to Fig. 6.1(b). Looking back at Fig. 6.4(b), we observe that for large k, when MGRIT approaches the exact trajectory {ui}, the MGRIT residual is initially nonsmooth as a function of time point. This reflects that, at early ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+17 
+
+(a) Sequential convergence (b) MGRIT convergence 
+
+Fig. 6.3: (a) Convergence of MP2-1D, (2.8) , with a standard sequential solve using proximal gradient descent method (3.8) ; Gsf (uq )
+
+denotes the generalized gradient (5.10) of the qth sequential iterate. (b): Convergence of MP2-1D, (2.8) , with MGRIT using proximal gradient operator (3.8) on the fine grid and alternating proximal mappings operator (3.9) on the coarse grid; rk denotes residual 
+
+(4.4) at iteration k, GsF (ukNt ) denotes generalized gradient (5.10) of the approximate solution at the final time point Nt and MGRIT iteration k, GsF (u0) denotes the generalized gradient of the initial guess u0, and r0 denotes the initial MGRIT residual. 
+
+(a) Gradient convergence by iteration (b) Residual convergence by iteration 
+
+Fig. 6.4: (a): 2-norm of GsF 
+
+ uktC
+
+, where GsF is the generalized gradient of F (5.10) , and uktC is the approximate solution at coarse time point tC and iteration k. (b) 2-norm of rktC , where rktC is the residual (4.4) at coarse time point tC and iteration k.
+
+Fig. 6.5: Left axis: 2-norm of (rk )i, where (rk )i is the ith spatial component of residual (4.4) at iteration k. Right axis: bu is the exact solution and ϕ is the obstacle of the 1D EOP, as in Fig. 2.1. The i points form a 256 -point discretization of the interior of the domain Ω = [0 , 3π] of both bu and ϕ.
+
+time points, the set of spatial points where the nonsmooth constraint is active is not fully determined yet. Once the ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+18 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+active set is fixed, the residual behaves similarly to how it does for MP1 (2.2), as seen in Fig. 6.2(b). 
+
+6.2.2 Numerical results for MP2-2D For the MP2-2D example, we consider MP2 in (2.8) with d = 2 and 
+
+N = n2 = 64 2, with MGRIT parameters m = 4 and bℓ = 2 . As in Section 6.1, we start by presenting the sequential and MGRIT convergence results in Fig. 6.6, noting that the sequential solver required Nt = 13 , 256 iterations to converge. We then compare the generalized gradient (5.10) and the MGRIT residual (4.4) at the coarse time points in Fig. 6.7. As with Fig. 6.5 for the MP2-1D, we also look at the 2-norm of the spatial components of the residual (4.4) in Fig. 6.8. This time, in order to present a 3D plot, we only present the residual at the final iteration k = 10 .
+
+(a) Sequential convergence (b) MGRIT convergence 
+
+Fig. 6.6: (a) Convergence of MP2-2D, (2.8) , with a standard sequential solve using proximal gradient descent method (3.8) ; Gsf (uq )
+
+denotes generalized gradient (5.10) of the qth sequential iterate. (b): Convergence of MP2-2D, (2.8) , with MGRIT using proximal gradient operator (3.8) on the fine grid and alternating proximal mappings operator (3.9) on the coarse grid; rk denotes the residual 
+
+(4.4) at iteration k, GsF (ukNt ) denotes the generalized gradient (5.10) of the approximate solution at the final time point Nt and MGRIT iteration k, GsF (u0) denotes the generalized gradient of the initial guess u0, and r0 denotes the initial MGRIT residual. 
+
+Fig. 6.7: (a) 2-norm of GsF 
+
+ uktC
+
+, where GsF is the generalized gradient of F , (5.10) , and uktC is the approximate solution vector at coarse time point tC and iteration k. (b) 2-norm of rktC , where rktC is residual (4.4) at coarse time point tC and iteration k.
+
+Comparing Fig. 6.8 to Fig. 2.1, we see a similar relationship between the residual, the solution and the obstacle as we did with Fig. 6.5 and Fig. 2.1 for MP2-1D. To better illustrate this relationship, we present countours plots in Fig. 6.9, from which we observe that the residual of the final MGRIT iteration is larger in the regions where the membrane attaches to the obstacle, as with the 1D case. Overall, we observe that MGRIT for MP2-2D behaves similar to that described for MP2-1D in Section 6.1, and MGRIT convergence for both MP2-1D and MP2-2D behave according to the theory in Section 5.4. As with MP1 in Table 6.1, we investigate the convergence results for MP2, (2.8), with different coarsening factors 
+
+m and number of MGRIT levels bℓ. This time, we also consider different sizes for the matrices A1 in (2.1a) for MP2-1D ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+19 
+
+Fig. 6.8: 2-norm of (r10 )(i,j ), where (r10 )(i,j ) is the (i, j )th spatial component of residual (4.4) for the 10 th and final MGRIT iteration. 
+
+Fig. 6.9: Contour plots of the approximate solution bu and obstacle ϕ for the 2D EOP, as in Fig. 2.1, and the residual of the 10th and final MGRIT iteration in Fig. 6.8. 
+
+and A2 in (2.1b) for MP2-2D. Overall, MGRIT consistently converges in a small number of iterations, as for MP1 in Table 6.1, and we obtain iteration numbers that are almost independent of problem size. 
+
+Table 6.2: MP2-1D convergence results for different values of n, m and bℓ, using proximal gradient operator (3.8) on the fine grid and alternating proximals operator (3.9) on the coarse grid. 
+
+bℓ = 2 bℓ = 3 bℓ = 4 bℓ = 5 bℓ = 6 bℓ = 7 bℓ = 8 
+
+m = 4 10 10 11 12 12 12 13 
+
+m = 16 8 9 10 10 
+
+m = 64 10 10 10 
+
+m = 256 10 10 
+
+m = 1024 11 
+
+(a) n = 256 , Nt = 109 , 888 .
+
+bℓ = 2 bℓ = 3 bℓ = 4 bℓ = 5 bℓ = 6 bℓ = 7 bℓ = 8 bℓ = 9 bℓ = 10 
+
+m = 4 9 12 11 11 12 12 12 12 12 
+
+m = 16 10 10 11 11 
+
+m = 64 8 10 10 
+
+m = 256 9 9
+
+m = 1024 10 
+
+(b) n = 512 , Nt = 369 , 612 .ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+20 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+Table 6.3: MP2-2D convergence results for different values of n, m and bℓ, using proximal gradient operator (3.8) on the fine grid and alternating proximals operator (3.9) on the coarse grid. 
+
+bℓ = 2 bℓ = 3 bℓ = 4 bℓ = 5 bℓ = 6 bℓ = 7 
+
+m = 4 10 13 13 13 13 13 
+
+m = 16 11 12 12 
+
+m = 64 10 10 
+
+m = 256 9
+
+(a) n2 = 64 2, Nt = 13 , 256 .
+
+bℓ = 2 bℓ = 3 bℓ = 4 bℓ = 5 bℓ = 6 bℓ = 7 bℓ = 8 
+
+m = 4 10 10 10 10 11 11 11 
+
+m = 16 9 9 9
+
+m = 64 9 9
+
+m = 256 9
+
+(b) n2 = 128 2, Nt = 46 , 431 .
+
+7 MGRIT parallel speedup estimates In our numerical results, we verified that MGRIT was successful in solving both MP1, (2.2), and MP2, (2.8), in a small number of iterations. However, each MGRIT iteration does considerably more work than a full sequential solve. Since we are interested in the wall-clock time reduction in solving in parallel, we need to compute the relative cost of the MGRIT solve compared to the sequential solve, and estimate how much time would be saved by solving the problem in parallel. For that, we must first derive a formula for estimating the wall-clock time speedup as a function of the relevant parameters. Based on [41] and [32], which provide speedup estimates for the parareal method, we derive a formula for the MGRIT speedup estimate. In the following estimates, we assume that parallel communication costs are negligible, as assumed for the parareal speedup estimates in [32, 41]. 
+
+7.1 Estimating 2-level MGRIT wall-clock time speedup First, we consider a 2-level MGRIT scheme as in Section 4.1. Let Nf denote the number of time intervals on the fine-grid level ℓ = 1 , and let tf denote the wall-clock time required to apply the fine-grid time-stepping operator Φ once. Similarly, let Nc denote the total number of time intervals on the coarse-grid level ℓ = 2 , and let tc denote the wall-clock time required to apply the coarse-grid time-stepping operator Φ∆ once. The coarsening factor, m, is given by m = Nf 
+
+> Nc
+
+. Let Np denote the number of processors; full parallelization is obtained when we take Np = Nc = Nf 
+
+> m
+
+, such that we allot each coarse-grid step to its own processor, along with m fine-grid steps. Finally, let Nit be the number of MGRIT iterations required for convergence to a set tolerance. The speedup, given by the ratio of the computation time for the sequential solve and the MGRIT solve, is given by (7.1) S2 (Np) = Nf tf
+
+Nit 
+
+
+
+Nctc + 2Nf tf
+
+> Np
+
+ .
+
+The numerator Nf tf represents the total cost of the sequential solve. In the denominator, we have the cost of the MGRIT solve: for each of the Nit MGRIT iterations, the 2Nf tf 
+
+> Np
+
+term accounts for the fine-grid cost of the parallel FCF-relaxation and correcting the coarse-grid solution, which in total amount to the cost of two full sequential solves that are solved in parallel by Np processors, while the Nctc term accounts for the cost of computing the C-point residual. Recalling that Nf 
+
+> Nc
+
+= m and assuming full parallelization (i.e., Np = Nf 
+
+> m
+
+), we rearrange (7.1) to find (7.2) S2 (m) = Nf tf
+
+Nit 
+
+
+
+Nctc + 2Nf tf
+
+> Np
+
+ = 1
+
+Nit 
+
+ 1 
+
+> mtc
+> tf
+
++ 2
+
+> Np
+
+ = 1
+
+Nit 
+
+ 1 
+
+> mtc
+> tf
+
++ 2mNf
+
+ .
+
+In Section 6, we observed that Nit does not vary significantly with m, so in what follows we assume it is a constant independent of m. We further assume tc is independent of m, such that setting the derivative of S2 with respect to mETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+21 equal to zero then yields (7.3) S′ 
+
+> 2
+
+(m) = 0 ⇐⇒ − 1
+
+m2
+
+tc
+
+tf
+
++ 2
+
+Nf
+
+= 0 ⇐⇒ m =
+
+s
+
+Nf
+
+2
+
+tc
+
+tf
+
+,
+
+where for simplicity we assume the minimizer 
+
+q Nf 
+
+> 2
+> tc
+> tf
+
+is an integer, such that we can choose m = m∗ := 
+
+q Nf
+
+> 2
+> tc
+> tf
+
+as the optimal coarsening factor; in our results in the tables below, we round 
+
+q Nf 
+
+> 2
+> tc
+> tf
+
+to the nearest integer. Denote 
+
+α := tc 
+
+> tf
+
+, such that m∗ =
+
+q αN f 
+
+> 2
+
+. Taking m = m∗ in (7.2), and simplifying gives (7.4) S2 (m∗) = 1
+
+Nit 1q αN f
+
+> 2
+
+α + 2  
+
+> qαN f
+> 2
+> Nf
+
+! = 1
+
+Nit 
+
+q 2αNf +
+
+q 2αNf
+
+ =
+
+pNf
+
+Nit 2√2α .
+
+We observe that the optimal speedup is a function of Nf , Nit and α := tc 
+
+> tf
+
+. Since the optimal speedup is proportional to 
+
+pNf , it is clear that more speedup can be obtained and MGRIT will be more effective when the fine-level optimization method converges slowly and requires a large Nf . Similarly, to keep Nit small it is important to choose a coarse-grid operator that closely matches the fine operator, see [9, 14]. Finally, α can be brought close to 1 by making tc as close as possible to tf , for example, by optimizing the implicit computations done with the coarse-grid operator or by substituting it by a different one with smaller tc, without increasing Nt.
+
+7.2 Estimating 3-level MGRIT wall-clock time speedup Next, we introduce a third level, ℓ = 3 , which is obtained from coarsening the ℓ = 2 coarse grid level by the same coarsening factor m. Associated with ℓ = 3 is the time-stepping operator Φ3∆, defined according to (5.6) (i.e., an operator similar to Φ∆ with an m times larger step size), which takes m2∆t-sized steps. Let Ncc be the number of time intervals on the ℓ = 3 level, and let tcc denote the wall-clock time required to compute one Φ3∆ step. We assume that tcc = tc, since we use the same implicit scheme on both coarse levels ℓ = 2 and ℓ = 3 , and Ncc = Nc 
+
+> m
+
+= Nf 
+
+> m2
+
+, assuming Ncc is an integer. For bℓ = 3 , we get a speedup estimate formula of (7.5) S3 (Np) = Nf tf
+
+Nit 
+
+
+
+Ncc tcc + 3Nctc 
+
+> min {Np,N c/m }
+
++ 2Nf tf
+
+> Np
+
+ .
+
+The reasoning is similar to that for bℓ = 2 , with the difference that here we replace the original coarse-grid work in (7.1), with cost Nctc, with a new 2-grid MGRIT solve. Note that on the ℓ = 2 level, a post F-relaxation step must be done to distribute the correction from the coarse-grid solve in ℓ = 3 , such that the total relaxation cost on the 
+
+ℓ = 2 grid is roughly that of 3 sequential coarse solves. Since there are only Nc 
+
+> m
+
+intervals on the first coarse level, we can use at most Nc 
+
+> m
+
+processors on that level. Assuming full parallelization on the fine level Np = Nc, we have that 
+
+min {Np, Nc 
+
+> m
+
+} = min {Nc, Nc 
+
+> m
+
+} = Nc 
+
+> m
+
+. In that case, (7.6) S3 (Np) = Nf tf
+
+Nit 
+
+
+
+Ncc tcc + 3Nctc 
+
+> Nc/m
+
++ 2Nf tf
+
+> Nc
+
+ = 1
+
+Nit 
+
+ 1 
+
+> m2
+> tc
+> tf
+
++ 2mNf
+
+
+
+1 + 32
+
+> tc
+> tf
+
+ .
+
+Following a similar reasoning to that for finding the optimal 2-level coarsening factor (7.3), we set the derivative of S3
+
+with respect to m equal to zero and get (7.7) S′ 
+
+> 3
+
+(Np) = 0 ⇐⇒ − 1
+
+m3
+
+tc
+
+tf
+
++ 2
+
+Nf
+
++ 2
+
+Nf
+
+32
+
+tc
+
+tf
+
+= 0 ⇐⇒ m = 3
+
+s
+
+Nf
+
+2
+
+ 1
+
+tf /t c + 3 /2
+
+
+
+.
+
+Assuming 3
+
+r Nf
+
+> 2
+
+ 1 
+
+> tf/t c+3 /2
+
+
+
+is a integer, we take m = m∗ := 3
+
+r Nf
+
+> 2
+
+ 1 
+
+> tf/t c+3 /2
+
+
+
+to be the optimal coarsening factor; we take the nearest integer, otherwise. We note that this analysis can be further extended for more levels, but here we restrict ourselves to the 2- and 3-level cases. ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+22 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+7.3 MGRIT parallel speedup estimates for MP1 and MP2 Using the formulas derived for 2 and 3 levels, we now present the computed MGRIT parallel speedup estimates for MP1 in (2.2) and MP2 in (2.8) in the following tables. First, we compute m∗ for ℓ = 2 and ℓ = 3 using (7.3) and (7.7), respectively; if the resulting value is not an integer, we round it to the nearest integer and call that m∗ instead. We choose m = m∗ as the coarsening factor for the MGRIT solve, which gives us N ∗ 
+
+> it
+
+iterations in our numerical experiments; note that this is not the optimal number of MGRIT iterations, but simply the value of Nit obtained experimentally when using m = m∗. We then use m = m∗
+
+and Nit = N ∗ 
+
+> it
+
+in the speedup formulas (7.2) and (7.6), where we also use an empirically estimated α = tc 
+
+> tf
+
+.Next, we consider a hypothetical ideal case in which tc 
+
+> tf
+
+= 1 = bα. Even if tc 
+
+> tf
+
+= 1 is unlikely, this provides a lower bound for the value of the optimal coarsening factor m∗, since m∗ in (7.3) and (7.7) is increasing with respect to  
+
+> tc
+> tf
+
+. Following the previously outlined process, we compute the optimal bm∗, and then obtain cNit 
+
+> ∗
+
+numerically, which are used alongside bα = 1 for the 2- and 3-level speedup formulas to provide an estimated upper bound for speedup. We note that since the fine grid, ti = i∆t, i = 0 , 1, . . . , N t, has Nt + 1 points, there are Nf = Nt fine-grid intervals. Similarly, Nc = NT .
+
+Table 7.1: Speedup estimates for MP1, (2.2) , different values of n and bℓ, using gradient descent operator (3.5) on the fine grid and proximal point operator (3.6) on the coarse grid. Here, m∗ and S∗ are computed based on the numerically estimated tc 
+
+> tf
+
+values given by α = 2 .9 for n = 40 , α = 3 .1 for n = 60 , and α = 3 .5 for n = 80 . Np denotes the number of processors required to achieve optimal speedup. 
+
+bℓ m∗ N ∗ 
+
+> it
+
+S∗ 
+
+> ℓ
+
+Np
+
+2 112 7 2.73 76 3 27 8 3.29 315 
+
+(a) n = 40 , Nt = 8 , 503 .
+
+bℓ m∗ N ∗ 
+
+> it
+
+S∗ 
+
+> ℓ
+
+Np
+
+2 167 8 3.37 109 3 35 8 5.11 516 
+
+(b) n = 60 , Nt = 18 , 050 .
+
+bℓ m∗ N ∗ 
+
+> it
+
+S∗ 
+
+> ℓ
+
+Np
+
+2 229 8 4.09 132 3 42 8 6.41 715 
+
+(c) n = 80 , Nt = 30 , 018 .
+
+Table 7.2: Speedup estimates for MP1, (2.2) , for different values of n and bℓ, using gradient descent operator (3.5) on the fine grid and proximal point operator (3.6) on the coarse grid. Here, bm∗ and bS∗ are computed based on a hypothetical lower bound for tc
+
+> tf
+
+given by bα = 1 . Np denotes the number of processors required to achieve optimal speedup. 
+
+bℓ bm∗ cNit  
+
+> ∗
+
+bS∗ 
+
+> ℓ
+
+Np
+
+2 65 8 4.07 131 3 22 8 8.33 387 
+
+(a) n = 40 , Nt = 8 , 503 .
+
+bℓ bm∗ cNit  
+
+> ∗
+
+bS∗ 
+
+> ℓ
+
+Np
+
+2 95 8 5.93 190 3 28 8 13 .84 645 
+
+(b) n = 60 , Nt = 18 , 050 .
+
+ℓ bm∗ cNit  
+
+> ∗
+
+bS∗ 
+
+> ℓ
+
+Np
+
+2 123 8 7.65 245 3 33 8 19 .48 910 
+
+(c) n = 80 , Nt = 30 , 018 .
+
+Table 7.3: Speedup estimates MP2-1D, (2.8) , for different values of n and bℓ, using proximal gradient operator (3.8) on the fine grid and alternating proximals operator (3.9) on the coarse grid. Here, m∗ and S∗ are computed based on the numerically estimated tc
+
+> tf
+
+values given by α = 2 .4 for n = 256 , and α = 3 .9 for n = 512 . Np denotes the number of processors required to achieve optimal speedup. 
+
+bℓ m∗ N ∗ 
+
+> it
+
+S∗ 
+
+> ℓ
+
+Np
+
+2 363 10 7.56 303 3 60 9 19 .52 1832 
+
+(a) n = 256 , Nt = 109 , 888 .
+
+bℓ m∗ N ∗ 
+
+> it
+
+S∗ 
+
+> ℓ
+
+Np
+
+2 849 10 10 .88 436 3 100 9 27 .12 3697 
+
+(b) n = 512 , Nt = 369 , 612 .
+
+First, we note that 2-level MGRIT is predicted to provide speedup over sequential solves in all of our estimates. For most cases, the estimated speedups for ℓ = 3 were considerable improvements over the ℓ = 2 speedup. For all ETNA  
+
+> Kent State University and Johann Radon Institute (RICAM)
+> PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT
+
+23 
+
+Table 7.4: Speedup estimates for MP2-1D, (2.8) , for different values of n and bℓ, using the proximal gradient operator (3.8) on the fine grid and the alternating proximals operator (3.9) on the coarse grid. Here, bm∗ and bS∗ are computed based on an hypothetical lower bound for tc 
+
+> tf
+
+given by bα = 1 . Np denotes the number of processors required to achieve optimal speedup. 
+
+bℓ bm∗ cNit  
+
+> ∗
+
+bS∗ 
+
+> ℓ
+
+Np
+
+2 234 10 11 .72 470 3 52 9 40 .61 2114 
+
+(a) n = 256 , Nt = 109 , 888 .
+
+bℓ bm∗ cNit  
+
+> ∗
+
+bS∗ 
+
+> ℓ
+
+Np
+
+2 430 10 21 .49 860 3 77 10 82 .62 4801 
+
+(b) n = 512 , Nt = 369 , 612 .
+
+Table 7.5: Speedup estimates for MP2-2D, (2.8) , for different values of n and bℓ, using proximal gradient operator (3.8) on the fine grid and alternating proximals operator (3.9) on the coarse grid. Here, m∗ and S∗ are computed based on the numerically estimated tc 
+
+> tf
+
+values given by α = 13 for n2 = 64 2, and α = 7 for n2 = 128 2. Np denotes the number of processors required to achieve optimal speedup. 
+
+bℓ m∗ N ∗ 
+
+> it
+
+S∗ 
+
+> ℓ
+
+Np
+
+2 294 9 1.25 46 3 46 10 0.67 289 
+
+(a) n2 = 64 2, Nt = 13 , 256 .
+
+bℓ m∗ N ∗ 
+
+> it
+
+S∗ 
+
+> ℓ
+
+Np
+
+2 403 9 3.19 116 3 58 10 3.24 801 
+
+(b) n2 = 128 2, Nt = 46 , 431 .
+
+Table 7.6: Speedup estimates for MP2-2D, (2.8) , for different values of n and bℓ, using the proximal gradient operator (3.8) on the fine grid and the alternating proximals operator (3.9) on the coarse grid. Here, bm∗ and bS∗ are computed based on an hypothetical lower bound for tc 
+
+> tf
+
+given by bα = 1 . Np denotes the number of processors required to achieve optimal speedup. 
+
+bℓ bm∗ cNit  
+
+> ∗
+
+bS∗ 
+
+> ℓ
+
+Np
+
+2 81 10 4.07 164 3 25 9 10 .07 531 
+
+(a) n2 = 64 2, Nt = 13 , 256 .
+
+bℓ bm∗ cNit  
+
+> ∗
+
+bS∗ 
+
+> ℓ
+
+Np
+
+2 152 10 7.61 306 3 39 9 22 .87 1191 
+
+(b) n2 = 128 2, Nt = 46 , 431 .
+
+cases, increasing N led to improved speedup. As the sizes N of the Laplacian matrices (2.1a) and (2.1b) increase, more sequential iterations are needed until convergence is achieved, which in turn increases the size of the MGRIT time grids. Optimal speedup formula (7.4) shows that larger grids often benefit from more parallelization. On the other hand, increasing N is also correlated with an increased tc 
+
+> tf
+
+ratio, due to the cost of the implicit coarse-grid time-stepping operations increasing relatively more than that of the explicit fine-grid ones. However, in our experiments the larger tc
+
+> tf
+
+ratios were offset by the increase in Nt, such that speedup was improved with larger N .The results in Table 7.5 are exceptions to the above. For the n2 = 64 2 experiment, the estimated tf 
+
+> tc
+
+ratio of α = 13 
+
+was very large. This is expected, since we are using 2D Laplacians (2.1b) instead of 1D ones (2.1a), thus increasing the relative cost of implicit steps. In fact, α was so large that the 2-level solve is predicted to perform better than the 3-level solve, likely since using 3 levels requires an additional post-relaxation step on the ℓ = 2 coarse grid. However, when increasing the problem size to n2 = 128 2, the tc 
+
+> tf
+
+ratio was reduced to α = 7 . To understand why this happens, recall that the fine-grid proximal gradient operator (3.8) is Φ = Psg ◦ Gsf , while the coarse-grid alternating proximals operator (3.9) is Φ∆ = Psg ◦ Psf , with s = 1 
+
+> L
+
+for Φ and s = mL for Φ∆. As N increases, the cost of the Psg step in both Φ and Φ∆ accounts for a larger share of both tc and tf , such that the tc 
+
+> tf
+
+ratio is reduced. While still large, tc 
+
+> tf
+
+was reduced enough that the 3-level solve is estimated to provide a slight speedup improvement over the 2-level solve. In particular, Table 7.3 and Table 7.5 exemplify the conditions for which our method performs best and worse, respectively; in the former, we have large Nt and small α, while the opposite is true for the latter. The implicit steps in our MGRIT implementation were calculated using LU-factorization with saved L and U factors to avoid having to repeatedly invert large matrices directly; improving this calculation can bring the tc 
+
+> tf
+
+ratio to lower, more beneficial levels, hence bringing speedup estimates closer to the hypothetical tc 
+
+> tf
+
+= 1 results in Table 7.2, Table 7.4 and Table 7.6. ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+24 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK 
+
+While not explored here, we expect speedups to potentially improve with more levels; this is supported by Table 6.1, Table 6.2 and Table 6.3, in which we observe that the Nit remains fairly consistent across for all possible values ℓ.Finally, increasing the resolution of MP2-2D to n2 = 256 2 or n2 = 512 2 to match the tests for MP2-1D, would dramatically increase Nt, which would also be expected to substantially increase the speedup. 
+
+8 Issues with momentum-accelerated algorithms So far, we have only worked with standalone versions of gradient-based methods such as gradient descent, (3.5), and proximal gradient descent, (3.8). However, in practice they are often replaced by accelerated variants; for example, gradient descent is often replaced by Nesterov’s accelerated gradient descent [33]. Starting from u0 ∈ RN and letting 0 < s < 2 
+
+> L
+
+, Nesterov’s accelerated gradient sequence 
+
+{uk, vk}, given by (8.1) uk = vk−1 − s∇f (vk−1) ,
+
+vk = uk + βk (uk − uk−1) ,
+
+with momentum parameter βk = k−1 
+
+> k+2
+
+, converges to a minimizer of f with a convergence rate of O( 1 
+
+> k2
+
+) for convex 
+
+f with Lipschitz gradient [34]. The connection between optimization method and ODE still holds, although not as trivially as in Section 3.3. In [43], a second-order ODE was derived which is the exact limit of Nesterov’s scheme as the time step s approaches 0:(8.2) d2
+
+dt2 u(t) + 3
+
+t
+
+ddt u(t) + ∇f (u(t)) = 0 ,
+
+for t > 0 with initial conditions u(0) = u0 and ddt u(0) = 0 , where u0 is the initial guess. The time parameter in this ODE is related to the step size s in Nesterov’s scheme via t ≈ k√s.Initially, we expected that MGRIT in standard form with implicit discretization on the coarse grid, as explained above, would work well for MP1, (2.2), with Nesterov’s accelerated gradient operator (8.2) as the fine-grid operator and a similar momentum-accelerated proximal point operator (3.6) as the coarse-grid operator, given the positive results obtained with gradient descent (3.5). However, in our preliminary work, MGRIT has failed to converge except for when using very small constant values of β = ϵ > 0, in which case Nesterov’s scheme behaves almost exactly like gradient descent. Unlike gradient descent, which we have observed to behave similarly to a parabolic PDE in Section 5.1, the same does not apply for Nesterov’s accelerated gradient descent as explained in the following remark. REMARK 8.1 (Nesterov’s accelerated gradient ODE and hyperbolic PDE connection). Consider Nesterov’s accelerated gradient ODE (8.2) applied to MP1, (2.2), such that ∇f (u(t)) = A1u, where A1 is the 1D Laplacian matrix in (2.1a) with (A1u)i ≈ − ∂2 
+
+> ∂x 2
+
+u(xi, t ). Then, we have (8.3) ∂2
+
+∂t 2 u(x, t ) + 3
+
+t∂∂t u(x, t ) − ∂2
+
+∂x 2 u(x, t ) = 0 ,
+
+which is a hyperbolic PDE. This behavior similar to a hyperbolic PDE, which MGRIT in standard form is known to struggle with, might be a reason for why Nesterov’s accelerated gradient did not work with MGRIT using the standard algorithmic approach operators described in Section 4. On the other hand, it has recently been shown that MGRIT can be made to work for hyperbolic PDEs by carefully considering non-standard specialized coarse operators: research on on modified semi-Lagrangian coarse-grid operators for advection-dominated and hyperbolic PDEs [9, 10, 11, 12, 26] has shown progress in adapting MGRIT to solve hyperbolic PDEs, which indicates a promising direction for further research on applying MGRIT to momentum-accelerated optimization algorithms. 
+
+9 Conclusions We have presented a framework for solving optimization problems all-at-once, in the sense that sequential solves are replaced by a parallel solver in which the sequential iterations are computed simultaneously. Using the MGRIT algorithm to parallelize over iteration of the optimization method instead of over time, we demonstrated a multilevel parallel-in-iteration method that can converge in a small number of iterations, and also provides considerable estimated speedup for both smooth and nonsmooth problems. Further improvements to this framework and the consideration of other model problems can be investigated by the continued exploration of the connection between optimization algorithms and ODEs, especially those related to diffusion-dominated problems for which MGRIT performs well. Among the problems of our interest, we list constrained optimization problems using ADMM, minimizations of nonquadratic functions (such as the cross-entropy loss function from logistic regression) and applications of stochastic ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+PARALLEL-IN-ITERATION OPTIMIZATION USING MGRIT 25 approximations such as stochastic gradient descent, to name a few. We established that in order to extend this framework to momentum-accelerated algorithms such as Nesterov’s accelerated gradient descent and FISTA, we will likely need to address MGRIT’s difficulties with handling hyperbolic PDEs. Adapting MGRIT with this intent is an intricate problem-specific endeavor, which we leave as a suggestion for future work. 
+
+REFERENCES [1] A. A NG , H. D E STERCK , AND S. V AVASIS , MGProx: A nonsmooth multigrid proximal gradient method with adaptive restriction for strongly convex optimization , SIAM Journal on Optimization, 34 (2024), p. 2788–2820. 
+
+http://dx.doi.org/10.1137/23M1552140 .[2] J. D. A NGRIST AND J.-S. P ISCHKE , Mostly Harmless Econometrics: An Empiricist’s Companion , Princeton University Press, Princeton, USA, Dec. 2008. [3] H. A TTOUCH , Z. C HBANI , J. P EYPOUQUET , AND P. R EDONT , Fast convergence of inertial dynamics and algorithms with asymptotic vanishing viscosity , Mathematical Programming, 168 (2016), p. 123–175. 
+
+http://dx.doi.org/10.1007/s10107-016-0992-8 .[4] H. H. B AUSCHKE AND W. M. M OURSI , An Introduction to Convexity, Optimization, and Algorithms , Society for Industrial and Applied Mathematics, Philadelphia, USA, Jan. 2023. [5] A. B ECK AND M. T EBOULLE , A fast iterative shrinkage-thresholding algorithm for linear inverse problems , SIAM Journal on Imaging Sciences, 2 (2009), p. 183–202. 
+
+http://dx.doi.org/10.1137/080716542 .[6] A. B RANDT AND C. W. C RYER , Multigrid algorithms for the solution of linear complementarity problems arising from free boundary problems , SIAM Journal on Scientific and Statistical Computing, 4 (1983), p. 655–684. 
+
+http://dx.doi.org/10.1137/0904046 .[7] L. A. C AFFARELLI , The obstacle problem revisited , The Journal of Fourier Analysis and Applications, 4 (1998), p. 383–402. 
+
+http://dx.doi.org/10.1007/BF02498216 .[8] A. C HAMBOLLE AND T. P OCK , An introduction to continuous optimization for imaging , Acta Numerica, 25 (2016), p. 161–319. 
+
+http://dx.doi.org/10.1017/S096249291600009X .[9] H. D E STERCK , R. D. F ALGOUT , S. F RIEDHOFF , O. A. K RZYSIK , AND S. P. M AC LACHLAN , Optimizing multigrid reduction-in-time and parareal coarse-grid operators for linear advection , Numerical Linear Algebra with Applications, 28 (2021). 
+
+http://dx.doi.org/10.1002/nla.2367 .[10] H. D E STERCK , R. D. F ALGOUT , AND O. A. K RZYSIK , Fast multigrid reduction-in-time for advection via modified semi-Lagrangian coarse-grid operators , SIAM Journal on Scientific Computing, 45 (2023), p. A1890–A1916. 
+
+http://dx.doi.org/10.1137/22M1486522 .[11] H. D E STERCK , R. D. F ALGOUT , O. A. K RZYSIK , AND J. B. S CHRODER , Efficient multigrid reduction-in-time for method-of-lines discretizations of linear advection , Journal of Scientific Computing, 96 (2023). 
+
+http://dx.doi.org/10.1007/s10915-023-02223-4 .[12] H. D E STERCK , S. F RIEDHOFF , A. J. M. H OWSE , AND S. P. M AC LACHLAN , Convergence analysis for parallel-in-time solution of hyperbolic systems , Numerical Linear Algebra with Applications, 27 (2019). 
+
+http://dx.doi.org/10.1002/nla.2271 .[13] H. D E STERCK , S. F RIEDHOFF , O. A. K RZYSIK , AND S. P. M AC LACHLAN , Multigrid reduction-in-time convergence for advection problems: A Fourier analysis perspective , Numerical Linear Algebra with Applications, 32 (2024). 
+
+http://dx.doi.org/10.1002/nla.2593 .[14] V. A. D OBREV , T. K OLEV , N. A. P ETERSSON , AND J. B. S CHRODER , Two-level convergence theory for multigrid reduction in time (MGRIT) ,SIAM Journal on Scientific Computing, 39 (2017), p. S501–S527. 
+
+http://dx.doi.org/10.1137/16M1074096 .[15] M. E MMETT AND M. M INION , Toward an efficient parallel in time method for partial differential equations , Communications in Applied Mathematics and Computational Science, 7 (2012), p. 105–132. 
+
+http://dx.doi.org/10.2140/camcos.2012.7.105 .[16] R. D. F ALGOUT , S. F RIEDHOFF , T. V. K OLEV , S. P. M AC LACHLAN , AND J. B. S CHRODER , Parallel time integration with multigrid , SIAM Journal on Scientific Computing, 36 (2014), p. C635–C661. 
+
+http://dx.doi.org/10.1137/130944230 .[17] R. D. F ALGOUT , T. A. M ANTEUFFEL , B. O’N EILL , AND J. B. S CHRODER , Multigrid reduction in time for nonlinear parabolic problems: A case study , SIAM Journal on Scientific Computing, 39 (2017), p. S298–S322. 
+
+http://dx.doi.org/10.1137/16M1082330 .[18] M. P. F RIEDLANDER AND P. T SENG , Exact regularization of convex programs , SIAM Journal on Optimization, 18 (2008), p. 1326–1350. 
+
+http://dx.doi.org/10.1137/060675320 .[19] M. J. G ANDER , 50 Years of Time Parallel Time Integration , Springer International Publishing, Cham, Switzerland, 2015, p. 69–113. [20] M. J. G ANDER , F. K WOK , AND J. S ALOMON , PARAOPT: A parareal algorithm for optimality systems , SIAM Journal on Scientific Computing, 42 (2020), p. A2773–A2802. 
+
+http://dx.doi.org/10.1137/19M1292291 .[21] M. J. G ANDER AND S. V ANDEWALLE , Analysis of the parareal time-parallel time-integration method , SIAM Journal on Scientific Computing, 29 (2007), p. 556–578. 
+
+http://dx.doi.org/10.1137/05064607X .[22] B. G AO AND L. P AVEL , On the properties of the softmax function with application in game theory and reinforcement learning , 2017. 
+
+https://arxiv.org/abs/1704.00805 .[23] G. H. G OLUB , P. C. H ANSEN , AND D. P. O’L EARY , Tikhonov regularization and total least squares , SIAM Journal on Matrix Analysis and ETNA 
+
+> Kent State University and Johann Radon Institute (RICAM)
+
+26 G. ARAUJO, O. KRZYSIK, AND H. DE STERCK Applications, 21 (1999), p. 185–194. 
+
+http://dx.doi.org/10.1137/S0895479897326432 .[24] J. H AHNE , B. P OLENZ , I. K ULCHYTSKA -R UCHKA , S. F RIEDHOFF , S. U LBRICH , AND S. S CHÖPS , Parallel-in-time optimization of induction motors , Journal of Mathematics in Industry, 13 (2023). 
+
+http://dx.doi.org/10.1186/s13362-023-00134-5 .[25] A. J. H OWSE , H. D. S TERCK , R. D. F ALGOUT , S. M AC LACHLAN , AND J. S CHRODER , Parallel-in-time multigrid with adaptive spatial coarsening for the linear advection and inviscid burgers equations , SIAM Journal on Scientific Computing, 41 (2019), p. A538–A565. 
+
+http://dx.doi.org/10.1137/17M1144982 .[26] O. A. K RZYSIK , H. D E STERCK , R. D. F ALGOUT , AND J. B. S CHRODER , Parallel-in-time solution of hyperbolic PDE systems via characteristic-variable block preconditioning , SIAM Journal on Scientific Computing, 0 (0), pp. S337–S363. 
+
+http://dx.doi.org/10.1137/24M1673310 .[27] J.-L. L IONS , Y. M ADAY , AND G. T URINICI , Resolution d’EDP par un schema en temps parareel , Comptes Rendus de l’Académie des Sciences - Series I - Mathematics, 332 (2001), p. 661–668. 
+
+http://dx.doi.org/10.1016/S0764-4442(00)01793-6 .[28] P. L. L IONS AND B. M ERCIER , Splitting algorithms for the sum of two nonlinear operators , SIAM Journal on Numerical Analysis, 16 (1979), pp. 964–979. 
+
+http://www.jstor.org/stable/2156649 .[29] Y. M ADAY , M.-K. R IAHI , AND J. S ALOMON , Parareal in Time Intermediate Targets Methods for Optimal Control Problems , Springer Basel, Basel, Switzerland, 2013, p. 79–92. [30] J. M ANDEL , A multilevel iterative method for symmetric, positive definite linear complementarity problems , Applied Mathematics & Optimization, 11 (1984), p. 77–95. 
+
+http://dx.doi.org/10.1007/BF01442171 .[31] O. L. M ANGASARIAN , Sufficiency of exact penalty minimization , SIAM Journal on Control and Optimization, 23 (1985), p. 30–37. 
+
+http://dx.doi.org/10.1137/0323003 .[32] M. M INION , A hybrid parareal spectral deferred corrections method , Communications in Applied Mathematics and Computational Science, 5 (2010), p. 265–301. 
+
+http://dx.doi.org/10.2140/camcos.2010.5.265 .[33] Y. N ESTEROV , A method for solving the convex programming problem with convergence rate o(1 /k 2), Proceedings of the USSR Academy of Sciences, 269 (1983), pp. 543–547. 
+
+https://api.semanticscholar.org/CorpusID:145918791 .[34] , Introductory Lectures on Convex Optimization , Springer US, 2004. [35] B. W. O NG AND J. B. S CHRODER , Applications of time parallelization , Computing and Visualization in Science, 23 (2020). 
+
+http://dx.doi.org/10.1007/s00791-020-00331-4 .[36] B. O’D ONOGHUE AND E. C ANDÈS , Adaptive restart for accelerated gradient schemes , Foundations of Computational Mathematics, 15 (2013), p. 715–732. 
+
+http://dx.doi.org/10.1007/s10208-013-9150-3 .[37] N. P ARIKH , Proximal algorithms , Foundations and Trends® in Optimization, 1 (2014), p. 127–239. 
+
+http://dx.doi.org/10.1561/2400000003 .[38] M. R IES , U. T ROTTENBERG , AND G. W INTER , A note on MGR methods , Linear Algebra and its Applications, 49 (1983), p. 1–26. 
+
+http://dx.doi.org/10.1016/0024-3795(83)90091-5 .[39] J.-F. R ODRIGUES , Obstacle problems in mathematical physics , North-Holland Mathematics Studies, North-Holland, May 2014. [40] O. R OMERO , M. B ENOSMAN , AND G. J. P APPAS , Ode discretization schemes as optimization algorithms , in 2022 IEEE 61st Conference on Decision and Control (CDC), IEEE, Dec. 2022, p. 6318–6325. [41] D. R UPRECHT AND R. K RAUSE , Explicit parallel-in-time integration of a linear acoustic-advection system , Computers & Fluids, 59 (2012), p. 72–83. 
+
+http://dx.doi.org/10.1016/j.compfluid.2012.02.015 .[42] B. S. S OUTHWORTH , Necessary conditions and tight two-level convergence bounds for parareal and multigrid reduction in time , SIAM Journal on Matrix Analysis and Applications, 40 (2019), p. 564–608. 
+
+http://dx.doi.org/10.1137/18M1226208 .[43] W. S U, S. B OYD , AND E. J. C ANDÈS , A differential equation for modeling Nesterov’s accelerated gradient method: Theory and insights ,Journal of Machine Learning Research, 17 (2016), pp. 1–43. 
+
+http://jmlr.org/papers/v17/15-084.html .[44] J. S UYKENS AND J. V ANDEWALLE , Least squares support vector machine classifiers , Neural Processing Letters, 9 (1999), p. 293–300. 
+
+http://dx.doi.org/10.1023/A:1018628609742 .[45] Y. T AI , A survey of regression algorithms and connections with deep learning , 2021. 
+
+https://arxiv.org/abs/2104.12647 .[46] G. T RAN , H. S CHAEFFER , W. M. F ELDMAN , AND S. J. O SHER , An l1 penalty method for general obstacle problems , SIAM Journal on Applied Mathematics, 75 (2015), p. 1424–1444. 
+
+http://dx.doi.org/10.1137/140963303 .[47] U. T ROTTENBERG , C. W. O OSTERLEE , AND A. S CHULLER , Multigrid , Academic Press, San Diego, CA, Nov. 2000. [48] S. U LBRICH , Preconditioners Based on “Parareal” Time-Domain Decomposition for Time-Dependent PDE-Constrained Optimization ,Springer International Publishing, 2015, p. 203–232. [49] R. V UCHKOV , E. C. C YR , AND D. R IDZAL , Multigrid-in-time preconditioners for KKT systems , 2024. 
+
+https://arxiv.org/abs/2405.04808 .[50] C. W U AND J. W. W AN , Multigrid methods with Newton-Gauss-Seidel smoothing and constraint preserving interpolation for obstacle problems , Numerical Mathematics: Theory, Methods and Applications, 8 (2015), p. 199–219. 
+
+http://dx.doi.org/10.4208/nmtma.2015.w08si .

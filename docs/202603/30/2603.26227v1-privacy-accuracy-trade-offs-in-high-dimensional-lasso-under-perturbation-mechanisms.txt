@@ -1,0 +1,3571 @@
+Title: Privacy-Accuracy Trade-offs in High-Dimensional LASSO under Perturbation Mechanisms
+
+URL Source: https://arxiv.org/pdf/2603.26227v1
+
+Published Time: Mon, 30 Mar 2026 00:44:42 GMT
+
+Number of Pages: 53
+
+Markdown Content:
+# Privacy-Accuracy Trade-offs in High-Dimensional LASSO under Perturbation Mechanisms 
+
+## Ayaka Sakata ∗
+
+## Department of Information Science, Ochanomizu University RIKEN center for AIP Haruka Tanzawa Department of Information Science, Ochanomizu University March 30, 2026 
+
+Abstract 
+
+We study privacy-preserving sparse linear regression in the high-dimensional regime, focusing on the LASSO estimator. We analyze two widely used mechanisms for dif-ferential privacy: output perturbation, which injects noise into the estimator, and objective perturbation, which adds a random linear term to the loss function. Using approximate message passing (AMP), we characterize the typical behavior of these estimators under random design and privacy noise. To quantify privacy, we adopt typical-case measures, including the on-average KL divergence, which admits a hypothesis-testing interpretation in terms of distinguishability between neighboring datasets. Our analysis reveals that sparsity plays a central role in shaping the privacy-accuracy trade-off: stronger regularization can improve privacy by stabilizing the es-timator against single-point data changes. We further show that the two mechanisms exhibit qualitatively different behaviors. In particular, for objective perturbation, increasing the noise level can have non-monotonic effects, and excessive noise may destabilize the estimator, leading to increased sensitivity to data perturbations. Our results demonstrate that AMP provides a powerful framework for analyzing privacy-accuracy trade-offs in high-dimensional sparse models. 
+
+Keywords: Differential Privacy, Objective Perturbation, Output Perturbation, Sparse Es-timation, Approximate Message Passing 
+
+> ∗
+
+The authors gratefully acknowledge JSPS KAKENHI (22H05117) and JST PRESTO (JPMJPR23J4). 
+
+1
+
+> arXiv:2603.26227v1 [stat.ML] 27 Mar 2026
+
+# 1 Introduction 
+
+Differential privacy (DP) has become a foundational concept in modern data analysis, pro-viding formal guarantees that protect whether an individual’s data is included in a dataset [Dwork et al., 2006]. Its practical relevance is evidenced by its deployment in production systems by large-scale tech companies and governmental institutions. For example, the U.S. Census Bureau employed differential privacy for the 2020 decennial census data re-lease, marking one of the first large-scale governmental uses of DP [Kenny et al., 2021]. Similarly, technology platforms use DP to protect individual contributions in aggregate statistics derived from user behavior, recommendation systems [M¨ ullner et al., 2023], and natural language processing pipelines [Klymenko et al., 2022]. In addition, there is increas-ing demand for privacy-preserving analysis in domains such as healthcare, genomics, and finance, where both the dimensionality of data and the risk of privacy leakage are high. A common approach to achieve differential privacy is to randomize the process of pa-rameter estimation, a principle known as the randomized mechanism . Intuitively, such randomization prevents an adversary from reliably inferring whether a particular indi-vidual’s data was used in the analysis, by ensuring that the algorithm’s output remains probabilistically similar even when one data point is modified. Several randomized mech-anisms have been proposed for statistical estimation. For instance, [Dwork et al., 2006] introduced the Laplace mechanism, in which independent Laplace noise is added to the output of a query (i.e., a function of the dataset, such as an estimator) in proportion to its sensitivity, providing a concrete method to achieve ( ϵ, 0)-differential privacy. This method belongs to the so-called output perturbation framework, where noise is added directly to the estimated model parameters after optimization. Another widely used approach is objective perturbation (or loss perturbation), where noise is injected into the loss function before or during optimization [Chaudhuri et al., 2011]. These two classes of mechanisms exhibit different theoretical and empirical behaviors in terms of privacy guarantees and statistical 2accuracy, although in specific cases, such as least-squares estimation, they can be shown to be mathematically equivalent under suitable conditions. A fundamental challenge in differential privacy lies in balancing the trade-off between preserving privacy and maintaining the usefulness of data, often referred to as the privacy-utility trade-off [Dwork et al., 2014, Chaudhuri et al., 2011]. Utility in this context includes statistical accuracy, model interpretability, computational feasibility, and application-specific relevance. This trade-off is intrinsic to privacy-preserving mechanisms: stronger privacy guarantees typically require introducing more randomness, which can deteriorate the util-ity of the resulting model or statistical output. In supervised learning tasks, a prominent instance of the privacy-utility trade-off is the privacy-accuracy trade-off. Here, utility is measured in terms of predictive accuracy or estimation error, and the goal is to quantify how privacy mechanisms degrade the model’s performance. Output perturbation is often simpler to analyze, but it may fail to adapt to structural properties of the underlying parameters. In particular, in sparse estimation problems such as LASSO, adding noise directly to the estimated coefficients can destroy sparsity patterns and deteriorate the interpretability and statistical efficiency of the solution [Khanna et al., 2023]. To address this issue, several works have proposed variants of output perturbation that explicitly account for sparsity. A common approach is to first estimate the support of the parameters and then apply output perturbation only to the selected (nonzero) com-ponents [Lei et al., 2018]. Similar ideas appear in differentially private model selection procedures, where variable selection is performed prior to private estimation on the re-duced model [Smith, 2011, Talwar et al., 2015]. These approaches can improve utility by avoiding unnecessary noise on irrelevant coordinates, and have been shown to achieve fa-vorable accuracy-privacy trade-offs under sparsity assumptions. However, such two-stage procedures introduce additional challenges from a privacy perspective. Since the support selection step itself depends on the data, it may leak sensitive information unless it is prop-3erly privatized. By the composition property of differential privacy [Dwork et al., 2014], this typically requires allocating a portion of the privacy budget to the model selection step, which increases the overall complexity of the mechanism and may degrade perfor-mance. In contrast, objective perturbation injects noise directly into the loss function before optimization. This approach implicitly accounts for the regularization structure of the estimator, and can better preserve properties such as sparsity without requiring an explicit support selection step. This motivates us to analyze objective perturbation as an alternative mechanism within a unified framework. In the context of statistical estimation, particularly penalized regression methods such as the LASSO, several works have developed perturbation-based mechanisms to achieve differential privacy guarantees. However, these analyses typically rely on strong structural assumptions on the data or the design matrix, such as restricted eigenvalue conditions or exact sparsity [Chaudhuri et al., 2011, Talwar et al., 2015, Smith, 2011], which may not hold in practical high-dimensional settings. Existing results suggest that objective perturbation can outperform output perturbation under strong convexity and smoothness assumptions [Chaudhuri et al., 2011]. However, it remains unclear whether such advantages persist in high-dimensional sparse regimes, where the estimator is inherently non-smooth. Moreover, the interplay between privacy noise, regularization, and generalization performance remains only partially understood. To better understand these interactions, we focus on the high-dimensional regime, where both the number of samples and parameters grow to infinity with a fixed ratio. In such settings, worst-case guarantees from differential privacy can be overly conservative, as they are often dominated by rare pathological configurations that do not reflect typical data realizations. In contrast, typical-case analysis captures the behavior under random design and noise, which is more relevant for modern statistical applications. Despite its impor-tance, this perspective has received limited attention, and in particular, the role of sparsity 4in shaping effective privacy leakage has not been systematically characterized. In such settings, typical-case analysis requires a distributional characterization of the es-timator under random data. This naturally motivates an information-theoretic approach to quantifying privacy leakage. Specifically, we consider the problem of distinguishing whether an estimator was computed from a dataset D or from a neighboring dataset D′ differing in a single sample. This naturally leads to a binary hypothesis testing problem, where the optimal error exponent is governed by the KL divergence between the corresponding distributions. This connection provides an operational interpretation of KL-based privacy measures: a small KL divergence implies that even an optimal adversary cannot reliably infer the presence of an individual data point. Building on this formulation, we analyze the high-dimensional LASSO under both out-put perturbation and objective perturbation using tools from approximate inference, in particular approximate message passing (AMP). AMP provides an asymptotic characteri-zation of high-dimensional estimators under random design, enabling a typical-case analysis of both generalization error and privacy-related quantities. This framework allows us to quantify how sparsity, noise strength, and the sample-to-parameter ratio jointly influence both prediction accuracy and privacy, without relying on restrictive conditions such as restricted eigenvalue assumptions or worst-case sensitivity bounds. 
+
+## 1.1 Related Works 
+
+A substantial body of work has developed differentially private variants of regularized re-gression methods, including ridge regression and LASSO, using techniques including output perturbation, objective perturbation, and noise injection into sufficient statistics [Chaud-huri et al., 2011, Talwar et al., 2015]. While these methods provide rigorous privacy guaran-tees under certain modeling assumptions, their theoretical guarantees in high-dimensional settings often rely on structural conditions-such as restricted eigenvalue assumptions, which 5can be difficult to satisfy in overparameterized regimes. In the broader context of private empirical risk minimization, Bassily et al. [2014] es-tablished minimax optimal rates, clarifying the fundamental trade-off between privacy and utility. While these worst-case guarantees are foundational, they can be overly conserva-tive and may not reflect the typical behavior of learning algorithms. Related developments, including proximal perturbation methods for non-smooth optimization [Wang et al., 2018] and compressed noise injection techniques [Zhou et al., 2020], further expand the scope of private optimization, but remain primarily focused on worst-case analyses. Complementary to these works, on-average privacy measures such as the On-average KL divergence (OnAveKL) [Wang et al., 2016] have been proposed to capture typical-case privacy leakage. These metrics admit an operational interpretation in terms of hypothesis testing and membership inference, and provide a more refined view of privacy in practice. However, existing studies have largely focused on low-dimensional or unregularized settings, leaving open the question of how high dimensionality, sparsity, and regularization jointly affect on-average privacy. Despite these advances, a systematic understanding of privacy-accuracy trade-offs in high-dimensional sparse models remains lacking. In particular, the interaction between noise injection mechanisms, structural constraints such as sparsity, and typical-case privacy measures has not been fully characterized. 
+
+## 1.2 Our contribution 
+
+In this work, we analyze differentially private sparse linear regression in the high-dimensional regime, focusing on the LASSO estimator under both output perturbation and objective perturbation. Our main contributions are summarized as follows: 
+
+• Asymptotic characterization of perturbation mechanisms: We derive an ex-plicit asymptotic characterization of the LASSO estimator under both output per-6turbation and objective perturbation in the high-dimensional limit. Using approxi-mate message passing, we reduce the high-dimensional problem to a scalar equivalent model, which captures the combined effects of sparsity, noise injection, and sample complexity. 
+
+• Closed-form characterization of typical-case accuracy and privacy: We ob-tain explicit formulas for both prediction accuracy and the on-average KL divergence (OnAveKL) in the high-dimensional limit. Our results characterize the dependence of both quantities on the noise variance and the sparsity level induced by regularization. 
+
+• Comparison between output and objective perturbation: We establish a quantitative comparison between output perturbation and objective perturbation within a unified framework. Our analysis reveals that objective perturbation can achieve smaller OnAveKL in regimes when the support of the estimator remains stable under the replacement of a single data point. 
+
+• Implications for noise calibration: Our analytical characterization provides prac-tical guidance for selecting the noise level to balance prediction accuracy and privacy. In particular, we identify regimes where increasing noise leads to non-monotonic ef-fects on stability and privacy under objective perturbation. Taken together, our results provide a unified and quantitative understanding of privacy-accuracy trade-offs in high-dimensional sparse estimation, complementing existing worst-case analyses. 
+
+# 2 Problem setting 
+
+We consider sparse linear regression under differential privacy and study two widely used randomization mechanisms: output perturbation and objective perturbation. In the fol-lowing, we introduce these two mechanisms. 72.1 Private LASSO via Objective Perturbation 
+
+We consider a linear regression model to estimate a sparse parameter vector β(0) ∈ Rp from a dataset D = {(xμ, y μ)}nμ=1 , where 
+
+yμ = x⊤ 
+
+> μ
+
+β(0) + ξμ, (1) and the noise variables ξμ are i.i.d. Gaussian with ξμ ∼ N (0 , σ 2). Under the objective perturbation mechanism, noise is injected directly into the function to be optimaized. The LASSO estimator is defined as 
+
+bβ(D, η) = argmin 
+
+> β
+
+12∥y − Xβ∥22 + λ∥β∥1 + η⊤β
+
+
+
+, (2) where X = ( x1, . . . , xn)⊤ ∈ Rn×p and η ∈ Rp is a random noise vector drawn from a distribution Pη(η). The magnitude of η controls the strength of privacy protection and affects both estimation accuracy and information leakage. 
+
+## 2.2 Private LASSO via Output Perturbation 
+
+Under the output perturbation mechanism, noise is added directly to the estimator. The resulting estimator is defined as 
+
+bβ(D, η) = bβ(D, 0) + η, (3) where bβ(D, 0) denotes the standard LASSO estimator obtained in the absence of privacy noise, defined by (2) with η = 0.
+
+## 2.3 Evaluation Criteria: Accuracy and Privacy 
+
+To investigate the trade-off between utility and privacy, we evaluate the estimator using two complementary criteria. 8(1) Prediction Accuracy. The prediction performance is evaluated using the expected generalization error: 
+
+Egen (η) = ED, xnew , ξ new 
+
+
+
+ynew − x⊤ 
+
+> new
+
+bβ(D, η)
+
+2
+
+, (4) where xnew is a test sample not used in training, and ynew = x⊤
+
+> new
+
+β(0) +ξnew with observation noise ξnew .The training error is similarly defined as 
+
+Etrain (η) = 1
+
+n ED
+
+h
+
+∥y − X bβ(D, η)∥22
+
+i
+
+. (5) Comparing the generalization and training errors provides insight into how much the es-timator relies on the training data. In particular, the increase of the generalization er-ror relative to the training error can serve as an indicator of potential privacy leakage, since stronger dependence on individual samples may reveal information about the train-ing dataset [Yeom et al., 2018, Wu et al., 2019]. For output perturbation, when η is independent of the dataset and the test sample, the generalization and training errors become 
+
+Egen (η) = Egen (0) + E (x⊤
+
+> new
+
+η)2 , (6) 
+
+Etrain (η) = Etrain (0) + 1
+
+nED
+
+∥Xη∥22
+
+ . (7) Hence, output perturbation always increases both the generalization and training errors compared with the noiseless estimator. In contrast, for objective perturbation the effect of privacy noise on the estimator is nontrivial, since the noise enters through the optimization problem itself. Analyzing its impact on these errors is therefore one of the main objectives of this work. 
+
+(2) Privacy Measure: On-Average KL-Privacy. To quantify privacy, we adopt an information-theoretic perspective based on the distinguishability between neighboring 9datasets. Consider an adversary who observes the estimator and attempts to determine whether it was computed from a dataset D or from a neighboring dataset D′ that differs in a single sample. This naturally leads to a binary hypothesis testing problem. Due to the injected privacy noise, the estimator in (2) is a random variable even for a fixed dataset D. We thus define the distribution of the estimated parameters as 
+
+P(β | D ) = 
+
+Z
+
+dη Pη(η) δ
+
+ bβ(D, η) − β
+
+
+
+. (8) Under the two hypotheses D and D′, the adversary observes samples from P(β|D ) or 
+
+P(β|D ′). In this setting, classical results in hypothesis testing imply that the optimal error exponent for distinguishing the two distributions is governed by the Kullback-Leibler (KL) divergence between them. In particular, by Stein’s lemma, a smaller KL divergence implies that even the most powerful test cannot reliably distinguish whether a given data point was included in the dataset. This provides a direct operational interpretation of KL-based privacy measures. Motivated by this perspective, we define the On-Average KL-Privacy as OnAvgKL = 1
+
+n
+
+> n
+
+X
+
+> μ=1
+
+ED,D′
+
+> μ
+
+KL  P(β|D ) P(β|D ′
+
+> μ
+
+) , (9) where D′ 
+
+> μ
+
+denotes a dataset differing from D only in its μ-th sample. The quantity mea-sures how much the output distribution of the estimator changes, on average, when a single sample is replaced. A small value of OnAvgKL indicates that the two distributions are nearly indistinguishable, implying that the inclusion or exclusion of an individual sam-ple has little influence on the estimator. This KL-based measure applies to both output perturbation and objective perturbation, allowing a unified comparison of their privacy properties through the same information-theoretic criterion. 10 3 Approximate Message Passing algorithm 
+
+## 3.1 Bayesian formulation and MAP estimator 
+
+We reformulate the LASSO estimator within a Bayesian framework, which provides a uni-fied starting point for analyzing both objective perturbation and output perturbation mech-anisms. We define the posterior distribution as 
+
+Pτ (β | D ; η, λ ) = 1
+
+Zτ (D; η, λ ) exp 
+
+(
+
+− τ
+
+12∥y − Xβ∥22 + λ∥β∥1 + η⊤β
+
+)
+
+, (10) where Zτ (D; η, λ ) denotes the normalization constant and λ > 0 is the regularization parameter, and τ controls the sharpness of the posterior. In the limit τ → ∞ , the posterior concentrates around its mode, and the estimator converges to the corresponding maximum a posteriori (MAP) solution, given by eq. (2). This posterior formulation provides a starting point for the microscopic AMP-based approximation presented in the following sections. 
+
+## 3.2 Assumptions on data generative process and privacy noise 
+
+We assume that data are generated according to (1) under the following assumptions, which allow for a tractable analysis in the high-dimensional limit: 
+
+Setting D (Data model) 
+
+1. Predictor matrix. The entries of X are i.i.d. Gaussian: Xμi ∼ N (0 , 1/p ), so that 
+
+E P pi=1 X2
+
+> μi
+
+ = 1. 2. Ground truth coefficients. The true signal follows a Bernoulli-Gaussian prior: 
+
+β(0)  
+
+> i
+
+∼ (1 − ρ)δ0 + ρ N (0 , σ 2 
+
+> β
+
+),
+
+where ρ ∈ [0 , 1] denotes the fraction of nonzero components, and δ0 is the Dirac delta at zero. 11 3. Observation noise. Measurement noise is i.i.d. Gaussian: ξμ ∼ N (0 , σ 2 
+
+> ξ
+
+). In addition to the data-generating assumptions above, we specify the distribution of the privacy noise as follows: 
+
+Setting P (Privacy noise model) 
+
+1. Independence across coordinates: The entries {ηi}pi=1 are mutually independent. 2. Independence from the data: η is independent of ( X, y). 3. Identical marginal distribution: All coordinates ηi share the same marginal dis-tribution. 4. Finite variance: E[η2] < ∞.Under Setting P, for any pseudo-Lipschitz function ϕ,1
+
+p
+
+> p
+
+X
+
+> i=1
+
+ϕ(ηi) p
+
+−→ Eη[ϕ(η)] , (11) where p
+
+−→ denotes convergence in probability as p → ∞ .Thus, in the high-dimensional limit, the effect of the perturbation can be captured through deterministic scalar summary statistics (e.g., its variance) when evaluating pseudo-Lipschitz observables, rather than its full realization. 
+
+## 3.3 Approximate Message Passing Algorithm 
+
+To analyze the high-dimensional behavior of the estimator, we employ approximate mes-sage passing (AMP), which provides a tractable approximation to the marginal posterior distributions in large random systems. This approach enables a characterization of both estimation performance and distributional properties relevant for privacy analysis. 12 The message passing framework aims to approximate the marginal posterior of each component: 
+
+pτ,i (βi|D , η) := 
+
+Z
+
+dβ\iPτ (β|D , η), (12) and corresponding posterior mean at τ → ∞ 
+
+bβi(D, η) = lim  
+
+> τ→∞
+
+Z
+
+dβ i βipτ,i (βi|D , η). (13) The marginal distribution is approximated via an iterative message passing procedure. At iteration t, the approximate marginal p(t) 
+
+> τ,i
+
+is constructed as 
+
+p(t)
+
+> τ,i
+
+(βi) ∝ exp ( −τ λ |βi| − τ η iβi) Y
+
+> μ∈n
+
+eπ(t)
+
+> μ→i
+
+(βi), (14) where, for notational simplicity, we omit the dependence on ( D, η). The messages eπ(t)
+
+> μ→i
+
+(βi), defined for μ ∈ { 1, . . . , n } and i ∈ { 1, . . . , p }, are updated recursively according to 
+
+π(t+1)  
+
+> i→μ
+
+(βi) ∝ exp ( −τ λ |βi| − τ η iβi) Y
+
+> ν∈n\μ
+
+eπ(t)
+
+> ν→i
+
+(βi) (15) 
+
+eπ(t)
+
+> μ→i
+
+(βi) ∝
+
+Z
+
+dβ\i exp 
+
+n
+
+−τ
+
+2 (yμ − x⊤ 
+
+> μ
+
+β)2
+
+o Y 
+
+> j∈p\i
+
+π(t)
+
+> j→μ
+
+(βj ), (16) where n = {1, . . . , n } and p = {1, . . . , p }. The expression (14) becomes exact after sufficient iterations when the underlying factor graph is a tree. For loopy graphs, the same update rules can still be applied, in which case the procedure can be interpreted as a form of variational inference. 
+
+3.3.1 Gaussian Approximation 
+
+The update equations (15) and (16) involve 2 np messages, which are computationally intractable in high dimensions. To obtain a tractable algorithm in the large-system limit (n, p → ∞ with α = n/p fixed), we introduce the following standard assumptions. 
+
+Assumption 3.1 The entries of the predictor matrix X are O(p−1/2) so that ∥xμ∥22 =
+
+O(1) .
+
+13 Assumption 3.2 The empirical correlations between different predictors vanish as p →∞, i.e., the off-diagonal elements of X⊤X are O(p−1/2).
+
+Assumption 3.3 The factor graph associated with X is dense, with O(p) edges connected to each factor node. 
+
+Predictor matrices generated according to Setting D satisfy Assumptions 3.1–3.3. Under Assumptions 3.1–3.3, the messages {eπμ→i} become asymptotically Gaussian due to the central limit effect Krzakala et al. [2012], Sakata [2023]. Therefore, it suffices to track only their means and variances: 
+
+bβ(t) 
+
+> i→μ
+
+=
+
+Z
+
+dβ iβiπ(t)
+
+> i→μ
+
+(βi) (17) 
+
+s(t) 
+
+> i→μ
+
+= τ
+
+Z
+
+dβ i(βi − bβ(t)
+
+> i→μ
+
+)2π(t)
+
+> i→μ
+
+(βi) (18) 
+
+eβ(t) 
+
+> μ→i
+
+=
+
+Z
+
+dβ iβibπ(t)
+
+> μ→i
+
+(βi) (19) 
+
+es(t) 
+
+> μ→i
+
+= τ
+
+Z
+
+dβ i(βi − eβ(t)
+
+> μ→i
+
+)2eπ(t)
+
+> μ→i
+
+(βi), (20) The resulting algorithm that updates these means and variances for arbitrary likelihood and prior distributions is known as approximate message passing (AMP). Within AMP, the marginal posterior of each coefficient at iteration t reduces to a scalar distribution. Specifically, the scalar marginal distribution for i-th component is given by 
+
+Pτ (β; Σ (t), m(t) 
+
+> i
+
+− ηΣ(t)) = 1
+
+Zτ (Σ (t), m(t) 
+
+> i
+
+− ηiΣ(t)) exp 
+
+−
+
+τ
+
+
+
+β −
+
+
+
+m(t) 
+
+> i
+
+− ηiΣ(t)
+
+ 2
+
+2Σ (t) − τ λ |β|
+
+ ,
+
+(21) where Zτ (Σ , m − ηΣ) is the normalization constant. The mean parameter m i and variance parameter Σ are given by m(t) 
+
+> i
+
+= Σ (t)
+
+> n
+
+X
+
+> μ=1
+
+(
+
+Xμi 
+
+yμ − by\μ(t)
+
+> μ
+
+1 + s(t)
+
+> θ
+
++ X2 
+
+> μi
+
+bβ(t)
+
+> i
+
+1 + s(t)
+
+> θ
+
+)
+
+(22) Σ(t) = α
+
+1 + s(t)
+
+> θ
+
+!−1
+
+, (23) 14 where 
+
+by\μμ =
+
+> p
+
+X
+
+> i=1
+
+Xμi bβi→μ (24) 
+
+s(t) 
+
+> θ
+
+= 1
+
+p
+
+> p
+
+X
+
+> i=1
+
+s(t) 
+
+> i
+
+(25) and we set 
+
+s(t) 
+
+> i
+
+= τ
+
+Z
+
+dβ i(βi − bβ(t) 
+
+> i
+
+)2Pτ (β; Σ (t), m(t) 
+
+> i
+
+− ηiΣ(t)). (26) Using the marginal distribution, we obtain the estimate 
+
+bβ(t) 
+
+> i
+
+=
+
+Z
+
+dβ iβiPτ (β; Σ (t), m(t) 
+
+> i
+
+− ηiΣ(t)). (27) We note that the dependence on the dataset appears in {mi} and Σ. In addition, for the 
+
+i-th marginal, the privacy noise ηi appears explicitly, while the remaining noise components 
+
+{ηj }j̸ =i enter implicitly through the parameters m i and Σ. 
+
+τ → ∞ limit 
+
+In the limit τ → ∞ , we apply Laplace’s approximation with respect to β to the distri-bution (21). As a result, expectations with respect to this distribution reduce to 
+
+bβ(t) 
+
+> i
+
+= M(Σ (t), m(t) 
+
+> i
+
+− ηiΣ(t)) (28) 
+
+s(t) 
+
+> i
+
+= V(Σ (t), m(t) 
+
+> i
+
+− ηiΣ(t)), (29) where 
+
+M(Σ , m − ηΣ) = argmin 
+
+> β
+
+(β − (m − ηΣ)) 2
+
+2Σ − λ|β|
+
+
+
+= (m − ηΣ − sgn(m − ηΣ) λΣ) I(|m − ηΣ| > λ Σ) (30) 
+
+V(Σ , m − ηΣ) = Σ I(|m − ηΣ| > λ Σ) , (31) and I(a) denotes the indicator function, which returns 1 if a is true and 0 otherwise. Equation (30) corresponds to a soft-thresholding operator. The privacy noise shifts the mean parameter to m − ηΣ, thereby affecting whether the coefficient is set to zero or remains active. 15 Estimate under LOO sample 
+
+Intuitively, the output message πi→μ(βi) represents the marginal distribution of βi before incorporating the observation yμ associated with xμ, that is, under the leave-one-out (LOO) dataset D\μ in a tree-structured factor graph, where D\μ = {(xν , y ν ) | ν = 1 , . . . , n, ν ̸ = μ}
+
+[Koller and Friedman, 2009]. Although regression problems with dense predictor matrices do not form tree graphs, we adopt the following approximation: 
+
+Assumption 3.4 The mean of the output message bβi→μ coincides with the estimator of the i-th parameter computed from the leave-one-out dataset D\μ.
+
+Under the Assumption 3.4, the estimate and its rescaled variance under the LOO dataset are given by 
+
+bβ(t+1) = M
+
+
+
+Σ(t), m(t) 
+
+> i→ν
+
+− ηΣ(t)
+
+
+
+, (32) 
+
+s(t+1)  
+
+> i→ν
+
+= V
+
+
+
+Σ(t), m(t) 
+
+> i→ν
+
+− ηΣ(t)
+
+
+
+. (33) From a perturbative expansion, we obtain the relation [Krzakala et al., 2012, Sakata, 2023], m(t) 
+
+> i→μ
+
+= m (t) 
+
+> i
+
+− Xμi 
+
+yμ − by\μ(t)
+
+> μ
+
+1 + s(t)
+
+> θ
+
+Σ(t) (34) 
+
+# 4 Effect of Privacy Noise on errors and sparsity 
+
+For simplicity, we set σβ = 1 throughout the reminder of this paper, without loss of generality. 
+
+## 4.1 Sparsity and Generalization 
+
+Fig. 1(a) shows the fraction of nonzero components in the AMP estimator, denoted by 
+
+bρ = 1 
+
+> p
+
+∥ bβ(D, η)∥0, as a function of the privacy noise level ση. As ση increases, the estimator becomes progressively denser. This effect is more pronounced for smaller values of the 16 0      
+
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.1
+> 0.12
+> 0.14
+> 0.16
+> 0.18
+> 0.2
+> 00.05 0.1 0.15 0.2 0.25 0.3
+
+(a) 
+
+> ρ^
+
+σηλ = 0.3       
+
+> λ= 0.5
+> λ= 1 Generalization error
+> λ= 0.5
+> λ= 0.7
+> λ= 1
+> λ= 1.5
+> ση
+> ση
+
+(b)                   
+
+> 0.06
+> 0.08
+> 0.1
+> 0.12
+> 0.14
+> 0.16
+> 0.18
+> 0.2
+> 00.1 0.2 0.3 0.4
+> 0.06
+> 0.1
+> 0.14
+> 0.18
+> 00.1 0.2 0.3 0.4 0.5
+> 0.08
+> 0.1
+> 0.12
+> 0.14
+> 0.16
+> 0.18
+> 0.2
+> 00.2 0.4 0.6 0.1
+> 0.12
+> 0.14
+> 0.16
+> 0.18
+> 0.2
+> 00.2 0.4 0.6 0.8 1
+
+Figure 1: ση-dependence of (a) the fraction of nonzero components in the estimator and (b) the generalization error for various regularization parameters λ under objective pertur-bation. Circles ( ◦) denote AMP results and solid lines show the corresponding analysis by replica method. In the AMP experiments, we set p = 1000, α = 0 .5, ρ = 0 .1, and σξ = 0 .1. AMP results are averaged over 100 datasets; error bars indicate the standard error. For each dataset, a single realization of privacy noise η is generated. The dashed lines in (b) shows the generalization error under output perturbation. 0       
+
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1
+> 00.2 0.4 0.6 0.8 11.2 1.4
+> Generalization error
+
+(a) 
+
+λ        
+
+> ση= 0
+> ση= 0.1
+> ση= 0.3 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1
+> 00.1 0.2 0.3 0.4 0.5
+> Generalization error
+
+(b) 
+
+ρ^   
+
+> ση= 0
+> ση= 0.1
+> ση= 0.3
+
+Figure 2: (a) λ-dependence of the generalization error for different privacy noise levels (ση = 0 .1, 0 .3) compared with the noiseless case. (b) Generalization error as a function of the resulting bρ. The experimental setup and plotting style are the same as in Fig. 1. 17 regularization parameter λ. Hence, weaker regularization combined with privacy noise promotes denser solutions. Figure 1(b) presents the corresponding generalization error as a function of ση. For certain values of λ, the error exhibits a non-monotonic behavior: it initially decreases with increasing ση and then increases. In particular, when λ is sufficiently large, such as 
+
+λ = 1 and λ = 1 .5, a finite level of privacy noise yields a lower generalization error than in the noiseless case. For comparison, we also show the generalization error under output perturbation in Fig. 1(b) (dashed lines). Under Setting D, the generalization error under output perturbation, eq. (6), is given by 
+
+Egen (η) = Egen (0) + σ2 
+
+> η
+
+, (35) which increases monotonically with the noise level. The non-monotonic behavior of generalization error under objective perturbation is closely related to the densification observed in Fig. 1(a). For large λ, the estimator is overly sparse without privacy noise. Increasing ση modifies the effective thresholding condition, leading to the activation of additional components and compensating for the shrinkage induced by strong regularization, thereby improving predictive performance. Fig. 2(a) shows the λ-dependence of the generalization error under objective preturba-tion at α = 0 .5, ρ = 0 .1, and σξ = 0 .1. Consistent with Fig. 1(b), increasing the privacy noise generally increases the generalization error, and for sufficiently small λ the error can become very large. Moreover, as the privacy noise level increases, the divergence of the error occurs at larger values of λ. This indicates that models with weaker regularization are more sensitive to objective noise in terms of generalization performance. This behavior can be attributed to the fact that weakly regularized models have greater flexibility, which allows them to fit the privacy noise in addition to the true signal, thereby increasing the generalization error. Figure 2(b) shows the same results as a function of the non-zero component in the 18 estimator, bρ. Even when bρ is the same, larger privacy noise leads to a higher generalization error. This indicates that bρ alone is insufficient to characterize the prediction performance. Even when the sparsity level bρ is the same, different choices of parameters (such as λ, α,
+
+ρ) can lead to different generalization errors. To analyze these behaviors more systematically, we study the estimator using the state evolution associated with the AMP algorithm. This analysis characterizes the macroscopic quantities governing the estimator and, in particular, reveals a proportional relationship between the training and generalization errors. 
+
+## 4.2 Asymptotic behavior based on State Evolution 
+
+4.2.1 AMP’s decoupling and state evolution 
+
+The dependence of the AMP trajectory on the dataset and privacy noise appears through 
+
+{m1, . . . , mp} and Σ, which are random variables determined by the dataset and privacy noise. Under Setting D, the variance of Σ is sufficiently small and negligible in the high-dimensional limit. By analyzing the statistical properties of {m1, . . . , mp}, we obtain the following result. 
+
+Theorem 4.1 (AMP decoupling with privacy noise) Consider a component of the AMP estimator at step t, bβ(t)AMP , with assigned privacy noise η and ground truth β(0) . De-note the component by bβ(t)AMP (X, β (0) , η ). If the privacy noise satisfies Assumption P, then in the high-dimensional limit n, p → ∞ with α = n/p = O(1) , the estimator is asymptotically equivalent in distribution to 
+
+bβ(t+1) (AMP) (X|β(0) , η ) d
+
+= M  Σ(t), β (0) + σ(t) 
+
+> z
+
+z − ηΣ(t) (36) 
+
+where σ(t) 
+
+> z
+
+= pE(t)/α , Σ(t) = (1 + V (t))/α , and z ∼ N (0 , 1) . The parameters E(t) and V (t)
+
+19 satisfy 
+
+E(t) =
+
+Z
+
+dβ (0) ϕ0(β(0) )
+
+Z
+
+dηP η(η)
+
+Z
+
+Dz  β(0) − M  Σ(t), β (0) + σz z − ηΣ(t) 2 + σ2 
+
+> ξ
+
+(37) 
+
+V (t) =
+
+Z
+
+dβ (0) ϕβ (β(0) )
+
+Z
+
+dηP η(η)
+
+Z
+
+Dz V(Σ (t), β (0) + σz z − ηΣ(t)). (38) Theorem 4.1 states that, in the high-dimensional limit, the joint dynamics of the AMP iterates become asymptotically equivalent to a collection of independent scalar estimation problems driven by an effective Gaussian noise [Bayati and Montanari, 2011]. This char-acterization is known as state evolution . More precisely, in the presence of privacy noise, the injected objective noise decomposes into two qualitatively distinct components: (i) a local contribution through the coordinate-wise noise, and (ii) a non-local contribution aris-ing from the remaining coordinates, which affects each coordinate indirectly through the macroscopic quantities E(t) and V (t). As a result, the AMP trajectory becomes asymp-totically decoupled across coordinates, and the dynamics can be described by a scalar stochastic recursion that depends on each ηi at the coordinate level and on E(t) and V (t) at the macroscopic level. The derivation of Theorem 4.1 is provided in Supplement Material. The state evolution parameters have the following meanings: 
+
+E(t) = 1
+
+p∥ bβ(t)AMP (D, η) − β(0) ∥2 + σ2 
+
+> ξ
+
+, (39) 
+
+V (t) = lim  
+
+> τ→0
+
+τp
+
+> p
+
+X
+
+> i=1
+
+Var (t) 
+
+> τ
+
+(β), (40) at sufficiently large p, where Var (t) 
+
+> τ
+
+(·) denotes the posterior variance at τ as defined in (10) at step t. The state evolution parameter E corresponds to the generalization error under Setting D, and V corresponds to the local variance of the estimator. Although the quantities on the right-hand sides are defined for a fixed realization of the dataset D and the objective noise η, in the high-dimensional limit n, p → ∞ with α = n/p = O(1), the empirical generalization error concentrates around its expectation with respect to the randomness of D and η. Consequently, a typical realization of the AMP estimator yields the same asymptotic error as that predicted by state evolution. In Figs. 1 and 2, we 20 compare the AMP results under a fixed realization of the objective privacy noise with the corresponding result obtained from state evolution and analysis by replica method, which characterize the average over η in the high-dimensional limit (see Supplement). We observe good agreement between them, indicating that the results do not depend on the specific realization of η.The presence of privacy noise does not alter the overall structure of the state evolution equations. Consequently, many arguments developed for the noiseless setting carry over directly to the present setting with privacy noise. 
+
+4.2.2 Proportionality between training and generalization errors 
+
+Utilizing the state evolution form, we can show a relationship which holds without depend-ing on the existence of the objective privacy noise. 
+
+Claim 4.2 (Proportionality between two errors) Under the RS assumption, for ar-bitrary values of σξ, ση, α, ρ, and λ, the generalization and training errors computed at the fixed point of AMP, denoted by E(AMP) gen and E(AMP) train , satisfy the following proportionality in the high-dimensional limit: 
+
+E(AMP) gen 
+
+E(AMP) train 
+
+= (1 + V )2 . (41) The detail is shown in Supplement Material. In Fig. 2(b), we show the ratio between the generalization error and the training error obtained from the AMP algorithm, together with the corresponding value predicted by the state evolution (SE) equations in the large-p limit, which is given by the replica method. This proportionality reveals that the effect of privacy noise enters both errors through a common multiplicative factor. In particular, the gap between training and generalization errors is fully controlled by the scalar parameter V .This behavior contrasts with output perturbation. Under Setting D, output perturba-tion satisfies Egen (η)−Etrain (η) = Egen (0)−Etrain (0), indicating that the generalization gap 21 0           
+
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> 18
+> 20
+> 00.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45
+> α= 0.3
+> α= 0.5
+> Generalization error/ Training error
+
+(a)      
+
+> ρ^0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> 00.2 0.4 0.6 0.8 1
+
+Stable Unstable (b) 
+
+> ση
+
+λ
+
+> AMP
+> CD
+
+Figure 3: (a) Dependence of the ratio between generalization and training errors on bρ at 
+
+ρ = 0 .1, σξ = 1, and ση = 0 .1, for α = 0 .5 and α = 0 .3, as predicted by state evolution in the high-dimensional limit. Circles represent the AMP results. (b) Parameter region where AMP does not converge at α = 0 .5, ρ = 0 .5 and σξ = 0 .1. The solid line denotes the boundary predicted by the replica method, circles and squares indicate the empirical convergence limit of AMP, and squares indicate that of coordinate descent. For both AMP and coordinate descent, convergence was evaluated over 100 independent runs, and a point is marked as non-convergent if at least one run fails to converge. is unaffected by the noise. In contrast, objective perturbation modifies this gap through the factor (1 + V )2, demonstrating a qualitative difference in how the two mechanisms influence errors. 
+
+4.2.3 Convergence condition of AMP 
+
+The AMP algorithm does not always converge. The stability of the AMP algorithm can be characterized by its local stability condition associated with state evolution. In the present setting, the stability condition is given by [Krzakala et al., 2012, Sakata, 2023] 
+
+bρα < 1, (42) where bρ denotes the asymptotic fraction of nonzero components in the estimator. This condition simply requires that the number of active coefficients does not exceed the number 22 of observations. The results presented in this paper are valid only when (42) is satisfied. Figure 3(b) illustrates the parameter region where this stability condition is satisfied. The boundary of the stable region depends primarily on the ratio α, with weaker depen-dence on other parameters. Although the convergence condition is derived from AMP, it is also related to the behavior of coordinate descent algorithms, as shown in Fig.3(b). In prior work without privacy noise, non-unique solution regions of coordinate descent coin-cide with AMP divergence regions [Sakata and Xu, 2018, Obuchi and Sakata, 2019]. We find that this correspondence holds under privacy noise as well. Although the optimization problem with objective perturbation remains convex, the above condition shows that the estimator can enter a regime where AMP fails to converge. This behavior is closely related to the sparsity of the solution. In particular, objective perturbation tends to increase the number of active coefficients, making the estimator denser. As a result, the condition bρ/α < 1 is more easily violated compared to the noiseless case. In the high-dimensional limit p, n → ∞ with α = n/p = O(1), combining the state evolution analysis with an analysis by replica method gives the following expression for the state evolution parameter: 
+
+V = bρα − bρ. (43) Equation (43) shows that V diverges as α approaches bρ, i.e., when condition (42) is violated. This divergence explains the observed divergence of the empirical ratio in Fig. 2(b). 
+
+# 5 Asymptotic Distribution of the AMP Estimator 
+
+## 5.1 Equivalent Distribution over the Data (Fixed Privacy Noise) 
+
+To evaluate the typical information-theoretic privacy criterion, the on-average KL diver-gence, we examine the component-wise distribution of estimates produced by AMP. Accord-23 P(
+
+> β|β(0) ,
+> η)
+
+βββββββββββ
+
+(a) (b) (c) (d) (e) (f) (g) (h) (i) (j) 
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+-0.5 0 0.5 1 1.5 
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+-1.5 -1 -0.5 0 0.5 
+
+0
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.1 
+
+0.12 
+
+-3 -2 -1 0
+
+0
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.1 
+
+0.12 
+
+-1 0 1 2 3 4
+
+0
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+0.07 
+
+-1 0 1 2 3 4 5
+
+0
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+-4 -3 -2 -1 0
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+-2 -1.5 -1 -0.5 0
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1
+
+-0.5 0 0.5 1 1.5 
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1
+
+-1.5 -1 -0.5 0 0.5 
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1
+
+-0.5 0 0.5 1 1.5 Figure 4: Comparison of distribution of the estimators with respect to data by AMP ( ◦)and DE (boxes) at α = 0 .5, ρ = 0 .3, σξ = 0 .1, λ = 0 .5 and ση = 0 .1. Distributions for different β(0) and η are shown: (a) β(0) = 1 .0629 , η = 0 .0460, (b) β(0) = −1.0412 , η =
+
+−0.0238, (c) β(0) = −2.1796 , η = −0.0079, (d) β(0) = 2 .1290 , η = −0.0317, (e) β(0) =3.2188 , η = 0 .0556, (f) β = −3.2333 , η = −0.0321, (g) β(0) = −1.0095 , η = 0 .2907, (h) 
+
+β(0) = 0 .1017 , η = −0.3261, (i) β(0) = 0 , η = 0 .3579, (j) β(0) = 0 , η = −0.3233. 24 ing to Theorem 4.1, it suffices to consider the conditional distribution of a single component given fixed values of β(0) and η. We thus introduce the following conditional probability density function for a sufficiently small increment dβ ≪ 1: 
+
+PAMP 
+
+> |β(0) ,η
+
+(β|β(0) , η )dβ := 
+
+Z
+
+dXd ξ PX (X)Pξ(ξ)I(β ≤ bβAMP (D, η ) < β + dβ ). (44) Following Theorem 4.1, the conditional distribution of the AMP estimate given ( β(0) , η )converges in probability to the distribution induced by the state evolution: 
+
+PAMP 
+
+> |β(0) ,η
+
+(β|β(0) , η ) P
+
+−→ PSE 
+
+> |β(0) ,η
+
+(β|β(0) , η ), (45) where the limiting distribution PSE  
+
+> |β(0) ,η
+
+is defined by 
+
+PDE 
+
+> |β(0) ,η
+
+(β|β(0) , η )dβ =
+
+Z
+
+Dz I
+
+
+
+β ≤ M
+
+1 + sθ
+
+α , β (0) + σz z − η(1 + sθ)
+
+α
+
+
+
+< β + dβ 
+
+
+
+. (46) Fig. 4 compares the distributions obtained from AMP, PAMP  
+
+> |β(0) ,η
+
+at p = 5000, and from state evolution, PSE 
+
+> |β(0) ,η
+
+, for fixed realizations of η and β(0) . For AMP, the distribution is estimated using the fixed point over 1000 realizations of X and ξ. In both AMP and SE, the distributions are computed numerically on a discretized grid with step size ∆ β = 10 −2.Following the decoupling principle, we compare the distributions of components associated with given values of β(0) and η, for various choices of these parameters. The AMP results qualitatively reproduce the distributions predicted by SE, although the accuracy depends on the magnitudes of β(0) and η. As shown in Fig. 4(a)–(f), where 
+
+|η| is relatively small (up to O(10 −2)), AMP agrees well with SE. Minor discrepancies can be attributed to finite-size effects, the limited number of samples, and discretization errors. When β(0) is small, the agreement becomes even better, since the distribution is dominated by a single peak with small residual tails. In contrast, as shown in panels (g)–(j), for larger 
+
+|η| on the order of 10 −1, noticeable deviations appear even for small β(0) , particularly in the peak amplitude. However, the overall qualitative behavior remains consistent with the SE prediction, and the agreement is expected to improve with larger system sizes and an increased number of samples used to estimate the distribution. 25 5.2 Equivalent Distribution over the privacy noise (Fixed data) 
+
+Since (45) holds for any fixed values of β(0) and η, averaging over the privacy noise yields, for any β,
+
+Z
+
+dη PAMP 
+
+> |β(0) ,η
+
+(β|β(0) , η )Pη(η) = 
+
+Z
+
+dη PSE 
+
+> |β(0) ,η
+
+(β|β(0) , η )Pη(η). (47) Using the definitions in (44) and (46), this identity can be rewritten as 
+
+Z
+
+dXd ξ PX (X)Pξ(ξ)PAMP  
+
+> |β(0) ,X
+
+(β|β(0) , X ) = 
+
+Z
+
+Dz PSE  
+
+> |β(0) ,z
+
+(β|β(0) , σ z z), (48) where the conditional distributions are defined as 
+
+PAMP  
+
+> |β(0) ,X
+
+(β|β(0) , X )dβ =
+
+Z
+
+dηP η(η)I(β ≤ bβAMP (D, η ) < β + dβ ) (49) 
+
+PDE  
+
+> |β(0) ,z
+
+(β|β(0) , σ z z)dβ =
+
+Z
+
+dηP η(η)I
+
+
+
+β ≤ M
+
+1 + sθ
+
+α , β (0) + σz z − η(1 + sθ)
+
+α
+
+
+
+< β + dβ 
+
+
+
+.
+
+(50) Accordingly, we obtain the following equivalence in distribution. 
+
+Claim 5.1 (Equivalent distribution induced by objective privacy noise) For a fixed dataset D, the distribution of a component of the AMP estimator over the privacy noise is asymptotically equivalent to the scalar distribution generated by the state evolution with Gaussian noise z:
+
+PAMP  
+
+> |β(0) ,X
+
+(β|β(0) , X ) d
+
+= PSE  
+
+> |β(0) ,z
+
+(β|β(0) , σ z z). (51) Moreover, (48) implies that, for any measurable function a(β), 
+
+Z
+
+dβ a (β)PAMP  
+
+> |β(0) ,X
+
+(β|β(0) , X ) d
+
+=
+
+Z
+
+dβ a (β)PSE  
+
+> |β(0) ,z
+
+(β|β(0) , σ z z). (52) The equivalent scalar distribution PSE  
+
+> |z,β (0)
+
+(β|β(0) , σ z z) admits a closed-form expression, de-rived in the Supplementary Material: 
+
+PSE  
+
+> |β(0) ,z
+
+(β|β(0) , σ z z) = (1 − brSE (β(0) + σz z, Σ)) δ(β)+ 1
+
+√2πΣση
+
+exp −
+
+ β − (β(0) + σz z) + sgn( β)λΣ2
+
+2Σ 2σ2
+
+> η
+
+!
+
+, (53) 26 where 
+
+brSE (β(0) + σz z, Σ) = 12
+
+
+
+erfc 
+
+−(β(0) + σz z) + λΣ
+
+√2Σ ση
+
+
+
++ erfc 
+
+β(0) + σz z + λΣ
+
+√2Σ ση
+
+ 
+
+. (54) This quantity represents the probability, with respect to the objective noise, that a com-ponent with true signal β(0) is estimated as nonzero under a fixed realization of z. This interpretation follows directly from (52) by setting a(β) = I(|β| > 0), which yields 
+
+brAMP (D) := 
+
+Z
+
+dβ I(|β| > 0) PAMP (β|D ) d
+
+= brSE (β(0) + σz z, Σ) . (55) In the limit ση → 0, brSE (β(0) , σ z z) reduces to Θ( |β(0) + σz z| > λ Σ), and the distribu-tion PSE  
+
+> |β(0) ,z
+
+collapses to a Dirac delta located at the soft-thresholding estimator, thereby recovering the original LASSO solution. Fig. 5 shows the distribution of the AMP estimate with respect to the privacy noise for a fixed dataset. For comparison, the distribution predicted by state evolution is shown by dashed lines. We present results for several values of β(0) , where the distributions are averaged over 100 realizations of the dataset (for AMP) or of z (for SE), since establishing a one-to-one correspondence between X and z is non-trivial in the present framework. Overall, we observe good agreement between AMP and SE. In the nonzero case, the mass of the distribution is biased toward the sign of β(0) , reflecting the effect of the underlying signal. 
+
+# 6 Asymptotic Evaluation of the On-Average KL Di-vergence 
+
+AMP does not provide the full joint distribution of all variables on a non-tree factor graph. We therefore focus on comparing marginal distributions under one-point-mutant datasets. Starting from the original definition of the OnAveKL in (9), we introduce the component-27 P(
+
+> β|β(0) , X)
+
+## ββββββ
+
+# (a) (b) (c) (d) (e) (f) 
+
+## 0.000010 
+
+## 0.000100 
+
+## 0.001000 
+
+## 0.010000 
+
+## 0.100000 
+
+## 1.000000 
+
+## -4 -2 0 2 4 0.000010 
+
+## 0.000100 
+
+## 0.001000 
+
+## 0.010000 
+
+## 0.100000 
+
+## 1.000000 
+
+## -4 -2 0 2 4 0.000010 
+
+## 0.000100 
+
+## 0.001000 
+
+## 0.010000 
+
+## 0.100000 
+
+## 1.000000 
+
+## -2 0 2 4
+
+## 0.000010 
+
+## 0.000100 
+
+## 0.001000 
+
+## 0.010000 
+
+## 0.100000 
+
+## 1.000000 
+
+## -4 -2 0 2 0.000010 
+
+## 0.000100 
+
+## 0.001000 
+
+## 0.010000 
+
+## 0.100000 
+
+## 1.000000 
+
+## -2 0 2 4 6 0.000010 
+
+## 0.000100 
+
+## 0.001000 
+
+## 0.010000 
+
+## 0.100000 
+
+## 1.000000 
+
+## -6 -4 -2 0 2Figure 5: Examples of the distributions of the AMP estimates induced by the injected privacy noise (solid lines) and the corresponding SE predictions (dashed lines) at α = 0 .5, 
+
+ρ = 0 .5, σy = 0 .1, λ = 1, and ση = 0 .5. For AMP, we set N = 500, and 1000 realizations of the objective noise are used in the computation. Panels (a)-(f) correspond to β(0) = 0, 0.3554, 1 .308, −1.279, 2 .191, and −2.432, respectively. The circle at β = 0 indicates the height of the peak of the AMP distribution. 28 wise On-Average KL divergence, defined as cwOnAveKL = 1
+
+n
+
+> n
+
+X
+
+> μ=1
+
+ED,D′
+
+> μ
+
+"Z
+
+dβ iNY
+
+> i=1
+
+pi(βi|D )
+
+> N
+
+X
+
+> i=1
+
+ln pi(βi|D )
+
+pi(βi|D ′
+
+> μ
+
+)
+
+#
+
+, (56) where pi(βi|D ) denotes the marginal posterior distribution of the i-th component under dataset D.To provide a reference scale for interpreting the magnitude of cwOnAveKL, consider the following simple Gaussian example. When the two distributions over the p components are i.i.d. Gaussian with identical variance σ2 but different means, and the mean difference is uniformly μ across all components, the divergence reduces to cwOnAveKL = pμ 2
+
+2σ2 . (57) In particular, the condition OnAveKL = ε/σ 2 corresponds, in the Gaussian case, to a component-wise mean deviation of order 
+
+μ =
+
+r2εp . (58) Although the distributions considered in this work are not always Gaussian, in particular for objective perturbation case, this relation provides a useful reference scale for interpreting the magnitude of cwOnAveKL. 
+
+## 6.1 cwOnAveKL under Output Perturbation 
+
+First, we evaluate the cwOnAveKL for output perturbation, where the calculation simplifies significantly in the infinite dimensional case. In this regime, support changes induced by a one-point perturbation occur only rarely. Namely, components that are zero under D
+
+typically remain zero under D′
+
+> μ
+
+, and their contribution to the KL divergence after adding output noise is negligible, as their distributions are the same. Therefore, only the active components contribute to cwOnAveKL. 29 For the non-zero components, output perturbation induces Gaussian distributions N ( bβi(D, 0), σ 2 
+
+> η
+
+)and N ( bβi(D′
+
+> μ
+
+, 0), σ 2 
+
+> η
+
+). Since these two distributions share the same variance σ2 
+
+> η
+
+, their KL divergence is given by the squared difference of the means. Therefore, we obtain cwOnAveKL = 1
+
+nσ 2
+
+> ηn
+
+X
+
+> μ=1
+
+ED,D′
+
+> μ
+
+" p
+
+X
+
+> i=1
+
+I(| bβi(D, 0)| > 0)( bβi(D, 0) − bβi(D′
+
+> μ
+
+, 0)) 2
+
+#
+
+. (59) Using the AMP expression, combined with replica expression, explained by Supplement Material, cwOnAveKL for output perturbation is given by cwOnAveKL = E0 bρ0
+
+α2σ2
+
+> η
+
+, (60) where E0 = E(η = 0) and bρ0 = 1 
+
+> p
+
+ED[∥ bβ(D, 0)∥0]. 
+
+## 6.2 cwOnAveKL under objective perturbation 
+
+For computing cwOnAveKL for objective perturbation, we need to compare two marginal distributions under D and D′
+
+> μ
+
+. We represent the original dataset D and its one-point-mutant counterpart D′ 
+
+> μ
+
+as D = {D \μ, dμ} and D′ 
+
+> μ
+
+= {D \μ, d′
+
+> μ
+
+}, respectively, where D\μ
+
+denotes the LOO dataset obtained by removing the μ-th sample from D. We make use of the following claim, which shows that cwOnAveKL can be expressed solely in terms of the decoupled distributions. 
+
+Claim 6.1 (Distribution of estimate under One-Point-Mutant data) Let us con-sider a functional A(D, D′
+
+> μ
+
+) = a(PAMP  
+
+> |β(0) ,X
+
+(β|, β (0) , {D \μ, dμ}), PAMP 
+
+> |β(0) ,X ′
+> μ
+
+(β|{D \μ, d′
+
+> μ
+
+})) defined for an arbitrary function a(·, ·). Then, for any such a(·, ·), the following equality in distri-bution holds: 
+
+A(D, D′
+
+> μ
+
+) d
+
+= a
+
+
+
+PSE  
+
+> |β(0) ,z
+
+(β|β(0) , σ \∆ 
+
+> z
+
+z + √∆ζ), PSE  
+
+> |β(0) ,z
+
+(β|β(0) , σ \∆ 
+
+> z
+
+z + √∆ζ′)
+
+
+
+(61) 
+
+where σ\∆ 
+
+> z
+
+= pσ2 
+
+> z
+
+− ∆, ∆ = E/ (αn ), and z, ζ and ζ′ are independent standard Gaussian random variables. 
+
+30 The derivation of Claim 6.1 is provided in Supplement Material. Here, E denotes the generalization error for both the full dataset and the LOO dataset; we assume that their difference is negligible in the large-n limit. Utilizing Claim 6.1 and choosing a(P, Q) = P ln( P/Q), the cwOnAveKL can be ex-pressed as cwOnAveKL =
+
+Z
+
+DzDζDζ ′
+
+> p
+
+X
+
+> i=1
+
+Z
+
+dβ iPSE  
+
+> |β(0) ,z
+
+(βi|β(0)  
+
+> i
+
+, σ \∆ 
+
+> z
+
+z + ∆ ζ) ln PSE  
+
+> |z
+
+(βi|β(0)  
+
+> i
+
+, σ \∆ 
+
+> z
+
+z + ∆ ζ)
+
+PSE  
+
+> |z
+
+(βi|β(0)  
+
+> i
+
+, σ \∆ 
+
+> z
+
+z + ∆ ζ′). (62) Since ∆ = O(n−1), we may expand (62) to first order in ∆ for sufficiently large n, leading to the following result. 
+
+Corollary 6.2 The component-wise On-Average KL divergence for the AMP estimator is given by 
+
+cwOnAveKL = ER α2σ2
+
+> η
+
+, (63) 
+
+where 
+
+R = σ2
+
+> η
+
+Z
+
+dβ (0) ϕβ (β(0) )
+
+Z
+
+Dz 
+
+(
+
+11 − br( bm, Σ) 
+
+∂br( bm, Σ) 
+
+∂ bm
+
+2
+
++ ∂2br( bm, Σ) 
+
+∂ bm2 + br( bm, Σ) Σ2σ2
+
+> η
+
+)
+
+,
+
+(64) 
+
+with bm = β(0) + σz z.
+
+The derivation of (64) is shown in Supplement Material. The term R is the contribution of the sparisty to the privacy performance. 
+
+## 6.3 Comparison of cwOnAveKLs 
+
+The cwOnAveKLs for output and objective perturbations exhibit a similar structural fea-ture: in both cases, the numerator is given by the generalization error multiplied by a 31 0     
+
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> 4.5
+> 5
+> 00.2 0.4 0.6 0.8 1
+
+(a) cwOnAveKL 
+
+ση
+
+λ = 0.5 
+
+λ = 1 
+
+λ = 1.5 0     
+
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> 4.5
+> 5
+> 00.2 0.4 0.6 0.8 1
+
+(b) cwOnAveKL 
+
+ση
+
+ρ = 0.1 
+
+ρ = 0.3 
+
+ρ = 0.5 0     
+
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> 4.5
+> 5
+> 00.2 0.4 0.6 0.8 1
+
+(c) cwOnAveKL 
+
+ση
+
+α = 0.3 
+
+α = 0.5 
+
+α = 0.7 Figure 6: cwOnAveKL under output perturbation as a function of the noise strength ση
+
+for different parameter settings: (a) α = 0 .5, ρ = 0 .1, (b) α = 0 .5, λ = 1, and (c) ρ = 0 .1, 
+
+λ = 1. The observation noise strength is set to σξ = 0 .1. 0       
+
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> 4.5
+> 5
+> 00.2 0.4 0.6 0.8 11.2 1.4
+
+(a) cwOnAveKL              
+
+> ση
+> λ= 0.5
+> λ= 1
+> λ= 1.5 0
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> 4.5
+> 5
+> 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+(b) cwOnAveKL 
+
+ση
+
+ρ = 0.1 
+
+ρ = 0.3 
+
+ρ = 0.5 0      
+
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> 4.5
+> 5
+> 00.2 0.4 0.6 0.8 11.2
+
+(c) cwOnAveKL    
+
+> ση
+> α= 0.3
+> α= 0.5
+> α= 0.7
+
+Figure 7: cwOnAveKL under objective perturbation as a function of the noise strength ση
+
+for different parameter settings: (a) α = 0 .5, ρ = 0 .1, (b) α = 0 .5, λ = 1, and (c) ρ = 0 .1, 
+
+λ = 1. The observation noise strength is set to σξ = 0 .1. 32 sparsity-dependent coefficient (Eqs. (60) and (63)). This common structure highlights the role of sparsity in privacy. We compare the cwOnAveKL for output and objective perturbations. Fig. 6 shows cwOnAveKL for output perturbation under various model parameters as functions of the noise strength ση. For output perturbation, the cwOnAveKL decreases monotonically with 
+
+ση, which is consistent with intuition. Fig. 7 shows the cwOnAveKL for objective perturbation under various model parame-ters as a function of the noise strength ση. In this case, the cwOnAveKL is not monotonic; increasing the noise can even lead to larger values, which is counterintuitive. As the pri-vacy noise increases, the estimator becomes unstable as it approaches the condition (42), as reflected in the increase of the generalization error (Fig. 2). This instability can also be interpreted as high sensitivity of the estimator to small perturbations in the data [Obuchi and Sakata, 2019]. Therefore, although increasing the noise might be expected to enhance privacy, excessively large noise does not improve privacy in this setting. Instead, it induces instability in the estimator, limiting further improvement of privacy performance. For both perturbation schemes, the cwOnAveKL increases as the regularization param-eter λ decreases, the sparsity level ρ increases, and α decreases. This indicates that privacy is harder to maintain when the underlying signal is dense and the estimation problem becomes more difficult. 
+
+## 6.4 Trade-off between prediction and privacy 
+
+To investigate the trade-off between prediction accuracy and privacy, we plot cwOnAveKL against the generalization error, as shown in Fig. 8: (a) is for output perturbation, and (b) is for objective perturbation. This figure is obtained by combining the results in Fig. 1(b) and Figs. 6, 7, using the noise strength ση as a parametric variable. Each curve represents how the prediction-privacy pair evolves as ση varies. 33 (a)                           
+
+> cwOnAveKL Generalization error
+> λ= 0.5
+> λ= 0.7
+> λ= 1
+> λ= 1.5
+> 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> 00.2 0.4 0.6 0.8 10
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> 00.2 0.4 0.6 0.8 1
+> 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> 00.2 0.4 0.6 0.8 10
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> 00.2 0.4 0.6 0.8 1
+
+(b)                             
+
+> cwOnAveKL Generalization error
+> λ= 0.5
+> λ= 0.7
+> λ= 1
+> λ= 1.5
+> 0
+> 0.5
+> 1
+> 1.5
+> 2
+> 00.2 0.4 0.6 0.8 10
+> 0.5
+> 1
+> 1.5
+> 2
+> 00.2 0.4 0.6 0.8 1
+> 0
+> 0.5
+> 1
+> 1.5
+> 2
+> 00.2 0.4 0.6 0.8 1
+> 0.3
+> 0.35
+> 0.08 0.12 0
+> 0.5
+> 1
+> 1.5
+> 2
+> 00.2 0.4 0.6 0.8 1
+> 0.02
+> 0.06
+> 0.1
+> 0.1 0.12
+
+Figure 8: Privacy-accuracy trade-off at α = 0 .5, ρ = 0 .1, and σξ = 0 .1 for (a) output and (b) objective perturbation. The vertical dashed lines represent the generalization error in the noiseless case, and circles denote the points closest to the origin. The inset in (b) magnifies the curve around the minimum. In Fig. 8(a), the relationship between cwOnAveKL and the generalization error under output perturbation is monotonic. The limit ση → 0 corresponds to divergence of cwOn-AveKL, as the curve approaches the vertical dashed line indicating the generalization error in the absence of privacy noise. As ση increases, the curve is traversed from this divergent regime toward the regime where cwOnAveKL vanishes. Furthermore, as λ increases, the curve approaches a limiting shape defined by the three points ( E0, ∞), ( E0, 0), and ( ∞, 0). In contrast, Fig. 8(b) shows that the relationship between cwOnAveKL and the gener-alization error in the objective perturbation case is generally non-monotonic. Starting from 
+
+ση = 0, increasing ση initially reduces cwOnAveKL while keeping the generalization error nearly unchanged or slightly decreasing it. For larger ση, both cwOnAveKL and the gener-alization error increase, approximately in a linear manner. As in the output perturbation case, the minimum of the curve approaches ( E0, 0) as λ increases; however, the divergence at large ση does not disappear. 34 0          
+
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 00.2 0.4 0.6 0.8 11.2 1.4 1.6 1.8 2
+> Optimal noise strength
+
+(a)        
+
+> λρ= 0.05
+> ρ= 0.1
+> ρ= 0.3 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 00.5 11.5 2
+
+(b) Optimal noise strength 
+
+λ   
+
+> ρ= 0.05
+> ρ= 0.1
+> ρ= 0.3
+
+Figure 9: (a) Optimal noise strength under output perturbation at α = 0 .5 and σξ = 0 .1for different values of ρ. (b) Optimal noise strength under objective perturbation under the same conditions. From a practical viewpoint, desirable noise strengths are those for which both the generalization error and cwOnAveKL are small. Motivated by this observation, we define the optimal privacy noise as the value of ση that minimizes the distance to the origin in the generalization-cwOnAveKL plane, i.e., the point that simultaneously achieves low generalization error and strong privacy. These optimal points are indicated by circles in Fig. 8. For output perturbation, beyond the optimal noise level, privacy continues to improve while the generalization error deteriorates. For objective perturbation, beyond the optimal noise level, further increasing ση causes both cwOnAveKL and the generalization error to grow approximately proportionally for any λ.Figure 9 shows the dependence of the optimal noise level on the regularization parameter 
+
+λ at α = 0 .5 and σξ = 0 .1 for (a) output and (b) objective perturbation. For output perturbation, the optimal noise decreases as λ increases, and stronger noise is required for larger ρ. In contrast, for objective perturbation, the optimal noise exhibits a non-monotonic dependence on λ. As discussed above, beyond the optimal noise level, both the privacy and generalization performance deteriorate. Therefore, in the objective perturbation case, a more careful tuning of the noise strength is required. 35 0          
+
+> 0.05
+> 0.1
+> 0.15
+> 0.2
+> 0.25
+> 0.3
+> 0.35
+> 0.4
+> 00.2 0.4 0.6 0.8 11.2 1.4 1.6 1.8 2
+
+(a) Generalization error             
+
+> λ
+> With optimal output noise
+> With optimal objective noise
+> Without privacy noise
+> 0.09
+> 0.1
+> 0.11
+> 0.12
+> 11.5 20
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 00.2 0.4 0.6 0.8 11.2 1.4 1.6 1.8 2
+
+(b) cwOnAveKL under optimal noise 
+
+> λ
+> Output
+> Objective
+
+Figure 10: Generalization error (a) and cwOnAveKL (b) at the optimal noise strength, for 
+
+α = 0 .5, ρ = 0 .1, and σξ = 0 .1. Figure 10 shows (a) the generalization error and (b) cwOnAveKL evaluated at the optimal noise level. For generalization, objective perturbation achieves lower error over a wider range of λ, and in particular outperforms the noiseless case at large λ. In contrast, cwOnAveKL is smaller for output perturbation across the entire range of λ. These results suggest that when strong privacy is not required, objective perturbation may be preferable, as it maintains or even improves generalization performance. On the other hand, when a higher level of privacy is desired, output perturbation may be more suitable, although it slightly reduces prediction accuracy. We emphasize that this conclusion relies on the assumption that the support selection remains unchanged under one-point perturbations of the data, which may be a reasonable approximation in the high-dimensional limit considered in this paper. 
+
+# 7 Conclusion 
+
+In this work, we investigated statistical estimation accuracy and privacy using the on-average KL criterion in high-dimensional LASSO with output and objective perturbation. We quantified how privacy noise affects estimation behavior. In the case of objective per-36 turbation, the estimator can become denser than in the noiseless setting, even under the same regularization strength. This property can lead to improved generalization perfor-mance compared to the noiseless case, particularly for sufficiently large λ and appropriately chosen noise levels. We analyzed the distributional properties of the estimator with respect to privacy noise using asymptotic analysis based on approximate message passing (AMP) and its associated state evolution. This framework allowed us to derive a statistically equivalent characteriza-tion of the AMP estimator and to quantify how the privacy level, measured by cwOnAveKL, depends on the noise strength and model parameters. Our analysis revealed several notable features. First, the privacy level is not a mono-tonic function of the objective perturbation noise. While adding output noise consistently improves privacy, excessively large objective noise can instead increase cwOnAveKL. This counterintuitive behavior arises from instability in the estimator, as captured by AMP, which is closely related to coordinate descent dynamics, and is reflected in increased gen-eralization error. In such regimes, the estimator becomes highly sensitive to data pertur-bations, and the privacy protection deteriorates. Second, cwOnAveKL depends strongly on the underlying model parameters. In partic-ular, weaker regularization, lower sampling ratios, and denser true signal tend to increase cwOnAveKL. These findings suggest that privacy is harder to maintain precisely in regimes where statistical estimation itself is challenging, while sparsity can play a beneficial role in enhancing privacy. To better understand the trade-off between prediction accuracy and privacy, we exam-ined the relationship between cwOnAveKL and the generalization error by treating the privacy noise as a parametric variable. In the case of output perturbation, the resulting curve exhibits an inverse relationship, whereas for objective perturbation it becomes non-monotonic. This indicates that moderate noise levels can simultaneously improve prediction 37 performance and provide privacy protection, while excessive noise degrades both. Based on this observation, we introduced the notion of an optimal privacy noise , defined as the noise strength that minimizes the distance to the origin in the generalization-cwOnAveKL plane. This point represents a balance between prediction accuracy and privacy. We fur-ther found that the optimal noise decreases monotonically with λ for output perturbation, while it exhibits non-monotonic behavior for objective perturbation. Moreover, objective perturbation tends to better preserve prediction performance, whereas output perturbation provides stronger privacy protection in terms of cwOnAveKL. Overall, our results highlight that privacy protection through noise injection must be carefully calibrated. Increasing objective noise does not necessarily improve privacy and may instead induce estimator instability and degrade prediction performance. The pro-posed framework provides a quantitative approach to analyzing this trade-off and offers guidance for selecting noise levels in high-dimensional statistical models. Future work includes extending this analysis to broader classes of models and inference methods, as well as to other privacy mechanisms beyond output and objective perturba-tion. In particular, it would be important to investigate data-dependent noise calibration strategies and to validate these findings in more complex statistical settings. Connections to differential privacy mechanisms such as output perturbation, objective perturbation, and gradient-based methods [Abadi et al., 2016] provide a promising direction for further study. 
+
+## SUPPLEMENTARY MATERIAL 
+
+Supplementary material contains proof and derivations of theorem and claims. 38 ℓ! penalty 
+
+𝑦 ! 𝑦 " 𝑦 # 𝑦 $
+
+𝛽 ! 𝛽 " 𝛽 # 𝛽 $ 𝛽 % 𝛽 &
+
+𝜋 $'→) 𝜋 )→' 
+
+> Privacy nois e
+
+Figure 11: Graphical representation of the privacy-preserving LASSO with n = 4 and 
+
+p = 6. 
+
+# S.1 AMP algorithm 
+
+Fig. 11 shows the factor graph representation of the posterior distribution with privacy noise, given by Eq. (10) in the main text. In this representation: 
+
+• Variable nodes correspond to the parameters β.
+
+• Factor nodes correspond to likelihood terms associated with each observation yμ; the 
+
+ℓ1 penalty and the privacy noise are also represented as factor nodes. 
+
+• Edges connect factor and variable nodes whenever the corresponding factor depends on the variable. Messages are assigned to edges as follows: 
+
+• Output message πi→μ(βi): Message from the variable βi to data yμ
+
+• Input message eπμ→i(βi): Message from data yμ to the variable βi.By interpreting the privacy noise as an additional prior on the variables, the standard pro-cedure for deriving AMP can be applied, following [Sakata, 2023]. The resulting marginal posterior is given by Eq. (21) in the main text. 39 Introducing appropriate mean and variance parameters, we can express both the marginal posterior and the messages by using eq.(21) in the main text. In particular, we introduce the following representations, which are useful for the analysis of the subsequent state evolution: Σ(t) 
+
+> i→μ
+
+= 1
+
+P 
+
+> ν∈M\μ
+
+(es(t)
+
+> ν→i
+
+)−1 , m(t) 
+
+> i→μ
+
+=
+
+P 
+
+> ν∈M\μ
+
+(es(t)
+
+> ν→i
+
+)−1 eβ(t)
+
+> ν→i
+
+P 
+
+> ν∈M\μ
+
+(es(t)
+
+> ν→i
+
+)−1 . (65) and Σ(t) 
+
+> i
+
+= 1
+
+PMν=1 (es(t)
+
+> ν→i
+
+)−1 , m(t) 
+
+> i
+
+=
+
+PMν=1 (es(t)
+
+> ν→i
+
+)−1 eβ(t)
+
+> ν→i
+
+PMν=1 (es(t)
+
+> ν→i
+
+)−1 . (66) Under the Gaussian approximation, the input message takes the form 
+
+eξ(t)
+
+> μ→i
+
+(xi) ∝ exp 
+
+(
+
+−τ A (t)
+
+> μ→i
+
+β2
+
+> i
+
+2 + τ B (t)
+
+> μ→i
+
+βi
+
+)
+
+, (67) with 
+
+A(t) 
+
+> μ→i
+
+= X2
+
+> μi
+
+1 + s(t)
+
+> θ
+
+(68) 
+
+B(t) 
+
+> μ→i
+
+= Xμi 
+
+yμ − by\μ(t)
+
+> μ
+
+1 + s(t)
+
+> θ
+
+, (69) hence the mean and (rescaled) variance of the input message, eβμ→i and esμ→i, are given by 
+
+eβ(t) 
+
+> μ→i
+
+= B(t)
+
+> μ→i
+
+A(t)
+
+> μ→i
+
+, (70) 
+
+es(t) 
+
+> μ→i
+
+= 1
+
+A(t)
+
+> μ→i
+
+. (71) 
+
+# S.2 State Evolution 
+
+We start from the following expressions, obtained from Eqs. (68)–(71): m(t) 
+
+> i
+
+= Σ (t)
+
+> in
+
+X
+
+> μ=1
+
+(
+
+Xμi 
+
+yμ − by\μμ
+
+1 + sθμ 
+
++ X2 
+
+> μi
+
+bβ(t)
+
+> i
+
+1 + sθμ 
+
+)
+
+(72) 1Σ(t)
+
+> i
+
+=
+
+> n
+
+X
+
+> μ=1
+
+X2
+
+> μi
+
+1 + sθ
+
+. (73) 40 In the large-system limit, the fluctuations of Σ (t) 
+
+> i
+
+vanish, and Σ (t) 
+
+> i
+
+converges to a determinis-tic value. Consequently, the only remaining random quantity that requires a distributional characterization is m (t) 
+
+> i
+
+. Using the definition of the leave-one-out prediction by\μμ and the data model yμ = Ppj=1 Xμj β(0)  
+
+> j
+
++ ξμ, we obtain m(t) 
+
+> i
+
+= 1
+
+Pnμ=1 X2
+
+> μi
+
+11 + sθnX
+
+> μ=1
+
+(
+
+Xμi 
+
+(yμ − by\μμ )1 + sθ
+
++ X2 
+
+> μi
+
+bβ(t)
+
+> i→μ
+
+11 + sθ
+
+)
+
+= 1
+
+Pnμ=1 X2
+
+> μi n
+
+X
+
+> μ=1
+
+(
+
+Xμi (
+
+> p
+
+X
+
+> i=1
+
+Xμi β(0)  
+
+> i
+
++ ξμ −
+
+> p
+
+X
+
+> i=1
+
+Xμi bβi→μ) + X2 
+
+> μi
+
+bβ(t)
+
+> i→μ
+
+)
+
+= 1
+
+Pnμ=1 X2
+
+> μi n
+
+X
+
+> μ=1
+
+(
+
+Xμi (
+
+> p
+
+X
+
+> i=1
+
+Xμi β(0)  
+
+> i
+
++ ξμ) −
+
+> p
+
+X 
+
+> j̸=i
+
+Xμi Xμj bβj→μ
+
+)
+
+(74) Taking the expectation with respect to X and the observation noise ξ under the setting D,we find 
+
+EX, ξ[m i] = β(0)  
+
+> i
+
+. (75) Next, we evaluate the variance of m (t) 
+
+> i
+
+. Subtracting β(0)  
+
+> i
+
+and rearranging terms yields m(t) 
+
+> i
+
+− β(0)  
+
+> i
+
+= 1
+
+Pnμ=1 X2
+
+> μi n
+
+X
+
+> μ=1
+
+(
+
+Xμi (
+
+> p
+
+X
+
+> j=1
+
+Xμj β(0)  
+
+> j
+
++ ξμ) −
+
+> p
+
+X 
+
+> j̸=i
+
+Xμi Xμj bβj→μ − X2
+
+> μi
+
+β(0) 
+
+> i
+
+)
+
+= 1
+
+Pnμ=1 X2
+
+> μi n
+
+X
+
+> μ=1
+
+(
+
+Xμi (
+
+> p
+
+X 
+
+> j̸=i
+
+Xμj β(0)  
+
+> j
+
++ ξμ) −
+
+> p
+
+X 
+
+> j̸=i
+
+Xμi Xμj bβj→μ
+
+)
+
+. (76) Assuming independence of Xμi across indices and using the law of large numbers, we obtain 
+
+EX [(m (t) 
+
+> i
+
+− β(0)  
+
+> i
+
+)2] ≃ 1
+
+α2
+
+> n
+
+X
+
+> μ=1
+
+(
+
+Xμi (
+
+> p
+
+X 
+
+> j̸=i
+
+Xμj β(0)  
+
+> j
+
++ ξμ) −
+
+> p
+
+X 
+
+> j̸=i
+
+Xμi Xμj bβj→μ
+
+)2
+
+≃ 1
+
+α
+
+(
+
+(
+
+> p
+
+X 
+
+> j̸=i
+
+X2 
+
+> μj
+
+(β(0)  
+
+> j
+
+)2 + ξ2
+
+> μ
+
+) − 2 X 
+
+> k̸=i
+
+X2
+
+> μk
+
+β(0)  
+
+> k
+
+bβk→μ +
+
+> p
+
+X 
+
+> j̸=i
+
+X2 
+
+> μj
+
+( bβj→μ)2
+
+)
+
+≃ 1
+
+α
+
+(
+
+(1
+
+p
+
+> p
+
+X 
+
+> j̸=i
+
+(β(0)  
+
+> j
+
+)2 + σ2 
+
+> ξ
+
+) − 2
+
+p
+
+X 
+
+> k̸=i
+
+β(0)  
+
+> k
+
+bβk→μ + 1
+
+p
+
+> p
+
+X 
+
+> j̸=i
+
+( bβj→μ)2
+
+)
+
+≃ 1
+
+α
+
+(
+
+1
+
+p
+
+X 
+
+> j̸=i
+
+
+
+β(0)  
+
+> j
+
+− bβj
+
+2
+
++ σ2
+
+> ξ
+
+)
+
+= E(t)
+
+α , (77) where E(t) denotes the state evolution parameter corresponding to the generalization error at iteration t.41 Therefore, in the large-system limit, m (t) 
+
+> i
+
+converges in distribution to a Gaussian random variable: m(t)
+
+> id
+
+−→ N 
+
+
+
+β(0)  
+
+> i
+
+, σ 2
+
+> z
+
+
+
+, σ2 
+
+> z
+
+= E(t)
+
+α . (78) This Gaussianity of the effective field m (t) 
+
+> i
+
+leads directly to the state evolution equation and establishes the decoupling principle used in Theorem 4.1 of the main text. 
+
+## S.2.1 Distribution of estimator with respect to noise 
+
+To derive the distribution of the estimator β under privacy noise, we separately consider the cases β > 0, β < 0, and β = 0. Here, we define bmi = β(0)  
+
+> i
+
++ σz z. For β > 0, i.e., when 
+
+bmi − ηΣ > λ Σ, the conditional distribution is given by 
+
+PSE  
+
+> |β(0) ,z
+
+(β|β > 0; bmi, Σ) dβ =
+
+Z
+
+dηP η(η)I (β ≤ bmi − ηiΣ − λΣ < β + dβ )= 12
+
+
+
+erfc 
+
+
+
+−β + dβ − bmi + λΣ
+
+√2Σ ση
+
+
+
+− erfc 
+
+
+
+−β − bmi + λΣ
+
+√2Σ ση
+
+ 
+
+(79) For sufficiently small dβ , this yields 
+
+PSE  
+
+> |β(0) ,z
+
+(β|β > 0; bmi, Σ) dβ = 1
+
+√2πΣση
+
+exp 
+
+
+
+−(β − bmi + λΣ) 2
+
+2Σ 2σ2
+
+> η
+
+
+
+dβ + O(dβ 2). (80) Similarly, for β < 0, i.e., when bmi − ηΣ < −λΣ, we obtain 
+
+PSE  
+
+> |β(0) ,z
+
+(β|β < 0; bmi, Σ) dβ = 1
+
+√2πΣση
+
+exp 
+
+
+
+−(β − bmi − λΣ) 2
+
+2Σ 2σ2
+
+> η
+
+
+
+dβ + O(dβ 2).
+
+The probability that the estimator is nonzero is therefore given by 
+
+brSE ( bmi, Σ) = 
+
+Z ∞
+
+> β=0
+
+PSE  
+
+> |β(0) ,z
+
+(β|β > 0; bmi, Σ) dβ +
+
+Z 0
+
+> −∞
+
+PSE  
+
+> |β(0) ,z
+
+(β|β < 0; bmi, Σ) dβ 
+
+= 12
+
+
+
+erfc 
+
+− bmi + λΣ
+
+√2Σ ση
+
+
+
++ erfc 
+
+ bmi + λΣ
+
+√2Σ ση
+
+ 
+
+, (81) In summary, this yields the distribution given in Eq. (52) of the main text. 42 S.3 On-average KL Privacy using AMP 
+
+## S.3.1 cwOnAveKL for output perturbation 
+
+To compute cwOnAveKL for output perturbation (eq. (59) in the main text), we evaluate the squared difference between the estimators under one-point-mutant datasets using AMP. Using the AMP expression, we obtain 
+
+> p
+
+X
+
+> i=1
+
+( bβAMP ,i ({D \μ, dμ}, η) − bβAMP ,i ({D \μ, d′
+
+> μ
+
+}, η)) 2
+
+=
+
+> p
+
+X
+
+> i=1
+
+( bβAMP ,i ({D \μ, dμ}, η) − bβAMP ,i (D\μ, η) − ( bβAMP ,i ({D \μ, d′
+
+> μ
+
+}, η) − bβAMP ,i (D\μ, η))) 2
+
+=
+
+> p
+
+X
+
+> i=1
+
+siXμi 
+
+(yμ − by\μμ )1 + sθ
+
+− siX′
+
+> μi
+
+(y′ 
+
+> μ
+
+− by′\ μμ )1 + sθ
+
+!2
+
+, (82) where by′\ μμ = Ppi=1 X′ 
+
+> μi
+
+bβi→μ. Note that si = 0 for inactive components, hence the indicator function in eq. (59) is implicitly incorporated. Since Xμi and X′ 
+
+> μi
+
+are independent for any i, taking the expectation over the dataset yields 
+
+ED
+
+" p
+
+X
+
+> i=1
+
+( bβAMP ,i ({D \μ, dμ}, η) − bβAMP ,i ({D \μ, d′
+
+> μ
+
+}, η)) 2
+
+#
+
+= 2
+
+pE
+
+(1 + V )2
+
+> p
+
+X
+
+> i=1
+
+(si)2 . (83) Using eqs. (29) and (31) in the main text, 
+
+ED
+
+" p
+
+X
+
+> i=1
+
+( bβAMP ,i ({D \μ, dμ}, η) − bβAMP ,i ({D \μ, d′
+
+> μ
+
+}, η)) 2
+
+#
+
+= 2E bρα2 (84) This corresponds to the average sensitivity of the AMP estimator under setting D, which at η = 0 leads to eq. (60) in the main text. 
+
+## S.3.2 Correlation structure under one-point-mutant data 
+
+To derive cwOnAveKL, we need to characterize the correlation between the estimators obtained from the original dataset D and the one-point-mutant dataset D′. To this end, we analyze the joint distribution of the AMP mean parameters bmi and bm′μi , where bm′μi denotes 43 the mean parameter under the μ-th one-point-mutant dataset. This analysis allows us to derive Claim 6.1. Focusing on the overlap between bmi and bm′μi , we can rewrite them as mi = 1
+
+α
+
+(X 
+
+> ν̸=μ
+
+Xνi 
+
+
+
+yν − by\νν + Xνi bβi→ν
+
+
+
++ Xμi 
+
+
+
+yμ − by\μμ + Xμi bβi→μ
+
+)
+
+(85) m′μi = 1
+
+α
+
+(X 
+
+> ν̸=μ
+
+Xνi 
+
+
+
+yν − by\νν + Xνi bβi→ν
+
+
+
++ X′
+
+> μi
+
+
+
+y′ 
+
+> μ
+
+− by′\ μμ + X′ 
+
+> μi
+
+bβi→μ
+
+)
+
+. (86) From the independence between Xμi and X′
+
+> μi
+
+, we obtain 
+
+E[(m i − β(0)  
+
+> i
+
+)(m ′ 
+
+> i
+
+− β(0)  
+
+> i
+
+)] = Eα − Eαn . (87) From Eq. (77), we have E[(m i − β(0)  
+
+> i
+
+)2] = E[(m ′μi − β(0)  
+
+> i
+
+)2] = E/α , hence the joint distribu-tional property of m i and m ′μi can be constructed as mi − β(0)  
+
+> i
+
+= σ\∆ 
+
+> z
+
+z + √∆ζ (88) m′ 
+
+> i
+
+− β(0)  
+
+> i
+
+= σ\∆ 
+
+> z
+
+z + √∆ζ′ (89) where z, ζ, and ζ′ are independent standard Gaussian random variables. These expressions imply the distributional equivalence 
+
+f ( bm′μi , bmi) d
+
+= f (β(0)  
+
+> i
+
++ σ\∆ 
+
+> z
+
+z + √∆ζ′, β (0)  
+
+> i
+
++ σ\∆ 
+
+> z
+
+z + √∆ζ), (90) for any μ. By choosing f as a functional of the corresponding marginal distributions 
+
+a(P( bm) , P( bm′)), this establishes Claim 6.1. 44 S.3.3 Component-wise on-average KL 
+
+We evaluate the component-wise on-average KL divergence between SE-based distributions. The cross entropy between P(SE)  
+
+> |β(0) ,z
+
+(β| bm1, Σ1) and P(SE)  
+
+> |β(0) ,z
+
+(β| bm2, Σ2) is given by 
+
+Z
+
+dβ P(SE)  
+
+> |β(0) ,z
+
+(β| bm1, Σ1) ln P(SE)  
+
+> |β(0) ,z
+
+(β| bm2, Σ2)= (1 − br( bm1, Σ1)) ln (1 − br( bm2, Σ2)) − br( bm1, Σ1)2 ln  2πΣ22σ2
+
+> η
+
+
+
++ 1
+
+q
+
+2πΣ21σ2
+
+> η
+
+Z
+
+dβ 
+
+
+
+−(β − bm2 + sgn( β)λΣ2)2
+
+2Σ 22σ2
+
+> η
+
+
+
+exp 
+
+
+
+−(β − bm1 + sgn( β)λΣ1)2
+
+2Σ 21σ2
+
+> η
+
+
+
+. (91) We now consider the case where bm1 = bm\∆ + √∆ζ and bm2 = bm\∆ + √∆ζ′, with bm\∆ =
+
+β(0) +σ\∆ 
+
+> z
+
+z, and Σ 1 = Σ 2 = Σ. Writing bm1 = bm2 +√∆( ζ −ζ′), we expand the cross entropy in powers of √∆ up to O(∆). In this derivation, we use the following identities: 
+
+br(m , Σ) = 1
+
+p2πΣ2σ2
+
+> η
+
+Z
+
+dβ exp 
+
+
+
+−(β − m + sgn( β)λΣ) 2
+
+2Σ 2σ2
+
+> η
+
+
+
+(92) 
+
+∂br(m , Σ) 
+
+∂m = 1
+
+p2πΣ2σ2
+
+> η
+
+Z
+
+dβ 
+
+β − m + sgn( β)λΣΣ2σ2
+
+> η
+
+
+
+exp 
+
+
+
+−(β − m + sgn( β)λΣ) 2
+
+2Σ 2σ2
+
+> η
+
+
+
+(93) 
+
+∂2br(m , Σ) 
+
+∂m2 = − br
+
+Σ2σ2
+
+> η
+
++ 1
+
+p2πΣ2σ2
+
+> η
+
+Z
+
+dβ 
+
+β − m + sgn( β)λΣΣ2σ2
+
+> η
+
+2
+
+exp 
+
+
+
+−(β − m + sgn( β)λΣ) 2
+
+2Σ 2σ2
+
+> η
+
+
+
+.
+
+(94) Combining the above expressions, we arrive at Eq. (63) in the main text. 
+
+# S.4 Replica method 
+
+To analytically characterize the typical performance of the privacy LASSO estimator in the large-system limit, we employ the replica method, a non-rigorous yet powerful analytical technique from statistical physics that enables the evaluation of ensemble-averaged quanti-ties in high-dimensional inference problems. This framework yields closed-form expressions for key performance metrics, including the training and generalization errors. 45 S.4.1 Self-averaging of the noise-dependent free energy 
+
+The property in Eq. (11) of the main text naturally aligns with the structure of the replica method. The central object of interest is the free energy density , which summarizes the macroscopic behavior of the posterior distribution defined in Eq. (10) of the main text. For a fixed realization of the privacy noise η and finite p, we define the free energy density as 
+
+f (η) = − lim  
+
+> τ→∞
+
+1
+
+pτ ED[ln Zτ (D, η)] . (95) To evaluate the large dimensional limit of fp(η), we rely on the replica method, which is based on the identity 
+
+ED[ln Zτ (D, η)] = lim 
+
+> r→0
+
+∂∂r ED[Zrτ (D, η)] . (96) Assuming that r is a positive integer, we represent Zrτ as an r-replicated system by intro-ducing r copies of the original variable β, denoted by β(1) , · · · , β(r),
+
+ED[Zrτ (D, η)] = ED
+
+"Z
+
+dβ(1) · · · dβ(r) exp 
+
+(
+
+−τ
+
+> r
+
+X
+
+> a=1
+
+12∥y − Xβ(a)∥22 + λ∥β(a)∥1 + η⊤β(a)
+
+)# 
+
+.
+
+(97) Introducing the following statistics, which are overlap quantities commonly referred to as replica order parameters, 
+
+q(ab ) = 1
+
+p
+
+> p
+
+X
+
+> i=1
+
+β(a) 
+
+> i
+
+β(b) 
+
+> i
+
+, a, b ∈ { 1, . . . , r }, (98) 
+
+m(a) = 1
+
+p
+
+> p
+
+X
+
+> i=1
+
+β(0)  
+
+> i
+
+β(a) 
+
+> i
+
+, a ∈ { 1, . . . , r } (99) the replicated partition function can be evaluated by taking expectations with respect to the predictor matrix X. After standard manipulations (see, e.g., [Krzakala et al., 2012, Sakata, 2023]), the leading contribution to ED[Zrτ (D, η)] in the high-dimensional limit is expressed as an extremum over the macroscopic variables Q := {q(ab )} and m := {m(a)}:
+
+ED[Zrτ (D, η)] ∝ exp 
+
+
+
+p extr  
+
+> Q,m
+
+Φr({q(ab )}, {m(a)}; η)
+
+
+
+. (100) 46 Here, Φ r denotes the free entropy density, and extr Q,m indicates extremization with respect to Q and m. The explicit form of Φ r in the absence of privacy noise is given in [Krzakala et al., 2012, Sakata, 2023], and the present case differs by the additional noise term through the prior distribution. To proceed, we adopt the replica-symmetric (RS) assumption, under which the ex-tremum is invariant under permutations of the replica indices. This assumption enables the analytic continuation of Φ r from integer r to real r, followed by the limit r → 0. Under the RS ansatz, we set q(ab ) = q for all a̸ = b, q(aa ) = Q, and m(a) = m for all a ∈ { 1, . . . , r }.Denoting the resulting RS free energy by f (RS)  
+
+> p
+
+(η), we obtain the following property. 
+
+Claim S.4.1 (Self-averaging of the privacy-noise-dependent free energy) Under As-sumptions D and P, and assuming Lipschitz continuity of the free energy with respect to the privacy noise, 
+
+f (RS)  
+
+> p
+
+(η) p
+
+−→ Eη[f (RS)  
+
+> p
+
+(η)] . (101) 
+
+Remark S.4.2 Although the present analysis is carried out under the RS assumption, the self-averaging property of the free energy is expected to hold more generally, including under one-step and multi-step replica-symmetry-breaking (RSB) assumptions, which are commonly regarded as providing progressively more accurate descriptions of the underlying free energy. 
+
+Equation (101) indicates that, while the free energy is defined for each realization of the privacy noise η, its large-system limit becomes deterministic and depends only on the distribution Pη. Consequently, macroscopic observables derived from the free energy do not depend on a specific realization of η.We now present the explicit form of the RS free energy in the limit τ → ∞ . To take this limit, we introduce the scaling χ = τ (Q − q) and keep χ finite as τ → ∞ . The RS free energy density is then obtained as the extremum with respect to the macroscopic variables 47 Ω = {Q, χ, m }:
+
+f (RS) = extr 
+
+> Ω,bΩ
+
+hbμm − bΘQ − bχχ 
+
+2 − α(Q − 2m + ρσ 2 
+
+> x
+
++ σ2 
+
+> ξ
+
+)2(1 + χ)+
+
+Z
+
+dηP η(η)
+
+Z
+
+dβ (0) ϕ(0) (β(0) )
+
+Z
+
+Dz H(RS) ∗(z, β (0) , η )
+
+i
+
+. (102) Here, bΩ = {bμ, bΘ, bχ} are the conjugate variables associated with Ω, whose extremization yields 
+
+bΘ = α
+
+1 + χ (103) 
+
+bχ = α(Q − 2m + ρσ 2 
+
+> x
+
++ σ2 
+
+> ξ
+
+)(1 + χ)2 (104) 
+
+bμ = α
+
+1 + χ. (105) We define β∗ 
+
+> RS
+
+as the minimizer of the effective single-body problem 
+
+β∗
+
+> RS
+
+(z, β (0) , η ) = argmin 
+
+> β
+
+H(RS) (β; z, β (0) , η ) (106) where 
+
+H(RS) (β; z, β (0) , η ) = bΘ2 β2 − (pbχz + bμβ (0) − η)β + λ|β|. (107) We further define H(RS) ∗(z, β (0) , η ) := H(RS) (β∗
+
+> RS
+
+(z, β (0) , η ); z, β (0) , η ). The minimizer β∗ 
+
+> RS
+
+takes the soft-thresholding form 
+
+β∗
+
+> RS
+
+(z, β (0) , η ) = 
+
+
+
+h(RS) − λsgn( h(RS) )
+
+bΘ for |h(RS) | > λ 
+
+0 otherwise (108) where hRS (z, β (0) , η ) = pbχ z +bμβ (0) −η. The corresponding minimized value of the function 
+
+H(RS) is given by 
+
+H(RS) ∗(z, β (0) , η ) = 
+
+ h(RS) − λsgn( h(RS) )2
+
+2 bΘ for |h(RS) | > λ 
+
+0 otherwise 
+
+. (109) 48 At the extremum, the macroscopic parameters satisfy 
+
+Q =
+
+Z
+
+dηP η(η)
+
+Z
+
+dβ (0) ϕ(0) (β(0) )
+
+Z
+
+Dz (β∗
+
+> RS
+
+(z, β (0) )) 2 (110) 
+
+χ = 1
+
+pbχ
+
+Z
+
+dηP η(η)
+
+Z
+
+dβ (0) ϕ(0) (β(0) )
+
+Z
+
+Dz ∂β ∗
+
+> RS
+
+(z, β (0) )
+
+∂z (111) 
+
+m =
+
+Z
+
+dηP η(η)
+
+Z
+
+dβ (0) ϕ(0) (β(0) )
+
+Z
+
+Dzβ ∗
+
+> RS
+
+(z, β (0) )β(0) . (112) 
+
+## S.4.2 Connection to the state evolution 
+
+For high-dimensional models with a random design matrix, the fixed-point equations of state evolution coincide with those obtained by the replica method. In particular, the macroscopic quantities derived from AMP and state evolution agree with those predicted by the replica analysis, namely 
+
+Q = ED,η
+
+"
+
+1
+
+p
+
+> p
+
+X
+
+> i=1
+
+bβ2AMP ,i (D, η)
+
+#
+
+(113) 
+
+χ = ED,η
+
+"
+
+1
+
+p
+
+> p
+
+X
+
+> i=1
+
+si(D, η)
+
+#
+
+= V (114) 
+
+m = ED,η
+
+"
+
+1
+
+p
+
+> p
+
+X
+
+> i=1
+
+β(0)  
+
+> i
+
+bβAMP ,i (D, η)
+
+#
+
+. (115) Furthermore, the generalization error and training error are expressed as 
+
+Egen = Q − 2m + ρσ 2 
+
+> β
+
++ σ2 
+
+> ξ
+
+(116) 
+
+Etrain = Q − 2m + ρσ 2 
+
+> β
+
++ σ2
+
+> ξ
+
+(1 + χ)2 . (117) These relations lead to Claim 4.2 in the main text. In addition, there is the correspondence Σ−1 = bΘ. (118) Solving (111), we can find that 
+
+χ = bρ
+
+bΘ (119) 49 hence, from (118), we obtain 
+
+V = (1 + V )bρα , (120) and transforming this, we obtain eq.(43) in the main text. These correspondences have been established in a number of previous studies, where the replica method characterizes the typical-case behavior of the estimator. The agree-ment between state evolution and the replica method supports the validity of the present analysis and provides further justification for the use of AMP in characterizing the typical performance of the estimator. 
+
+# References 
+
+Martin Abadi, Andy Chu, Ian Goodfellow, H Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep learning with differential privacy. In Proceedings of the 2016 ACM SIGSAC conference on computer and communications security , pages 308– 318, 2016. Raef Bassily, Adam Smith, and Abhradeep Thakurta. Private empirical risk minimization: Efficient algorithms and tight error bounds. In 2014 IEEE 55th annual symposium on foundations of computer science , pages 464–473. IEEE, 2014. Mohsen Bayati and Andrea Montanari. The dynamics of message passing on dense graphs, with applications to compressed sensing. IEEE Transactions on Information Theory , 57 (2):764–785, 2011. Kamalika Chaudhuri, Claire Monteleoni, and Anand D Sarwate. Differentially private empirical risk minimization. Journal of Machine Learning Research , 12(3), 2011. Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. Calibrating noise to sensitivity in private data analysis. In Theory of Cryptography: Third Theory of Cryp-
+
+50 tography Conference, TCC 2006, New York, NY, USA, March 4-7, 2006. Proceedings 3 ,pages 265–284. Springer, 2006. Cynthia Dwork, Aaron Roth, et al. The algorithmic foundations of differential privacy. 
+
+Foundations and Trends ® in Theoretical Computer Science , 9(3–4):211–407, 2014. Christopher T Kenny, Shiro Kuriwaki, Cory McCartan, Evan TR Rosenman, Tyler Simko, and Kosuke Imai. The use of differential privacy for census data and its impact on redistricting: The case of the 2020 us census. Science advances , 7(41):eabk3283, 2021. Amol Khanna, Fred Lu, Edward Raff, and Brian Testa. Differentially private logistic regression with sparse solutions. In Proceedings of the 16th ACM Workshop on Artificial Intelligence and Security , pages 1–9, 2023. Oleksandra Klymenko, Stephen Meisenbacher, and Florian Matthes. Differential pri-vacy in natural language processing: The story so far. In Oluwaseyi Feyisetan, Sepi-deh Ghanavati, Patricia Thaine, Ivan Habernal, and Fatemehsadat Mireshghallah, ed-itors, Proceedings of the Fourth Workshop on Privacy in Natural Language Processing ,pages 1–11, Seattle, United States, jul 2022. Association for Computational Linguis-tics. doi: 10.18653/v1/2022.privatenlp-1.1. URL https://aclanthology.org/2022. privatenlp-1.1/ .Daphne Koller and Nir Friedman. Probabilistic graphical models: principles and techniques .MIT press, 2009. Florent Krzakala, Marc M´ ezard, Francois Sausset, Yifan Sun, and Lenka Zdeborov´ a. Proba-bilistic reconstruction in compressed sensing: algorithms, phase diagrams, and threshold achieving matrices. Journal of Statistical Mechanics: Theory and Experiment , 2012(08): P08009, 2012. Jing Lei, Anne-Sophie Charest, Aleksandra Slavkovic, Adam Smith, and Stephen Fienberg. 51 Differentially private model selection with penalized and constrained likelihood. Journal of the Royal Statistical Society Series A: Statistics in Society , 181(3):609–633, 2018. Peter M¨ ullner, Elisabeth Lex, Markus Schedl, and Dominik Kowald. Differential privacy in collaborative filtering recommender systems: a review. Frontiers in big data , 6:1249997, 2023. Tomoyuki Obuchi and Ayaka Sakata. Cross validation in sparse linear regression with piecewise continuous nonconvex penalties and its acceleration. Journal of Physics A: Mathematical and Theoretical , 52(41):414003, 2019. Ayaka Sakata. Prediction errors for penalized regressions based on generalized approximate message passing. Journal of Physics A: Mathematical and Theoretical , 56(4):043001, 2023. Ayaka Sakata and Yingying Xu. Approximate message passing for nonconvex sparse reg-ularization with stability and asymptotic analysis. Journal of Statistical Mechanics: Theory and Experiment , 2018(3):033404, 2018. Adam Smith. Privacy-preserving statistical estimation with optimal convergence rates. In 
+
+Proceedings of the forty-third annual ACM symposium on Theory of computing , pages 813–822, 2011. Kunal Talwar, Abhradeep Guha Thakurta, and Li Zhang. Nearly optimal private lasso. 
+
+Advances in Neural Information Processing Systems , 28, 2015. Di Wang, Marco Gaboardi, and Jinhui Xu. Empirical risk minimization in non-interactive local differential privacy revisited. Advances in Neural Information Processing Systems ,31, 2018. Yu-Xiang Wang, Jing Lei, and Stephen E Fienberg. On-average kl-privacy and its equiv-52 alence to generalization for max-entropy mechanisms. In International Conference on Privacy in Statistical Databases , pages 121–134. Springer, 2016. Bingzhe Wu, Shiwan Zhao, Chaochao Chen, Haoyang Xu, Li Wang, Xiaolu Zhang, Guangyu Sun, and Jun Zhou. Generalization in generative adversarial networks: Anovel perspective from privacy protection. Advances in Neural Information Processing Systems , 32, 2019. Samuel Yeom, Irene Giacomelli, Matt Fredrikson, and Somesh Jha. Privacy risk in machine learning: Analyzing the connection to overfitting. In 2018 IEEE 31st computer security foundations symposium (CSF) , pages 268–282. IEEE, 2018. Yingxue Zhou, Zhiwei Steven Wu, and Arindam Banerjee. Bypassing the ambient dimen-sion: Private sgd with gradient subspace identification. arXiv preprint arXiv:2007.03813 ,2020. 53

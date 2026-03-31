@@ -6,64 +6,76 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-30
-- 运行时间：2026-03-30 19:51:51 UTC
+- 最新运行日期：2026-03-31
+- 运行时间：2026-03-31 19:54:13 UTC
 - 运行状态：成功
-- 本次总论文数：14
-- 精读区：6
-- 速读区：8
+- 本次总论文数：18
+- 精读区：7
+- 速读区：11
 
 ### 今日简报（AI）
-今日精选 14 篇前沿论文，深度剖析隐私保护与机器学习性能的平衡艺术。
-重点关注高维 LASSO 在扰动机制下的隐私精度权衡，以及混合同态加密如何赋能更安全的联邦学习。
-建议优先研读隐私增强加密综述，快速构建从理论权衡到医疗推理实践的知识体系。
-- 详情：[/202603/30/README](/202603/30/README)
+今日深度解析 18 篇前沿论文，聚焦联邦学习在个性化 Web 服务与隐私保护生成领域的重大突破。
+重点推荐“原型对齐软提示”与“流匹配生成”两项满分成果，它们为解决持续学习与系统鲁棒性提供了全新思路。
+建议读者优先研读这两篇满分论文，掌握联邦学习与生成模型、个性化推荐结合的最新趋势。
+- 详情：[/202603/31/README](/202603/31/README)
 
 ### 精读区论文标签
-1. [Privacy-Accuracy Trade-offs in High-Dimensional LASSO under Perturbation Mechanisms](/202603/30/2603.26227v1-privacy-accuracy-trade-offs-in-high-dimensional-lasso-under-perturbation-mechanisms)  
+1. [Prototype-Aligned Federated Soft-Prompts for Continual Web Personalization](/202603/31/2603.27678v1-prototype-aligned-federated-soft-prompts-for-continual-web-personalization)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：用于软提示更新的差分隐私联邦聚合
+2. [FedFG: Privacy-Preserving and Robust Federated Learning via Flow-Matching Generation](/202603/31/2603.27986v1-fedfg-privacy-preserving-and-robust-federated-learning-via-flow-matching-generation)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：隐私保护且鲁棒的联邦学习
+3. [Privacy as Commodity: MFG-RegretNet for Large-Scale Privacy Trading in Federated Learning](/202603/31/2603.28329v1-privacy-as-commodity-mfg-regretnet-for-large-scale-privacy-trading-in-federated-learning)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：在联邦学习中交易差分隐私预算以获取补偿
+4. [A Step Toward Federated Pretraining of Multimodal Large Language Models](/202603/31/2603.26786v1-a-step-toward-federated-pretraining-of-multimodal-large-language-models)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：差分隐私扰动机制下的隐私与准确性权衡
-2. [Towards Privacy-Preserving Federated Learning using Hybrid Homomorphic Encryption](/202603/30/2603.26417v1-towards-privacy-preserving-federated-learning-using-hybrid-homomorphic-encryption)  
+   evidence：多模态大语言模型的联邦预训练
+5. [On the Optimal Number of Grids for Differentially Private Non-Interactive $K$-Means Clustering](/202603/31/2603.26963v1-on-the-optimal-number-of-grids-for-differentially-private-non-interactive-k-means-clustering)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：使用同态加密的隐私保护联邦学习
-3. [Combinatorial Privacy: Private Multi-Party Bitstream Grand Sum by Hiding in Birkhoff Polytopes](/202603/30/2603.22808v3-combinatorial-privacy-private-multi-party-bitstream-grand-sum-by-hiding-in-birkhoff-polytopes)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：具有差分隐私分析的多方比特流求和
-4. [Protecting User Prompts Via Character-Level Differential Privacy](/202603/30/2603.26032v1-protecting-user-prompts-via-character-level-differential-privacy)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：字符级差分隐私机制
-5. [SuperDP: Differential Privacy Refutation via Supermartingales](/202603/30/2603.26215v1-superdp-differential-privacy-refutation-via-supermartingales)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：差分隐私属性的正式验证与驳回
-6. [Optimization Trade-offs in Asynchronous Federated Learning: A Stochastic Networks Approach](/202603/30/2603.26231v1-optimization-trade-offs-in-asynchronous-federated-learning-a-stochastic-networks-approach)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：异步联邦学习的随机排队网络框架
+   evidence：K-means聚类的差分隐私机制
+6. [On the role of symmetry for staircase mechanisms in local differential privacy efficiency across different privacy regimes](/202603/31/2603.27572v1-on-the-role-of-symmetry-for-staircase-mechanisms-in-local-differential-privacy-efficiency-across-different-privacy-regimes)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：本地差分隐私下的统计效率与阶梯机制研究
+7. [Key-Embedded Privacy for Decentralized AI in Biomedical Omics](/202603/31/2603.28334v1-key-embedded-privacy-for-decentralized-ai-in-biomedical-omics)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：去中心化AI中保护隐私的轻量级联邦学习方法
 
 ### 速读区论文标签
-1. [EcoFair: Trustworthy and Energy-Aware Routing for Privacy-Preserving Vertically Partitioned Medical Inference](/202603/30/2603.26483v1-ecofair-trustworthy-and-energy-aware-routing-for-privacy-preserving-vertically-partitioned-medical-inference)  
+1. [Combinatorial Privacy: Private Multi-Party Bitstream Grand Sum by Hiding in Birkhoff Polytopes](/202603/31/2603.22808v4-combinatorial-privacy-private-multi-party-bitstream-grand-sum-by-hiding-in-birkhoff-polytopes)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：隐私保护的垂直分区医疗推理框架
-2. [Privacy-Enhancing Encryption in Data Sharing: A Survey on Security, Performance and Functionality](/202603/30/2603.26224v1-privacy-enhancing-encryption-in-data-sharing-a-survey-on-security-performance-and-functionality)  
+   evidence：具有差分隐私分析的多方私密求和协议
+2. [BLOSSOM: Block-wise Federated Learning Over Shared and Sparse Observed Modalities](/202603/31/2603.27552v1-blossom-block-wise-federated-learning-over-shared-and-sparse-observed-modalities)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：面向分布式客户端的多模态联邦学习框架
+3. [Neural Federated Learning for Livestock Growth Prediction](/202603/31/2603.28117v1-neural-federated-learning-for-livestock-growth-prediction)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：保护数据隐私的联邦学习框架
+4. [AI Security in the Foundation Model Era: A Comprehensive Survey from a Unified Perspective](/202603/31/2603.24857v1-ai-security-in-the-foundation-model-era-a-comprehensive-survey-from-a-unified-perspective)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：数据共享中的隐私增强加密
-3. [UNIFERENCE: A Discrete Event Simulation Framework for Developing Distributed AI Models](/202603/30/2603.26469v1-uniference-a-discrete-event-simulation-framework-for-developing-distributed-ai-models)  
+   evidence：AI安全与隐私保护机器学习综述
+5. [Gradient Manipulation in Distributed Stochastic Gradient Descent with Strategic Agents: Truthful Incentives with Convergence Guarantees](/202603/31/2603.27962v1-gradient-manipulation-in-distributed-stochastic-gradient-descent-with-strategic-agents-truthful-incentives-with-convergence-guarantees)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式AI模型的仿真框架
-4. [On the Role of Batch Size in Stochastic Conditional Gradient Methods](/202603/30/2603.21191v1-on-the-role-of-batch-size-in-stochastic-conditional-gradient-methods)  
+   evidence：具有策略博弈代理和收敛保证的分布式学习
+6. [FedDES: Graph-Based Dynamic Ensemble Selection for Personalized Federated Learning](/202603/31/2603.28006v1-feddes-graph-based-dynamic-ensemble-selection-for-personalized-federated-learning)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：使用动态集成选择的去中心化个性化联邦学习框架
+7. [Pre-Deployment Complexity Estimation for Federated Perception Systems](/202603/31/2603.28282v1-pre-deployment-complexity-estimation-for-federated-perception-systems)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：联邦学习感知系统的复杂度评估
+8. [Taming the Instability: A Robust Second-Order Optimizer for Federated Learning over Non-IID Data](/202603/31/2603.28316v1-taming-the-instability-a-robust-second-order-optimizer-for-federated-learning-over-non-iid-data)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：联邦学习的二阶优化框架
+9. [Cooperative Bandit Learning in Directed Networks with Arm-Access Constraints](/202603/31/2603.22881v1-cooperative-bandit-learning-in-directed-networks-with-arm-access-constraints)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于大规模训练的随机条件梯度方法
-5. [Knowledge-Guided Retrieval-Augmented Generation for Zero-Shot Psychiatric Data: Privacy Preserving Synthetic Data Generation](/202603/30/2603.25186v1-knowledge-guided-retrieval-augmented-generation-for-zero-shot-psychiatric-data-privacy-preserving-synthetic-data-generation)  
+   evidence：分布式网络中的协作多智能体老虎机学习
+10. [Efficient Encrypted Computation in Convolutional Spiking Neural Networks with TFHE](/202603/31/2603.26781v1-efficient-encrypted-computation-in-convolutional-spiking-neural-networks-with-tfhe)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：隐私保护合成数据生成
-6. [MAGNET: Autonomous Expert Model Generation via Decentralized Autoresearch and BitNet Training](/202603/30/2603.25813v1-magnet-autonomous-expert-model-generation-via-decentralized-autoresearch-and-bitnet-training)  
+   evidence：脉冲神经网络中的隐私保护计算
+11. [Expert Streaming: Accelerating Low-Batch MoE Inference via Multi-chiplet Architecture and Dynamic Expert Trajectory Scheduling](/202603/31/2603.27624v1-expert-streaming-accelerating-low-batch-moe-inference-via-multi-chiplet-architecture-and-dynamic-expert-trajectory-scheduling)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：去中心化的自主训练系统
-7. [Not All Entities are Created Equal: A Dynamic Anonymization Framework for Privacy-Preserving Retrieval-Augmented Generation](/202603/30/2603.26074v1-not-all-entities-are-created-equal-a-dynamic-anonymization-framework-for-privacy-preserving-retrieval-augmented-generation)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：隐私保护的检索增强生成
-8. [A Lightweight High-Throughput Collective-Capable NoC for Large-Scale ML Accelerators](/202603/30/2603.26438v1-a-lightweight-high-throughput-collective-capable-noc-for-large-scale-ml-accelerators)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：大规模机器学习加速器的集合通信
+   evidence：混合专家模型推理的分布式策略
 
 
 <div class="dpr-home-promo-card">

@@ -6,76 +6,64 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-31
-- 运行时间：2026-03-31 19:54:13 UTC
+- 最新运行日期：2026-04-01
+- 运行时间：2026-04-01 19:58:22 UTC
 - 运行状态：成功
-- 本次总论文数：18
-- 精读区：7
+- 本次总论文数：14
+- 精读区：3
 - 速读区：11
 
 ### 今日简报（AI）
-今日深度解析 18 篇前沿论文，聚焦联邦学习在个性化 Web 服务与隐私保护生成领域的重大突破。
-重点推荐“原型对齐软提示”与“流匹配生成”两项满分成果，它们为解决持续学习与系统鲁棒性提供了全新思路。
-建议读者优先研读这两篇满分论文，掌握联邦学习与生成模型、个性化推荐结合的最新趋势。
-- 详情：[/202603/31/README](/202603/31/README)
+今日精选 14 篇前沿论文，深度聚焦联邦学习在畜牧业预测及轨迹隐私保护中的突破性应用。
+重点推荐神经联邦学习对牲畜生长的精准建模，以及利用 Permute-and-Flip 机制强化符号轨迹的差分隐私。
+建议同步关注联邦增量学习与后门攻击防御，以应对日益复杂的分布式安全与动态数据挑战。
+- 详情：[/202604/01/README](/202604/01/README)
 
 ### 精读区论文标签
-1. [Prototype-Aligned Federated Soft-Prompts for Continual Web Personalization](/202603/31/2603.27678v1-prototype-aligned-federated-soft-prompts-for-continual-web-personalization)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：用于软提示更新的差分隐私联邦聚合
-2. [FedFG: Privacy-Preserving and Robust Federated Learning via Flow-Matching Generation](/202603/31/2603.27986v1-fedfg-privacy-preserving-and-robust-federated-learning-via-flow-matching-generation)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：隐私保护且鲁棒的联邦学习
-3. [Privacy as Commodity: MFG-RegretNet for Large-Scale Privacy Trading in Federated Learning](/202603/31/2603.28329v1-privacy-as-commodity-mfg-regretnet-for-large-scale-privacy-trading-in-federated-learning)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：在联邦学习中交易差分隐私预算以获取补偿
-4. [A Step Toward Federated Pretraining of Multimodal Large Language Models](/202603/31/2603.26786v1-a-step-toward-federated-pretraining-of-multimodal-large-language-models)  
+1. [Neural Federated Learning for Livestock Growth Prediction](/202604/01/2603.28117v2-neural-federated-learning-for-livestock-growth-prediction)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：多模态大语言模型的联邦预训练
-5. [On the Optimal Number of Grids for Differentially Private Non-Interactive $K$-Means Clustering](/202603/31/2603.26963v1-on-the-optimal-number-of-grids-for-differentially-private-non-interactive-k-means-clustering)  
+   evidence：用于隐私保护牲畜预测的联邦学习框架
+2. [Differential Privacy for Symbolic Trajectories via the Permute-and-Flip Mechanism](/202604/01/2603.28903v1-differential-privacy-for-symbolic-trajectories-via-the-permute-and-flip-mechanism)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：K-means聚类的差分隐私机制
-6. [On the role of symmetry for staircase mechanisms in local differential privacy efficiency across different privacy regimes](/202603/31/2603.27572v1-on-the-role-of-symmetry-for-staircase-mechanisms-in-local-differential-privacy-efficiency-across-different-privacy-regimes)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：本地差分隐私下的统计效率与阶梯机制研究
-7. [Key-Embedded Privacy for Decentralized AI in Biomedical Omics](/202603/31/2603.28334v1-key-embedded-privacy-for-decentralized-ai-in-biomedical-omics)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：去中心化AI中保护隐私的轻量级联邦学习方法
+   evidence：差分隐私的置换翻转机制
+3. [Causality-inspired Federated Learning for Dynamic Spatio-Temporal Graphs](/202604/01/2603.29384v1-causality-inspired-federated-learning-for-dynamic-spatio-temporal-graphs)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：在保护隐私的同时进行去中心化训练的联邦学习
 
 ### 速读区论文标签
-1. [Combinatorial Privacy: Private Multi-Party Bitstream Grand Sum by Hiding in Birkhoff Polytopes](/202603/31/2603.22808v4-combinatorial-privacy-private-multi-party-bitstream-grand-sum-by-hiding-in-birkhoff-polytopes)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：具有差分隐私分析的多方私密求和协议
-2. [BLOSSOM: Block-wise Federated Learning Over Shared and Sparse Observed Modalities](/202603/31/2603.27552v1-blossom-block-wise-federated-learning-over-shared-and-sparse-observed-modalities)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：面向分布式客户端的多模态联邦学习框架
-3. [Neural Federated Learning for Livestock Growth Prediction](/202603/31/2603.28117v1-neural-federated-learning-for-livestock-growth-prediction)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：保护数据隐私的联邦学习框架
-4. [AI Security in the Foundation Model Era: A Comprehensive Survey from a Unified Perspective](/202603/31/2603.24857v1-ai-security-in-the-foundation-model-era-a-comprehensive-survey-from-a-unified-perspective)  
+1. [FeDMRA: Federated Incremental Learning with Dynamic Memory Replay Allocation](/202604/01/2603.28455v1-fedmra-federated-incremental-learning-with-dynamic-memory-replay-allocation)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：AI安全与隐私保护机器学习综述
-5. [Gradient Manipulation in Distributed Stochastic Gradient Descent with Strategic Agents: Truthful Incentives with Convergence Guarantees](/202603/31/2603.27962v1-gradient-manipulation-in-distributed-stochastic-gradient-descent-with-strategic-agents-truthful-incentives-with-convergence-guarantees)  
+   evidence：分布式客户端间的联邦增量学习
+2. [Mitigating Backdoor Attacks in Federated Learning Using PPA and MiniMax Game Theory](/202604/01/2603.28652v1-mitigating-backdoor-attacks-in-federated-learning-using-ppa-and-minimax-game-theory)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：具有策略博弈代理和收敛保证的分布式学习
-6. [FedDES: Graph-Based Dynamic Ensemble Selection for Personalized Federated Learning](/202603/31/2603.28006v1-feddes-graph-based-dynamic-ensemble-selection-for-personalized-federated-learning)  
+   evidence：缓解联邦学习中的后门攻击
+3. [Beyond Corner Patches: Semantics-Aware Backdoor Attack in Federated Learning](/202604/01/2603.29328v1-beyond-corner-patches-semantics-aware-backdoor-attack-in-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：使用动态集成选择的去中心化个性化联邦学习框架
-7. [Pre-Deployment Complexity Estimation for Federated Perception Systems](/202603/31/2603.28282v1-pre-deployment-complexity-estimation-for-federated-perception-systems)  
+   evidence：联邦学习中的后门攻击
+4. [FedDBP: Enhancing Federated Prototype Learning with Dual-Branch Features and Personalized Global Fusion](/202604/01/2603.29455v1-feddbp-enhancing-federated-prototype-learning-with-dual-branch-features-and-personalized-global-fusion)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦学习感知系统的复杂度评估
-8. [Taming the Instability: A Robust Second-Order Optimizer for Federated Learning over Non-IID Data](/202603/31/2603.28316v1-taming-the-instability-a-robust-second-order-optimizer-for-federated-learning-over-non-iid-data)  
+   evidence：针对异构数据的联邦原型学习
+5. [Self-Supervised Federated Learning under Data Heterogeneity for Label-Scarce Diatom Classification](/202604/01/2603.29633v1-self-supervised-federated-learning-under-data-heterogeneity-for-label-scarce-diatom-classification)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦学习的二阶优化框架
-9. [Cooperative Bandit Learning in Directed Networks with Arm-Access Constraints](/202603/31/2603.22881v1-cooperative-bandit-learning-in-directed-networks-with-arm-access-constraints)  
+   evidence：数据异构下的自监督联邦学习
+6. [Client-Verifiable and Efficient Federated Unlearning in Low-Altitude Wireless Networks](/202604/01/2603.29688v1-client-verifiable-and-efficient-federated-unlearning-in-low-altitude-wireless-networks)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：无线网络中的联邦遗忘学习以消除设备贡献
+7. [SiftMoE: Similarity-Aware Energy-Efficient Expert Selection for Wireless Distributed MoE Inference](/202604/01/2603.23888v1-siftmoe-similarity-aware-energy-efficient-expert-selection-for-wireless-distributed-moe-inference)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：分布式网络中的协作多智能体老虎机学习
-10. [Efficient Encrypted Computation in Convolutional Spiking Neural Networks with TFHE](/202603/31/2603.26781v1-efficient-encrypted-computation-in-convolutional-spiking-neural-networks-with-tfhe)  
+   evidence：无线分布式混合专家模型推理与专家选择
+8. [Silent Guardians: Independent and Secure Decision Tree Evaluation Without Chatter](/202604/01/2603.28143v1-silent-guardians-independent-and-secure-decision-tree-evaluation-without-chatter)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：脉冲神经网络中的隐私保护计算
-11. [Expert Streaming: Accelerating Low-Batch MoE Inference via Multi-chiplet Architecture and Dynamic Expert Trajectory Scheduling](/202603/31/2603.27624v1-expert-streaming-accelerating-low-batch-moe-inference-via-multi-chiplet-architecture-and-dynamic-expert-trajectory-scheduling)  
+   evidence：决策树评估的隐私保护机器学习
+9. [OptINC: Optical In-Network-Computing for Scalable Distributed Learning](/202604/01/2603.28290v1-optinc-optical-in-network-computing-for-scalable-distributed-learning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：混合专家模型推理的分布式策略
+   evidence：用于梯度聚合的分布式学习架构
+10. [Unsafe2Safe: Controllable Image Anonymization for Downstream Utility](/202604/01/2603.28605v1-unsafe2safe-controllable-image-anonymization-for-downstream-utility)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：用于模型训练的隐私保护图像匿名化
+11. [FL-PBM: Pre-Training Backdoor Mitigation for Federated Learning](/202604/01/2603.28673v1-fl-pbm-pre-training-backdoor-mitigation-for-federated-learning)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：联邦学习中的后门缓解防御机制
 
 
 <div class="dpr-home-promo-card">

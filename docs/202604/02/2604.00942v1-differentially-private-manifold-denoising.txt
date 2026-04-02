@@ -1,0 +1,2962 @@
+Title: Differentially Private Manifold Denoising
+
+URL Source: https://arxiv.org/pdf/2604.00942v1
+
+Published Time: Thu, 02 Apr 2026 01:21:23 GMT
+
+Number of Pages: 59
+
+Markdown Content:
+# Differentially Private Manifold Denoising 
+
+Jiaqi Wu *, Yiqing Sun *, Zhigang Yao †
+
+Department of Statistics and Data Science, National University of Singapore 
+
+Abstract 
+
+We introduce a differentially private manifold denoising framework that allows users to exploit sensitive reference datasets to correct noisy, non-private query points without compro-mising privacy. The method follows an iterative procedure that (i) privately estimates local means and tangent geometry using the reference data under calibrated sensitivity, (ii) projects query points along the privately estimated subspace toward the local mean via corrective steps at each iteration, and (iii) performs rigorous privacy accounting across iterations and queries using (ε, δ )-differential privacy (DP). Conceptually, this framework brings differential privacy to manifold methods, retaining sufficient geometric signal for downstream tasks such as em-bedding, clustering, and visualization, while providing formal DP guarantees for the reference data. Practically, the procedure is modular and scalable, separating DP-protected local geome-try (means and tangents) from budgeted query-point updates, with a simple scheduler allocating privacy budget across iterations and queries. Under standard assumptions on manifold regular-ity, sampling density, and measurement noise, we establish high-probability utility guarantees showing that corrected queries converge toward the manifold at a non-asymptotic rate governed by sample size, noise level, bandwidth, and the privacy budget. Simulations and case studies demonstrate accurate signal recovery under moderate privacy budgets, illustrating clear utility-privacy trade-offs and providing a deployable DP component for manifold-based workflows in regulated environments without reengineering privacy systems. 
+
+Keywords: Differential privacy, Smooth latent structure, Manifold denoising 
+
+## 1 Introduction 
+
+High-dimensional datasets now grow explosively in both scale and dimensionality, spanning tens of thousands of gene expression profiles in genomics, millions of pixels in computer vision, and high-dimensional word-embedding vectors in natural language processing. A central challenge in this regime is the curse of dimensionality: as the ambient dimension increases, data become sparse, making statistical inference, model training, and generalization difficult. Fortunately, a widely 
+
+> ∗
+
+J.W. and Y.S. contributed equally to this work. 
+
+> †
+
+To whom correspondence should be addressed. E-mail: zhigang.yao@nus.edu.sg 
+
+1
+
+> arXiv:2604.00942v1 [cs.LG] 1 Apr 2026
+
+observed structural regularity offers relief. Under the manifold hypothesis , observations in a high-dimensional ambient space RD concentrate near a smooth d-dimensional manifold M with d ≪ D.This low-dimensional geometric structure appears as pose manifolds in images (Tenenbaum et al., 2000), orientation manifolds in structural biology (Dashti et al., 2014; Frank and Ourmazd, 2016), and latent cell-state manifolds in single-cell transcriptomics (Haghverdi et al., 2016; Yao et al., 2024a; Li et al., 2025). Leveraging this low-dimensional structure has become essential for mitigating the curse of dimensionality and enabling statistically efficient analysis. Yet in domains where such structure is most valuable (e.g., biomedicine, public health, finance), datasets that exhibit this geometry often contain sensitive individual-level information, including medical records, genomic sequences, and financial transactions. Exploiting manifold structure thus collides with a parallel imperative that analyses must protect the privacy of the individuals whose data contribute to the learned geometry. Regulatory frameworks such as the Health Insurance Porta-bility and Accountability Act (HIPAA; U.S. Department of Health and Human Services, 2025), the EU General Data Protection Regulation (GDPR; European Parliament and Council of the Euro-pean Union, 2016), and emerging AI governance standards (European Parliament and Council of the European Union, 2024) now mandate that released outputs, whether trained models, embed-dings, or denoised signals, limit what can be inferred about any single participant. Differential privacy (DP) formalizes this requirement by bounding the influence of any individual record on the output distribution (Dwork et al., 2006), with guarantees that compose transparently across iterative procedures and multiple queries. The challenge is not geometry or privacy, but geometry 
+
+under privacy. We must exploit manifold structure while consuming a finite privacy budget. In this work, we focus on a common and consequential scenario in which a private reference dataset contains geometric signal but cannot be exposed directly. Practitioners would like to use this sensitive reference as a scaffold to clean or interpret new, noisy observations ( public queries )without compromising privacy. Treating privacy and denoising in isolation is counterproductive: naively added DP noise can erase the local geometry that denoising requires, whereas unguarded denoising risks leaking whether a person’s data contributed or even revealing sensitive attributes. Our approach bridges manifold denoising and private data analysis from the outset by jointly recovering local geometric structure and enforcing explicit privacy accounting. 
+
+From noisy observations to geometry: non-private methods. When privacy is not a con-straint, extensive work connects noisy point clouds to smooth geometric structures on an unknown 2manifold M. Measurement noise obscures recovery of the latent manifold M, motivating man-ifold denoising and manifold fitting (Hein and Maier, 2006; Niyogi et al., 2008). Foundational approaches (Ozertem and Erdogmus, 2011; Genovese et al., 2014; Boissonnat and Ghosh, 2014) established the link between noisy point clouds and smooth geometric structures. Recent develop-ments have yielded stable, computationally tractable reconstruction procedures (Fefferman et al., 2018; Aamari and Levrard, 2018), including structure-adaptive tangent refinement (Puchkin and Spokoiny, 2022), reconstruction under unbounded Gaussian noise with smoothness guarantees (Yao and Xia, 2025), and local polynomial regression for projection and tangent estimation (Aizenbud and Sober, 2025). Notably, Yao et al. (2023) provided a computationally efficient estimator with favorable sample complexity, enabling applications in latent map learning, single-cell genomics, and population-scale metabolomics (Yao et al., 2024b,a; Li et al., 2025). These methods assume unrestricted access to the reference data. In regulated settings, however, such access is prohibited, and naively adding perturbations destroys the local tangent geometry needed for denoising. We therefore develop a privacy-aware approach using only privatized local geometric summaries to guide denoising of new queries. 
+
+From sensitive data to releases: differentially private methods. Differential privacy (DP) formalizes output-level protection by limiting how much changing any single record can alter the distribution of released results (Dwork et al., 2006; Dwork and Roth, 2014). In Euclidean settings, standard mechanisms are well established. For means and linear models, Laplace and Gaussian mechanisms with sensitivity-calibrated noise achieve optimal or near-optimal accuracy (Dwork et al., 2006; Dwork and Roth, 2014), the exponential mechanism handles utility-driven releases (McSherry and Talwar, 2007), and objective-perturbation procedures provide private regularized empirical risk minimization (ERM) (Chaudhuri et al., 2011). For covariance estimation and PCA, early work in the SuLQ framework (Blum et al., 2005) proposed releasing noisy empirical covariance matrices and then performing PCA. Chaudhuri et al. (2013) formalized a differentially private variant (MOD-SuLQ) and introduced PPCA, an exponential-mechanism DP-PCA with near-optimal sample complexity, while Dwork et al. (2014) analyzed a Gaussian version of this SULQ-style covariance perturbation and proved nearly optimal bounds on the loss of captured variance under (ε, δ )-DP. Differentially private covariance estimation has since been significantly refined (Amin et al., 2019; Dong et al., 2022b), and recent results have achieved near-optimal rates for top-eigenvector estimation under sub-Gaussian models (Liu et al., 2022) and 3for PCA and covariance estimation in spiked covariance models (Cai et al., 2024). For iterative procedures, privacy loss composes over multiple queries. Tight end-to-end account-ing is enabled by concentrated/Rényi DP and Gaussian DP (Bun and Steinke, 2016; Mironov, 2017; Dong et al., 2022a), with the moments accountant providing a practical instantiation for DP-SGD (Abadi et al., 2016). Comparisons of central and local models show that many tasks incur sub-stantial statistical slowdowns under local DP, whereas the central model often retains non-private minimax rates up to an explicit privacy penalty (Duchi et al., 2018; Cai et al., 2021). In geometric settings, DP has been developed for known manifolds. Reimherr et al. (2021) pri-vatized manifold-valued summaries (e.g., Fréchet means) by extending the Laplace/ K-norm mecha-nism using geodesic distances, whereas Han et al. (2024) performed differentially private Riemannian optimization by adding noise to gradients in tangent spaces when parameters live on a manifold. These works assume the manifold is given; we instead study geometry-aware denoising when the manifold is unknown and only privatized local summaries of a sensitive reference set can guide cor-rections of new, non-private queries. This “private-reference, public-queries” regime requires jointly designing private geometry estimation with transparent privacy accounting. Specifically, we address two fundamental questions: 
+
+• (Q1) Geometry under noise: How can we recover the local geometric structure (e.g., tangent spaces and projections) of an unknown C2 manifold from noisy reference data, so that noisy query points can be iteratively corrected toward the manifold? 
+
+• (Q2) Geometry under privacy: How can we carry out (Q1) under (ε, δ )-DP for the refer-ence dataset—releasing only privatized local summaries—while still obtaining reasonable utility guarantees? These questions expose a fundamental tension: manifold denoising seeks signal recovery by sup-pressing randomness, whereas differential privacy requires signal obfuscation through noise injection. Concretely, privacy noise in geometric estimation can propagate through projections, deflecting queries from the manifold. A successful DP manifold denoiser must jointly manage measurement noise (in both reference and queries) and privacy noise (added only to reference summaries). The challenge is to remove measurement noise from queries while injecting privacy noise in a geometry-aware manner that preserves tangent structure on which denoising depends. Few works target the intersection of differential privacy and manifold methods. Existing ap-proaches privatize representations through DP variants of t-SNE, Laplacian eigenmaps, and super-4vised embeddings (Arora and Upadhyay, 2019; Saha et al., 2022; Vepakomma et al., 2022), but operate on embeddings without accounting for manifold geometry or providing error guarantees. To the best of our knowledge, this is the first work to study manifold denoising under differential privacy for unknown manifolds with non-asymptotic error guarantees. 
+
+Model and setup. Consider n i.i.d. observations {yi}ni=1 ⊂ RD generated according to 
+
+yi = xi + ϵi, (1) where xi are i.i.d. samples drawn from a distribution supported on a compact, connected, d-dimensional C2 submanifold M ⊂ RD without boundary. See Appendix A for geometric definitions and notation. The sampling density p(x) with respect to the d-dimensional Hausdorff measure on 
+
+M is bounded away from zero and infinity: 
+
+0 < f min ≤ p(x) ≤ fmax < ∞, for all x ∈ M .
+
+The i.i.d. noise vectors ϵi satisfy ∥ϵi∥ ≤ σ (with σ < 1). Denote by M√σ = M ⊕ BD(0 , √σ) the 
+
+√σ-tubular neighborhood of M. We assume that M has reach at least τ , with τ / √σ sufficiently large to ensure that noise does not obscure the underlying manifold geometry. We consider a query point z ∈ M √σ (which need not belong to the sample) together with a private reference dataset {yi}ni=1 . Our goal is to design an (ε, δ )-DP procedure that estimates the projection of z onto M, while protecting the privacy of the reference data. As a first step, we develop an (ε, δ )-DP variant of local PCA at points within the σ-tubular neighborhood that privately recovers the local tangent geometry; this DP local PCA serves as the building block for our denoising estimator. 
+
+Our contributions. We present an integrated, geometry-aware framework for differentially pri-vate manifold denoising in the private-reference/public-queries regime that addresses (Q1)–(Q2). Our contributions are as follows: 1. Private local geometry. We develop a differentially private local PCA primitive tailored to the private-reference/public-queries setting. Building on neighborhood-wise tangent estima-tion, we privatize local spectral projectors and weighted means with calibrated Gaussian noise and explicit sensitivity bounds. These summaries are DP objects and can be reused across 5iterations and queries. 2. DP manifold denoising with non-asymptotic guarantees. Using the privatized projector– mean pair, we introduce an efficient denoising algorithm that iteratively updates each query point by removing its estimated normal component toward the manifold. The method avoids repeated privatization of high-dimensional gradients by releasing only low-dimensional geo-metric summaries. We prove finite-sample error bounds for the denoised outputs (Theorem 2) that separate curvature bias, measurement noise, and privacy noise, quantifying dependence on sample size, noise level, bandwidth, and privacy budgets. 3. Privacy accounting and practice. We design a zCDP-based privacy accountant for mul-tiple queries and iterations that splits the budget across projector/mean mechanisms and queries, with transparent conversion to (ε, δ )-DP. The resulting pipeline is modular and scal-able; case studies on real data on single-cell RNA sequencing and UK Biobank biomarker profiles illustrate utility-privacy trade-offs in high-dimensional settings. The remainder of the paper is organized as follows. Section 2 reviews differential privacy and related definitions, including sensitivity, the Gaussian mechanism, and concentrated/Rényi DP. Sec-tion 3 begins by developing differentially private tangent space estimation via local PCA to motivate the DP denoiser. Section 4 then presents our framework for differentially private manifold denoising. Section 5 evaluates utility under varying noise scale and privacy budgets through simulations, and Section 6 illustrates applications to real-world data. Section 7 concludes with future directions. 
+
+## 2 Differential privacy 
+
+Two datasets D, D′ of size n are adjacent if they differ by a single record (the bounded, replace-one notion). A randomized mechanism A is (ε, δ )-differentially private if for all measurable S,
+
+Pr[ A(D) ∈ S] ≤ eε Pr[ A(D′) ∈ S] + δ. 
+
+This guarantees that modifying a single individual’s record changes the output distribution only slightly, thereby limiting what can be inferred about any data point. The parameter ε controls the multiplicative change, and δ allows a small additive failure probability; smaller values yield stronger privacy. 6We use bounded (replace-one) adjacency. Results extend to unbounded (add/remove-one) ad-jacency by constant-factor sensitivity rescaling. 
+
+Sensitivity and Gaussian mechanisms. For a query f : X n → Rk, its ℓ2-sensitivity is 
+
+∆2(f ) := sup  
+
+> adjacent D,D′
+
+f (D) − f (D′) .
+
+The Gaussian mechanism releases 
+
+A(D) = f (D) + ξ, ξ ∼ N  0, ς 2Ik
+
+,
+
+where the noise scale is calibrated according to the sensitivity. One possible choice for 
+
+ς ≥
+
+p2 ln(1 .25 /δ ) ∆ 2(f )
+
+ε , 0 < ε < 1,
+
+as in Dwork and Roth (2014). 
+
+Remark 1 (High-probability sensitivity) . When ∆2(f ) ≤ ∆ on a high-probability event E with 
+
+Pr( E) ≥ 1 − ρ, calibrating using ∆ yields (ε, δ + ρ)-DP. This reduction is standard when sensitivity is random but concentrates under i.i.d. sampling. To streamline the exposition, we may omit ex-plicit reference to this failure probability, treating sensitivity bounds as deterministic without further comment. 
+
+Zero-concentrated DP (zCDP). For two distributions P, Q on a common measurable space with P ≪ Q, the Rényi divergence of order α > 1 is 
+
+Dα(P ∥Q) : = 1
+
+α − 1 log 
+
+Z  dP dQ 
+
+α
+
+dQ 
+
+= 1
+
+α − 1 log EQ
+
+h dP dQ 
+
+αi
+
+.
+
+A randomized mechanism A satisfies ρ-zCDP if for all α > 1 and all adjacent datasets (D, D′),
+
+Dα
+
+ A(D) ∥ A (D′) ≤ ρ α. 
+
+Equivalently, ρ-zCDP is Rényi DP with parameters (α, ε α = ρα ) for every α > 1. It enjoys (i) post-processing invariance : if A is ρ-zCDP, then for any mapping ϕ independent of the dataset, ϕ ◦ A 
+
+7is also ρ-zCDP; and (ii) additive composition : composing mechanisms with parameters ρ1, . . . , ρ T
+
+yields ρtot = PTt=1 ρt. The Gaussian mechanism with ℓ2-sensitivity ∆2(f ) and noise variance ς2
+
+satisfies ρ = ∆ 2(f )2/(2 ς2)-zCDP. Moreover, any ρ-zCDP guarantee implies (ε, δ )-DP for every 
+
+δ ∈ (0 , 1) via 
+
+ε = ρ + 2 pρ ln(1 /δ ).
+
+See Bun and Steinke (2016) for the zCDP formulation and its properties, and Mironov (2017) for Rényi DP. 
+
+Public–private split. Throughout, the query location z ∈ M √σ is treated as public, and privacy protection applies only to the private reference dataset {yi}ni=1 . This public/private split is standard (Wang et al., 2023), where privacy applies to randomization over the database while externally provided parameters (e.g., evaluation points) are non-sensitive and can be used without extra privacy cost. 
+
+## 3 DP tangent space estimation 
+
+We begin with differentially private estimation of the local tangent space from the sample covariance computed in a neighborhood of a query point z ∈ M σ, where z is sampled independently from the same distribution as {yi}ni=1 . Initially, we consider z ∈ M σ, and later extend our analysis to M√σ
+
+for manifold denoising. Let z⋆ := πM(z) denote the projection of z onto M. Throughout, we fix a bandwidth parameter h > 0 and suppress its dependence in our notation when no ambiguity arises. Define the neighbor index set 
+
+Iz :=  i ∈ [n] : yi ∈ BD(z, h ) .
+
+Let nz := |Iz|. Define the local mean ¯yz := 1
+
+> nz
+
+P 
+
+> i∈Iz
+
+yi, and the local covariance matrix 
+
+bΣz := 1
+
+nz − 1
+
+X
+
+> i∈Iz
+
+ yi − ¯yz
+
+  yi − ¯yz
+
+⊤. (2) Intuitively, bΣz captures the empirical second-order structure of the data restricted to a small ball around z. When h ≪ τ , the manifold in this neighborhood is well approximated by an estimate of the affine tangent space z⋆ + Tz⋆ M. Under measurement noise, the dominant variation of yi
+
+8near z lies along Tz⋆ M, while normal variation (from curvature and noise) is substantially weaker. Consequently, the leading d eigenvectors bΣz align with Tz⋆ M.Given the eigendecomposition bΣz = VΛV ⊤ with eigenvalues λ1 ≥ · · · ≥ λD and corresponding orthonormal eigenvectors v1, . . . , vD, the local tangent space estimator is 
+
+\Tz⋆ M := span {v1, . . . , vd},
+
+i.e., the span of the top-d principal directions of bΣz. We denote the basis matrix by Vz,d ∈ OD,d 
+
+with columns v1, . . . , vd.
+
+Remark 2. The C2 regularity and positive reach τ of M ensure that πM is well-defined in a tubular neighborhood of M. Under bounded noise ∥ϵi∥ ≤ σ with σ sufficiently small relative to τ ,the observations remain in this neighborhood and local linearization is valid at scale h ≪ τ . In addition, the density bounds together with admissible bandwidths imply that the neighborhood count 
+
+nz concentrates around its expectation, so bΣz is well behaved. These conditions control the non-private local PCA error and separate it from the additional perturbation introduced by differential privacy. 
+
+Sensitivity of the local projector. To obtain a differentially private local PCA estimator, we privatize the rank-d orthogonal projector onto the estimated tangent space. In line with Section 2, we quantify how the non-private projector changes under the bounded adjacency relation in the following lemma. Its proof is provided in Appendix B. 
+
+Lemma 1. Assume the model in (1) . Suppose z ∈ M σ is sampled independently from the same distribution as {yi}ni=1 and bandwidth h satisfies 
+
+( log nn ) 1 
+
+> d
+
+∨ σ ≲ h ≪ 1 ∧ τ. 
+
+Let bPz = Vz,d V⊤ 
+
+> z,d
+
+be the rank-d projector onto the top-d eigenvectors of bΣz. For each i ∈ [n], let 
+
+bP (i) 
+
+> z
+
+denote the corresponding projector computed from a replace-one neighboring dataset (obtained by replacing the ith record). Then with probability at least 1 − n−(1+ c),
+
+max 
+
+> i∈[n]
+
+bPz − bP (i)  
+
+> zF
+
+≤ C 1
+
+nh d . (3) Lemma 1 bounds the sensitivity of the local tangent projector. Combined with the Gaussian 9mechanism, this yields a DP release of bPz and hence a DP estimator of Tz⋆ M.
+
+Algorithm 1 DP-Projector at query z
+
+Require: Data Y = {yi}ni=1 , query z, dimension d, bandwidth h, privacy (ε, δ ) 
+
+> 1:
+
+Compute local covariance bΣz on neighborhood Iz 
+
+> 2:
+
+Compute top-d projector bPz = Vz,d V⊤ 
+
+> z,d
+> 3:
+
+Add symmetric Gaussian noise W with Wjk = Wkj ∼ N (0 , ς 2), independently for 1 ≤ j ≤ k ≤
+
+D, where 
+
+ς =
+
+p2 ln( c1/δ )
+
+ε · nh d 
+
+> 4:
+
+Compute top-d eigenvectors eVz,d of bPz + W 
+
+> 5:
+
+Return ePz = eVz,d eV⊤
+
+> z,d
+
+By Lemma 1, adding Gaussian noise with scale ς calibrated to the sensitivity bound ensures 
+
+(ε, δ )-DP. Similar Gaussian perturbations on spectral projectors are also used in DP-PCA (Cai et al., 2024). Although bPz + W is no longer an orthogonal projector, extracting the top-d eigenvectors is a data-independent transformation. By post-processing invariance, this restores rank-d structure while preserving privacy and ensuring the output remains a valid Grassmannian element. Early DP-PCA methods either employ the exponential mechanism or perturb the covariance matrix before PCA (Chaudhuri et al., 2013; Dwork et al., 2014). Since our denoiser only needs the local tangent projector, we privatize bPz directly and restore it to rank d via post-processing. This aligns the DP mechanism with the geometric summary driving the denoiser, avoiding reliance on a proxy covariance matrix. We next quantify the accuracy of the DP tangent estimator produced by Algorithm 1. 
+
+Theorem 1. Assume the model in (1) . Suppose z ∈ M σ is sampled independently from the same distribution as {yi}ni=1 and bandwidth h satisfies 
+
+( log nn ) 1 
+
+> d
+
+∨ σ ≲ h ≪ 1 ∧ τ. 
+
+Let V⋆ 
+
+> z
+
+∈ OD,d be an orthonormal basis for the tangent space Tz⋆ M and let eVz,d be the corresponding DP estimate obtained from Algorithm 1. Define the principal-angle distance 
+
+dist ∠
+
+ Tz⋆ M, \Tz⋆ M := ∥ sin Θ  V⋆
+
+> z
+
+, eVz,d 
+
+∥ = Πz − ePz ,
+
+10 where Πz = V⋆
+
+> z
+
+V⋆⊤ 
+
+> z
+
+projects onto Tz⋆ M. Then with probability at least 1 − n−(1+ c) − e−cD ,
+
+dist ∠
+
+ Tz⋆ M, \Tz⋆ M ≲ hτ|{z} 
+
+> curvature
+
++ σh|{z} 
+
+> noise
+
++
+
+√Dn ε h−d
+
+r
+
+2 ln c1
+
+δ
+
+| {z }
+
+> privacy
+
+. (4) The proof of Theorem 1 is deferred to Appendix B. The error bound in (4) decomposes into three parts. First, regarding curvature bias, in a C2 manifold with reach τ , the manifold is locally a quadratic graph; approximating it by a plane over radius h induces bias of order h/τ . Second, measurement noise perturbs eigenspaces by the noise-to-signal ratio in the local neighborhood, giving O(σ/h ). Finally, by Lemma 1, sensitivity satisfies ∆2 ≲ 1/(nh d). Calibrating with ς ≥
+
+p2 ln( c1/δ ) ∆ 2/ε injects privacy noise of size O(√D ς ) after eigentruncation. In the next section, we use these DP local projectors to construct a denoising operator and study how tangent-space error propagates to manifold-denoising error. 
+
+## 4 DP manifold denoising 
+
+We now transition from local geometry to manifold denoising of query points {z(q)}mq=1 ⊂ M √σ.Our approach adapts the “bias field” viewpoint introduced by Yao and Xia (2025): for each ambient point x, construct a vector 
+
+f (x) ≈ Π⊥
+
+> πM(x)
+
+ x − πM(x)
+
+approximating the normal component of displacement from x to M. In Yao and Xia (2025), πM(x)
+
+is estimated by a kernel-weighted local mean, while Π⊥ 
+
+> πM(x)
+
+is the rank-(D − d) approximation to averaged normal-space projectors from local PCA, yielding O(σ) Hausdorff distance of M.We modify this formulation for differential privacy and computational efficiency. First, we work with tangent projectors bPyi (rank-d projectors onto local PCA subspaces at each reference points) and approximate the local normal projector at x by I − bPw 
+
+> x
+
+, where bPw 
+
+> x
+
+is the weighted mean of local tangent projectors. This only requires the top-d eigenvectors at each neighborhood (as in Section 3), rather than full D − d normal bases, enabling the reuse of the same local PCA primitives throughout the procedure. Second, we forego iterative gradient descent, which would require privatizing gradients at each step and tracking the sensitivity of a high-dimensional vector field. Instead, we use the fixed-point 11 update 
+
+x ← x − ef (x),
+
+where ef is a privatized bias field from DP local means and projectors, with privacy enforced at these release points. 
+
+Weighted residual. For a query location x and bandwidth h, we use compactly supported weights (Yao and Xia, 2025): 
+
+eαi(x) := 
+
+
+
+1 − ∥x−yi∥2
+
+> h2
+
+β 
+
+> +
+
+(β ≥ 2) , αi(x) := eαi(x)
+
+Pnj=1 eαj (x) .
+
+These weights confine the analysis to a local neighborhood within the ball BD(x, h ). The associated (non-private) local mean is 
+
+¯bx := 
+
+> n
+
+X
+
+> i=1
+
+αi(x) yi,
+
+and we privatize it via an isotropic Gaussian perturbation 
+
+ebx = ¯bx + ξm(x), ξm(x) ∼ N (0 , ς 2mID),
+
+with ςm set by the mean-privacy budget. While prior work averages normal-space projectors, we aggregate tangent projectors 
+
+bPyi = Vyi,d V⊤
+
+> yi,d
+
+,
+
+where Vyi,d spans the top-d PCA directions at yi (computed once at the reference points, using the same bandwidth h as in the kernel weights). This aggregation yields the neighborhood projector 
+
+bPw 
+
+> x
+
+:= 
+
+> n
+
+X
+
+> i=1
+
+αi(x) bPyi ,
+
+which serves as an estimator for the projector onto TπM(x)M.We privatize via Gaussian noise and spectral truncation (analogous to Algorithm 1, Steps 3–5). For simplicity, denote this as 
+
+ePw 
+
+> x
+
+= DP-Projector   bPw 
+
+> x
+
+; ςP
+
+,
+
+12 with ςP set by the projector-privacy budget. We then define the privatized normal projector as 
+
+eΨw 
+
+> x
+
+= I − ePw 
+
+> x
+
+.Finally, the DP residual is constructed as 
+
+ef (x) := eΨw
+
+> x
+
+ x − ebx
+
+.
+
+In the non-private case, this vector aligns with the normal component of x − πM(x) up to an error of O(h2/τ + σ). Consequently, subtracting ef (x) updates x toward M.
+
+Sensitivity of the weighted projector and mean. To privatize the residual field f (x), we must quantify how the weighted projector bPw 
+
+> x
+
+and the weighted mean ¯bx change under the bounded ad-jacency relation. The following lemma establishes sensitivity bounds for both geometric summaries. 
+
+Lemma 2. Assume the model in (1) . Suppose x ∈ M √σ and bandwidth h satisfies 
+
+( log nn ) 1 
+
+> d
+
+∨ √σ ≲ h ≪ 1 ∧ τ. 
+
+For each i ∈ [n], let bPw,(i) 
+
+> x
+
+and ¯b(i) 
+
+> x
+
+denote the corresponding quantities computed from a replace-one neighboring dataset. Then with probability at least 1 − n−c,
+
+max 
+
+> i∈[n]
+
+bPw 
+
+> x
+
+− bPw,(i)  
+
+> xF
+
+≤ C 1
+
+nh d , (5) 
+
+and 
+
+max 
+
+> i∈[n]
+
+¯bx − ¯b(i) 
+
+> x
+
+≤ C 1
+
+nh d−1 . (6) The proof is in Appendix B. Combined with the Gaussian mechanism, these bounds enable DP releases of bPw 
+
+> x
+
+and ¯bx, the key components of ef (x). Notably, the resulting sensitivities are well-controlled as a consequence of locality: only the effective neighborhood influences the weighted summaries, so a single-record replacement perturbs aggregates at scale 1/(nh d) (up to the additional 
+
+h-scaling in the mean bound). Following Yao and Xia (2025), we interpret manifold denoising as finding a nearby zero of this residual field. For fixed c > 1, define 
+
+Z(z) =
+
+n
+
+x ∈ BD(z, c √σ) : ef (x) = 0 
+
+o
+
+.
+
+13 The denoised output is any point in Z(z) reached by Algorithm 2. By post-processing, returning a single zero of ˜f satisfies (ε, δ )-DP. The following result guarantees that any such zero lies close to the true manifold M, explicitly quantifying the contributions of curvature, ambient noise, and privacy noise. 
+
+Theorem 2. Assume the model in (1) . Fix z ∈ M √σ and bandwidth h satisfies 
+
+( log nn ) 1 
+
+> d
+
+∨ √σ ≲ h ≪ 1 ∧ τ. 
+
+For all x ∈ Z (z), with probability at least 1 − n−c − e−cD ,
+
+d(x, M) ≲ h2
+
+τ + σ + √D ς P h + √D ς m
+
+≲ h2
+
+τ + σ +
+
+√Dn ε h1−d
+
+r
+
+2 ln c1
+
+δ .
+
+The proof is in Appendix B. The bound separates geometric error from privacy cost. The baseline comprises curvature bias ( h2/τ ), and measurement noise ( σ). Privacy adds projector noise (√D ς P h) and mean noise ( √D ς m), yielding O(√D · h1−d/(nε ) · pln(1 /δ )) . In the limit of ample privacy budget ( ε → ∞ or equivalently ςP, ς m → 0), the bound recovers the non-private rate. 
+
+Algorithm. The denoising procedure implements the fixed-point update x ← x − ef (x) via three steps at each iterate x(q,t ). Kernel weights {αi(x(q,t ))} assign soft responsibilities to reference points. Using these weights, we construct a DP kernel-weighted mean and tangent projector (by aggregating precomputed Pyi before noise injection). The update 
+
+x(q,t +1) = x(q,t ) −  I − ePx(q,t )
+
+  x(q,t ) − ebx(q,t )
+
+
+
+subtracts the estimated normal component, driving toward the manifold. The complete procedure is given in Algorithm 2. From an algorithmic viewpoint, this procedure resembles a generalized EM scheme for latent projection recovery (Carreira-Perpinan, 2007): weights act as an E-step, privatized summaries serve as local geometry surrogates, and the update performs an M-step decreasing normal misalignment. This normal correction offers advantages over gradient descent on the residual norm ∥ef (x)∥22, par-ticularly in the private-reference regime. First, it avoids repeated privatization of high-dimensional gradients, releasing only DP local summaries with controlled sensitivities. Second, by reusing pre-14 Algorithm 2 DP-ManifoldDenoiser for queries {z(q)}mq=1 
+
+Require: Data Y = {yi}ni=1 , queries {z(q)}mq=1 , bandwidth h, steps T , privacy (ε, δ ) or zCDP budget ρtot  
+
+> 1:
+
+Budget across queries: choose {ρ(q)}mq=1 with Pmq=1 ρ(q) = ρtot  
+
+> 2:
+
+for q = 1 , . . . , m do  
+
+> 3:
+
+Per-iteration split: pick {ρ(q,t )P , ρ (q,t )m }T −1 
+
+> t=0
+
+with P
+
+> t
+
+(ρ(q,t )P + ρ(q,t )m ) = ρ(q) 
+
+> 4:
+
+Initialize x(q, 0) = z(q) 
+
+> 5:
+
+for t = 0 , 1, . . . , T − 1 do  
+
+> 6:
+
+DP projector: bPw 
+
+> x(q,t )
+
+= P 
+
+> i
+
+αi(x(q,t )) bPyi ; ePw 
+
+> x(q,t )
+
+← DP-Projector   bPw 
+
+> x(q,t )
+
+; ς(q,t )P
+
+ 
+
+> 7:
+
+DP mean: ebx(q,t ) = P 
+
+> i
+
+αi(x(q,t )) yi + ξ(q,t )m , with ξ(q,t )m ∼ N  0, (ς(q,t )m )2ID
+
+ 
+
+> 8:
+
+Update: x(q,t +1) = x(q,t ) −  I − ePw
+
+> x(q,t )
+
+  x(q,t ) − ebx(q,t )
+
+ 
+
+> 9:
+
+end for  
+
+> 10:
+
+ex(q) = x(q,T ) 
+
+> 11:
+
+end for  
+
+> 12:
+
+Return {ex(q)}mq=1 
+
+computed bPyi , each iteration requires only O(D2d) eigendecomposition rather than O(D3) for full normal bases. 
+
+Privacy accounting. The modular structure enables exact privacy accounting via zCDP. Given a target (ε, δ )-DP guarantee, we determine the total zCDP budget ρtot using the conversion from Section 2: 
+
+ε = ρtot + 2 pρtot ln(1 /δ ).
+
+Solving for ρtot gives the total zCDP budget to be allocated. By the additive composition property, the total zCDP parameter for query q accumulates as 
+
+ρ(q) = 
+
+> T−1
+
+X
+
+> t=0
+
+ ρ(q,t )P + ρ(q,t )m
+
+,
+
+which aggregates to ρtot = Pmq=1 ρ(q).In practice, a uniform allocation strategy often suffices: set ρ(q) = ρtot /m and introduce θ ∈ [0 , 1] 
+
+to split per-step budgets as 
+
+ρ(q,t )P = θ ρ(q)
+
+T , ρ(q,t )m = (1 − θ) ρ(q)
+
+T .
+
+These budgets directly determine the noise scales ς(q,t )P and ς(q,t )m via the Gaussian mechanism, ensuring the privacy guarantee is structurally enforced. 15 One-step iteration. Finally, we state a corollary based on one-step specialization of Algorithm 2. 
+
+Corollary 1. Under the assumptions of Theorem 2, consider a single query z ∈ M √σ and one iteration of the update in Algorithm 2: 
+
+x(1) = z −  I − ePw
+
+> z
+
+  z − ebz
+
+.
+
+Then with probability at least 1 − n−c,
+
+∥x(1) − πM(z)∥ ≲ h2
+
+τ + σ + √D ς P h + √D ς m
+
+≲ h2
+
+τ + σ +
+
+√Dn ε h1−d
+
+r
+
+2 ln c1
+
+δ .
+
+Corollary 1 shows that one DP normal-correction step yields the same error decomposition as Theorem 2, reminiscent of the one-step principle in statistical estimation (Van der Vaart, 2000). This suggests a small fixed T often suffices, as further iterations may offer diminishing gains while consuming budget. 
+
+## 5 Simulations 
+
+We evaluate our differentially private manifold denoising algorithm through synthetic experiments under diverse geometric settings. Four canonical manifolds of increasing complexity—circle, torus, Swiss roll, and sphere embedded in high-dimensional ambient space—were used to examine how curvature, topology, density heterogeneity, and ambient dimension affect performance. Each manifold was embedded in RD with intrinsic dimension d = 1 or 2 and perturbed by additive noise. For all experiments, we generated n reference points and m query points to be denoised using the proposed DP-MD algorithm, with noise magnitudes σ and √σ for references and queries, respectively. Unless stated otherwise, noise was bounded in ℓ2 norm. Unbounded Gaussian noise results (qualitatively similar) are in Figs. S.1 and S.2 of the Appendix. Non-private baselines, gradient descent (GD) and Nonprivate Manifold Denoiser (Nonprivate MD), were included for reference. Default parameters σ ∈ [0 .05 , 0.35] , n ∈ [1 × 10 4, 5 × 10 4], and total privacy budget ε = 1 .0, δ = 0 .1. Detailed parameter configurations for each experiment are 16 n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to circle manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 error vs n ( <<=0.20, m=100) — to manifold 
+
+n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to clean point
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1 error vs n ( <<=0.20, m=100) — to clean < (noise level) 
+
+0.05 0.1 0.2 0.3 0.4 
+
+> Distance to circle manifold
+
+0
+
+0.1 
+
+0.2 
+
+0.3 error vs << (n=30000, m=100) — to manifold 
+
+< (noise level) 
+
+0.05 0.1 0.2 0.3 0.4 
+
+> Distance to clean point
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 error vs << (n=30000, m=100) — to clean An (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to torus manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1 error vs n ( <<=0.15, m=100) — to manifold 
+
+n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+1.5 
+
+2 error vs n ( <<=0.15, m=100) — to clean < (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to torus manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+error vs << (n=30000, m=100) — to manifold 
+
+< (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to clean point
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 error vs << (n=30000, m=100) — to clean Bn (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to Swiss roll manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 error vs n ( <<=0.15, m=100) — to manifold 
+
+n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+1.5 error vs n ( <<=0.15, m=100) — to clean < (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to Swiss roll manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 error vs << (n=30000, m=100) — to manifold 
+
+< (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to clean point
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 error vs << (n=30000, m=100) — to clean CAmbient dimension D 
+
+5 10 20 50 100 
+
+> Distance to clean query point
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+S2 in R D: dist-to-clean vs D (bounded; n=30000, m=100, <<=0.30) 
+
+Ambient dimension D 
+
+5 10 20 50 100 
+
+> Distance to embedded S 2 manifold
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+S2 in R D: dist-to-manifold vs D (bounded) 
+
+D EFigure 1: Synthetic manifold denoising results. (A–C) Circle, torus, and Swiss roll: geometric visualization and error trends. (D–E) Sphere error vs ambient dimension D and privacy-utility tradeoff. summarized in Table S.1 of the Appendix. The neighborhood radius was chosen as 
+
+h = max 
+
+(
+
+5
+
+ log nn
+
+ 1
+
+d+1 
+
+, 2√σ
+
+)
+
+,
+
+in accordance with Theorem 2. 
+
+Experimental design. The four geometries progressively test different conditions: circle ( S1) for curvature, torus ( T 2) for nonconvex topology, Swiss roll for varying density, and sphere ( S2 ⊂ RD)17 for high-dimensional scalability. Performance is measured by (i) distance to the clean point and (ii) distance to the true manifold. 
+
+Low-dimensional manifolds. Figs 1A–C illustrate the denoising behavior on curved manifolds. For the circle ( S1 ⊂ R2), all three methods successfully projected noisy points back onto the true manifold, while DP-MD retained accuracy comparable to Nonprivate-MD even for strong noise (σ = 0 .3). Error distributions decreased systematically with sample size n. On the torus ( T 2 ⊂ R3), which features coupled principal curvatures and nonconvex topology, DP-MD accurately restored the ring structure without over-smoothing. The Swiss roll (Fig. 1C) further demonstrated robustness to heterogeneous sampling density: denoised points formed a smooth unrolled surface even where the data were sparse. 
+
+High-dimensional scalability. To evaluate scalability, we embedded sphere S2 in dimensions 
+
+D = 5 , 10 , 20 , 50 , 100 with fixed n = 30 ,000 , σ = 0 .3. Only DP-MD was applied. Both distance metrics remained nearly constant as D increased (Fig. 1D), demonstrating insensitivity to ambient dimension. Runtime scaled approximately linearly with D, dominated by the local PCA stage, while the average neighborhood size decreased moderately (Fig. S.2 in the Appendix), consistent with our theoretical analysis. 
+
+Privacy-utility tradeoff. We further examined how the privacy budget influences accuracy on the circle manifold by varying ε from 0.05 to 3 (Fig. 1E). The mean denoising error decreased monotonically with larger ε and plateaued beyond ε ≈ 1, indicating that the DP-MD algorithm preserves nearly optimal utility even under strong privacy constraints. Corresponding results on the torus and swiss roll manifolds are provided in Fig. S.3 of the Appendix. 
+
+Computational Complexity. The dominant cost is local PCA at each reference point: O(nD 2d)
+
+for computing n neighborhood projectors Pyi . For m queries and T iterations, the per-query cost is O(T nD ) for averaging plus O(T D 2d) for DP-Projector, yielding total complexity O(nD 2d +
+
+mT (nD + D2d)) .
+
+Summary. Across all manifolds, the proposed DP-MD achieves comparable accuracy to non-private baselines while ensuring differential privacy. It remains robust under high curvature, nonuni-form density, and high-dimensional embeddings, validating both the theoretical guarantees and the 18 practical scalability of our approach. 
+
+## 6 Application 
+
+6.1 Applications to UK Biobank data 
+
+Motivation. We illustrate our framework on the UK Biobank blood and urine biomarker panel (Appendix D), comprising 60 quantitative laboratory measurements spanning metabolic, hepatic, renal, and hematologic systems (Sinnott-Armstrong et al., 2021; Chan et al., 2021). Although these biomarkers reflect diverse physiological processes, prior work has shown that they exhibit coordinated low-dimensional organization driven by shared regulatory, inflammatory, and homeo-static mechanisms. Measurement noise, assay variability, and finite-sample effects can perturb this structure, distorting local neighborhoods and attenuating biologically meaningful gradients that are relevant for downstream risk modeling. This setting therefore provides a realistic and high-dimensional setting for assessing whether manifold-aware denoising can restore geometric coherence under privacy constraints. 
+
+Geometric effects of manifold denoising. We applied Non-private MD and DP-MD to 50,000 reference participants, with 1,000 held-out queries under privacy budget ε = 1 , δ = 0 .1. We adopted a local-geometry–driven strategy to determine neighborhood scale h and intrinsic dimension d, using local k-nearest-neighbor distances and principal component analysis. Denoising induces structured subject-level movements in the biomarker representation: most query points undergo minimal displacement, while a subset exhibits larger, directionally coherent adjustments toward locally consistent regions of the biomarker space (Fig. 2A). These movements preserve intrinsic variability and are accompanied by stable local geometric behavior, including bounded neighborhood distortion and consistent neighbor retention relative to the raw represen-tation (Fig. 2B). These analyses indicate that denoising modifies local geometry in a controlled manner rather than introducing random perturbations. 
+
+Implications for downstream risk stratification. We next examined whether restoring geo-metric coherence in biomarker space is compatible with downstream biomedical analysis. We began with a screen of ICD-10 endpoints derived from first-occurrence records and then focused on a pre-specified panel of clinically interpretable cardio-metabolic and vascular conditions. 19 −1.0 −0.5 0.0 0.5 
+
+−1.0 −0.5 0.0 0.5 
+
+PC1 
+
+> PC2
+
+triglycerides 
+
+> 246
+
+Raw biomarker PCA (colored by metabolic axis) 
+
+−1.0 −0.5 0.0 0.5 
+
+−1.0 −0.5 0.0 0.5 
+
+PC1 
+
+> PC2
+
+triglycerides 
+
+> 12345
+
+Query movement on PCA: Nonprivate−MD 
+
+−1.0 −0.5 0.0 0.5 
+
+−1.0 −0.5 0.0 0.5 
+
+PC1 
+
+> PC2
+
+triglycerides 
+
+> 12345
+
+Query movement on PCA: DP−MD 
+
+020 40 60 
+
+0.3 0.4 0.5 0.6 
+
+||.|| in 60D feature space 
+
+> Count
+
+method Raw−>DP−MD (HD L2) Raw−>Nonprivate−MD (HD L2) 
+
+High−D movement magnitude (moved queries) Unchanged: Nonprivate 17.9%, DP 17.9% A0.4 0.6 0.8 
+
+DP−MD Nonprivate−MD Raw 
+
+> Mean kNN distance to Reference
+
+med=0.124 med=0.125 
+
+med=0.15, >0.8=18% med=0.15, >0.8=18% 
+
+Neighbor retention (Jaccard) 
+
+Local distortion (|d/d0 − 1|) 
+
+DP−MD Nonprivate−MD 
+
+0.0 0.1 0.2 0.3 
+
+0.00 0.25 0.50 0.75 1.00 B72 50 131 3338 1742 6032 Q cases R cases 
+
+27 75 45 33 1321 2959 2428 1354 Q cases R cases 
+
+20 31 1141 1684 Q cases R cases 
+
+40 36 34 1968 2025 1904 Q cases R cases 
+
+Renal / fluid / electrolyte 
+
+Metabolic / hepatic 
+
+Inflammatory / acute stress 
+
+Cardiovascular anchors 
+
+−0.05 0.00 0.05 0.10 0.15 
+
+Ischaemic heart disease (I20−I25) Hypertensive diseases (I10−I15) Stroke (I60−I69) 
+
+Pleural effusion (J90) Pneumonia (J12−J18) Acute lower respiratory infection (J20−J22) Sepsis (A41) 
+
+Cholelithiasis (K80) Fatty liver / liver dz (K76) 
+
+Chronic kidney disease (N18−N19) Electrolyte/acid−base (E87) AKI (N17) 
+
+∆ C−index on held−out query (paired bootstrap 95% CI) 
+
+Nonprivate−MD DP−MD 
+
+Main: endpoints with query cases >= 20; full panel in SI. 
+
+Endpoint panel: prediction change after manifold denoising 
+
+CCRP WBC Neut Lymph NLR PLT Cr Urea 
+
+Raw Nonprivate−MD DP−MD 
+
+Developed Pneumonia (J12−J18) at 13.5 years | disp 89.3%ile 
+
+Subject A 
+
+Nonprivate−MD HR=1.28 (dLP=+0.24) 
+
+DP−MD HR=1.37 (dLP=+0.31) 
+
+Risk change 
+
+CRP WBC Neut Lymph NLR PLT Cr Urea 
+
+Raw Nonprivate−MD DP−MD 
+
+Disease−free through 16.4 years | disp 91.4%ile 
+
+Subject B 
+
+Nonprivate−MD HR=0.34 (dLP=−1.07) 
+
+DP−MD HR=0.32 (dLP=−1.13) 
+
+Risk change 
+
+Radar: z−scores vs landmark Raw. Right: .LP and HR change summary. 
+
+Two subjects: biomarker shifts and relative risk change DFigure 2: Manifold denoising preserves local geometric stability while remaining compatible with downstream biomedical risk modeling. (A) PCA embedding of the raw biomarker space, with subject-level displacement vectors induced by denoising. (B) Local geometry diagnostics showing bounded distortion and stable neighborhood structure relative to raw references. (C) Changes in out-of-sample risk discrimination across a pre-specified panel of clinically interpretable cardio-metabolic endpoints. Detailed results are provided in Fig. S.4 and Table S.3 of the Appendix. (D) Subject-level illustration linking coordinated biomarker shifts to coherent movement along a clinically meaningful risk axis. These conditions were chosen a priori based on two criteria: their established links to systemic biomarker profiles and sufficient, stable event incidence to support reliable Cox estimation (Table S.2 of the Appendix). 20 Table 1: Clustering performance (ARI) on single-cell RNA-seq datasets (mean (SE)). Dataset Original (ARI) Nonprivate-MD (ARI) DP-MD (ARI) Goolam 0.734 (0.063) 0.807 (0.059) 0.805 (0.057) Schaum2 0.681 (0.032) 0.723 (0.034) 0.737 (0.027) Yan 0.825 (0.025) 0.862 (0.023) 0.844 (0.020) He 0.711 (0.025) 0.744 (0.026) 0.734 (0.031) Pollen 0.925 (0.021) 0.951 (0.014) 0.943 (0.016) Wang 0.801 (0.023) 0.826 (0.030) 0.827 (0.029) Muraro 0.789 (0.031) 0.808 (0.026) 0.808 (0.025) Zeisel 0.700 (0.027) 0.718 (0.028) 0.717 (0.021) Enge 0.725 (0.013) 0.743 (0.013) 0.743 (0.013) Nowicki 0.663 (0.021) 0.674 (0.020) 0.670 (0.019) Mean ± SE 0.755 ± 0.025 0.786 ± 0.026 0.783 ± 0.025 For each endpoint, Cox models were trained on references using age, sex, ethnicity, and either Raw, Nonprivate-MD, or DP-MD biomarker representations; queries were reserved for out-of-sample evaluation. All pipeline aspects were held fixed so that differences reflect representation changes rather than model specification. Manifold denoising is associated with modest but directionally consistent changes in risk dis-crimination for disease families tied to systemic metabolic or inflammatory signatures, including coronary artery disease and ischemic stroke (Fig. 2C). Effect sizes vary across endpoints, reflecting heterogeneity in event prevalence and signal strength. Importantly, DP denoising closely tracks Non-private MD, indicating that privacy constraints do not materially alter risk-relevant geometric structure. 
+
+Subject-level illustration. Finally, we illustrate how representation correction operates at the individual scale (Fig. 2D). For two representative subjects, denoising induces coordinated biomarker adjustments and corresponding movement along a clinically interpretable risk axis. 
+
+6.2 Applications to Single-cell omics data 
+
+Motivation. Single-cell RNA sequencing (scRNA-seq) data are well known to reside near non-linear manifolds reflecting major biological factors such as cell type or developmental stage, but are corrupted by technical noise and dropout effects (Zhu et al., 2024; Zhang and Zhang, 2021). Building on manifold fitting applications such as SCAMF (Yao et al., 2024a), we evaluate whether our DP manifold denoiser can improve downstream clustering performance in real biological data 21 (Appendix E). 
+
+Experimental setup. We evaluated our method on 10 public scRNA-seq datasets spanning multiple tissues and protocols (Table S.4 of the Appendix). The same privacy budget and local-geometry–driven strategy for choosing neighborhood scale h and intrinsic dimension d was applied to single-cell datasets. 
+
+Clustering Performance. Clustering performance was evaluated by accuracy (ACC), normal-ized mutual information (NMI), and adjusted Rand index (ARI) across repeated runs. We also evaluated local neighborhood preservation using neighborhood purity. We report ARI as the most representative metric; detailed results for all metrics are in Table S.5 of the Appendix. Across almost all 10 datasets, both Nonprivate-MD and DP-MD improved ARI relative to original data, confirming that manifold denoising enhances biological signal recovery (Table 1). 
+
+## 7 Discussion 
+
+In this work, we have established a rigorous framework that reconciles the conflicting demands of high-dimensional geometric learning and individual privacy. By privatizing local geometric sum-maries, specifically tangent projectors and means, rather than raw data, we enable the recovery of latent manifold structures while strictly bounding the influence of any single participant in the reference data. Practically, this framework provides a viable pathway for utilizing sensitive high-dimensional data, such as genomic or medical records, in downstream analysis. By allowing the geometric information inherent in private cohorts to guide the denoising of new samples, our method maintains high statistical utility while strictly adhering to regulatory privacy bounds. Several theoretical and practical challenges remain. First, our theory denoises queries to the same order as reference noise. A natural next step is to obtain higher-order noise cancellation under additional structure (e.g., zero-mean noise with higher-moment conditions) so that the leading noise term vanishes. In particular, such a refinement may remove the first-order σ term from the utility bound and replace it with a higher-order remainder, analogous to noise cancellation improvements in non-private manifold denoising (Yao et al., 2023). Second, our current model assumes bounded noise to control sensitivity; extending this frame-work to handle unbounded Gaussian noise or heavy-tailed distributions is an important next step. This addresses a realistic concern but would require substantive theoretical developments, poten-22 tially integrating differentially private robust statistics to manage outliers and heavy tails while maintaining tractable sensitivity control and non-asymptotic guarantees. Third, while our method denoises discrete query points, a fundamental open problem is to define and release the entire manifold as a differentially private object. Constructing such a global release, whether as an implicit function or a geometric mesh, poses significant difficulties in quantifying global sensitivity and requires developing new mechanisms. Finally, our current setting assumes public queries; a natural extension is the fully private regime where both the reference dataset and the incoming queries contain sensitive information, requiring two-sided privacy guarantees. 
+
+Data, Materials, and Software Availability 
+
+Matlab and R implementation of the algorithm, including all experiments and visualizations, is available at https://github.com/zhigang-yao/DP-Manifold-Denoising under the MIT license. UK Biobank data are available to approved researchers through application to the UK Biobank Access Management System (https://www.ukbiobank.ac.uk). This study was conducted under application 146760. Single-cell RNA-seq datasets are publicly available from GEO and ArrayExpress. Synthetic manifold experiments can be reproduced using provided simulation code. 
+
+## References 
+
+Aamari, E. and Levrard, C. (2018). Stability and minimax optimality of tangential Delaunay complexes for manifold reconstruction. Discrete & Computational Geometry , 59(4):923–971. Abadi, M., Chu, A., Goodfellow, I., McMahan, H. B., Mironov, I., Talwar, K., and Zhang, L. (2016). Deep learning with differential privacy. In Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security , pages 308–318. ACM. Aizenbud, Y. and Sober, B. (2025). Estimation of local geometric structure on manifolds from noisy data. Journal of Machine Learning Research , 26(64):1–89. Amin, K., Dick, T., Kulesza, A., Munoz, A., and Vassilvitskii, S. (2019). Differentially private covariance estimation. Advances in Neural Information Processing Systems , 32. Arora, R. and Upadhyay, J. (2019). On differentially private graph sparsification and applications. 
+
+Advances in Neural Information Processing Systems , 32. 23 Blum, A., Dwork, C., McSherry, F., and Nissim, K. (2005). Practical privacy: the sulq framework. In Proceedings of the twenty-fourth ACM SIGMOD-SIGACT-SIGART symposium on Principles of database systems , pages 128–138. Boissonnat, J.-D. and Ghosh, A. (2014). Manifold reconstruction using tangential Delaunay com-plexes. Discrete & Computational Geometry , 51(1):221. Bun, M. and Steinke, T. (2016). Concentrated differential privacy: Simplifications, extensions, and lower bounds. In Theory of Cryptography Conference , pages 635–658. Springer. Cai, T. T., Wang, Y., and Zhang, L. (2021). The cost of privacy: Optimal rates of convergence for parameter estimation with differential privacy. The Annals of Statistics , 49(5):2825–2850. Cai, T. T., Xia, D., and Zha, M. (2024). Optimal differentially private PCA and estimation for spiked covariance matrices. arXiv preprint arXiv:2401.03820 .Carreira-Perpinan, M. A. (2007). Gaussian mean-shift is an em algorithm. IEEE Transactions on Pattern Analysis and Machine Intelligence , 29(5):767–776. Chan, M. S., Arnold, M., Offer, A., Hammami, I., Mafham, M., Armitage, J., Perera, R., and Parish, S. (2021). A biomarker-based biological age in uk biobank: composition and prediction of mortality and hospital admissions. The Journals of Gerontology: Series A , 76(7):1295–1302. Chaudhuri, K., Monteleoni, C., and Sarwate, A. D. (2011). Differentially private empirical risk minimization. Journal of Machine Learning Research , 12(3). Chaudhuri, K., Sarwate, A. D., and Sinha, K. (2013). A near-optimal algorithm for differentially-private principal components. Journal of Machine Learning Research , 14(1):2905–2943. Dashti, A., Schwander, P., Langlois, R., Fung, R., Li, W., Hosseinizadeh, A., Liao, H. Y., Pallesen, J., Sharma, G., Stupina, V. A., and et al. (2014). Trajectories of the ribosome as a Brownian nanomachine. Proceedings of the National Academy of Sciences , 111(49):17492–17497. Dong, J., Roth, A., and Su, W. J. (2022a). Gaussian differential privacy. Journal of the Royal Statistical Society: Series B (Statistical Methodology) , 84(1):3–37. Dong, W., Liang, Y., and Yi, K. (2022b). Differentially private covariance revisited. Advances in Neural Information Processing Systems , 35:850–861. 24 Duchi, J. C., Jordan, M. I., and Wainwright, M. J. (2018). Minimax optimal procedures for locally private estimation. Journal of the American Statistical Association , 113(521):182–201. Dwork, C., McSherry, F., Nissim, K., and Smith, A. (2006). Calibrating noise to sensitivity in private data analysis. In Theory of Cryptography Conference , pages 265–284. Springer. Dwork, C. and Roth, A. (2014). The algorithmic foundations of differential privacy. Foundations and Trends in Theoretical Computer Science , 9(3–4):211–407. Dwork, C., Talwar, K., Thakurta, A., and Zhang, L. (2014). Analyze Gauss: Optimal bounds for privacy-preserving principal component analysis. In Proceedings of the Forty-Sixth Annual ACM Symposium on Theory of Computing , pages 11–20. ACM. Enge, M., Arda, H. E., Mignardi, M., Beausang, J., Bottino, R., Kim, S. K., and Quake, S. R. (2017). Single-cell analysis of human pancreas reveals transcriptional signatures of aging and somatic mutation patterns. Cell , 171(2):321–330. European Parliament and Council of the European Union (2016). Regulation (EU) 2016/679 of the european parliament and of the council of 27 april 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data, and repealing directive 95/46/EC (General Data Protection Regulation). Official Journal of the European Union. OJ L 119, 4 May 2016, pp. 1–88. European Parliament and Council of the European Union (2024). Regulation (EU) 2024/1689 of the european parliament and of the council of 13 june 2024 laying down harmonised rules on artificial intelligence (Artificial Intelligence Act). Official Journal of the European Union. OJ L, 12 July 2024. Federer, H. (1959). Curvature measures. Transactions of the American Mathematical Society ,93(3):418–491. Fefferman, C., Ivanov, S., Kurylev, Y., Lassas, M., and Narayanan, H. (2018). Fitting a putative manifold to noisy data. In Conference on Learning Theory , pages 688–720. PMLR. Frank, J. and Ourmazd, A. (2016). Continuous changes in structure mapped by manifold embedding of single-particle data in cryo-EM. Methods , 100:61–67. 25 Genovese, C. R., Perone-Pacifico, M., Verdinelli, I., and Wasserman, L. (2014). Nonparametric ridge estimation. The Annals of Statistics , 42(4):1511–1545. Goolam, M., Scialdone, A., Graham, S. J., Macaulay, I. C., Jedrusik, A., Hupalowska, A., Voet, T., Marioni, J. C., and Zernicka-Goetz, M. (2016). Heterogeneity in oct4 and sox2 targets biases cell fate in 4-cell mouse embryos. Cell , 165(1):61–74. Haghverdi, L., Büttner, M., Wolf, F. A., Buettner, F., and Theis, F. J. (2016). Diffusion pseudotime robustly reconstructs lineage branching. Nature Methods , 13(10):845–848. Han, A., Mishra, B., Jawanpuria, P., and Gao, J. (2024). Differentially private Riemannian opti-mization. Machine Learning , 113(3):1133–1161. He, P., Lim, K., Sun, D., Pett, J. P., Jeng, Q., Polanski, K., Dong, Z., Bolt, L., Richardson, L., Mamanova, L., et al. (2022). A human fetal lung cell atlas uncovers proximal-distal gradients of differentiation and key regulators of epithelial fates. Cell , 185(25):4841–4860. Hein, M. and Maier, M. (2006). Manifold denoising. Advances in Neural Information Processing Systems , 19. Li, B., Su, J., Lin, R., Yau, S.-T., and Yao, Z. (2025). Manifold fitting reveals metabolomic heterogeneity and disease associations in UK Biobank populations. Proceedings of the National Academy of Sciences , 122(22):e2500001122. Liu, X., Kong, W., Jain, P., and Oh, S. (2022). DP-PCA: Statistically optimal and differentially private PCA. Advances in Neural Information Processing Systems , 35:29929–29943. McSherry, F. and Talwar, K. (2007). Mechanism design via differential privacy. In 48th Annual IEEE Symposium on Foundations of Computer Science (FOCS’07) , pages 94–103. IEEE. Mironov, I. (2017). Rényi differential privacy. In 2017 IEEE 30th Computer Security Foundations Symposium (CSF) , pages 263–275. IEEE. Muraro, M. J., Dharmadhikari, G., Grün, D., Groen, N., Dielen, T., Jansen, E., Van Gurp, L., Engelse, M. A., Carlotti, F., De Koning, E. J., et al. (2016). A single-cell transcriptome atlas of the human pancreas. Cell systems , 3(4):385–394. Niyogi, P., Smale, S., and Weinberger, S. (2008). Finding the homology of submanifolds with high confidence from random samples. Discrete & Computational Geometry , 39(1):419–441. 26 Nowicki-Osuch, K., Zhuang, L., Jammula, S., Bleaney, C. W., Mahbubani, K. T., Devonshire, G., Katz-Summercorn, A., Eling, N., Wilbrey-Clark, A., Madissoon, E., et al. (2021). Molecular phenotyping reveals the identity of barrett’s esophagus and its malignant transition. Science ,373(6556):760–767. Ozertem, U. and Erdogmus, D. (2011). Locally defined principal curves and surfaces. Journal of Machine Learning Research , 12:1249–1286. Pollen, A. A., Nowakowski, T. J., Shuga, J., Wang, X., Leyrat, A. A., Lui, J. H., Li, N., Szpankowski, L., Fowler, B., Chen, P., et al. (2014). Low-coverage single-cell mrna sequencing reveals cellular heterogeneity and activated signaling pathways in developing cerebral cortex. Nature biotechnol-ogy , 32(10):1053–1058. Puchkin, N. and Spokoiny, V. (2022). Structure-adaptive manifold estimation. Journal of Machine Learning Research , 23(40):1–62. Reimherr, M., Bharath, K., and Soto, C. (2021). Differential privacy over Riemannian manifolds. 
+
+Advances in Neural Information Processing Systems , 34:12292–12303. Saha, D. K., Calhoun, V. D., Du, Y., Fu, Z., Kwon, S. M., Sarwate, A. D., Panta, S. R., and Plis, S. M. (2022). Privacy-preserving quality control of neuroimaging datasets in federated environments. Human Brain Mapping , 43(7):2289–2310. Schaum, N., Karkanias, J., Neff, N. F., May, A. P., Quake, S. R., Wyss-Coray, T., Darmanis, S., Batson, J., Botvinnik, O., Chen, M. B., et al. (2018). Single-cell transcriptomics of 20 mouse organs creates a tabula muris: The tabula muris consortium. Nature , 562(7727):367. Sinnott-Armstrong, N., Tanigawa, Y., Amar, D., Mars, N., Benner, C., Aguirre, M., Venkataraman, G. R., Wainberg, M., Ollila, H. M., Kiiskinen, T., et al. (2021). Genetics of 35 blood and urine biomarkers in the uk biobank. Nature genetics , 53(2):185–194. Tenenbaum, J. B., Silva, V. d., and Langford, J. C. (2000). A global geometric framework for nonlinear dimensionality reduction. Science , 290(5500):2319–2323. U.S. Department of Health and Human Services (2025). 45 C.F.R. §164.514 — other requirements relating to uses and disclosures of protected health information. Electronic Code of Federal Regulations (eCFR). Standard: De-identification of protected health information. 27 Van der Vaart, A. W. (2000). Asymptotic statistics , volume 3. Cambridge university press. Vepakomma, P., Balla, J., and Raskar, R. (2022). Privatemail: Supervised manifold learning of deep features with privacy for image retrieval. Proceedings of the AAAI Conference on Artificial Intelligence , 36(8):8503–8511. Vershynin, R. (2018). High-dimensional probability: An introduction with applications in data sci-ence , volume 47. Cambridge university press. Wang, D., Hu, L., Zhang, H., Gaboardi, M., and Xu, J. (2023). Generalized linear models in non-interactive local differential privacy with public data. Journal of Machine Learning Research ,24(132):1–57. Wang, Y. J., Schug, J., Won, K.-J., Liu, C., Naji, A., Avrahami, D., Golson, M. L., and Kaestner, K. H. (2016). Single-cell transcriptomics of the human endocrine pancreas. Diabetes , 65(10):3028– 3038. Yan, L., Yang, M., Guo, H., Yang, L., Wu, J., Li, R., Liu, P., Lian, Y., Zheng, X., Yan, J., et al. (2013). Single-cell rna-seq profiling of human preimplantation embryos and embryonic stem cells. 
+
+Nature structural & molecular biology , 20(9):1131–1139. Yao, Z., Li, B., Lu, Y., and Yau, S.-T. (2024a). Single-cell analysis via manifold fitting: Aframework for RNA clustering and beyond. Proceedings of the National Academy of Sciences ,121(37):e2400002121. Yao, Z., Su, J., Li, B., and Yau, S.-T. (2023). Manifold fitting. arXiv preprint arXiv:2304.07680 .Yao, Z., Su, J., and Yau, S.-T. (2024b). Manifold fitting with CycleGAN. Proceedings of the National Academy of Sciences , 121(5):e2311436121. Yao, Z. and Xia, Y. (2025). Manifold fitting under unbounded noise. Journal of Machine Learning Research , 26(45):1–55. Yu, Y., Wang, T., and Samworth, R. J. (2015). A useful variant of the davis–kahan theorem for statisticians. Biometrika , 102(2):315–323. Zeisel, A., Muñoz-Manchado, A. B., Codeluppi, S., Lönnerberg, P., La Manno, G., Juréus, A., Marques, S., Munguba, H., He, L., Betsholtz, C., et al. (2015). Cell types in the mouse cortex and hippocampus revealed by single-cell rna-seq. Science , 347(6226):1138–1142. 28 Zhang, Z. and Zhang, X. (2021). Inference of high-resolution trajectories in single-cell rna-seq data by using rna velocity. Cell Reports Methods , 1(6). Zhu, L., Yang, S., Zhang, K., Wang, H., Fang, X., and Wang, J. (2024). Uncovering underlying physical principles and driving forces of cell differentiation and reprogramming from single-cell transcriptomics. Proceedings of the National Academy of Sciences , 121(34):e2401540121. 29 Appendix 
+
+The Appendix contains five sections. Appendix A introduces preliminaries, while Appendix B contains the detailed technical proofs. Appendix C presents supplementary simulation results. Ap-pendices D–E provide additional methodological, preprocessing, and evaluation details, along with supplementary empirical results for the UK Biobank and single-cell RNA sequencing applications, respectively. 
+
+## A Preliminaries 
+
+Notation. We use C, c for absolute positive constants whose values may change from line to line. For nonnegative functions f, g , write f ≲ g if f ≤ Cg for some universal C > 0, f ≳ g if 
+
+f ≥ cg for some c > 0, and f ≍ g if both hold. For integers n ≥ 1, let [n] := {1, . . . , n }, and for 
+
+G ⊆ [n], denote its cardinality by |G| . The indicator function is I(·). For real numbers a, b , set 
+
+a ∨ b := max {a, b } and a ∧ b := min {a, b }. Vectors are boldface (e.g., v ∈ RD) with Euclidean norm 
+
+∥v∥; for matrices, ∥ · ∥ denotes spectral norm and ∥ · ∥ F the Frobenius norm. The Stiefel manifold is 
+
+Op,r := {U ∈ Rp×r : U⊤U = Ir}, and Or := Or,r is the orthogonal group. For a matrix A ∈ Rp×q
+
+of rank r, write its SVD as A = UΣV ⊤ with U ∈ Op,r , V ∈ Oq,r , and Σ = diag( σ1(A), . . . , σ r(A)) ,where σ1 ≥ · · · ≥ σr > 0 are singular values. For r > 0 and x ∈ RD, let BD(x, r ) denote the closed Euclidean ball of radius r centered at x.For a set A ⊂ RD, its r-tubular neighborhood is A ⊕ BD(0 , r ) := { x + y : x ∈ A, ∥y∥ ≤ r }, where 
+
+⊕ denotes the Minkowski sum. 
+
+Geometric definitions. Let M ⊂ RD be a compact, connected d-dimensional C2 submanifold without boundary ( d ≪ D). For x ∈ M , denote the tangent space by TxM and the normal space by NxM = ( TxM)⊥. Let Πx : RD → TxM and Π⊥ 
+
+> x
+
+: RD → NxM be the corresponding orthogonal projectors. The reach of M is defined as 
+
+τ := reach( M) = sup  r > 0 : every y ∈ M ⊕ BD(0 , r ) admits a unique nearest point in M .
+
+Intuitively, τ lower-bounds the radius of curvature: for C2 manifolds with reach τ , the second fundamental form satisfies ∥II x∥ ≤ τ −1 for all x ∈ M . Within the τ -tubular neighborhood M ⊕ 
+
+30 BD(0 , τ ), the nearest-point projection πM : M ⊕ BD(0 , τ ) → M is well-defined and C1 (Federer, 1959; Niyogi et al., 2008). For any x ∈ RD, the distance to M is 
+
+d(x, M) := inf  
+
+> u∈M
+
+∥x − u∥.
+
+When x ∈ M ⊕ BD(0 , τ ), we have d(x, M) = ∥x − πM(x)∥ and 
+
+x = πM(x) + Π ⊥
+
+> πM(x)
+
+ x − πM(x),
+
+expressing x as its projection onto M plus a normal component. 
+
+## B Technical Proofs 
+
+To maintain concise expressions in the subsequent proofs, we treat the parameters d, fmin , and fmax 
+
+as constants, suppressing their explicit dependence in our asymptotic analysis. 
+
+B.1 Proof of Lemma 1 
+
+Write the private reference dataset as Y = {y1, . . . , yn} and let Y(i) denote a replace-one neighboring dataset obtained by replacing yi with y′
+
+> i
+
+. For any dataset D ∈ {Y , Y(i)}, define 
+
+Iz(D) := {j ∈ [n] : yj (D) ∈ BD(z, h )}, nz(D) := |Iz(D)|,
+
+where yj (D) denotes the j-th data point in D. Let ¯yz(D) be the local mean over Iz(D). To simplify the sensitivity analysis, we work with the scaled covariance 
+
+bΣ(s) 
+
+> z
+
+(D) := 1
+
+n
+
+X
+
+> j∈Iz(D)
+
+ yj (D) − ¯yz(D)  yj (D) − ¯yz(D)⊤,
+
+which has the same eigenvectors as bΣz(D) = nnz(D)−1 bΣ(s) 
+
+> z
+
+(D). Let bPz(D) be the rank-d projector onto the top-d eigenspace of bΣ(s) 
+
+> z
+
+(D). For brevity, write 
+
+bPz := bPz(Y), bP(i) 
+
+> z
+
+:= bPz(Y(i)),
+
+31 and similarly for Iz, n z, ¯yz, bΣ(s) 
+
+> z
+
+. For D ∈ {Y , Y(i)}, define the indicator 
+
+Uj (D) := I yj (D) ∈ BD(z, h ),
+
+and the centered data 
+
+˜yj (D) := yj (D) − z, ¯˜yz(D) := ¯ yz(D) − z.
+
+Step 1: Covariance decomposition. A direct expansion yields 
+
+> n
+
+X
+
+> j=1
+
+Uj (D) yj (D) − ¯yz(D)  yj (D) − ¯yz(D)⊤ =
+
+> n
+
+X
+
+> j=1
+
+Uj (D)˜ yj (D)˜ yj (D)⊤ − nz(D) ¯˜yz(D)¯˜yz(D)⊤.
+
+Therefore, 
+
+bΣ(s) 
+
+> z
+
+(D) = 1
+
+n
+
+> n
+
+X
+
+> j=1
+
+Uj (D)˜ yj (D)˜ yj (D)⊤ − nz(D)
+
+n ¯˜yz(D)¯˜yz(D)⊤ := bΣ(s)
+
+> z,1
+
+(D) + bΣ(s)
+
+> z,2
+
+(D).
+
+Step 2: Sensitivity of bΣ(s)
+
+> z,1
+
+. Since Y and Y(i) differ only in the i-th record, all summands except the i-th remain identical. Thus 
+
+bΣ(s)
+
+> z,1
+
+(Y) − bΣ(s)
+
+> z,1
+
+(Y(i)) = 1
+
+n
+
+h
+
+Ui(Y)˜ yi(Y)˜ yi(Y)⊤ − Ui(Y(i))˜ yi(Y(i))˜ yi(Y(i))⊤i
+
+.
+
+Since ∥˜yj (D)∥ ≤ h, we have ∥˜yj (D)˜ yj (D)⊤∥F ≤ h2. Therefore, 
+
+bΣ(s)
+
+> z,1
+
+(Y) − bΣ(s)
+
+> z,1
+
+(Y(i)) F ≤ 2h2
+
+n .
+
+Step 3: Sensitivity of bΣ(s)
+
+> z,2
+
+. Write nz := nz(Y), n′ 
+
+> z
+
+:= nz(Y(i)), a := ¯˜yz(Y), and a′ := ¯˜yz(Y(i)),where we interpret the mean as 0 if the neighborhood is empty. Since all points in the neighborhood lie in BD(z, h ), we have ∥a∥ ≤ h and ∥a′∥ ≤ h. Define the neighborhood sums 
+
+b := 
+
+> n
+
+X
+
+> j=1
+
+Uj (Y)˜ yj (Y) = nza, b′ := 
+
+> n
+
+X
+
+> j=1
+
+Uj (Y(i))˜ yj (Y(i)) = n′
+
+> z
+
+a′.
+
+Then 
+
+bΣ(s)
+
+> z,2
+
+(Y) − bΣ(s)
+
+> z,2
+
+(Y(i)) = − 1
+
+n (nzaa ⊤ − n′
+
+> z
+
+a′(a′)⊤) = − 1
+
+n (ba ⊤ − b′(a′)⊤).
+
+32 Adding and subtracting b′a⊤,
+
+ba ⊤ − b′(a′)⊤ = ( b − b′)a⊤ + b′(a − a′)⊤,
+
+so 
+
+∥ba ⊤ − b′(a′)⊤∥F ≤ ∥ b − b′∥∥ a∥ + ∥b′∥∥ a − a′∥ = ∥b − b′∥ ∥ a∥ + ∥a′∥ ∥ n′
+
+> z
+
+(a − a′)∥.
+
+Since only the i-th record changes, 
+
+b − b′ = Ui(Y)˜ yi(Y) − Ui(Y(i))˜ yi(Y(i)), n′ 
+
+> z
+
+− nz = Ui(Y(i)) − Ui(Y),
+
+implying |n′ 
+
+> z
+
+− nz| ≤ 1 and ∥b − b′∥ ≤ 2h. Moreover, 
+
+∥n′
+
+> z
+
+(a − a′)∥ = ∥n′
+
+> z
+
+a − b′∥ = ∥(n′ 
+
+> z
+
+− nz)a + ( b − b′)∥ ≤ | n′ 
+
+> z
+
+− nz| ∥ a∥ + ∥b − b′∥ ≤ 2h, 
+
+where the final inequality uses ∥a∥ ≤ h and the observation that: when |n′ 
+
+> z
+
+− nz| = 1 , at most one indicator flips, implying ∥b − b′∥ ≤ h; when h ≤ ∥ b − b′∥ ≤ 2h, we have n′ 
+
+> z
+
+= nz. Combining the above bounds gives 
+
+∥ba ⊤ − b′(a′)⊤∥F ≤ (2 h) · h + h · (2 h) = 4 h2,
+
+and therefore 
+
+bΣ(s)
+
+> z,2
+
+(Y) − bΣ(s)
+
+> z,2
+
+(Y(i)) F ≤ 4h2
+
+n .
+
+Step 4: Projector perturbation bound. The bounds in Steps 1–3 are deterministic and rely only on the fact that Y and Y(i) differ by a single record. Hence the same reasoning applies for every i ∈ [n]. By the triangle inequality, 
+
+max 
+
+> i∈[n]
+
+bΣ(s) 
+
+> z
+
+(Y) − bΣ(s) 
+
+> z
+
+(Y(i)) F ≤ 2h2
+
+n + 4h2
+
+n = 6h2
+
+n .
+
+Define the eigengap 
+
+gap z := λd( bΣ(s) 
+
+> z
+
+) − λd+1 ( bΣ(s) 
+
+> z
+
+).
+
+By Lemma 4(ii), with probability at least 1 − n−(1+ c), we have gap z ≳ hd+2 . Applying a variant of 33 the Davis–Kahan theorem (Theorem 2 in Yu et al., 2015), 
+
+max 
+
+> i∈[n]
+
+bPz − bP(i)  
+
+> zF
+
+≤ 2√2gap z
+
+max 
+
+> i∈[n]
+
+bΣ(s) 
+
+> z
+
+− bΣ(s) 
+
+> z
+
+(Y(i)) F ≲ h2/n hd+2 = 1
+
+nh d .
+
+This completes the proof. 
+
+B.2 Proof of Theorem 1 
+
+We begin by decomposing the error term into two parts 
+
+∥Πz⋆ − ePz∥ ≤ ∥Πz⋆ − bPz∥ + ∥ bPz − ePz∥.
+
+We bound the two terms separately. 
+
+Step 1: Non-private estimation error. By Lemma 4(i), the non-private projector bPz satisfies 
+
+∥Πz⋆ − bPz∥ ≲ hτ + σh ,
+
+with probability at least 1 − n−(1+ c).
+
+Step 2: Privacy-induced perturbation error. The DP mechanism adds symmetric Gaussian noise W to bPz, where Wjk = Wkj ∼ N (0 , ς 2) for j ≤ k, and then extracts the top-d spectral projector ePz of the noisy matrix bPz + W.Since bPz is a rank-d projector with eigenvalues 1 (with multiplicity d) and 0 (with multiplicity 
+
+D − d), it has spectral gap 1 between the d-th and (d + 1) -th eigenvalues. By the Davis–Kahan theorem 
+
+∥ ePz − bPz∥ ≲ ∥W∥.
+
+A standard concentration result for Gaussian random matrices (Theorem 4.4.5 in Vershynin, 2018) yields 
+
+∥W∥ ≲ √D ς, 
+
+with probability at least 1 − e−cD .By Lemma 1 with the calibration 
+
+ς =
+
+p2 ln( c1/δ )
+
+ε · Cnh d ,
+
+34 we obtain 
+
+∥ ePz − bPz∥ ≲
+
+√Dnε h−d
+
+r
+
+2 ln c1
+
+δ .
+
+with probability at least 1 − e−cD .
+
+Conclusion. Taking a union bound over the failure probabilities in Steps 1–2 and Lemma 1, we obtain 
+
+∥Πz⋆ − ePz∥ ≲ hτ + σh +
+
+√Dnε h−d
+
+r
+
+2 ln c1
+
+δ ,
+
+with probability at least 1 − n−(1+ c) − e−cD . This completes the proof. 
+
+B.3 Proof of Lemma 2 
+
+Consider a replace-one neighboring pair (Y, Y(i)) that differs only in the i-th record, where yi is replaced by y′
+
+> i
+
+. We adopt the same notation introduced in the proof of Lemma 1. For x ∈ M √σ
+
+and dataset D ∈ {Y , Y(i)}, define 
+
+eαj (x; D) := 
+
+
+
+1 − ∥x − yj (D)∥2
+
+h2
+
+β
+
+> +
+
+, Sx(D) := 
+
+> n
+
+X
+
+> j=1
+
+eαj (x; D), αj (x; D) := eαj (x; D)
+
+Sx(D) .
+
+Then 
+
+¯bx =
+
+> n
+
+X
+
+> j=1
+
+αj (x; Y)yj , bPw 
+
+> x
+
+=
+
+> n
+
+X
+
+> j=1
+
+αj (x; Y) bPyj ,
+
+where bPyj is the rank-d local PCA projector computed at reference point yj using the bandwidth 
+
+h and dataset Y.
+
+Step 1: Lower bound on the weight normalizer. Let 
+
+Ix(h/ 2) := {j ∈ [n] : ∥yj − x∥ ≤ h/ 2}, nx(h/ 2) := |Ix(h/ 2) |.
+
+For j ∈ Ix(h/ 2) ,
+
+eαj (x; Y) ≥  1 − (1 /2) 2β = (3 /4) β ,
+
+so Sx(Y) ≥ (3 /4) β nx(h/ 2) . Since x ∈ M √σ and h ≳ √σ, we have d(x, M) ≤ h/ (2 √2) and (adjusting implicit constants if needed) σ ≤ h/ 8. Applying Lemma 3 with bandwidth h/ 2 gives 
+
+nx(h/ 2) ≳ n(h/ 2) d ≍ nh d
+
+35 with probability at least 1 − n−c. Therefore, 
+
+Sx(Y) ≳ nh d. (7) Moreover, |Sx(Y) − Sx(Y(i))| ≤ 1 (since at most one weight changes by at most 1), so 
+
+Sx(Y(i)) ≳ nh d and max 
+
+> j∈[n]
+
+αj (x; Y) ∨ αj (x; Y(i)) ≲ 1
+
+nh d . (8) 
+
+Step 2: Perturbation of normalized weights. Write S := Sx(Y) and S′ := Sx(Y(i)). For j̸ = i,the unnormalized weights are identical, so 
+
+αj (x; Y) − αj (x; Y(i)) = eαj (x; Y) 1
+
+S − 1
+
+S′ = eαj (x; Y) |S − S′|
+
+SS ′ .
+
+Summing over j̸ = i,
+
+X 
+
+> j̸=i
+
+αj (x; Y) − αj (x; Y(i)) ≤ |S − S′|
+
+SS ′
+
+X 
+
+> j̸=i
+
+eαj (x; Y) ≤ |S − S′|
+
+S′ ≤ 1
+
+S′ .
+
+For j = i, by the triangle inequality, 
+
+αi(x; Y) − αi(x; Y(i)) ≤ |eαi(x; Y) − eαi(x; Y(i))|
+
+S + eαi(x; Y(i)) 1
+
+S − 1
+
+S′ ≤ 1
+
+S + 1
+
+S′ .
+
+Combining and using (7)–(8), on the event of Step 1, 
+
+> n
+
+X
+
+> j=1
+
+αj (x; Y) − αj (x; Y(i)) ≲ 1
+
+nh d . (9) 
+
+Step 3: Sensitivity of the weighted mean. Using P 
+
+> j
+
+αj (x; D) = 1 , we write 
+
+¯bx(D) − x =
+
+> n
+
+X
+
+> j=1
+
+αj (x; D)( yj (D) − x).
+
+36 Since αj (x; D) > 0 implies ∥yj (D) − x∥ ≤ h,
+
+¯bx(Y) − ¯bx(Y(i)) ≤ X 
+
+> j̸=i
+
+αj (x; Y) − αj (x; Y(i)) ∥yj − x∥
+
++ αi(x; Y)∥yi − x∥ + αi(x; Y(i))∥y′ 
+
+> i
+
+− x∥≤ h
+
+> n
+
+X
+
+> j=1
+
+αj (x; Y) − αj (x; Y(i)) + h αi(x; Y) + αi(x; Y(i))
+
+≲ hnh d = 1
+
+nh d−1 ,
+
+where we used (9) and (8). 
+
+Step 4: Sensitivity of the weighted projector. Recall that bPyj (resp. bP(i) 
+
+> yj
+
+) denotes the local PCA projector at reference point yj computed from dataset Y (resp. Y(i)). Write 
+
+bPw 
+
+> x
+
+(D) = 
+
+> n
+
+X
+
+> j=1
+
+αj (x; D) bPyj (D)(D), D ∈ {Y , Y(i)}.
+
+Decompose 
+
+bPw 
+
+> x
+
+(Y) − bPw 
+
+> x
+
+(Y(i)) = 
+
+> n
+
+X
+
+> j=1
+
+αj (x; Y) − αj (x; Y(i)) bPyj +
+
+> n
+
+X
+
+> j=1
+
+αj (x; Y(i)) bPyj − bP(i)
+
+> yj
+
+ := ∆ 1 + ∆ 2.
+
+Bounding ∆1: Since ∥ bPyj ∥F = √d,
+
+∥∆1∥F ≤ √d
+
+> n
+
+X
+
+> j=1
+
+αj (x; Y) − αj (x; Y(i)) ≲ 1
+
+nh d
+
+by (9). 
+
+Bounding ∆2: We split this into the contribution from j = i and j̸ = i.
+
+Case j = i: By (8), 
+
+αi(x; Y(i)) bPyi − bP(i)  
+
+> y′
+> iF
+
+≤ αi(x; Y(i)) ∥ bPyi ∥F + ∥ bP(i)
+
+> y′
+> i
+
+∥F
+
+ ≤ 2√dα i(x; Y(i)) ≲ 1
+
+nh d .
+
+Case j̸ = i: Here the center yj is unchanged across Y and Y(i), but the neighborhood Iyj (D) := 
+
+37 {k : ∥yk(D) − yj ∥ ≤ h} may differ. The projector bPyj (D) corresponds to the scaled local covariance 
+
+bΣ(s) 
+
+> yj
+
+(D) = 1
+
+n
+
+X 
+
+> k∈Iyj(D)
+
+(yk(D) − ¯yyj (D))( yk(D) − ¯yyj (D)) ⊤.
+
+By the same deterministic covariance sensitivity analysis as in Steps 1–3 of Lemma 1 (applied with center yj instead of z), 
+
+bΣ(s) 
+
+> yj
+
+(Y) − bΣ(s) 
+
+> yj
+
+(Y(i)) F ≤ 6h2
+
+n .
+
+Moreover, since yj ∈ M σ and the bandwidth satisfies (log n/n )1/d ∨ σ ≲ h ≪ 1 ∧ τ , Lemma 4(ii) gives the eigengap bound 
+
+λd
+
+  bΣ(s) 
+
+> yj
+
+(Y) − λd+1 
+
+  bΣ(s) 
+
+> yj
+
+(Y) ≳ hd+2 
+
+with probability at least 1 − n−(1+ c) for each fixed j. Taking a union bound over j ∈ [n], this holds simultaneously for all j with probability at least 1 − n−c. On this event, the variant of the Davis–Kahan theorem (Theorem 2 in Yu et al., 2015) yields 
+
+bPyj − bP(i)  
+
+> yjF
+
+≲ h2/n hd+2 = 1
+
+nh d
+
+uniformly for all j̸ = i. Therefore, 
+
+X 
+
+> j̸=i
+
+αj (x; Y(i)) bPyj − bP(i)  
+
+> yjF
+
+≲ X 
+
+> j̸=i
+
+αj (x; Y(i)) 1
+
+nh d ≤ 1
+
+nh d .
+
+Combining the cases j = i and j̸ = i, we obtain ∥∆2∥F ≲ (nh d)−1.
+
+Conclusion. The bounds in Steps 1–4 hold on the intersection of: (i) the event in Lemma 3 for the neighborhood Ix(h/ 2) , with probability ≥ 1 − n−c; and (ii) the simultaneous eigengap event for all reference points {yj }nj=1 from Step 4, with probability ≥ 1 − n−c.On the intersection of events (i) and (ii), the sensitivity bounds hold uniformly for all i ∈ [n].Taking a union bound over (i) and (ii) yields the stated probability bound. This completes the proof. 
+
+B.4 Proof of Theorem 2 
+
+For x ∈ Z (z), we have ∥x−z∥ ≤ c√σ. Since d(z, M) ≤ √σ, the triangle inequality yields d(x, M) ≤
+
+(c + 1) √σ. Provided that τ / √σ is sufficiently large, x⋆ := πM(x) is well-defined and satisfies 38 ∥x − x⋆∥ = d(x, M) ≲ √σ.
+
+Step 1: Decomposition of the projection error. By the construction of ef (x), we have 
+
+ef (x) = eΨw 
+
+> x
+
+(x − ebx) = ( I − ePw 
+
+> x
+
+)( x − ebx) = 0,
+
+where ebx = ¯bx + ξm with ξm ∼ N (0 , ς 2mID). As a result, 
+
+(I − ePw 
+
+> x
+
+)( x − ¯bx) = ( I − ePw 
+
+> x
+
+)ξm. (10) Recall that Πx⋆ denotes the orthogonal projector onto the tangent space Tx⋆ M. Since x − x⋆ is normal to Tx⋆ M, we have 
+
+Πx⋆ (x − x⋆) = 0.
+
+Therefore, 
+
+x − x⋆ = ( I − Πx⋆ )( x − x⋆) = ( I − Πx⋆ )( x − ¯bx) + ( I − Πx⋆ )( ¯bx − x⋆).
+
+Using the identity 
+
+I − Πx⋆ = ( I − ePw 
+
+> x
+
+) + ( ePw 
+
+> x
+
+− Πx⋆ ),
+
+we have 
+
+(I − Πx⋆ )( x − ¯bx) = ( I − ePw 
+
+> x
+
+)( x − ¯bx) + ( ePw 
+
+> x
+
+− Πx⋆ )( x − ¯bx).
+
+Substituting (10) yields the decomposition 
+
+x − x⋆ = ( I − Πx⋆ )( ¯bx − x⋆) + ( ePw 
+
+> x
+
+− Πx⋆ )( x − ¯bx) + ( I − ePw 
+
+> x
+
+)ξm. (11) Taking ℓ2 norms gives 
+
+d(x, M) = ∥x − x⋆∥ ≤ T1 + T2 + T3,
+
+where T1, T 2, T 3 correspond to the three terms on the right-hand side of (11). We bound them in turn. 
+
+Step 2: Bounding T1 = ∥(I− Πx⋆ )( ¯bx − x⋆)∥. By definition, ¯bx = Pni=1 αi(x)yi, where αi(x) > 0
+
+39 only if ∥yi − x∥ ≤ h. For any such i,
+
+∥yi − x⋆∥ ≤ ∥ yi − x∥ + ∥x − x⋆∥ ≤ h + C√σ. 
+
+Then 
+
+∥xi − x⋆∥ ≤ ∥ yi − x⋆∥ + ∥ϵi∥ ≤ h + C√σ + σ ≲ h, 
+
+using h ≳ √σ. By Lemma 5, 
+
+∥(I − Πx⋆ )( xi − x⋆)∥ ≤ ∥xi − x⋆∥2
+
+2τ ≲ h2
+
+τ .
+
+Therefore, 
+
+∥(I − Πx⋆ )( yi − x⋆)∥ ≤ ∥ (I − Πx⋆ )( xi − x⋆)∥ + ∥(I − Πx⋆ )ϵi∥ ≲ h2
+
+τ + σ. 
+
+Taking the convex combination, 
+
+T1 = (I−Πx⋆ )( ¯bx −x⋆) =
+
+> n
+
+X
+
+> i=1
+
+αi(x)( I−Πx⋆ )( yi −x⋆) ≤
+
+> n
+
+X
+
+> i=1
+
+αi(x)∥(I−Πx⋆ )( yi −x⋆)∥ ≲ h2
+
+τ +σ. 
+
+Step 3: Bounding T2 = ∥( ePw 
+
+> x
+
+− Πx⋆ )( x − ¯bx)∥. Since ¯bx is a convex combination of {yi :
+
+∥yi − x∥ ≤ h},
+
+∥x − ¯bx∥ =
+
+> n
+
+X
+
+> i=1
+
+αi(x)( x − yi) ≤
+
+> n
+
+X
+
+> i=1
+
+αi(x)∥x − yi∥ ≤ h. 
+
+Thus 
+
+T2 ≤ ∥ ePw 
+
+> x
+
+− Πx⋆ ∥∥ x − ¯bx∥ ≤ h∥ ePw 
+
+> x
+
+− Πx⋆ ∥.
+
+By the triangle inequality, 
+
+∥ ePw 
+
+> x
+
+− Πx⋆ ∥ ≤ ∥ bPw 
+
+> x
+
+− Πx⋆ ∥ + ∥ ePw 
+
+> x
+
+− bPw 
+
+> x
+
+∥.
+
+Bounding the first term: For any i with αi(x) > 0, we have ∥yi−x∥ ≤ h, which by the same argument as in Step 2 implies ∥y⋆i − x⋆∥ ≲ h, where y⋆i := πM(yi). By Lemma 4(i), with probability at least 
+
+1 − n−(1+ c),
+
+∥ bPyi − Πy⋆i ∥ ≲ hτ + σh .
+
+40 Moreover, by Lemma 14 in Yao and Xia (2025), 
+
+∥Πy⋆i − Πx⋆ ∥ ≲ hτ .
+
+Thus, 
+
+∥ bPyi − Πx⋆ ∥ ≤ ∥ bPyi − Πy⋆i ∥ + ∥Πy⋆i − Πx⋆ ∥ ≲ hτ + σh .
+
+As a result, with probability at least 1 − n−c,
+
+∥ bPw 
+
+> x
+
+− Πx⋆ ∥ ≤ 
+
+> n
+
+X
+
+> i=1
+
+αi(x)∥ bPyi − Πx⋆ ∥ ≲ hτ + σh .
+
+Bounding the second term: Recall that ePw 
+
+> x
+
+is obtained by adding Gaussian noise WP to bPw 
+
+> x
+
+and then projecting onto the top-d eigenspace. By a standard concentration result (Theorem 4.4.5 in Vershynin, 2018), with probability at least 1 − e−cD ,
+
+∥WP∥ ≲ √Dς P.
+
+By the variant of the Davis–Kahan theorem (Theorem 2 in Yu et al., 2015), 
+
+∥ ePw 
+
+> x
+
+− bPw 
+
+> x
+
+∥ ≲ ∥WP∥ ≲ √Dς P.
+
+Combining the two bounds, 
+
+∥ ePw 
+
+> x
+
+− Πx⋆ ∥ ≲ hτ + σh + √Dς P,
+
+and therefore 
+
+T2 ≲ h2
+
+τ + σ + √Dς Ph. 
+
+Step 4: Bounding T3 = ∥(I − ePw 
+
+> x
+
+)ξm∥. Since ∥I − ePw 
+
+> x
+
+∥ ≤ 1, T3 ≤ ∥ ξm∥. With ξm ∼ N (0 , ς 2mID),a standard Gaussian tail bound gives 
+
+∥ξm∥ ≲ √Dς m
+
+with probability at least 1 − e−cD .41 Conclusion. Combining Steps 2–4, we obtain 
+
+d(x, M) = ∥x − x⋆∥ ≲ h2
+
+τ + σ + √Dς Ph + √Dς m
+
+with probability at least 1 − n−c − e−cD . By Lemma 2, the noise scales are calibrated as 
+
+ςP ≍
+
+p2 ln( c1/δ )
+
+εnh d , ςm ≍
+
+p2 ln( c1/δ )
+
+εnh d−1 .
+
+This completes the proof. 
+
+B.5 Proof of Corollary 1 
+
+Recall that, for z ∈ M √σ,
+
+x(1) = z −  I − ePw
+
+> z
+
+  z − ebz
+
+, ebz = ¯bz + ξm,
+
+where ξm ∼ N (0 , ς 2mID) and ePw 
+
+> z
+
+is the DP rank-d projector returned by DP-Projector applied to bPw 
+
+> z
+
+= P 
+
+> i
+
+αi(z) bPyi . Let z⋆ := πM(z).Expanding 
+
+x(1) − z⋆ =  I − Πz⋆
+
+  z − z⋆ −  I − ePw
+
+> z
+
+  z − ¯bz
+
+ +  I − ePw
+
+> z
+
+ξm,
+
+and following similar algebraic manipulations as in Step 1 of the proof of Theorem 2, we obtain the decomposition 
+
+x(1) − z⋆ = ( I − Πz⋆ )( ¯bz − z⋆) + ( ePw 
+
+> z
+
+− Πz⋆ )( z − ¯bz) + ( I − ePw 
+
+> z
+
+)ξm. (12) This has the same structure as the decomposition (11) in Theorem 2, with x replaced by z through-out. Since d(z, M) = ∥z − z⋆∥ ≤ √σ satisfies the tubular neighborhood condition used in Theorem 2, 42 the estimates in Steps 2–4 of Theorem 2 apply directly to the three terms in (12), yielding 
+
+∥(I − Πz⋆ )( ¯bz − z⋆)∥ ≲ h2
+
+τ + σ, 
+
+∥( ePw 
+
+> z
+
+− Πz⋆ )( z − ¯bz)∥ ≲ h2
+
+τ + σ + √Dς Ph, 
+
+∥(I − ePw 
+
+> z
+
+)ξm∥ ≲ √Dς m,
+
+with probability at least 1 − n−c − e−cD . Combining these bounds gives 
+
+∥x(1) − πM(z)∥ = ∥x(1) − z⋆∥ ≲ h2
+
+τ + σ + √Dς Ph + √Dς m,
+
+which proves Corollary 1. 
+
+B.6 Auxiliary lemmas 
+
+Lemma 3. There exist constants h+ ≲ τ and h− ≳ (log n/n )1/d such that if h− ≤ h ≤ h+ and 
+
+σ ≤ h/ 4, then for any z with d(z, M) ≤ h/ √2, we have 
+
+nz = |Iz| ≳ nh d,
+
+with probability at least 1 − n−c.
+
+Proof of Lemma 3. The result follows directly from Lemma 9.3 in Aamari and Levrard (2018) combined with a standard Chernoff bound. 
+
+Lemma 4. Suppose z ∈ M σ is sampled independently from the same distribution as {yi}ni=1 and bandwidth h satisfies 
+
+( log nn ) 1 
+
+> d
+
+∨ σ ≲ h ≪ 1 ∧ τ. 
+
+Let z⋆ := πM(z), Iz = {i ∈ [n] : yi ∈ BD(z, h )}, and nz = |Iz|. Define the scaled local covariance 
+
+bΣ(s) 
+
+> z
+
+= 1
+
+n
+
+X
+
+> j∈Iz
+
+(yj − ¯yz)( yj − ¯yz)⊤.
+
+Let bPz be the rank-d projector onto the top-d eigenvectors of bΣ(s) 
+
+> z
+
+. Then with probability at least 
+
+1 − n−(1+ c), the following hold: 
+
+43 (i) Tangent accuracy: 
+
+∥ bPz − Πz⋆ ∥ ≲ hτ + σh .
+
+(ii) Eigengap: if σ ≤ ch for a sufficiently small constant c > 0, then 
+
+λd( bΣ(s) 
+
+> z
+
+) − λd+1 ( bΣ(s) 
+
+> z
+
+) ≳ hd+2 .
+
+Proof of Lemma 4. 
+
+Part (i): This is an intermediate result in the proof of Proposition 5.1 in Aamari and Levrard (2018). 
+
+Part (ii). For the analysis, we treat z as fixed and work with the conditional distribution of {yi}
+
+given z. Denote the population (truncated) local mean 
+
+mz := E[y I(y ∈ BD(z, h ))] 
+
+E[I(y ∈ BD(z, h ))] ,
+
+and the projected population covariance 
+
+Σ⋆ 
+
+> z
+
+:= E
+
+h
+
+Πz⋆ (y − mz) Πz⋆ (y − mz)⊤ I(y ∈ BD(z, h )) 
+
+i
+
+.
+
+Since Σ⋆ 
+
+> z
+
+is supported on the d-dimensional tangent space Tz⋆ M, it has rank at most d; hence 
+
+λd+1 (Σ⋆
+
+> z
+
+) = 0 . By Weyl’s inequality, 
+
+λk( bΣ(s) 
+
+> z
+
+) − λk(Σ⋆
+
+> z
+
+) ≤ bΣ(s) 
+
+> z
+
+− Σ⋆
+
+> z
+
+for any k. Therefore, 
+
+λd( bΣ(s) 
+
+> z
+
+) − λd+1 ( bΣ(s) 
+
+> z
+
+) ≥ λd(Σ⋆
+
+> z
+
+) − λd+1 (Σ⋆
+
+> z
+
+) − λd( bΣ(s) 
+
+> z
+
+) − λd(Σ⋆
+
+> z
+
+) − λd+1 ( bΣ(s) 
+
+> z
+
+) − λd+1 (Σ⋆
+
+> z
+
+)
+
+≥ λd(Σ⋆
+
+> z
+
+) − 2 bΣ(s) 
+
+> z
+
+− Σ⋆ 
+
+> z
+
+.
+
+(13) From the proof of Proposition 5.1 in Aamari and Levrard (2018), with probability at least 
+
+1 − n−(1+ c),
+
+bΣ(s) 
+
+> z
+
+− Σ⋆ 
+
+> z
+
+≤ λd(Σ⋆
+
+> z
+
+)
+
+h 14 + C
+
+ hτ + σ
+
+i 
+
+,
+
+44 for a universal constant C > 0. Substituting into (13), 
+
+λd( bΣ(s) 
+
+> z
+
+) − λd+1 ( bΣ(s) 
+
+> z
+
+) ≥ λd(Σ⋆
+
+> z
+
+) 1 − 2
+
+h 14 + C
+
+ hτ + σ
+
+i !
+
+= λd(Σ⋆
+
+> z
+
+)
+
+ 12 − 2C
+
+ hτ + σh
+
+ 
+
+.
+
+If hτ + σh ≤ 18C (which holds under our bandwidth assumptions), then 
+
+λd( bΣ(s) 
+
+> z
+
+) − λd+1 ( bΣ(s) 
+
+> z
+
+) ≥ 14 λd(Σ⋆
+
+> z
+
+).
+
+By Lemma 9.3 in Aamari and Levrard (2018), there exists c > 0 such that λd(Σ⋆
+
+> z
+
+) ≥ ch d+2 .Combining these bounds yields 
+
+λd( bΣ(s) 
+
+> z
+
+) − λd+1 ( bΣ(s) 
+
+> z
+
+) ≥ c
+
+4 hd+2 .
+
+This completes the proof. 
+
+Lemma 5. reach( M) ≥ a if and only if 
+
+∥Π⊥ 
+
+> x
+
+(y − x)∥ ≤ 12a ∥y − x∥2, ∀ x, y ∈ M .
+
+Proof of Lemma 5. See for example Theorem 4.18 in Federer (1959). 
+
+## C Extended simulation studies 
+
+In addition to the simulation results reported in the main text, we conducted a series of supplemen-tary experiments to further evaluate the robustness of the proposed differentially private manifold denoising (DP-MD) algorithm under alternative noise conditions. We considered the same set of canonical manifolds as in the main simulations, including the circle ( S1), torus ( T2), Swiss roll, and the two-dimensional sphere ( S2), but explored additional regimes not shown in the main figures. These supplementary experiments are designed to (i) assess sensitivity to ambient dimensionality, (ii) characterize privacy–utility tradeoffs on more complex manifolds, and (iii) verify robustness beyond the bounded-noise setting assumed in the theory. 
+
+Noise models and scale calibration. Unless otherwise stated, all supplementary experiments follow the same noise construction as in the main text. Reference points are perturbed by additive 45 ambient noise of order O(σ), while query points are subjected to stronger perturbations of order 
+
+O(√σ), reflecting their distinct roles in geometric estimation and denoising. The primary simulations adopt bounded ℓ2 noise, where each perturbation vector is uniformly constrained in norm. To evaluate robustness beyond this bounded regime, we additionally performed experiments under unbounded Gaussian noise. In these experiments, Gaussian perturbations were sampled from isotropic normal distributions with coordinate-wise variance calibrated to match the bounded-noise model scale. This calibration ensures that differences in performance are attributable to tail behavior rather than overall noise magnitude. 
+
+High-dimensional ambient embeddings. To complement the scalability experiment in the main text, we further examined the effect of increasing ambient dimension on both geometric de-noising performance and computational complexity under bounded and Gaussian noise. 
+
+Privacy–utility tradeoff on complex manifolds. While the main text illustrates the privacy– utility tradeoff on the circle manifold, we additionally investigated this behavior on more geometri-cally complex manifolds, including the torus and Swiss roll. For each geometry, we fixed the sample size and noise level and varied the total privacy budget ε
+
+over a wide range. Across both manifolds, we observed a consistent monotonic decrease in denoising error as ε increased, with performance saturating at moderate privacy levels. Notably, the qualitative shape of the privacy–utility curves closely matched that observed on the circle, indicating that the tradeoff behavior is largely geometry-independent. 
+
+## D UK Biobank analyses 
+
+Dataset description and cohort construction. We applied the proposed method to blood and urine biomarker data from the UK Biobank, a large prospective cohort study comprising approx-imately 500,000 participants recruited from across the United Kingdom. Data access was granted under UK Biobank application ID [146760] , and all analyses were conducted in accordance with the relevant ethical approvals and data use agreements. The initial cohort was restricted to participants with available baseline measurements for the selected biomarker panel and complete follow-up information for the outcomes of interest. After quality control, the remaining participants were randomly downsampled to 50,000 and then parti-tioned into a reference set of sample size 49,000 for geometric estimation and a query set of sample 46 n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to circle manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+error vs n (noise=gaussian, <<=0.20, m=100) — to manifold 
+
+n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+1.5 error vs n (noise=gaussian, <<=0.20, m=100) — to clean < (noise level) 
+
+0.05 0.1 0.2 0.3 0.4 
+
+> Distance to circle manifold
+
+0
+
+0.5 
+
+1 error vs << (noise=gaussian, n=30000, m=100) — to manifold 
+
+< (noise level) 
+
+0.05 0.1 0.2 0.3 0.4 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+error vs << (noise=gaussian, n=30000, m=100) — to clean n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to Swiss roll manifold
+
+0
+
+0.5 
+
+1 error vs n (noise=gaussian, <<=0.15, m=100) — to manifold 
+
+n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+1.5 
+
+2 error vs n (noise=gaussian, <<=0.15, m=100) — to clean < (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to Swiss roll manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 error vs << (noise=gaussian, n=30000, m=100) — to manifold 
+
+< (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+1.5 error vs << (noise=gaussian, n=30000, m=100) — to clean n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to torus manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 error vs n (noise=gaussian, <<=0.15, m=100) — to manifold 
+
+n (landmarks) 
+
+10000 20000 30000 40000 50000 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+1.5 
+
+2 error vs n (noise=gaussian, <<=0.15, m=100) — to clean < (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to torus manifold
+
+0
+
+0.2 
+
+0.4 
+
+0.6 error vs << (noise=gaussian, n=30000, m=100) — to manifold 
+
+< (noise level) 
+
+0.05 0.1 0.15 0.25 0.35 
+
+> Distance to clean point
+
+0
+
+0.5 
+
+1
+
+1.5 
+
+2 error vs << (noise=gaussian, n=30000, m=100) — to clean Figure S.1: Robustness under Gaussian ambient noise across different manifolds. Rows correspond to circle, Swiss roll, and torus manifolds. Left panels show reconstruction error as a function of sample size n under fixed noise scale, and right panels show reconstruction error as a function of noise scale σ under fixed sample size. Results are averaged over repeated trials; shaded regions indicate 95% confidence intervals. 47 Ambient dimension D 
+
+5 10 20 50 100 
+
+> Distance to clean query point
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+S2 in R D: dist-to-clean vs D (gaussian; n=30000, m=100, <<=0.30) 
+
+Ambient dimension D 
+
+5 10 20 50 100 
+
+> Distance to embedded S 2 manifold
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+S2 in R D: dist-to-manifold vs D (gaussian) Ambient dimension D       
+
+> 020 40 60 80 100
+> Average neighbors per point
+> 7700
+> 7800
+> 7900
+> 8000
+> 8100
+> 8200
+> 8300
+> 8400
+> 8500
+
+Avg neighbor count vs D (bounded; r rule uses <<=0.30) Ambient dimension D             
+
+> 010 20 30 40 50 60 70 80 90 100
+> Time (seconds)
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900 Runtime vs D (bounded; n=30000, m=100, <<=0.30)
+> Iteration
+> Cov+SVD
+> Neighbor search
+
+Figure S.2: Scalability with ambient dimension on high-dimensional spheres. (Top) Reconstruction error as a function of ambient dimension D under Gaussian noise. (Bottom left) Average neighborhood size used for local geometry estimation as D increases. (Bottom right) Com-putational runtime as a function of D under bounded noise. Sample size is fixed across experiments. 48 Figure S.3: Privacy–utility tradeoff on nontrivial manifolds. Reconstruction error as a function of the privacy budget for (top) Swiss roll and (bottom) torus manifolds. Curves compare the non-private manifold denoising method with its differentially private counterpart calibrated under the ρ-zCDP mechanism. 49 size 1000 reserved for denoising and downstream evaluation. 
+
+Biomarker preprocessing. We analyzed 60 quantitative blood and urine measurements from UK Biobank, covering hematological, metabolic, renal, hepatic, inflammatory, and electrolyte do-mains. Skewed biomarkers were log-transformed, standardized to zero median and unit median absolute deviation (MAD). Values were scaled and clipped to the range [-8, 8] to ensure finite sen-sitivity for differential privacy. This preprocessing ensures suitability for both geometric analysis and differential privacy. 
+
+Local geometry metrics and interpretation. To quantify how well denoising methods preserve the local geometric structure of the biomarker manifold, we computed three complementary metrics: 
+
+1. Mean k-nearest neighbor (kNN) distance to raw reference points: This metric measures how close a denoised query point remains to the raw reference set: 
+
+dmean (y) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+∥y − xi∥
+
+where y is a denoised query point and {xi}ki=1 are its k nearest raw reference points. Smaller values indicate better preservation of the query’s position relative to the original manifold. An increase suggests the point has moved to a less dense or different region. 
+
+2. Jaccard overlap of retained neighbors: This metric assesses neighborhood preservation by com-paring nearest neighbors before and after denoising: 
+
+J(yraw , y denoised ) = |Nraw (y) ∩ Ndenoised (y)||Nraw (y) ∪ Ndenoised (y)|
+
+where Nraw (y) and Ndenoised (y) are the sets of k nearest reference points for the raw and denoised query point. A Jaccard index of 1 indicates perfect neighborhood preservation, while 0 indicates complete neighborhood replacement. Values above 0.8 suggest strong topological consistency. 
+
+3. Relative distortion of distances to fixed neighboring reference points: This metric quantifies local distance preservation by comparing distances to the query’s original neighboring reference points: Distortion (y) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+∥ydenoised − xi∥∥yraw − xi∥ − 1
+
+50 where {xi}ki=1 are the k nearest reference points to the raw query point yraw . This measures how much denoising alters local distance ratios. Distortion close to 0 indicates excellent preservation of local geometry, while larger values indicate greater deformation. 
+
+Extended endpoint panel and robustness analyses. In addition to the subset of clinically interpretable endpoints shown in the main text, we evaluated the model across a broader panel of ICD-10 outcomes derived from first-occurrence records. Full results, including endpoints with null or inconsistent effects, are reported in Table S.2. 
+
+C-index and paired bootstrap evaluation. C-index (Harrell’s concordance). To quantify risk-ranking performance under right censoring, we report Harrell’s concordance index (C-index). Given a set of individuals with follow-up time Ti, event indicator δi ∈ { 0, 1}, and a model-derived risk score 
+
+ηi (here the Cox linear predictor), the C-index estimates the probability that, among comparable 
+
+pairs, the individual who experiences the event earlier has a higher predicted risk. A pair (i, j ) is comparable when the earlier observed time corresponds to an event (i.e., censoring does not prevent ordering). The C-index ranges from 0.5 (no better than random ranking) to 1 (perfect ranking), with ties handled by standard concordance conventions. 
+
+Evaluation protocol. For each endpoint, we trained a Cox proportional hazards model on the ref-erence set using the raw biomarker representation together with baseline covariates (age, sex, and ethnicity when available). Holding the fitted Cox model fixed, we computed the linear predictors on the disjoint query set under three representations: (i) Raw, (ii) Nonprivate-MD (non-private man-ifold denoising), and (iii) DP-MD (differentially private manifold denoising). We then computed Harrell’s C-index on the query set for each representation. 
+
+Paired bootstrap for uncertainty and ∆C-index. Uncertainty in C-index and in the perfor-mance change induced by denoising was quantified using a paired nonparametric bootstrap on the query set. Specifically, for each bootstrap replicate b = 1 , . . . , B , we resampled query individuals with replacement to obtain an index set Ib and recomputed 
+
+C(b)Raw , C(b)Nonprivate -MD , C(b)DP -MD .
+
+51 72 50 131 3338 1742 6032 Query cases Landmark cases 
+
+27 75 45 33 1321 2959 2428 1354 Query cases Landmark cases 
+
+220 31 118 1141 1684 Query cases Landmark cases 
+
+18 40 13 336 34 846 1968 654 235 2025 1904 Query cases Landmark cases 
+
+Renal / fluid / electrolyte 
+
+Metabolic / hepatic 
+
+Inflammatory / acute stress 
+
+Cardiovascular anchors 
+
+−0.1 0.0 0.1 0.2 0.3 0.4 
+
+Ischaemic heart disease (I20−I25) Hypertensive diseases (I10−I15) Stroke (I60−I69) 
+
+Pleural effusion (J90) Pneumonia (J12−J18) Acute lower respiratory infection (J20−J22) Sepsis (A41) 
+
+Cholelithiasis (K80) Fatty liver / liver dz (K76) Other metabolic disorders (E88) 
+
+Chronic kidney disease (N18−N19) Electrolyte/acid−base (E87) AKI (N17) Glomerular diseases (N00−N08) Urolithiasis/renal colic (N20−N23) Volume depletion (E86) 
+
+∆ C−index (held−out query), paired bootstrap 95% CI 
+
+Nonprivate−MD DP−MD 
+
+Paired bootstrap on held−out query set; uncertainty widens for low q−event endpoints. 
+
+Endpoint−level prediction change after manifold denoising (full panel) Figure S.4: Full ICD-coded endpoint panel. Prediction changes after manifold denoising across all ICD-coded disease endpoints in the UK Biobank application. Each facet corresponds to one ICD category; full endpoint definitions are provided in Table S.2. 52 We report percentile 95% bootstrap intervals for each C-index and for the paired differences 
+
+∆CNonprivate -MD = CNonprivate -MD − CRaw , ∆CDP -MD = CDP -MD − CRaw .
+
+The bootstrap is paired in the sense that all three C-indices are computed on the same resampled individuals within each replicate, which reduces Monte Carlo noise in method-to-method differences. We bootstrap only the query set with the Cox model fixed, so the intervals reflect uncertainty in held-out performance rather than training variability. 
+
+## E Single-cell RNA sequencing datasets analysis 
+
+Dataset description and preprocessing. We evaluated the proposed method on 10 publicly available scRNA-seq datasets spanning multiple tissues and experimental protocols. Datasets were obtained from the Gene Expression Omnibus (GEO) and ArrayExpress repositories; accession num-bers are summarized in Table S.4. Standard preprocessing was applied uniformly across datasets, including library-size normalization, log-transformation, and feature scaling. No dataset-specific parameter tuning was performed. 
+
+Query/reference splitting and manifold projection. For each dataset, we randomly selected a query subset of size nq = min( nmax , ⌈2√n⌉) and treated the remaining cells as reference points. To control computational cost, we subsampled at most 5000 reference cells and constructed a KD-tree on the reference set for radius-based neighbor search. Each query cell was projected using both the non-private manifold denoising procedure (Nonprivate-MD) and its differentially private counterpart (DP-MD). Prior to projection, we checked whether a query had at least d + 1 reference neighbors within radius h; if not, the query was marked as 
+
+no_neighbor and left unchanged. For DP-MD, the privacy budget was split across queries, using per-query parameters (ε/n q, δ/n q) (same θ as main text). 
+
+Clustering metrics and neighborhood purity. All evaluations were performed on the same query subset for the three embeddings: Original (preprocessed features), Nonprivate-MD projec-tions, and DP-MD projections. To avoid excluding cells due to projection failures, we adopted a conservative replacement rule: failed or non-finite projections were replaced by the corresponding original query points, ensuring identical sample sizes across conditions. 53 Clustering performance was evaluated using adjusted Rand index (ARI), accuracy (ACC), and normalized mutual information (NMI), which quantify agreement between inferred clusters and ground-truth cell-type labels from complementary perspectives. ARI measures chance-corrected pairwise label agreement, ACC captures the fraction of correctly assigned labels under optimal matching, and NMI assesses shared information between clusters and true labels. For fair compari-son, we used the same random seed across all three methods. We report ARI in the main text and ACC and NMI in the Supplement. To quantify local structure preservation, we computed neighborhood purity (NP) as a k-nearest-neighbor label-consistency score in the embedding space. For each query cell, we found its k nearest neighbors (cosine distance; k = min(15 , n q − 1) , lower-bounded by 5) and computed the fraction sharing the same ground-truth label; NP is the average across all query cells. All clustering and neighborhood metrics were averaged over 10 independent runs with different random seeds. Complete ACC/NMI/NP results are provided in Table S.5. 54 Table S.1: Simulation parameter settings across synthetic manifold experiments. Sum-mary of sample sizes, noise levels, ambient dimensions, and privacy budgets used in the simulation studies. For all experiments, n denotes the number of reference points used for local geometry estimation and m denotes the number of query points to be denoised. Unless otherwise stated, reference points are perturbed with noise of magnitude O(σ) and query points with noise of mag-nitude O(√σ). Bounded ℓ2 noise is used by default; additional experiments under Gaussian noise with matched scale are reported in the Appendix.                    
+
+> Manifold dDnσε
+> Circle ( S1)1210,000; 20,000; 30,000; 40,000; 50,000 0.05; 0.10; 0.20; 0.30; 0.40 0.05; 0.10; 0.30; 0.50; 0.70; 1.0; 2.0; 3.0 Torus ( T2)2310,000; 20,000; 30,000; 40,000; 50,000 0.05; 0.10; 0.15; 0.25; 0.35 0.05; 0.10; 0.30; 0.50; 0.70; 1.0; 2.0; 3.0 Swiss roll 2310,000; 20,000; 30,000; 40,000; 50,000 0.05; 0.10; 0.15; 0.25; 0.35 0.05; 0.10; 0.30; 0.50; 0.70; 1.0; 2.0; 3.0 Sphere ( S2)25; 10; 20; 50; 100 30,000 0.30 1.0
+
+55 Table S.2: ICD-10 endpoint panel used in the UK Biobank application. This endpoint panel was pre-specified based on established biological relationships between systemic biomarkers and disease pathophysiology prior to any denoising analysis. Endpoints are defined using first-occurrence ICD-10 codes; for grouped endpoints, the event date was taken as the earliest occurrence among listed codes. Prevalent cases (event date on or before baseline) were excluded from reference training. 
+
+Clinical label ICD-10 codes Axis 
+
+Other metabolic disorders (E88) E88 Metabolic / hepatic Fatty liver / other liver disease (K76) K76 Metabolic / hepatic Cholelithiasis (K80) K80 Metabolic / hepatic Volume depletion (E86) E86 Renal / fluid / electrolyte Electrolyte / acid–base disorders (E87) E87 Renal / fluid / electrolyte Urolithiasis / renal colic (N20–N23) N20, N21, N22, N23 Renal / fluid / electrolyte Glomerular diseases (N00–N08) N00, N01, N02, N03, N04, N05, N06, N07, N08 Renal / fluid / electrolyte Chronic kidney disease (N18–N19) N18, N19 Renal / fluid / electrolyte Acute kidney injury (N17) N17 Renal / fluid / electrolyte Sepsis (A41) A41 Inflammatory / acute stress Acute lower respiratory infection (J20–J22) J20, J21, J22 Inflammatory / acute stress Pneumonia (J12–J18) J12, J13, J14, J15, J16, J17, J18 Inflammatory / acute stress Pleural effusion (J90) J90 Inflammatory / acute stress Ischaemic heart disease (I20–I25) I20, I21, I22, I23, I24, I25 Cardiovascular anchors Stroke (I60–I69) I60, I61, I62, I63, I64, I65, I66, I67, I68, I69 Cardiovascular anchors Hypertensive diseases (I10–I15) I10, I11, I12, I13, I14, I15 Cardiovascular anchors 
+
+56 Table S.3: C-index with 95% confidence intervals across endpoint sets. C-index values are reported for raw features, Nonprivate-MD, and DP-MD. Confidence intervals were obtained via bootstrap. 
+
+Disease label Events in reference Events in queries C-index (95% CI) Raw Nonprivate-MD DP-MD Other metabolic disorders (E88) 118 2 0.590 [0.391,0.798] 0.703 [0.611,0.795] 0.751 [0.624,0.877] Volume depletion (E86) 846 18 0.755 [0.658,0.847] 0.786 [0.701,0.865] 0.799 [0.718,0.873] Urolithiasis/renal colic (N20–N23) 654 13 0.697 [0.545,0.844] 0.718 [0.559,0.860] 0.722 [0.571,0.866] Sepsis (A41) 1321 27 0.659 [0.570,0.752] 0.679 [0.578,0.778] 0.677 [0.577,0.778] Acute lower respiratory infection (J20–J22) 2959 75 0.630 [0.565,0.692] 0.649 [0.586,0.709] 0.644 [0.581,0.707] Glomerular diseases (N00–N08) 235 3 0.948 [0.853,0.996] 0.960 [0.893,0.995] 0.960 [0.894,0.995] Fatty liver/other liver disease (K76) 1141 20 0.675 [0.551,0.793] 0.683 [0.562,0.808] 0.685 [0.560,0.808] Pneumonia (J12–J18) 2428 45 0.740 [0.667,0.809] 0.750 [0.679,0.816] 0.746 [0.673,0.812] Cholelithiasis (K80) 1684 31 0.621 [0.527,0.715] 0.625 [0.533,0.717] 0.626 [0.531,0.723] Acute kidney injury (N17) 1904 34 0.816 [0.732,0.891] 0.820 [0.742,0.890] 0.821 [0.744,0.893] Electrolyte/acid-base disorders (E87) 1968 40 0.763 [0.692,0.826] 0.765 [0.686,0.828] 0.765 [0.689,0.826] Stroke (I60–I69) 1742 50 0.787 [0.737,0.838] 0.785 [0.734,0.835] 0.789 [0.736,0.838] Hypertensive diseases (I10–I15) 6032 131 0.715 [0.671,0.758] 0.716 [0.671,0.760] 0.716 [0.671,0.761] Ischaemic heart disease (I20–I25) 3338 72 0.707 [0.655,0.758] 0.704 [0.652,0.760] 0.707 [0.654,0.762] Pleural effusion (J90) 1354 33 0.766 [0.687,0.834] 0.755 [0.672,0.828] 0.752 [0.667,0.824] Chronic kidney disease (N18–N19) 2025 36 0.861 [0.799,0.914] 0.846 [0.788,0.898] 0.841 [0.777,0.895] 
+
+57 Table S.4: Summary of scRNA-seq datasets used in clustering analysis. 
+
+Data Accession Code Tissue # Cell Types # Cells # Genes Goolam (Goolam et al., 2016) E-MTAB-3321 Embryos ( M. musculus )5 124 41428 Schaum2 (Schaum et al., 2018) GSE132042 Intestine ( M. musculus )5 1887 17985 Yan (Yan et al., 2013) GSE36552 Embryonic stem cells (H. sapiens )6 90 20214 He (He et al., 2022) E-MTAB-11265 Embryonic/fetal lungs (H. sapiens )5 649 16122 Pollen (Pollen et al., 2014) SRP041736 Cerebral cortex ( H. sapiens )11 249 8869 Wang (Wang et al., 2016) GSE83139 Pancreatic endocrine (H. sapiens )7 457 19950 Muraro (Muraro et al., 2016) GSE85241 Pancreas ( H. sapiens ) 10 2126 19127 Zeisel (Zeisel et al., 2015) GSE60361 Cerebral cortex ( M. musculus )7 3005 19972 Enge (Enge et al., 2017) GSE81547 Pancreas ( H. sapiens ) 7 2476 22256 Nowicki (Nowicki-Osuch et al., 2021) EGAD00001010074 Esophagus/stomach (H. sapiens )5 3282 33234 
+
+58 Table S.5: Clustering performance on single-cell RNA-seq datasets. Clustering accuracy (ACC), normalized mutual information (NMI), and neighborhood purity (NP) are reported for 
+
+Original , Nonprivate-MD , and DP-MD as mean (SE) across replicates. 
+
+(A) Accuracy (ACC) Dataset Original Nonprivate-MD DP-MD 
+
+Goolam 0.861 (0.034) 0.874 (0.030) 0.865 (0.033) Schaum2 0.806 (0.014) 0.809 (0.016) 0.820 (0.013) Yan 0.847 (0.020) 0.879 (0.021) 0.863 (0.021) He 0.837 (0.015) 0.853 (0.014) 0.849 (0.017) Pollen 0.928 (0.013) 0.944 (0.012) 0.941 (0.013) Wang 0.881 (0.015) 0.895 (0.018) 0.895 (0.018) Muraro 0.855 (0.024) 0.853 (0.023) 0.859 (0.017) Zeisel 0.767 (0.014) 0.796 (0.021) 0.787 (0.013) Enge 0.827 (0.008) 0.830 (0.007) 0.830 (0.007) Nowicki 0.798 (0.017) 0.805 (0.016) 0.800 (0.015) 
+
+Mean ± SE 0.841 ± 0.014 0.854 ± 0.015 0.851 ± 0.014 (B) Normalized Mutual Information (NMI) Dataset Original Nonprivate-MD DP-MD 
+
+Goolam 0.787 (0.041) 0.833 (0.041) 0.829 (0.043) Schaum2 0.636 (0.021) 0.657 (0.021) 0.665 (0.020) Yan 0.883 (0.010) 0.907 (0.014) 0.887 (0.012) He 0.725 (0.019) 0.748 (0.020) 0.740 (0.025) Pollen 0.959 (0.008) 0.970 (0.007) 0.968 (0.007) Wang 0.826 (0.015) 0.852 (0.021) 0.852 (0.021) Muraro 0.823 (0.020) 0.824 (0.020) 0.824 (0.017) Zeisel 0.735 (0.017) 0.751 (0.021) 0.747 (0.015) Enge 0.724 (0.009) 0.734 (0.011) 0.733 (0.011) Nowicki 0.700 (0.014) 0.713 (0.016) 0.712 (0.015) 
+
+Mean ± SE 0.780 ± 0.030 0.799 ± 0.030 0.796 ± 0.029 (C) Neighborhood Purity (NP) Dataset Original Nonprivate-MD DP-MD 
+
+Goolam 0.564 (0.033) 0.568 (0.035) 0.568 (0.035) Schaum2 0.755 (0.004) 0.747 (0.006) 0.747 (0.006) Yan 0.281 (0.014) 0.281 (0.014) 0.281 (0.014) He 0.778 (0.011) 0.784 (0.012) 0.784 (0.012) Pollen 0.248 (0.006) 0.248 (0.006) 0.248 (0.006) Wang 0.677 (0.016) 0.674 (0.016) 0.675 (0.016) Muraro 0.749 (0.007) 0.736 (0.008) 0.736 (0.008) Zeisel 0.734 (0.009) 0.735 (0.008) 0.735 (0.008) Enge 0.758 (0.012) 0.749 (0.012) 0.749 (0.012) Nowicki 0.744 (0.006) 0.744 (0.007) 0.744 (0.007) 
+
+Mean ± SE 0.629 ± 0.064 0.627 ± 0.063 0.627 ± 0.063 
+
+59

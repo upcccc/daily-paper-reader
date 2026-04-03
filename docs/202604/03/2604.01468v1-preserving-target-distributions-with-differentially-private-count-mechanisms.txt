@@ -1,0 +1,2914 @@
+Title: Preserving Target Distributions With Differentially Private Count Mechanisms
+
+URL Source: https://arxiv.org/pdf/2604.01468v1
+
+Published Time: Fri, 03 Apr 2026 00:15:44 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# Preserving Target Distributions With Differentially Private Count Mechanisms 
+
+# Nitin Kohli 
+
+UC Berkeley Center for Effective Global Action nitin.kohli@berkeley.edu 
+
+# Paul Laskowski 
+
+UC Berkeley School of Information paul@ischool.berkeley.edu 
+
+## Abstract 
+
+Differentially private mechanisms are increasingly used to publish tables of counts, where each entry represents the number of indi-viduals belonging to a particular category. A distribution of counts 
+
+summarizes the information in the count column, unlinking counts from categories. This object is useful for answering a class of re-search questions, but it is subject to statistical biases when counts are privatized with standard mechanisms. This motivates a novel design criterion we term accuracy of distribution .This study formalizes a two-stage framework for privatizing tables of counts that balances accuracy of distribution with two standard criteria of accuracy of counts and runtime. In the first stage, a distribution privatizer generates an estimate for the true distribution of counts. We introduce a new mechanism, called the cyclic Laplace, specifically tailored to distributions of counts, that outperforms existing general-purpose differentially private his-togram mechanisms. In the second stage, a constructor algorithm 
+
+generates a count mechanism, represented as a transition matrix, whose fixed-point is the privatized distribution of counts. We de-velop a mathematical theory that describes such transition matrices in terms of simple building blocks we call 𝜖 -scales. This theory informs the design of a new constructor algorithm that generates transition matrices with favorable properties more efficiently than standard optimization algorithms. We explore the practicality of our framework with a set of experiments, highlighting situations in which a fixed-point method provides a favorable tradeoff among performance criteria. 
+
+## Keywords 
+
+Differential Privacy, Distribution Preservation, Optimal Count Mech-anisms, Convex Polytopes, Fixed-Point Analysis 
+
+## 1 Introduction 
+
+When studying populations, data is often organized as a table of counts, where each row records the number of people belonging to a particular category. Common categories include geographic regions, schools, and companies, among others. We assume that there are 𝑁 categories, numbered 0 through 𝑁 − 1. We assume that each category 𝑖 has a corresponding count 𝑑 𝑖 . We also require that every individual belongs to no more than one category. An example of such a dataset is provided in Figure 1.A, with categories  
+
+> This work is licensed under the Creative Commons Attribu-tion 4.0 International License. To view a copy of this license visit https://creativecommons.org/licenses/by/4.0/ or send a
+> letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
+> Proceedings on Privacy Enhancing Technologies YYYY(X), 1–27
+> ©YYYY Copyright held by the owner/author(s). https://doi.org/XXXXXXX.XXXXXXX
+
+Figure 1: A. Table of counts of bird flu cases by U.S. state as of February 27, 2025. B. The corresponding distribution of counts. In this figure, 𝑁 = 50 and 𝑛 = 41 .
+
+corresponding to U.S. states and counts recording the number of individuals who contracted bird flu. For organizations that hold such data – including census bureaus [ 1], humanitarian groups [ 31 ], and public health departments [ 42 ]– there is a tension between releasing the data to facilitate wider research and analysis, and protecting the privacy of the individuals contained inside. In recent years, some organizations have started to publish tables of privatized counts in place of raw data. Here, we are referring specifically to tables that preserve the row structure of the original data; these are tables that contain an approximate count for every category in the original dataset. In a typical scenario, independent noise is added to each count, with the noise magnitude tailored to meet the common standard of differential privacy [14]. We can distinguish two broad classes of questions that can be answered using a table of counts. The first are questions that must be formulated using the name of at least one category. For example, a researcher might want to know how many bird flu cases have occurred in Colorado. We refer to these as category-based questions .In contrast, some questions can be written without referencing any category names. Examples include the following policy-relevant questions. 
+
+• What fraction of US flights have zero air marshals onboard? This number raises security concerns, and in particular was cited [25] in motivating a 2024 congressional bill [9]. 
+
+• What fraction of company boards have more than 2 women? This threshold has been argued as important for changing company culture [32] and tracked in a recent report [38]. 
+
+• What is the average number of students overseen by each guidance counselor in the U.S.? A 2025 study estimated the number to be 405, far exceeding the 250 recommended by the American School Counselor Association [36]. We refer to questions like these as count distribution questions ,as it is possible to compute them after first preprocessing the count column. We assume each count 𝑑 𝑖 is in the set {0, 1, ....𝑛 − 1}, with higher counts truncated if necessary. We assume that the upper  
+
+> 1
+> arXiv:2604.01468v1 [cs.CR] 1 Apr 2026 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+bound 𝑛 − 1 is given publicly; if not, some privacy budget may be reserved to set 𝑛 (for example, 𝑛 can be set to a privatized 99 𝑡ℎ 
+
+percentile). We first define the histogram of counts as a vector 𝜂 = (𝜂 0, ..., 𝜂 𝑛 −1),where 𝜂 𝑖 = |{ 𝑗 ∈ { 0, ..., 𝑁 − 1} : 𝑑 𝑗 = 𝑖 }| is the number of categories with count 𝑖 . For example, in Figure 1 𝜂 0 equals the number of states with no bird flu cases. Note that 𝑁 = Í𝑛 −1 
+
+> 𝑖 =0
+
+𝜂 𝑖 . We then define the 
+
+distribution of counts as a vector 𝜁 = (𝜁 0, ..., 𝜁 𝑛 −1) where 𝜁 𝑖 = 𝜂 𝑖 /𝑁 
+
+denotes the proportion of categories with count 𝑖 . Figure 1.B depicts the distribution of counts for the count table in Figure 1.A. A problem arises when existing differential privacy techniques are used to answer count distribution questions. Within the litera-ture, utility is most often captured via the typical error for a single count. Thus, canonical mechanisms — including the Laplace [ 14 ], geometric [ 21 ], Gaussian [ 13 ], and discrete Gaussian [ 8] — are not designed to preserve the distribution of counts. In general, each bin of the distribution of counts will have non-zero bias. For example, the geometric mechanism with outputs bounded to be non-negative tends to inflate the number of zeros in the count table. Given the existence of such biases, one possible solution would be to independently create two separate data products: a table of privatized counts and a privatized distribution of counts (with the privacy budget split between the two). However, without additional constraints, there would be no guarantee of consistency between the two data products. As Long et al. explain, “Stakeholders [...] have expressed a strong desire for consistent data [...]. Such consis-tency has historically formed the bedrock of statistical use of the data, making it seamless to combine data across tables and easy to integrate it into traditional models and analyses” [28]. For the reasons above, we believe there is interest in a unified data product: a table of privatized counts that provides accurate answers to both category-based and count-distribution questions. 
+
+## 1.1 Distribution-Preserving Count Mechanisms 
+
+Conceptually, a count mechanism takes a “true” input count and outputs a (randomized) output count. Mathematically, it is useful to represent such a mechanism as an 𝑛 × 𝑛 transition matrix; this is a matrix 𝑇 ∈ R𝑛 ×𝑛  
+
+> ≥0
+
+with 𝑇 1𝑛 = 1𝑛 , where 1𝑛 denotes the 𝑛 -dimensional column vector of all ones. In alignment with the task of counting, all vectors and matrices will be indexed starting from 0. We will use capital letters for matrices and lowercase letters for their elements. For count mechanism 𝑇 , 𝑡 𝑖,𝑗 represents the conditional probability that the output count is 𝑗 given that the input count is 𝑖 .When the input count to a count mechanism 𝑇 is drawn from a distribution 𝑧 , written as an 𝑛 -dimensional row vector, the distri-bution of the output count may be expressed as 𝑧𝑇 . We say that a count mechanism 𝑇 has fixed point 𝑧 if 𝑧𝑇 = 𝑧 .For the moment, assume that the true distribution of counts 𝜁 is publicly known (we will relax this assumption in Section 1.2). We envision the following: The data holder selects count mechanism 𝑇 
+
+with fixed point 𝜁 . They then take each row 𝑖 of the dataset, passes the count 𝑑 𝑖 as an input to 𝑇 , and records the output in row 𝑖 of the privatized table. The resulting output may be summarized with its distribution of privatized counts, which we label ˆ𝑧 .Because of the fixed-point constraint, for every output count 
+
+𝑗 ∈ { 0, ..., 𝑛 − 1}, E[ ˆ𝑧 𝑗 ] = 𝜁 𝑗 , so the output distribution of counts is correct in expectation. 1 While this is a promising observation, one obstacle remains to using a fixed-point constraint in this way: distri-bution 𝜁 is often not publicly known. We next develop a workflow for situations in which 𝜁 cannot be directly used. 
+
+## 1.2 A Two-Stage Counting Framework 
+
+Figure 2: A framework for constructing and utilizing count mechanisms when the true distribution must be protected. 
+
+When choosing a count mechanism, a common obstacle is that the true distribution 𝜁 is not public knowledge and must be kept secret by the data holder. To overcome this obstacle, we follow the strategy of adding a preprocessing step to generate a privatized approximation to 𝜁 . The total privacy budget, which we label 𝜖 𝑡 ,must therefore be divided as 𝜖 𝑡 = 𝜖 1 + 𝜖 2, with 𝜖 1 used to privatize 
+
+𝜁 , and 𝜖 2 reserved for the count mechanism. When the distribution is privatized before a count mechanism is chosen, we will refer to the overall system as a two-stage counting framework . Figure 2 lays out the operation of such a framework, which involves five steps. (1) The table of counts is summarized by its distribution of counts 𝜁 .(2) A distribution privatizer D is used to privatize 𝜁 , using pri-vacy budget 𝜖 1, forming privatized distribution 𝑧 (the target distribution ). (3) Constructor algorithm C is used to create an 𝜖 2-differentially private count mechanism 𝑇 . In normal operation, we require that 𝑇 has fixed point 𝑧 .(4) Each row of the table of counts is passed into count mecha-nism 𝑇 , one at a time, with the output recorded in a table of privatized counts using privacy budget 𝜖 2.(5) Users with count distribution questions may summarize the table of privatized counts with its distribution of privatized counts ˆ𝑧 .To fully implement this framework, one must specify a distribu-tion privatizer D, a constructor algorithm C, and several parameter                                                             
+
+> 1To see why, let I𝑖,𝑗 be the indicator random variable corresponding to the event that row 𝑖 of the count table (with count 𝑑 𝑖 ) is mapped to 𝑗 under 𝑇 . Then I𝑖,𝑗 ∼
+> Bernoulli (𝑡 𝑑 𝑖 ,𝑗 )and ˆ𝑧 𝑗 =1
+> 𝑁
+> Í𝑁 −1
+> 𝑖 =0I𝑖,𝑗 =1
+> 𝑁
+> Í𝑛 −1
+> 𝑙 =0
+> Í𝑖 :𝑑 𝑖 =𝑙 I𝑖,𝑗 The inner sum is the sum of 𝜂 𝑙 Bernoulli random variables, each with expectation 𝑡 𝑙,𝑗 , so E[ˆ𝑧 𝑗 ]=
+> 1
+> 𝑁
+> Í𝑛 −1
+> 𝑙 =0𝜂 𝑙 𝑡 𝑙,𝑗 =Í𝑛 −1
+> 𝑙 =0𝜁 𝑙 𝑡 𝑙,𝑗 =(𝜁𝑇 )𝑗 =𝜁 𝑗 where the last equality follows by the fixed-point constraint. Also Var (ˆ𝑧 𝑗 )=1
+> 𝑁
+> 
+> 𝜁 𝑗 −Í𝑛 −1
+> 𝑙 =0𝜁 𝑙 𝑡 2
+> 𝑙,𝑗
+> 
+> so we expect the sampling error of the output distribution to be small for larger datasets. 2Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+values. To guide the choices that go into a deployment, we first identify a set of three performance criteria. These are intended to represent the top concerns of data users and data holders. (1) Accuracy of Distribution. We conceptualize distribution error as a difference between 𝜁 and ˆ𝑧 . Although our frame-work involves a fixed-point constraint, there are two rea-sons that these distributions will not be identical. First, the fixed-point of 𝑇 is 𝑧 , which is an approximation to 𝜁 . Sec-ond, there will be sampling error as each row of the table is selected randomly using probabilities in 𝑇 . Distribution error can be operationalized using Wasserstein, total vari-ation, or Kolmogorov-Smirnov distance. A researcher with a count distribution question may be primarily concerned with accuracy of distribution. (2) Accuracy of Counts. We conceptualize count error as a typical distance between a single input count and the corre-sponding output count. This is commonly operationalized as mean squared error or expected absolute deviation. A researcher with a category-based question may primarily be concerned with accuracy of counts. (3) Runtime. In many scenarios, the space of count mechanisms has high dimensionality and care must be taken that the constructor algorithm C can run efficiently. As we will see in Section 6, standard algorithms from linear programming are often impractical in our setting. There are obstacles to designing a system that meets all three performance criteria to a satisfactory level. First, one might hope to adapt existing algorithms to play the role of the distribution privatizer D and the constructor algorithm C. While this works for some datasets, as we explore in Section 6, existing algorithms often lead to reduced accuracy or impractically long runtimes. Moreover, the development of new constructor algorithms is complicated by a lack of mathematical theory describing private count mechanisms with fixed-point constraints. 
+
+## 1.3 Summary of Contributions 
+
+Our study pioneers the development of count mechanisms that incorporate a fixed-point constraint to provide high accuracy of distribution. We make four main contributions: the first three are mathematical, corresponding to different portions of the two-stage counting framework; the last contribution is experimental, and explores the practicality of our approach. Table 1 provides a table of notation used throughout the paper. 
+
+Distribution Privatizer. We provide a novel mechanism to pri-vatize a distribution of counts with a differential privacy guarantee (Theorem 1). Our mechanism, called the cyclic Laplace mechanism for distributions of counts (Definition 2), employs Laplace noise, but transfers probability between adjacent positions in the distribu-tion of counts, which is specifically tailored to mask the presence or absence of an individual in this context. We provide evidence that this technique yields more accurate distributions than existing general-purpose differentially private histogram mechanisms. 
+
+Theory of Count Mechanisms with Fixed Points. We pro-vide a compact description of count mechanisms that satisfy differ-ential privacy and a fixed-point constraint using an atomic element that we call an 𝜖 -scale (Definition 6). Roughly speaking, an 𝜖 -scale is 
+
+Notation Description 
+
+𝑛 Maximum allowed count is 𝑛 − 1
+
+𝑁 Number of categories 
+
+𝜂 Histogram of counts 
+
+𝜁 Distribution of counts 
+
+D Distribution privatizer with budget 𝜖 1
+
+C Constructor algorithm with budget 𝜖 2
+
+𝑧 Fixed point, output of D
+
+𝑇 Count algorithm, output of C
+
+1𝑛 𝑛 -dimensional vector of 1’s 
+
+𝐹 Fixed-point polytope for 𝑧 𝑈 Unfixed point polytope 
+
+𝑅 𝐹 Representation Fixed-point polytope of 𝑧 𝑅 𝑈 Representation Unfixed point polytope 
+
+𝑀 𝐹 Movement matrices for 𝑅 𝐹 
+
+𝑀 𝑈 Movement matrices for 𝑅 𝑈 
+
+𝑠 𝜖 -scale 
+
+𝑝 pattern of an 𝜖 -scale 
+
+𝑘 Number of 𝜖 -scales ( 2𝑛 −1)
+
+Ψ Scale matrix 
+
+𝑒𝑥 (·) Extreme points of a polytope 
+
+⟨· , ·⟩ Frobenius inner product 
+
+𝜅 Column selector function 
+
+Table 1: Frequently used notation. 
+
+a probability distribution over {0, 1, 2, ..., 𝑛 − 1} in which a differen-tial privacy constraint binds for every pair of neighboring positions. The name comes from the notion that, if one were to take a “walk” along a scale, every step from one position to the next would either be a step up or step down by the same multiplicative constant. Our results will show that 𝜖 -scales are fundamental building blocks of differentially private count mechanisms. We begin by formally defining 𝐹 𝜖 [𝑧 ] as the set of count mech-anisms that satisfy 𝜖 -differential privacy with fixed-point 𝑧 (Defi-nition 5); we often just write 𝐹 for brevity when 𝜖 and 𝑧 are clear from context. Viewed geometrically, 𝐹 is a convex polytope, and hence it can be characterized using its extreme points. We show that any differentially private fixed-point count mech-anism in 𝐹 can be described using a conic combination of 𝜖 -scales (Corollary 1). Building on this observation, we construct a represen-tation polytope 𝑅 𝐹 that encodes how much of each scale contributes to each column of a mechanism 𝑇 (Definition 7). This polytope is related to 𝐹 by a linear map Ψ whose matrix representation is com-prised of the 𝜖 -scales. In Theorem 3, we prove that any mechanism in 𝐹 has a representation (not necessarily unique) in 𝑅 𝐹 . Further-more, Proposition 1 links each extreme point of 𝐹 to at least one extreme point of 𝑅 𝐹 through Ψ.These results suggest that we can learn about the extreme points of 𝐹 by studying the extreme points of 𝑅 𝐹 . In Theorem 11, we char-acterize these extreme points in terms of the scales that make them up. Specifically, the extreme points of 𝑅 𝐹 are exactly those for which certain weighted differences of scales are linearly independent – a condition we call Ψ-affinely simplified (Definition 8). Taken together, our results show that every extreme matrix of 𝐹 
+
+can be represented by a relatively small number of 𝜖 -scales (Corol-lary 2), fulfilling certain conditions (Theorem 11). The algebraic structure that we discover provides a framework for reasoning  
+
+> 3Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+about differentially private fixed-point count mechanisms, which can be leveraged for algorithmic design. 
+
+Constructor Algorithm. Next, we consider the design of a con-structor algorithm. Our primary focus is on the development of con-structor algorithms whose output has fixed-point 𝑧 , which we refer to as fixed-point constructor algorithms . Since all such constructors share the same fixed-point constraint, we expect them to behave similarly in terms of accuracy of distribution (we will later confirm this in experiments). We therefore follow an approach in which we focus on accuracy of counts and use C to find a count mechanism with low count error. It is sometimes possible to minimize count error exactly using standard linear programming algorithms; how-ever, the runtime of existing solvers can be prohibitively long for large 𝑛 . For such settings, we provide Algorithm 1, which leverages our scale representation and builds a conic combination of scales in a greedy fashion to output an extreme point of 𝐹 𝜖 2 [𝑧 ] (Theorem 6). Our algorithm runs as fast as O( 𝑛 2) (Theorem 5), demonstrating its practicality even when 𝑛 is large. Our mathematical framework can also be utilized to design con-structor algorithms that do not involve a fixed-point constraint. When used in a two-stage framework, this forms a relevant base-line against which fixed-point methods can be compared. We let 
+
+𝑈 denote the set of 𝜖 -differentially private count mechanisms that may send 𝑧 to a different distribution (Definition 4). We leverage our framework and a key result from Ghosh et al. [ 21 ] to create a two-staged unfixed optimum constructor (Algorithm 2), which returns the lowest count-error mechanism in 𝑈 in O( 𝑛 2) time (Theorem 7). 
+
+Empirical Results and Practical Guidance. In Section 6, we report on a set of experiments in which our fixed-points methods are used to generate tables of privatized counts. We are interested in how different fixed-point constructors perform relative to each other, and also how they perform relative to four unfixed base-lines – mechanisms representing prior work that do not enforce a fixed-point constraint. We divide these questions into three com-ponents, aligned with our three performance criteria: accuracy of distribution, accuracy of counts, and runtime. First, we find that the inclusion of a fixed-point constraint usually yields a significant improvement to accuracy of distribution, rela-tive to all unfixed baselines. This is to be expected, as the unfixed baselines do not encode a preference for accuracy of distribution. Next, we find that that switching from an unfixed baseline to a fixed-point method generally degrades accuracy of counts. This is also to be expected, as fixed-point methods must output a count mechanism in polytope 𝐹 , which is a strict subset of the unfixed polytope 𝑈 . Nevertheless, we find the difference to be moderate in magnitude – sometimes a matter of a few percentage points. Finally, we find that the fastest runtime is always attained by one of the unfixed baselines. Fixed-point constructors that minimize count error exactly (i.e., using the interior point method or simplex algorithm) exhibit large growth rates and are impractical for all but the smallest values of 𝑛 ; in these situations, our heuristic construc-tor provides a promising alternative, with execution time that is experimentally comparable to the fastest unfixed baseline. Taken together, our experimental results shed light on the prac-tical tradeoffs from adopting a fixed-point constraint. Throughout Section 6, we highlight scenarios where a fixed-point constraint provides substantial improvements in terms of accuracy of distri-bution, with modest performance losses in both accuracy of counts and runtime. 
+
+Organization of Paper: In Section 2, we discuss related works. In Section 3, we propose a distribution privatizer that is 𝜖 -differentially private and argue that it has favorable error characteristics. In Sec-tion 4 we develop a mathematical framework that describes mecha-nisms in 𝐹 using 𝜖 -scales, and provide conditions that characterize all extreme points. In Section 5, we discuss constructor algorithms, including novel algorithms that leverage 𝜖 -scales to run efficiently. In Section 6, we explore the practicality of our approach with a set of experiments. We conclude with a discussion of future avenues of inquiry in Section 7. For readability, all proofs of the mathematical results described in the main text are deferred to the Appendix. 
+
+## 2 Related Works 
+
+Differential privacy was introduced in 2006 by Dwork, McSherry, Nissim, and Smith [ 14 ]. One of the earliest and most studied prob-lems in the field is that of privately computing a count of individuals [14 ]. The modern toolkit for privatizing counts includes the Laplace [14 ] and Gaussian mechanisms [ 13 ], and their discrete analogs (the geometric [ 17 , 21 ] and discrete Gaussian mechanisms [ 8]), some-times followed by a postprocessing step to ensure that desirable data properties are met [6, 7, 10]. A number of authors present methods for privatizing distribu-tions, which can serve as a distribution privatizer in our two-stage framework. Typically in this literature, the outputs corresponding to bins are correlated, in order to improve the utility for certain sets of queries. For example, Xiao et al . [44] apply wavelet transforma-tions to privatize ordinal data while maintaining high accuracy for range count queries. Hay et al . [24] introduce hierarchical methods to improve the accuracy of range queries for differentially pri-vate histograms. Qardaji et al . [39] improve upon the hierarchical method of Hay et al. by specifying an error measure and recom-mending optimal branching factors. Like the above studies, our cyclic Laplace mechanism also utilizes noise that is shared between histogram bins, but our sharing strategy is tailored specifically to the setting of distributions of counts. Sharing a focus on privatized distributions, Li et al . [35] propose a mechanism that adds noise to individual datapoints before reconstructing a distribution. Their noise is drawn from a square wave to meet the standard of local differential privacy, a stricter standard than the notion of (central) differential privacy considered in this paper. Several studies address privatizing counts, and are especially relevant to the constructor algorithm of our two-stage framework. In a series of papers, Geng et al. show that the staircase mecha-nism is the differentially private algorithm that minimizes a certain class of cost functions with real-valued outputs [ 18 – 20 ]. Li et al. introduce the matrix mechanism to privately answer a collection of count-based queries using (potentially correlated) Laplace and Gaussian noise to minimize the total error [ 33 ]. Sadeghi et al. utilize techniques from linear programming to develop a differentially pri-vate count mechanism that adds integer-valued noise over a fixed and finite range, and numerically demonstrate its improved privacy properties over the discrete Gaussian mechanism [40].  
+
+> 4Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+In the study closest to ours, Ghosh et al. study the problem of minimizing count error for count mechanisms without a fixed-point constraint [ 21 ]. Under mild assumptions on an objective function, they find that all optimal mechanisms are equivalent to a geometric mechanism under post-processing – a result that we leverage in developing our two-staged unfixed optimum constructor. Unlike Ghosh et al., we provide a linear algebra framework that provides new intuition for the structure of count mechanisms, and we focus on a scenario with a fixed-point constraint. Kairouz et al. [ 30 ] and Holohan et al. [ 27 ] both mathematically analyze the behavior of optimal algorithms satisfying local differ-ential privacy [ 16 , 46 ]. As in our setting, the authors represent mechanisms as transition matrices and apply linear constraints corresponding to a differential privacy guarantee. In contrast to the task of counting, the authors allow neighboring datasets to be associated with any pair of inputs, not just consecutive rows. This leads to the local differential privacy polytope. We study different polytopes in this paper, but our focus on characterizing extreme points is shared by the above authors. The mathematical techniques we use to analyze our polytopes of interest, 𝑈 and 𝐹 , are rooted in the algebraic study of matrix polytopes more broadly. The classic Birkhoff–von Neumann The-orem states that permutation matrices are the extreme points of the set of doubly stochastic matrices [ 12 ]. Jurkat and Ryser [ 29 ]generalize this result to the transportation polytope with row and column sums equal to 𝜑 ∈ R1×𝑛 . Hartfiel [ 22 ] characterizes the extreme points of the set of stochastic matrices with a fixed point 
+
+𝑧 . Since we incorporate privacy constraints into the definition of our polytopes, our results can be viewed as extensions of the above results, though our algebraic tools are somewhat different. 
+
+## 3 Privatizing Distributions of Counts 
+
+In this section, we consider the design of a distribution privatizer 
+
+D, which forms part of our two-stage counting framework. The role of this component is to take the secret distribution of counts 𝜁 
+
+and return an approximation meeting 𝜖 -differential privacy. One existing candidate algorithm is the 𝑛 -dimensional Laplace mecha-nism, which adds independent Laplace noise 2 to each dimension proportional to 𝐿 1 global sensitivity [ 14 ]. Compared to a generic probability distribution however, a distribution of counts brings additional structure that the classic Laplace mechanism does not leverage. We therefore provide a design for an alternative algorithm. A randomized algorithm R accepts an input and outputs a ran-dom variable that takes values in some set O. Differential privacy depends on the concept of neighboring inputs [14 ]. We adopt the presence-absence variant of neighboring, which means that two in-puts are neighbors if one input corresponds to adding or removing exactly one individual from the other. In the context of count tables, this means that two count tables 𝑑 and 𝑑 ′ are neighboring if and only if there exists a row 𝑖 ∈ { 0, ..., 𝑁 − 1} such that |𝑑 𝑖 − 𝑑 ′ 
+
+> 𝑖
+
+| = 1
+
+and for all 𝑗 ≠ 𝑖 , 𝑑 𝑗 = 𝑑 ′ 
+
+> 𝑗
+
+.
+
+Definition 1. A distribution privatizer satisfies 𝜖 -differential pri-vacy if for every pair of neighboring count tables 𝑑 and 𝑑 ′ and for every measurable set Θ ⊆ O, P(R ( 𝑑 ) ∈ Θ) ≤ 𝑒 𝜖 P(R ( 𝑑 ′) ∈ Θ).               
+
+> 2The Laplace (𝑏 )distribution is the probability distribution over Rwhose density function is 𝜑 (𝑥 ;𝑏 )=12𝑏 exp (− | 𝑥 |/ 𝑏 ), expectation is 0, and variance is 2𝑏 2.
+
+Throughout this study, we assume that 𝜖 > 0. When a distribu-tion privatizer is used in the two-stage counting framework, we use the value of 𝜖 = 𝜖 1.
+
+Definition 2. We define the cyclic Laplace mechanism for dis-tributions of counts as a randomized algorithm that accepts a pa-rameter 𝜖 and table of counts 𝑑 as inputs. It then computes its distribution of counts 𝜁 and independently samples 𝐿 0, ..., 𝐿 𝑛 −1 ∼
+
+Laplace (1/( 𝑁 𝜖 )) , defines 𝐿 𝑛 = 𝐿 0, and outputs 𝑉 (𝜁 ) = (𝑉 0, ..., 𝑉 𝑛 −1)
+
+where 𝑉 𝑖 = 𝜁 𝑖 + 𝐿 𝑖 − 𝐿 𝑖 +1 for all 𝑖 ∈ { 0, ..., 𝑛 − 1}.
+
+Observation 1. By construction, Í𝑛 −1 
+
+> 𝑖 =0
+
+𝑉 𝑖 = Í𝑛 −1 
+
+> 𝑖 =0
+
+𝜁 𝑖 = 1. However, there is no guarantee that 𝑉 (𝜁 ) is a probability distribution because some elements may be negative, so post-processing may be required. 
+
+To provide some intuition for this mechanism, consider our earlier example in Figure 1. A switch to a neighboring dataset could represent an extra individual in Alabama contracting bird flu, increasing the count for Alabama from 0 to 1, while all other rows remain unchanged. As a result, there would then be one extra 1 in the column of counts, and one fewer 0. The histogram of counts therefore changes only in positions 0 and 1, and only by 1 in these positions. In general, switching to a neighboring dataset always has the effect of shifting one unit from one histogram position to an adjacent position. In the cyclic Laplace mechanism for distributions of counts, such a change can be “masked” if the Laplace random variable corresponding to the pair of positions changes its value by one. This intuition is formalized in the proof of Theorem 1. 
+
+Theorem 1. The cyclic Laplace mechanism for distributions of counts satisfies 𝜖 -differential privacy. 
+
+A benefit of the cyclic Laplace mechanism for distributions of counts is that it does not alter the cumulative sum of the distribution of counts by very much. For index 𝑖 ∈ { 0, ..., 𝑁 − 1}, the variance of the cumulative sum of the output of the cyclic Laplace mechanisms for distributions of counts is given by, Var 
+
+"∑︁  
+
+> 𝑗 ≤𝑖
+
+𝑉 𝑗 
+
+#
+
+= Var 
+
+"∑︁  
+
+> 𝑗 ≤𝑖
+
+𝜁 𝑗 + 𝐿 𝑗 − 𝐿 𝑗 +1
+
+#
+
+= Var 𝐿 0 − 𝐿 𝑗 +1
+
+ = 4
+
+𝑁 2𝜖 2
+
+This result can be compared to the classic Laplace mechanism, which would output ˜𝑉 (𝜁 ) = ( ˜𝑉 0, ..., ˜𝑉 𝑛 −1) where ˜𝑉 𝑗 = 𝜁 𝑗 + ˜𝐿 𝑗 for independent Laplace random variables ˜𝐿 𝑗 ∼ Laplace (2/( 𝑁 𝜖 )) (the 
+
+𝐿 1 sensitivity is 2/𝑁 since adding an individual increases 𝜂 𝑖 for one 
+
+𝑖 and reduces 𝜂 𝑖 ′ for an adjacent 𝑖 ′). The resulting variance is Var 
+
+"∑︁  
+
+> 𝑗 ≤𝑖
+
+˜𝑉 𝑗 
+
+#
+
+= Var 
+
+"∑︁  
+
+> 𝑗 ≤𝑖
+
+𝜁 𝑗 + ˜𝐿 𝑗 
+
+#
+
+= Var 
+
+"∑︁  
+
+> 𝑗 ≤𝑖
+
+˜𝐿 𝑗 
+
+#
+
+= (𝑖 + 1) 8
+
+𝑁 2𝜖 2
+
+which is larger by a factor of 4(𝑖 + 1), meaning that the cumulative sum gets progressively less precise from position 0 to position 𝑛 − 1.Note that the sums in the variances above are not technically cu-mulative distributions, because 𝑉 and ˜𝑉 may not be valid probability distributions. To use either of these mechanisms in the two-stage counting framework, it is necessary to post-process the output so it is a valid probability distribution. Unfortunately, the simple expressions for variance above may not hold after post-processing. We perform experiments to measure the distributional accuracy of the cyclic Laplace in practice. As points of comparison, we con-sider three mechanisms: the classic Laplace, the Privelet mechanism  
+
+> 5Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+Figure 3: Comparison of distribution error for the cyclic Laplace mechanism against other mechanisms with 𝜖 1 = 1.
+
+with the Haar wavelet transform of Xiao et al . [44] , and the Hier-archical mechanism with weighted averaging, mean consistency, and a branching factor of 16 as recommended by Qardaji et al . [39] (hereafter the QYL mechanism). The latter two mechanisms are designed to improve accuracy when answering range queries. We use a dataset describing schools which will be introduced later in Section 6, top coding the counts at 𝑛 − 1 for different values of 𝑛 . We operationalize distribution error using Wasserstein-1 and Kolmogorov-Smirnov (KS) distance. Figure 3 shows the results of this study for Wasserstein distance; the results for KS distance are similar. The cyclic Laplace mechanism outperforms the other mechanisms for all values of 𝑛 .More generally, this cyclic approach can be combined with other differentially private mechanisms as building blocks, such as the Gaussian mechanism (see Appendix A for details). 
+
+## 4 Describing Fixed-Point Count Mechanisms 
+
+In this section, we provide a compact description of count mecha-nisms that satisfy differential privacy and the fixed-point constraint. A key aim of this effort is to provide a framework to assist in design-ing constructor algorithms for the two-stage counting framework. 
+
+## 4.1 Mathematical Formulation 
+
+Recall that from Section 1.1 that a count mechanism is represented by an 𝑛 × 𝑛 transition matrix 𝑇 . To incorporate differential privacy into this setting, we compare the conditional probability of an output 𝑗 ∈ { 0, ..., 𝑛 − 1} based on the presence or absence of an individual; in the count setting, this requires us to compare an input of 𝑖 against an input of 𝑖 + 1, for 𝑖 ∈ { 0, ..., 𝑛 − 2}. This is expressed for a single column as follows. 
+
+Definition 3. A column vector 𝑣 ∈ R𝑛 is 𝜖 -neighbor indistinguish-able if 𝑒 −𝜖 𝑣 𝑖 +1 ≤ 𝑣 𝑖 ≤ 𝑒 𝜖 𝑣 𝑖 +1 for all 0 ≤ 𝑖 ≤ 𝑛 − 2.Since 𝜖 > 0 throughout our study, it follows from the definition that all entries of an 𝜖 -neighbor indistinguishable vector are non-negative. Denote the 𝑗 𝑡ℎ column of a matrix 𝑇 as 𝑇 𝑗 . We can now define differential privacy over count mechanisms as follows. 3                     
+
+> 3We have chosen to define differential privacy over distribution privatizers and count mechanisms separately because they accept different inputs (the table of counts versus a single count). While we have defined these separately, they are actually connected as follows. We say two non-negative integers 𝑥, 𝑦 are neighboring counts if |𝑥 −𝑦 |=1.Then, we two count tables 𝑑 and 𝑑 ′are neighboring if and only if 𝑑 𝑖 =𝑑 ′
+> 𝑖 for 𝑁 −1
+
+Definition 4. A count mechanism 𝑇 satisfies 𝜖 -differential privacy 
+
+if and only if every column 𝑇 𝑗 is 𝜖 -neighbor indistinguishable. Let 
+
+𝑈 𝜖 ⊂ R𝑛 ×𝑛 denote the set of all 𝜖 -differentially private count mecha-nisms . Since we have placed no fixed-point restrictions on 𝑈 𝜖 , we will additionally refer to it as unfixed . When 𝜖 is clear from context, we will denote this set as 𝑈 .In the context of the two-stage counting framework, we require that 𝑇 satisfies 𝜖 2-differential privacy. The privacy constraints above can be understood as a set of linear constraints on a vector space. To make this explicit, for 𝑖 ∈ { 0, ..., 𝑛 −
+
+2}, we define 𝜋 + 
+
+> 𝑖
+
+to be the 𝑛 -dimensional row vector with position 𝑖 
+
+equal to 1, position 𝑖 + 1 equal to −𝑒 𝜖 , and all other positions are 0; similarly, 𝜋 − 
+
+> 𝑖
+
+is the 𝑛 dimensional row vector with position 𝑖 equal to -1, position 𝑖 + 1 equal to 𝑒 −𝜖 , and all other positions are 0. Let 
+
+Π ∈ R(2𝑛 −2) × 𝑛 be the matrix whose rows are given by the 2𝑛 −
+
+2 differential privacy constraints 𝜋 − 
+
+> 0
+
+, 𝜋 + 
+
+> 0
+
+, ..., 𝜋 −
+
+> 𝑛 −2
+
+, 𝜋 +
+
+> 𝑛 −2
+
+. Given this notation, a column vector 𝑣 is 𝜖 -neighbor indistinguishable if and only if Π𝑣 ⪯ 02𝑛 −2, where ⪯ denotes the element-wise inequality 
+
+≤. Note that a constraint of this form defines a convex cone in R𝑛 .This yields the following standard result from geometry. 
+
+Observation 2. Any conic combination of 𝜖 -neighbor indistinguish-able vectors is also 𝜖 -neighbor indistinguishable. 
+
+Similarly, a count mechanism 𝑇 is 𝜖 -differentially private if and only if Π𝑇 ⪯ 0(2𝑛 −2) × 𝑛 . Next, we restrict the set of such mechanisms by adding a fixed-point constraint. 
+
+Definition 5. Let 𝐹 𝜖 [𝑧 ] ⊂ 𝑈 𝜖 denote the set of all 𝜖 -differentially private count mechanisms with fixed point 𝑧 . When 𝜖 and 𝑧 are clear from context, we omit them and write 𝐹 instead. We follow the convention of Holohan et al. and refer to a convex polyhedron as the intersection of finitely many closed half-spaces, and refer to a bounded convex polyhedron as a convex polytope [ 27 ]. We have defined both 𝑈 and 𝐹 as a finite set of linear constraints on R𝑛 ×𝑛 . Moreover, both sets are bounded because each element of a count mechanism 𝑇 must be between 0 and 1. Hence 𝑈 and 𝐹 are both convex polytopes. A fact from geometry is that any convex polytope can be char-acterized by its extreme points. We recall that 𝐴 is an extreme point of polytope 𝑃 if 𝐴 cannot be written as a non-trivial con-vex combination of elements of 𝑃 . That is, 𝐴 cannot be written as 
+
+𝐴 = 𝛼𝑋 + ( 1 − 𝛼 )𝑌 for some distinct 𝑋, 𝑌 ∈ 𝑃 and 𝛼 ∈ ( 0, 1). We denote the set of extreme points of a convex polytope 𝑃 as 𝑒𝑥 (𝑃 ).We therefore view 𝑒𝑥 (𝑈 ) and 𝑒𝑥 (𝐹 ) as representatives of desirable classes of count mechanisms. We now aim to describe them in a way that builds intuition. 
+
+## 4.2 𝜖 -Scales as Building Blocks 
+
+We now introduce the important mathematical object we call a scale. This is a probability vector in which a differential privacy constraint binds for every pair of consecutive entries. Let Δ𝑛 denote the set of probability column vectors of length 𝑛 , Δ𝑛 = {𝑣 ∈ R𝑛  
+
+> ≥0
+
+: 𝑣 ⊤1𝑛 = 1}.                
+
+> rows 𝑖 ∈ { 0, ..., 𝑁 −1}and there exists a unique row 𝑗 ∈ { 0, ..., 𝑁 −1}such that
+> 𝑑 𝑗 and 𝑑 ′
+> 𝑗 are neighboring counts. These definitions ensure, by parallel composition, that if a count mechanism satisfies 𝜖 -differential privacy, the independent application of the mechanism to every row in a count table also satisfies 𝜖 -differential privacy. 6Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+Definition 6. We define an 𝜖 -scale as a probability vector 𝑠 ∈ Δ𝑛 
+
+such that for all 𝑖 ∈ { 0, ..., 𝑛 − 2}, either 𝑠 𝑖 = 𝑒 𝜖 𝑠 𝑖 +1 or 𝑠 𝑖 = 𝑒 −𝜖 𝑠 𝑖 +1.Using our algebraic notation, we can equivalently define an 𝜖 -scale as a vector 𝑠 ∈ R𝑛 such that 1⊤ 
+
+> 𝑛
+
+𝑠 = 1 and either 𝜋 + 
+
+> 𝑖
+
+𝑠 = 0 or 
+
+𝜋 − 
+
+> 𝑖
+
+𝑠 = 0 for all 𝑖 ∈ { 0, ..., 𝑛 − 2}.An elementary counting argument shows that there are 𝑘 = 2𝑛 −1
+
+𝜖 -scales. For the remainder of this paper, we fix a matrix Ψ ∈ R𝑛 ×𝑘 
+
+> ≥0
+
+whose columns are the 𝑘 𝜖 -scales in any arbitrary order. In our notation, the 𝑗 𝑡ℎ scale is denoted Ψ𝑗 , for 𝑗 = 0, ..., 𝑘 − 1.Lemma 1 shows that scales can be viewed as building blocks of each column of any matrix in 𝑈 .
+
+Lemma 1. If 𝑇 ∈ 𝑈 , then every column of 𝑇 can be written as a conic combination of 𝜖 -scales. 
+
+Since 𝐹 ⊂ 𝑈 , every column of matrices in 𝐹 can be written as conic combinations of scales as well. 
+
+Corollary 1. If 𝑇 ∈ 𝐹 , then every column of 𝑇 can be written as a conic combination of 𝜖 -scales. 
+
+Hinting at the utility of scales, we begin by highlighting a result that characterizes certain extreme points of 𝑈 in terms of 𝜖 -scales. 
+
+Theorem 2. For 𝑇 ∈ 𝑈 with all positive entries, 𝑇 ∈ 𝑒𝑥 (𝑈 ) if and only if the columns of 𝑇 are linearly independent multiples of 𝜖 -scales. 
+
+Given this result, one might wonder whether 𝜖 -scales can be leveraged to give a compact description of the extreme points of 𝐹 .This turns out to be true; however, additional machinery is required, which we develop in the remainder of this section. 
+
+## 4.3 Representing 𝐹 with 𝜖 -Scales 
+
+As we showed in the prior subsection, every matrix 𝑇 ∈ 𝐹 can be formed from 𝜖 -scales. To proceed further, we require a more precise accounting of how much of each scale contributes to each column. By Corollary 1, every column of 𝑇 ∈ 𝐹 can be expressed as a conic combination of scales. This means that there exist non-negative 
+
+𝑏 𝑖,𝑗 such that 𝑇 𝑗 = Í𝑘 −1 
+
+> 𝑖 =0
+
+𝑏 𝑖,𝑗 Ψ𝑖 . In other words, 𝑏 𝑖,𝑗 quantifies the amount of scale 𝑖 that enters column 𝑗 of 𝑇 . Arranging these 𝑏 𝑖,𝑗 
+
+into a 𝑘 × 𝑛 matrix 𝐵 , we have 𝑇 = Ψ𝐵 . We refer to 𝐵 as a repre-sentation matrix , and denote the set of all such 𝐵 as 𝑅 𝐹 . A more mathematically precise definition is given below. 
+
+Definition 7. We define the fixed point representation polytope 4
+
+𝑅 𝐹 as 
+
+𝑅 𝐹 = 𝐵 ∈ R𝑘 ×𝑛  
+
+> ≥0
+
+: Ψ𝐵 1𝑛 = 1𝑛 and 𝑧 Ψ𝐵 = 𝑧 
+
+For the remainder of this paper, we slightly overload notation and use Ψ to refer to both the matrix Ψ and the linear map formed by left multiplication by Ψ. The next theorem shows that Ψ relates any matrix in 𝐹 to at least one matrix in 𝑅 𝐹 .
+
+Theorem 3. Ψ is an affine surjection from 𝑅 𝐹 to 𝐹 .
+
+Thus, the surjection Ψ allows us to express a matrix 𝑇 ∈ 𝐹 using a matrix 𝐵 in the new space 𝑅 𝐹 where the neighbor-indistinguishability constraints within each column of 𝑇 are replaced by linear con-straints on the rows and columns of 𝐵 . In Proposition 1, we show the linear map Ψ also provides a relation between the extreme points of 𝐹 and the extreme points of 𝑅 𝐹 . 
+
+> 4𝑅 𝐹 is a polytope, as it is bounded and formed from a finite number of linear constraints.
+
+Proposition 1. For all 𝑇 ∈ 𝑒𝑥 (𝐹 ) there exists 𝐵 ∈ 𝑒𝑥 (𝑅 𝐹 ) such that 
+
+𝑇 = Ψ𝐵 .
+
+Hence, every extreme point in 𝐹 can be written as an extreme point in 𝑅 𝐹 under the mapping Ψ. However, this representation is not necessarily unique. In particular, it is possible for multiple extreme points of 𝑅 𝐹 to map to the same extreme point in 𝐹 . Ad-ditionally, it is possible for an extreme point of 𝑅 𝐹 to map to a non-extreme point of 𝐹 under Ψ. We demonstrate both phenom-ena when 𝑛 = 3 in Example 1 of Appendix B.1. Additionally, in Corollary 3 of Appendix B.2, we provide a geometric condition on extreme points of 𝑅 𝐹 that indicates exactly when they are mapped to an extreme point of 𝐹 .
+
+## 4.4 Characterizing the Extreme Points of 𝑅 𝐹 
+
+Up to this point, we have argued that differentially private count mechanisms with fixed point 𝑧 are represented by the extreme points of 𝐹 , and there is a relationship between these extreme points and those of the representation polytope 𝑅 𝐹 . Next, we characterize the extreme points of 𝑅 𝐹 in terms of the scales they encode. Given a column vector 𝑥 ∈ R𝑘 , let 𝐻 (𝑥 ) be the set of vectors 
+
+ℎ = (𝑧 Ψ𝑢 )−1Ψ𝑢 − ( 𝑧 Ψ𝑣 )−1Ψ𝑣 
+
+where 𝑣 is the smallest index such that 𝑥 𝑣 > 0 and 𝑢 is another index such that 𝑥 𝑢 > 0.5 Note that, under this definition, if a vector 
+
+𝑥 has either 0 or 1 positive entry, 𝐻 (𝑥 ) = ∅. Also, for ℎ ∈ 𝐻 (𝑥 ),
+
+𝑧ℎ = 0 by routine computation. 
+
+Definition 8. We call a 𝑘 × 𝑛 matrix 𝐵 Ψ−affinely simplified if the additive union 6 ⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐻 (𝐵 𝑗 ) is linearly independent. Let 𝑀 𝐹 (Ψ) be the set of 𝑘 × 𝑛 matrices 𝜇 such that 𝑧 Ψ𝜇 = 0⊤
+
+> 𝑛
+
+and Ψ𝜇 1𝑛 = 0𝑛 . By construction of 𝑀 𝐹 (Ψ), if 𝑋, 𝑌 ∈ 𝑅 𝐹 , then 
+
+𝑋 − 𝑌 ∈ 𝑀 𝐹 (Ψ). Conceptually, 𝑀 𝐹 represents “movement matrices” that can potentially be added to matrices in 𝑅 𝐹 to move through the affine space. The following lemma and theorem formalize the equivalence between the extreme points of 𝑅 𝐹 , the notion of Ψ-affinely simplified matrices, and these movement matrices. 
+
+Lemma 2. Suppose 𝐵 ∈ 𝑅 𝐹 . Then 𝐵 is Ψ-affinely simplified if and only if there does not exist a non-zero matrix 𝜇 ∈ 𝑀 𝐹 (Ψ) such that 
+
+𝜇 𝑖,𝑗 is zero whenever 𝑏 𝑖,𝑗 is zero. 
+
+Theorem 4. Given scale matrix Ψ, 𝐵 ∈ 𝑒𝑥 (𝑅 𝐹 ) if and only if 𝐵 ∈ 𝑅 𝐹 
+
+is Ψ-affinely simplified. 
+
+Hence, the extreme points of our representation space are those that are Ψ-affinely simplified. Additionally, Theorem 4 can be used to quantify combinatorial properties of 𝐵 ∈ 𝑒𝑥 (𝐹 ), such as the number of positive entries. 
+
+Corollary 2. Let P denote set of indices where 𝑧 is positive. Then extreme matrices in 𝑅 𝐹 contain at least |P | and at most |P | + 𝑛 − 1
+
+positive entries. 
+
+Thus the extreme points of 𝐹 can be represented using relatively few scales. This suggests that constructor algorithms C that work                                          
+
+> 5Note that (𝑧 Ψ𝑗 )−1is well-defined for all 𝑗 ∈ { 0, ..., 𝑘 −1}, since 𝑧 Ψ𝑗 >0because 𝑧
+> is a probability row vector and Ψ𝑗 is an 𝜖 -scale.
+> 6The additive union of sets 𝑋 and 𝑌 is the multiset denoted as 𝐴 ⊎𝐵 , where the multiplicity of 𝑠 ∈𝑋 ⊎𝑌 equals the sum of the multiplicity of 𝑠 in 𝑋 and of 𝑠 in 𝑌 [5]. 7Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+at the granularity of scales could be used to build an extreme point of 𝐹 efficiently. We showcase an example of this in the next section. 
+
+## 5 Constructor Algorithms 
+
+In this section, we turn our attention to the design of the constructor algorithm. This component of the two-stage counting framework outputs a single count mechanism from within a set of allowable count mechanisms. We first discuss fixed-point constructors before describing the two-staged unfixed optimum constructor. 
+
+## 5.1 Fixed-Point Constructors 
+
+The goal of a fixed-point constructor is to accept target distribution 
+
+𝑧 and output a single mechanism inside 𝐹 𝜖 [𝑧 ]. Recall from the intro-duction that we identified three performance criteria for a two-stage counting framework. The first criterion, accuracy of distribution, is supported by the inclusion of a fixed-point constraint. Moreover, in the experiments we describe later, we observe that all fixed-point constructors we create behave very similarly with respect to this criterion. We therefore set accuracy of distribution aside and focus the following discussion on the other criteria: accuracy of counts and runtime. Beginning with accuracy of counts, we consider a natural class of count-error measures – those that are linear in the coefficients of the transition matrix. Given a count mechanism 𝑇 , and an 𝑛 × 𝑛 matrix of weights 𝑊 , we define the count error of 𝑇 under 𝑊 with the Frobenius inner product ⟨𝑊 ,𝑇 ⟩ = 𝑡𝑟 [𝑊 ⊤𝑇 ] = Í𝑛 −1
+
+> 𝑖 =0
+
+Í𝑛 −1 
+
+> 𝑗 =0
+
+𝑤 𝑖,𝑗 𝑡 𝑖,𝑗 .For example, 𝑤 𝑖 𝑗 = 𝑧 𝑖 |𝑖 − 𝑗 | yields expected absolute deviation: 
+
+⟨𝑊 ,𝑇 ⟩ =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =0
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+𝑧 𝑖 |𝑖 − 𝑗 |𝑡 𝑖,𝑗 = E𝑖 ∼𝑧 E𝑗 ∼Row 𝑖 of 𝑇 
+
+|𝑖 − 𝑗 |
+
+Similarly, setting 𝑤 𝑖 𝑗 = 𝑧 𝑖 (𝑖 − 𝑗 )2 encodes mean squared error. Since 
+
+𝐹 𝜖 [𝑧 ] is a polytope, the optimum of such a function can be achieved at one of the extreme points 𝑒𝑥 (𝐹 𝜖 [𝑧 ]) (Lemma 4). Given a linear count-error function, it is useful to divide the task of choosing a mechanism in 𝐹 into two cases. First, when 𝑛 is small, a mechanism that minimizes count error can be found using standard linear programming algorithms. These include open-source and commercial variants of the simplex algorithm and the interior point method. We refer to a constructor algorithm that minimizes count error over 𝐹 as a count-error-minimizing fixed-point constructor .For larger values of 𝑛 , the runtime of linear programming al-gorithms can be prohibitively large. For situations like these, we provide a heuristic algorithm that outputs a single extreme point of 𝐹 𝜖 [𝑧 ]. Our algorithm is inspired by our scale representation, but only requires polynomial space, and can run as fast as 𝑂 (𝑛 2).
+
+## 5.2 Heuristic Constructor Algorithm 
+
+To motivate our algorithm, we begin with a piece of intuition. To make the output count close to the input count, we want the probability near the diagonal to be high, and the probability far away from the diagonal to be low. This leads us to the notion of a 
+
+single-peaked scale at position 𝑗 , which increases to a single peak at row 𝑗 , then decreases until the end. The following definitions make this notion precise. 
+
+Definition 9. A pattern is an (𝑛 − 1)-tuple 𝑝 ∈ {− 1, +1}𝑛 −1. We say an 𝜖 -scale 𝑠 has pattern 𝑝 if, for all 𝑗 ∈ { 0, ..., 𝑛 − 2}, 𝑝 𝑗 = 1 if 
+
+𝑠 𝑗 < 𝑠 𝑗 +1, and 𝑝 𝑗 = −1 otherwise. 
+
+Definition 10. The single-peaked pattern at 𝑗 ∈ { 0, ..., 𝑛 − 1} is the pattern 𝑝 such that 𝑝 𝑖 = 1 for all 𝑖 < 𝑗 and 𝑝 𝑖 = −1 otherwise. We will refer to an 𝜖 -scale with a single-peaked pattern at 𝑗 as a 
+
+single-peaked scale at position 𝑗 .One might hope that a mechanism 𝑇 can be constructed solely from singled-peaked scales. This is possible for 𝑇 ∈ 𝑈 , but is not possible for 𝑇 ∈ 𝐹 in general given the fixed-point constraint. However, single-peaked scales can provide a useful starting point for constructing a count mechanism in 𝐹 . This informs the design of Algorithm 1. The core idea underlying our algorithm is as follows. Imagine starting with the 𝑛 × 𝑛 zero matrix 𝐴 and then adding scales to it until the row sum and fixed-point constraints of 𝐹 are fulfilled. By Observation 2, adding positive multiples of 𝜖 -scales always maintains 𝜖 -neighbor indistinguishability. As we add scales, we can keep track of how much still needs to be added to each row, 
+
+𝑟 = 1𝑛 −𝐴 1𝑛 , and how much still needs to be added to each column, 
+
+𝑐 = 𝑧 − 𝑧𝐴 . At the end of the algorithm, we must have 𝑟 = 0𝑛 and 
+
+𝑐 = 0⊤ 
+
+> 𝑛
+
+. If at any point when adding scales, an element of 𝑐 becomes negative, it will not be possible to arrive at 𝑐 = 0⊤ 
+
+> 𝑛
+
+by adding more scales. Similarly, if at any point 𝑟 becomes not 𝜖 -neighbor-indistinguishable, it will not be possible to add more scales to end with 𝑟 = 0𝑛 (Proposition 2 quantifies how much of a scale 𝑠 can be added without triggering one of these two conditions). Applying this idea, Algorithm 1 proceeds iteratively, filling one column at a time. When operating on a particular column 𝑗 , if it is possible to add some multiple of the single-peaked scale at position 𝑗 while preserving the 𝜖 -neighbor-indistinguishability of 
+
+𝑟 , we greedily add as much of the scale as possible. Otherwise, we adjust the single-peaked scale as necessary so that it matches the pattern of 𝑟 at any row where a privacy bound holds for 𝑟 . This guarantees that we are able to add some positive multiple of the scale to 𝐴 . The details can be observed in the proof of Theorem 5. We repeat the process of adding scales to column 𝑗 until the column is at capacity ( 𝑐 𝑗 = 0). When execution begins, and any time a column has been filled to capacity, the algorithm must select a new column 𝑗 to operate on. The selection of a new column is delegated to a function 𝜅 , which is an input parameter. The only requirement for the results of this section is that 𝜅 always returns a column index 𝑗 with 𝑐 𝑗 > 0. For example, 𝜅 could select the column 𝑗 for which 𝑐 𝑗 is maximal and non-zero. In principle, one could choose many other options for 𝜅 ,which may result in varying runtimes and have a significant effect on the accuracy of counts. We observe this phenomenon for three possible choices for 𝜅 in the experiments of Section 6. The following two theorems demonstrate that Algorithm 1 can run efficiently and outputs an extreme point of 𝐹 .
+
+Theorem 5. If the worst-case runtime of selection algorithm 𝜅 is 
+
+O( 𝜏 ), then the worst-case runtime of Algorithm 1 is O  max {𝜏𝑛, 𝑛 2 }.
+
+Theorem 6. Algorithm 1 outputs a matrix in 𝑒𝑥 (𝐹 ).
+
+Selection Guidelines for 𝜅 in Practice. The reader might wonder how to choose a column selector in order to have the lowest count  
+
+> 8Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+Algorithm 1: Heuristic Constructor Algorithm 
+
+Input: 
+
+• Fixed point 𝑧 
+
+• Privacy parameter 𝜖 
+
+• Column selection function 𝜅  
+
+> 1
+
+Initialize an 𝑛 × 𝑛 matrix 𝐴 of 0’s, 𝑟 = 1𝑛 , and 𝑐 = 𝑧  
+
+> 2
+
+while 𝑟 ≠ 0𝑛 (equivalently, 𝑐 ≠ 0⊤ 
+
+> 𝑛
+
+) do  
+
+> 3
+
+Select a column 𝑗 = 𝜅 (𝑧, 𝑟, 𝑐, 𝐴 ) such that 𝑐 𝑗 > 0. 
+
+> 4
+
+while 𝑐 𝑗 > 0 do  
+
+> 5
+
+Assign 𝑝 as the single-peaked pattern for 𝑗 . 
+
+> 6
+
+Adjust 𝑝 as follows: for any 𝑖 which  
+
+> 𝑟 𝑖 +1
+> 𝑟 𝑖
+
+= exp (− 𝑝 𝑖 𝜖 ), reassign 𝑝 𝑖 ← − 𝑝 𝑖 . 
+
+> 7
+
+Let 𝑠 be the 𝜖 -scale with pattern 𝑝 . 
+
+> 8
+
+Compute 𝑞 = max {𝛾 : 𝛾𝑧𝑠 ≤
+
+𝑐 𝑗 and 𝑟 − 𝛾𝑠 is 𝜖 -neighbor indistinguishable }. 
+
+> 9
+
+Update 𝐴 𝑗 ← 𝐴 𝑗 + 𝑞𝑠 , 𝑟 ← 𝑟 − 𝑞𝑠 , and 𝑐 𝑗 ← 𝑐 𝑗 − 𝑞𝑧𝑠 . 
+
+> 10
+
+end  
+
+> 11
+
+end  
+
+> 12
+
+Return 𝐴 
+
+error for a given dataset. Surprisingly, once a data holder generates the privatized distribution of counts 𝑧 , they can then compute the count error analytically for any number of columns selectors without incurring additional privacy loss. The rationale is an iterated application of the post-processing guarantee. First, distribution 𝑧 is the only input to Algorithm 1 that is computed from the underlying data. Therefore, when Algorithm 1 with a column selector 𝜅 produces an output 𝑇 using 𝑧 , no additional privacy loss is incurred. Second, the metrics we have chosen to represent count error ⟨𝑊 ,𝑇 ⟩ depend only on 𝑧 and 𝑇 , so they can be computed without additional privacy loss. This argument holds for any number of columns selectors 𝜅 tested. Hence, a data holder can create a transition matrix for every available column selector and keep the one with the lowest count error without incurring additional privacy loss beyond the 𝜖 1 used to generate 𝑧 .
+
+## 5.3 Two-Stage Unfixed Optimum Constructor 
+
+While the main focus of this section was the creation of fixed-point constructors, we will want to compare our techniques against a set of baselines that do not enforce a fixed-point constraint. One such baseline can be developed by adapting our two-stage framework. We envision a constructor algorithm that minimizes count error over the unfixed polytope 𝑈 instead of 𝐹 . Even though 𝑈 does not depend on the distribution 𝑧 , the distribution privatization step is still required since common measures of count error depend on the distribution of counts (e.g., expected total deviation is given by ⟨𝑊 ,𝑇 ⟩, with 𝑤 𝑖 𝑗 = 𝑧 𝑖 |𝑖 − 𝑗 |). For that reason, we now develop a constructor that selects a count mechanism from 𝑈 . This will form the basis of our two-stage unfixed optimum .As was the case for 𝐹 , it would theoretically be possible to mini-mize count error over 𝑈 with standard linear programming algo-rithms, but these would take impractically long for some of the datasets we study. We therefore seek to leverage the structure of polytope 𝑈 to find the lowest count error point more efficiently. First, in Appendix D, we show that count mechanisms in 𝑈 can be represented using scales in a similar way as those in 𝐹 , yielding a new representation polytope, 𝑅 𝑈 (Theorem 10). Next, in Appendix E we leverage a result from Ghosh et al. [ 21 ], which tells us exactly which scales make up the optimal point in 𝑈 for a natural class of count error measures, which we call row-wise concentrating .
+
+Definition 11. A weight matrix 𝑊 ∈ R𝑛 ×𝑛  
+
+> ≥0
+
+is row-wise concentrat-ing if 𝑤 𝑖,𝑗 is non-decreasing in |𝑖 − 𝑗 | for each 𝑖 ∈ { 0, ..., 𝑛 − 1}.Theorem 12 tells us that the scales that make up a count mecha-nism in 𝑈 that minimizes a row-wise concentrating weight matrix are exactly the single peaked scales. We let Σ be the 𝑛 × 𝑛 matrix, where column 𝑗 is the single-peaked scale at position 𝑗 .We will further restrict attention to a narrower class of weight matrices, which will enable certain optimizations, stated below. 
+
+Definition 12. A weight matrix 𝑊 is row-wise convex if for every 
+
+𝑖 ∈ { 0, ..., 𝑛 − 1} and every 𝑗 ∈ { 0, ..., 𝑛 − 2}, 𝑤 𝑖,𝑗 +1 − 𝑤 𝑖,𝑗 is non-decreasing in 𝑗 .Note that commonly used count-error measures, including ex-pected absolute deviation and mean squared error, are row-wise concentrating and row-wise convex. Row-wise convexity is useful because it ensures that once we find a column for a single-peaked scale that minimizes count error in a local sense, it is also optimal over all columns (Lemma 9). Putting these ideas together, Algorithm 2 places the single peaked scales into a transition matrix one at a time. 
+
+Algorithm 2: Two-Stage Unfixed Optimum Constructor 
+
+Input: 
+
+• Privacy parameter 𝜖 
+
+• Weight matrix 𝑊 that is both row-wise concentrating and row-wise convex  
+
+> 1
+
+Initialize Σ and {𝜔 𝑙 }𝑛 −1 
+
+> 𝑙 =0
+
+as described in Observation 3.  
+
+> 2
+
+Initialize an 𝑛 × 𝑛 matrix 𝐴 of 0’s, 𝑗 = 0, and 𝑙 = 0. 
+
+> 3
+
+while 𝑙 ≤ 𝑛 − 1 do  
+
+> 4
+
+𝑐𝑢𝑟𝑟𝑒𝑛𝑡 _𝑒𝑟𝑟𝑜𝑟 ← 𝜔 𝑙 (𝑊 𝑗 )⊤ Σ𝑙  
+
+> 5
+
+if 𝑗 < 𝑛 − 1 then  
+
+> 6
+
+𝑛𝑒𝑥𝑡 _𝑒𝑟𝑟𝑜𝑟 ← 𝜔 𝑙 (𝑊 𝑗 +1)⊤ Σ𝑙  
+
+> 7
+
+else  
+
+> 8
+
+𝑛𝑒𝑥𝑡 _𝑒𝑟𝑟𝑜𝑟 ← ∞  
+
+> 9
+
+end  
+
+> 10
+
+if 𝑛𝑒𝑥𝑡 _𝑒𝑟𝑟𝑜𝑟 > 𝑐𝑢𝑟𝑟𝑒𝑛𝑡 _𝑒𝑟𝑟𝑜𝑟 then  
+
+> 11
+
+𝐴 𝑗 ← 𝐴 𝑗 + 𝜔 𝑙 Σ𝑙  
+
+> 12
+
+𝑙 ← 𝑙 + 1 
+
+> 13
+
+else  
+
+> 14
+
+𝑗 ← 𝑗 + 1 
+
+> 15
+
+end  
+
+> 16
+
+end  
+
+> 17
+
+Return 𝐴  
+
+> 9Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+The following two theorems establish that the two-stage un-fixed optimum runs efficiently and outputs a count mechanism that minimizes count error. 
+
+Theorem 7. The worst-case runtime of Algorithm 2 is O( 𝑛 2).
+
+Theorem 8. Algorithm 2 outputs a count mechanism 𝑂 ∈ 𝑒𝑥 (𝑈 )
+
+that minimizes count error. That is, for all ˆ𝑂 ∈ 𝑈 , ⟨𝑊 , 𝑂 ⟩ ≤ ⟨ 𝑊 , ˆ𝑂 ⟩.
+
+## 6 Experiments 
+
+In this section, we explore the practicality of fixed-point methods for privatizing a table of counts. We perform a set of simulations in which we measure the performance of different privatization methods. Our simulations are grouped into three experiments, cor-responding to our three performance criteria: accuracy of distribu-tion, accuracy of counts, and runtime. As we detail in this section, there are some scenarios in which a fixed-point method can dra-matically improve accuracy of distribution with only moderate cost to accuracy of counts and runtime; however, considerable nuance can be found through each of our experiments. Each of our simulations represents a complete privatization of a table of counts. All experiments were written in Python 3.12.7 and executed on a single machine. We include the following privatiza-tion methods. 
+
+Fixed-Point Methods. We implement our two-stage fixed-point framework. In the role of distribution privatizer D, we select the cyclic Laplace mechanism, guided by the favorable results of Section 3. While other choices for D are possible, fixing the distribution privatizer allows us to focus on the effects of other experimental parameters. As a robustness check, we replicated key experiments with each of the other distribution privatizers from Section 3 and observed similar trends. For the constructor algorithm C, we im-plement the following choices. 
+
+• The simplex algorithm provided by the open-source SciPy Python library. 
+
+• The interior point method provided by the open-source SciPy Python library. 
+
+• Our heuristic algorithm, Algorithm 1. Furthermore, we explore several options for the column selector 𝜅 .
+
+– Max probability. This selector always chooses the remaining column 𝑗 with maximum 𝑧 𝑗 .
+
+– Min probability. This selector always chooses the remaining column 𝑗 with minimum 𝑧 𝑗 .
+
+– Sandwich. This selector always follows a prescribed pattern: 
+
+0, 𝑛 − 1, 1, 𝑛 − 2, 2... until every column has been chosen. 
+
+Unfixed Baselines. As points of comparison, we implement a set of privatization algorithms that do not enforce a fixed-point constraint. 
+
+• Two-stage unfixed optimum given in Algorithm 2. 
+
+• Truncated geometric of Ghosh et al . [21] . This mechanism may not coincide with the output of the two-stage unfixed optimum, because it does not include the post-processing described by Ghosh el al. As such, there is no guarantee that the truncated geometric minimizes a given notion of count error. 
+
+• Staircase mechanism of Geng et al . [18] , which minimizes count error for a certain class of mechanisms whose outputs are in R.Because this mechanism outputs a real number, we post-process the output by mapping to the nearest integer in {0, ..., 𝑛 − 1}.7
+
+• Discrete Gaussian of Canonne et al . [8] . This is the integer-analog of the commonly used Gaussian mechanism, and satisfies the weaker privacy notion of approximate (𝜖, 𝛿 )-differential privacy. We set 𝛿 = 1/( 𝑁 + 1), maximizing the benefit to this baseline while satisfying the convention that 𝛿 < 1/𝑁 [ 15 , 37 ]. We post-process the output of this mechanism to ensure that it lies be-tween 0 and 𝑛 − 1.Note that the latter three mechanisms do not utilize a probability distribution as input. Accordingly, they are implemented as stand-alone algorithms, not part of a two-stage framework. For each of our privatization methods, we vary the following experimental parameters. 
+
+Input Data. We select three datasets to have a range of distribu-tional characteristics (see Figure 4). 
+
+• 10,000 synthetic draws from a Binomial distribution with size parameter 20 and probability parameter 1/2. This is a symmetric distribution that closely approximates a normal distribution. 
+
+• Real counts of homicides in each US County. 8 When conduct-ing accuracy experiments, we top code these counts at 50. This dataset has a considerable right skew (5.83) and a substantial peak at zero (53% of counties report zero homicides). It is our smallest dataset with 3,136 total counties. 
+
+• Real counts of full-time teachers in public elementary and sec-ondary education facilities in the US. 9 When conducting accuracy experiments, we top code these counts at 80. This data was pub-lished by the US Department of Education for the 2017-2018 school year. This dataset has a mild positive skewness (1.29). It is our largest dataset, representing 95,969 schools. 
+
+Privacy Parameters. We set a total privacy budget, 𝜖 𝑡 , to val-ues ranging from 0.1 to 5. As noted in Section 1.2, the two-stage counting framework requires this budget to be divided into two components: 𝜖 1 for the distribution privatizer D, and 𝜖 2 for the count mechanism 𝑇 , with 𝜖 𝑡 = 𝜖 1 + 𝜖 2. Let 𝑓 = 𝜖 1/𝜖 𝑡 represent the fraction allocated to the distribution privatizer. Setting 𝑓 is com-plicated by two stylized facts. First, dividing the privacy budget requires a value judgement, as it trades off between accuracy of counts and accuracy of distribution. Second, both types of accuracy generally depend on the underlying data, and existing methods of estimating these for candidate values of 𝑓 require considerable privacy budget. For these reasons, we pursue the development of a rule of thumb that is independent of data, and that practitioners can use to set 𝑓 .We detail the development of our rule of thumb in Appendix F. To summarize our process, we begin with a combined error objective 
+
+of the form ln (count_error (𝑓 )) + ln (distribution_error (𝑓 )) . This                  
+
+> 7The staircase mechanism includes a parameter 𝛾 ∈ [ 0,1], which dictates the width the center-most step. When 𝛾 =1/2the staircase mechanism coincides with the truncated geometric. We follow the authors’ recommendation and set 𝛾 =(1+exp (𝜖 /2) ) −1to minimize the expected noise amplitude, resulting in a distinct mechanism. However, in our experiments, we found that the performance of the staircase mechanism was visually indistinguishable from the truncated geometric.
+> 8Downloaded from https://www.kaggle.com/datasets/mikejohnsonjr/united-states-crime-rates-by-county
+> 9Downloaded from https://public.opendatasoft.com/explore/dataset/us-public-schools/ 10 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+Figure 4: Distributions of the three datasets used in our experiments: (A) synthetic draws from a binomial distribution, (B) observed counts of homicides in US counties, and (C) observed counts of teachers in public schools. 
+
+Figure 5: Distribution error under different total privacy budgets on logarithmic scale. All fixed-point constructors were visually overlapping, so we include only the heuristic with sandwich selector to represent all fixed-point constructors. 
+
+objective has the interpretation that, at the optimum, a multiplica-tive decrease in one type of error must be matched by an equal (or greater) multiplicative increase in the other. We perform a set of simulations on six new synthetic datasets, varying the total privacy budget, and computing the value of 𝑓 that minimizes the combined error objective. We observe an inverse relationship between 𝜖 𝑡 and the optimal 𝑓 that appears in all datasets tested. We fit a model on these simulation results, yielding the following rule of thumb. 
+
+ˆ𝑓 (𝜖 𝑡 ) = 0.106 + 0.533 exp (− 2.87 𝜖 𝑡 )
+
+We employ this rule of thumb whenever we simulate the two-stage framework. Because the truncated geometric, staircase, and discrete Gaussian mechanisms do not require a two-stage framework, we grant them the entire privacy budget 𝜖 𝑡 .
+
+## 6.1 Accuracy of Distribution 
+
+In our first experiment, we investigate how the choice of priva-tization method affects accuracy of distribution. We run a set of simulations, varying the privatization method, dataset, and privacy parameters as described above. To operationalize accuracy of distri-bution, we use total variation distance, Kolmogorov–Smirnov (KS) distance, and Wasserstein-1 distance. Figure 5 shows the Wasser-stein distance between the output distribution of counts and the true input distribution from a set of simulations; the corresponding plots for KS distance and total variation distance are similar and we omit them. We found that all fixed-point methods were closely overlapping, so we represent them with a single curve. Similarly, the truncated geometric and staircase mechanisms were closely overlapping, so we also represent them with a single curve. As seen in Figure 5, the introduction of a fixed-point constraint often leads to a substantial improvement in accuracy of distribution. For example, for the binomial dataset at 𝜖 𝑡 = 0.48 , switching from the best performing baseline (two-stage unfixed optimum) to a fixed-point constructor reduces Wasserstein distance from 0.64 
+
+to 0.04 , a 94% decrease in distribution error. For the crime and schools dataset, the corresponding decreases in distribution error are 74% and 87% respectively. There are exceptions in which an unfixed baseline has slightly better accuracy of distribution than a fixed-point constructor. In particular, for the crime data at 𝜖 = 0.1,Wasserstein distance is 1.44 for the two-stage unfixed optimum, but rises to 2.17 for the fixed-point methods. Aside from the crime data, the fixed point constraint seem to offer the greatest advantage when 𝜖 𝑡 is small. In particular, at 𝜖 𝑡 = 0.1, for the schools dataset, the fixed-point methods feature a Wasserstein distance of 0.06 .The closest baseline is the truncated geometric mechanism, with a Wasserstein distance of 2.60 – more than 40-times larger. Overall, we believe this first experiment presents promising evidence in favor of imposing a fixed-point constraint. While such  
+
+> 11 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+Figure 6: Count error under different total privacy budgets on logarithmic scale. As expected, an unfixed baseline yields lower count error than the fixed-point methods. 
+
+a constraint does not lead to perfect equality between the output distribution of counts and the true input, it represents a substantial improvement over current practice. 
+
+## 6.2 Accuracy of Counts 
+
+Our second experiment investigates how our fixed-point methods affect accuracy of counts. As noted earlier, we expect our techniques to involve some performance loss in this dimension. One reason is that they select a count mechanism from the polytope 𝐹 , which is a strict subset of the unfixed polytope 𝑈 . A more intuitive reason is that fixed-point techniques split attention between accuracy of distribution and accuracy of counts, whereas prior techniques focus exclusively on accuracy of counts. While some performance loss is expected, we believe that its magnitude is important. If users are to adopt a fixed-point technique, the loss in accuracy of counts cannot be too large, relative to the gain in accuracy of distribution. To measure how much fixed-point methods degrade accuracy of counts, we run a set of simulations, varying the privatization method, dataset, and privacy parameters as before. To operational-ize count error, we use both expected absolute deviation and mean squared error. Figure 6 shows the expected absolute deviation from a set of simulations; the corresponding plot for mean squared error is similar so we omit it. Additionally, we omit the curve for the sandwich selector, noting that it closely overlaps with the better of the max or min selector for all datasets. We first observe that the two-stage unfixed optimum is consis-tently near the bottom of each plot, which we expect since this method outputs the best possible count mechanism in the poly-tope 𝑈 𝜖 2 . Somewhat surprisingly, there are situations in which the truncated geometric and staircase mechanisms outperform the two-stage unfixed optimum. The reason this is possible is that these mechanisms don’t require a privatized estimate of 𝑧 , and hence the entire privacy budget 𝜖 𝑡 can be used to privatize the table of counts. The truncated geometric and staircase mechanisms have the most visible advantage in the schools data, with the advantage shrinking with higher 𝜖 𝑡 . One possible explanation relates to the shape of the schools data, which is the closest to a uniform among our three datasets. Recall that the two-stage unfixed optimum can be viewed as a truncated geometric mechanism with post-processing [ 21 ]. When data is near uniform, we expect that the optimal transition matrix in 𝑈 𝜖 2 closely resembles the truncated geometric, so the ben-efits of post-processing are small. On the other hand, the truncated geometric mechanism enjoys the benefit of choosing a point from the larger polytope 𝑈 𝜖 𝑡 , even though that point is not optimal. Among the fixed-point methods, the count-error-minimizing fixed-point constructors (i.e. fixed-point constructors using simplex or the interior point method) have the lowest count error. These methods are never the lowest curve in the graph, and in particular, the two-staged unfixed optimum always has lower count error. One reason is that adding constraints reduces the set of feasible mechanisms (from 𝑈 𝜖 2 to 𝐹 𝜖 2 ). Even though switching from the best baseline to a count-error minimizing fixed-point method does increase count error, the gap is often moderate. For example, for the crime data, at 𝜖 𝑡 = 0.48 , switching from the best baseline (two-stage unfixed optimum) to a count-error-minimizing fixed-point method increases count error from 1.27 to 1.32 , a 5.7% increase (recall from the prior section that for the same switch, distribution error decreased by 74% ). The largest performance gaps tend to occur for small values of 𝜖 𝑡 .The heuristic fixed-point constructors appear as a set of curves above the count-error-minimizing fixed point methods. Since these constructors also output a point in 𝐹 𝜖 2 [𝑧 ], they must result in at least as much count error as the minimum value over 𝐹 . An interesting finding is that no column selector consistently outperforms the alternatives. In fact, by manipulating experimental parameters, we found situations in which each of the column selectors we studied was the best choice. As a general observation, the sandwich selector tends to have either the lowest count error, or close to the lowest for all datasets and parameter choices we tested. The max selector performed well for the highly skewed crime dataset, but poorly for the other two. Alternatively, the min selector performed well for the binomial and schools data, both of which exhibit more symmetry than the crime data. When using a heuristic constructor is necessary (because it is computationally impractical to find the fixed-point optimum), the cost of imposing a fixed-point constraint, relative to the best unfixed  
+
+> 12 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+Figure 7: Runtime for crime data with 𝜖 𝑡 = ln (2).
+
+baseline, is larger. However, the additional cost of switching from a count-error-minimizing fixed-point constructor to a heuristic constructor is usually less than the cost of switching from the best unfixed baseline to a count-error-minimizing fixed-point construc-tor. For example, in the crime dataset, when 𝜖 𝑡 = 1, the expected absolute deviation is 0.55 for the truncated geometric, 0.64 for the count-error-minimizing fixed-point constructors, and 0.66 for the best-performing heuristic (sandwich selector). Overall, we find these results promising. As expected, count error does increase when adopting a fixed-point constraint. However, the increase is often a matter of a few percentage points and we expect that users will find this acceptable in some scenarios. 
+
+## 6.3 Runtime 
+
+In our final experiment, we measure how the choice of privatization method affects runtime. This is important because an algorithm must finish running in a reasonable time to be deployable. We measure runtime using the system clock on a computer as it executes each privatization algorithm. Since each constructor algorithm must choose an 𝑛 ×𝑛 matrix, we expect that the bound on the number of counts, 𝑛 − 1, would have a strong effect on runtime. We therefore adjust the datasets used in this experiment so that we can vary 𝑛 . For the binomial dataset, we continue taking draws with probability parameter 1/2 but with size parameter set to 𝑛 − 1.For the crime and school datasets, we use the same raw data, but top code counts at 𝑛 − 1.Measurements of runtime for different values of 𝑛 for the crime dataset are shown in Figure 7. Plots for the binomial and schools dataset are similar and we omit them. Additionally, we found that the selector function had no visual impact on the runtime of our heuristic algorithm; we therefore include just a single selector func-tion in the plot. Omitted from the plot is the Discrete Gaussian, whose runtime is consistently off the plot due to its use of rejection sampling [ 8]. The truncated geometric and staircase mechanisms were closely overlapping, so they are represented by a single curve. For all parameter choices, we find that the truncated geomet-ric and staircase baselines provide the fastest runtime. These are followed closely by the two-stage unfixed optimum. Among the fixed-point constructors, we find that the one that uses the interior point method, and especially the one that uses simplex, exhibit rapid growth rates. This suggests that their use must be limited to smaller values of 𝑛 . Our heuristic constructor, on the other hand, performs more efficiently, with runtimes closer to that of the unfixed baselines. To explore this further, we ran additional simulations with even larger values of 𝑛 . We were able to execute our heuristic constructor with 𝑛 = 2, 000 in under 10 seconds on a single laptop. Overall, these results provide further evidence supporting the practicality of a fixed-point constraint. While the fixed point leads to higher runtimes relative to the unfixed baselines, the use of heuristic constructors serves as an effective technique to ensure that runtimes remain reasonable, even for high values of 𝑛 .
+
+## 7 Discussion 
+
+This study proposes a framework for computing tables of priva-tized counts that balances three performance criteria: accuracy of distribution, accuracy of counts, and runtime. We support the de-sign of such a framework with a mathematical theory of transition matrices that obey differential privacy and fixed-point constraints. We provide advances for two framework components: the distri-bution privatizer and the constructor algorithm. Our experiments provide evidence that a fixed-point constraint can be practical, often yielding a favorable tradeoff among our three performance criteria. Our study leaves open several questions. We would like to know if, under a reasonable class of loss functions, we can provide a compact description of the global optimum of 𝐹 , analogous to the one found by Ghosh et al. for the unfixed case [ 21 ]. A little more broadly, we are interested in whether an algorithm for finding the global optimum exists that is more efficient than today’s general-purpose solvers. Furthermore, numerous variants of differential privacy have been proposed [ 11 ], some of which may be well-suited for a polytope-style analysis. In particular, the set of (𝜖, 𝛿 )-differentially private count mechanisms forms a polytope in R𝑛 ×𝑛 .We would therefore like to investigate whether an analogue of 
+
+𝜖 -scales can be applied to this setting. We are also interested in whether the upper bound 𝑛 can be dropped from our framework, alleviating the need for truncating counts. We believe this would require radically different techniques, including infinite-dimensional analogs of the mathematical tools developed in this paper. Another interesting direction involves preserving distributions for other types of data beyond simple counts. For example, many applications rely on the joint distribution of two count variables. Mortality rates and disease rates are typically computed as a frac-tion, meaning that systematic distortions in the joint distribution of incidence counts and population counts can interfere with our understanding of health trends [ 23 , 34 , 41 ]. Similarly, measures of segregation are based on the joint distribution of minority counts and majority counts, and can be biased upwards or downwards by privatization [ 2]. We believe the techniques developed in this study provide a promising starting point for developing privatization algorithms that can support applications like these. 
+
+## Acknowledgments 
+
+This work was greatly improved by comments from our anonymous reviewers, our revision editor, Joshua Blumenstock, and members of UC Berkeley’s Global Opportunity Lab. This research received no specific grant from any funding agency in the public, commercial, or not-for-profit sectors. 
+
+> 13
+
+Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski 
+
+## References 
+
+[1] John M Abowd. 2018. The US Census Bureau adopts differential privacy. In Pro-ceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining . 2867–2867. [2] Brian Asquith, Brad Hershbein, Tracy Kugler, Shane Reed, Steven Ruggles, Jonathan Schroeder, Steve Yesiltepe, and David Van Riper. 2022. Assessing the impact of differential privacy on measures of population and racial residential segregation. Harvard Data Science Review Special Issue 2 (2022). [3] David Avis and Komei Fukuda. 1991. A pivoting algorithm for convex hulls and vertex enumeration of arrangements and polyhedra. In Proceedings of the Seventh Annual Symposium on Computational Geometry . 98–104. [4] Borja Balle and Yu-Xiang Wang. 2018. Improving the gaussian mechanism for differential privacy: Analytical calibration and optimal denoising. In International conference on machine learning . PMLR, 394–403. [5] Wayne D. Blizard et al . 1989. Multiset theory. Notre Dame Journal of formal logic 
+
+30, 1 (1989), 36–66. [6] Fabrizio Boninsegna and Francesco Silvestri. 2025. Differential Privacy Releasing of Hierarchical Origin/Destination Data with a TopDown Approach. Proceedings on Privacy Enhancing Technologies (2025). [7] US Census Bureau. 2021. Disclosure avoidance for the 2020 census: An introduc-tion. [8] Clément L Canonne, Gautam Kamath, and Thomas Steinke. 2020. The discrete gaussian for differential privacy. Advances in Neural Information Processing Systems 33 (2020), 15676–15688. [9] United States Congress. 2024. No FAMS at the Border Act of 2024. [10] Ryan Cumings-Menon, Robert Ashmead, Daniel Kifer, Philip Leclerc, Matthew Spence, Pavel Zhuravlev, and John M Abowd. 2023. Disclosure Avoidance for the 2020 Census Demographic and Housing Characteristics File. arXiv preprint arXiv:2312.10863 (2023). [11] Damien Desfontaines and Balázs Pejó. 2020. SoK: Differential privacies. Proceed-ings on Privacy Enhancing Technologies (2020). [12] Fanny Dufossé, Kamer Kaya, Ioannis Panagiotas, and Bora Uçar. 2018. Further notes on Birkhoff–von Neumann decomposition of doubly stochastic matrices. 
+
+Linear Algebra Appl. 554 (2018), 68–78. [13] Cynthia Dwork, Krishnaram Kenthapadi, Frank McSherry, Ilya Mironov, and Moni Naor. 2006. Our data, ourselves: Privacy via distributed noise generation. In 
+
+Advances in Cryptology-EUROCRYPT 2006: 24th Annual International Conference on the Theory and Applications of Cryptographic Techniques, St. Petersburg, Russia, May 28-June 1, 2006. Proceedings 25 . Springer, 486–503. [14] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. 2006. Cali-brating noise to sensitivity in private data analysis. In Theory of Cryptography: Third Theory of Cryptography Conference, TCC 2006, New York, NY, USA, March 4-7, 2006. Proceedings 3 . Springer, 265–284. [15] Cynthia Dwork and Aaron Roth. 2014. The algorithmic foundations of differential privacy. Foundations and trends ® in theoretical computer science 9, 3–4 (2014), 211–407. [16] Úlfar Erlingsson, Vasyl Pihur, and Aleksandra Korolova. 2014. Rappor: Random-ized aggregatable privacy-preserving ordinal response. In Proceedings of the 2014 ACM SIGSAC conference on computer and communications security . 1054–1067. [17] Natasha Fernandes, Kacem Lefki, and Catuscia Palamidessi. 2019. Utility-preserving privacy mechanisms for counting queries. Models, Languages, and Tools for Concurrent and Distributed Programming: Essays Dedicated to Rocco De Nicola on the Occasion of His 65th Birthday (2019), 487–495. [18] Quan Geng, Peter Kairouz, Sewoong Oh, and Pramod Viswanath. 2015. The staircase mechanism in differential privacy. IEEE Journal of Selected Topics in Signal Processing 9, 7 (2015), 1176–1184. [19] Quan Geng and Pramod Viswanath. 2013. The optimal mechanism in differential privacy: Multidimensional setting. arXiv preprint arXiv:1312.0655 (2013). [20] Quan Geng and Pramod Viswanath. 2014. The optimal mechanism in differential privacy. In 2014 IEEE international symposium on information theory . IEEE, 2371– 2375. [21] Arpita Ghosh, Tim Roughgarden, and Mukund Sundararajan. 2009. Universally utility-maximizing privacy mechanisms. In Proceedings of the forty-first annual ACM symposium on Theory of computing . 351–360. [22] Darald Hartfiel. 1974. A study of convex sets of stochastic matrices induced by probability vectors. Pacific J. Math. 52, 2 (1974), 405–418. [23] Mathew E Hauer and Alexis R Santos-Lozada. 2021. Differential privacy in the 2020 census will distort COVID-19 rates. Socius 7 (2021), 2378023121994014. [24] Michael Hay, Vibhor Rastogi, Gerome Miklau, and Dan Suciu. 2010. Boosting the Accuracy of Differentially Private Histograms Through Consistency. Proceedings of the VLDB Endowment 3, 1 (2010). [25] Ashley Hinson. 2024. Hinson Bill Forces Biden Administration to Keep Air Marshals on Flights Instead. https://hinson.house.gov/media/press-releases/ hinson-bill-forces-biden-administration-keep-air-marshals-flights-instead. [26] Shlomi Hod and Ran Canetti. 2025. Differentially private release of Israel’s national registry of live births. In 2025 IEEE Symposium on Security and Privacy (SP) . IEEE, 3912–3930. [27] Naoise Holohan, Douglas J Leith, and Oliver Mason. 2017. Extreme points of the local differential privacy polytope. Linear Algebra Appl. 534 (2017), 78–96. [28] JASON 2020. 2022. Consistency of Data Products and Formal Privacy Methods for the 2020 Census . Technical Report. The MITRE Corporation. [29] Wolfgang B Jurkat and Herbert John Ryser. 1967. Term ranks and permanents of nonnegative matrices. Journal of Algebra 5, 3 (1967), 342–357. [30] Peter Kairouz, Sewoong Oh, and Pramod Viswanath. 2016. Extremal mechanisms for local differential privacy. The Journal of Machine Learning Research 17, 1 (2016), 492–542. [31] Nitin Kohli, Emily Aiken, and Joshua E Blumenstock. 2024. Privacy guarantees for personal mobility data in humanitarian response. Scientific Reports 14, 1 (2024), 28565. [32] Vicki W Kramer. 2006. Critical mass on corporate boards: Why three or more women enhance governance . Wellesley Centers for Women. [33] Chao Li, Gerome Miklau, Michael Hay, Andrew McGregor, and Vibhor Ras-togi. 2015. The matrix mechanism: optimizing linear counting queries under differential privacy. The VLDB journal 24 (2015), 757–781. [34] Yanran Li, Brent A Coull, Nancy Krieger, Emily Peterson, Lance A Waller, Jarvis T Chen, and Rachel C Nethery. 2023. Impacts of census differential privacy for small-area disease mapping to monitor health inequities. Science Advances 9, 33 (2023), eade8888. [35] Zitao Li, Tianhao Wang, Milan Lopuhaä-Zwakenberg, Ninghui Li, and Boris Škoric. 2020. Estimating numerical distributions under local differential privacy. In Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data . 621–635. [36] National Association for College Admission Counseling (NACAC). 2025. School Counseling: Caseloads and Responsibilities. https://www.nacacnet.org/school-counseling/. [37] Hector Page, Charlie Cabot, and Kobbi Nissim. 2018. Differential privacy an introduction for statistical agencies. NSQR. Government Statistical Service (2018), 1–53. [38] PricewaterhouseCoopers LLP. 2017. The Governance Divide: Boards and Investors in a Shifting World – PwC’s 2017 Annual Corporate Directors Survey .Technical Report. Governance Insights Center, PricewaterhouseCoopers LLP. https://www.pwc.com/us/en/governance-insights-center/annual-corporate-directors-survey/assets/pwc-2017-annual-corporate--directors--survey.pdf [39] Wahbeh Qardaji, Weining Yang, and Ninghui Li. 2013. Understanding hierarchical methods for differentially private histograms. Proceedings of the VLDB Endowment 
+
+6, 14 (2013), 1954–1965. [40] Parastoo Sadeghi, Shahab Asoodeh, and Flavio du Pin Calmon. 2020. Differentially private mechanisms for count queries. arXiv preprint arXiv:2007.09374 (2020). [41] Alexis R Santos-Lozada, Jeffrey T Howard, and Ashton M Verdery. 2020. How differential privacy will affect our understanding of health disparities in the United States. Proceedings of the National Academy of Sciences 117, 24 (2020), 13405–13412. [42] Merveille Koissi Savi, Akash Yadav, Wanrong Zhang, Navin Vembar, Andrew Schroeder, Satchit Balsari, Caroline O Buckee, Salil Vadhan, and Nishant Kishore. 2023. A standardised differential privacy framework for epidemiological mod-elling with mobile phone data. medRxiv (2023), 2023–03. [43] Allan R Willms. 2008. Analytic results for the eigenvalues of certain tridiagonal matrices. SIAM journal on matrix analysis and applications 30, 2 (2008), 639–656. [44] Xiaokui Xiao, Guozhang Wang, and Johannes Gehrke. 2010. Differential privacy via wavelet transforms. IEEE Transactions on knowledge and data engineering 23, 8 (2010), 1200–1214. [45] Yingtai Xiao, Zeyu Ding, Yuxin Wang, Danfeng Zhang, and Daniel Kifer. 2021. Optimizing fitness-for-use of differentially private linear queries. Proceedings of the VLDB Endowment 14, 10 (2021), 1730–1742. [46] Mengmeng Yang, Taolin Guo, Tianqing Zhu, Ivan Tjuawinata, Jun Zhao, and Kwok-Yan Lam. 2023. Local differential privacy and its applications: A compre-hensive survey. Computer Standards & Interfaces (2023), 103827. 14 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X) 
+
+## Appendix A Proof and Other Details from Section 3 
+
+Proof of Theorem 1. The proof proceeds in 5 steps. 
+
+Step 1: Relate the cyclic Laplace 𝑉 (𝜁 ) to a new mechanism ˆ𝑉 (𝜁 ) to facilitate analysis. We introduce modified mechanism ˆ𝑉 (𝜁 ), which is identical to the cyclic Laplace mechanism 𝑉 (𝜁 ), except that it only outputs the first 𝑛 − 1 dimensions of the output, ˆ𝑉 = (𝑉 0, ..., 𝑉 𝑛 −2) ∈ 
+
+R𝑛 −1. By Observation 1, the sum of the cyclic Laplace outputs must be 1. It is therefore possible to post-process the output of ˆ𝑉 (𝜁 ) by computing the dropped component, 𝑉 𝑛 −1 = 1 − Í𝑛 −2 
+
+> 𝑖 =0
+
+𝑉 𝑖 , thereby recovering the original mechanism. By the postprocessing guaran-tee, it is therefore sufficient to prove that ˆ𝑉 satisfied 𝜖 -differential privacy. This reduction allows us to use the convenient language of probability density functions in the remainder of the proof. 
+
+Step 2: Compute the conditional probability density function of ˆ𝑉 
+
+given 𝐿 𝑛 −1 = 𝑙 𝑛 −1. The modified cyclic Laplace outputs 𝑉 0, ..., 𝑉 𝑛 −2
+
+where 𝑉 𝑖 = 𝜁 𝑖 + 𝐿 𝑖 − 𝐿 𝑖 +1 for all 𝑖 ∈ { 0, ..., 𝑛 − 2}. Repeatedly substituting 𝐿 𝑗 +1 −𝜁 𝑗 +𝑉 𝑗 for 𝐿 𝑗 yields the following 𝑛 − 1 equations. 
+
+𝐿 𝑖 = 𝐿 𝑛 −1 +
+
+> 𝑛 −2
+
+∑︁ 
+
+> 𝑗 =𝑖
+
+𝑉 𝑗 − 𝜁 𝑗 for all 𝑖 ∈ { 0, ..., 𝑛 − 2}
+
+Given 𝑙 𝑛 −1 ∈ R, we condition on the event 𝐿 𝑛 −1 = 𝑙 𝑛 −1. We also de-fine the random vector ˆ𝐿 = (𝐿 0, ..., 𝐿 𝑛 −2). For any ˆ𝑙 = (ˆ𝑙 0, ..., ˆ𝑙 𝑛 −2) ∈ 
+
+R𝑛 −1, let 𝜙 (ˆ𝑙 ) denote the joint density of ˆ𝐿 . By independence of the 
+
+𝐿 𝑖 ’s, 𝜙 (ˆ𝑙 ) = Î𝑛 −2 
+
+> 𝑖 =1
+
+𝜑 (ˆ𝑙 𝑖 ; 1 /( 𝑁 𝜖 )) where 𝜑 (· ; 1 /( 𝑁 𝜖 )) is the probabil-ity distribution function of the single-variable Laplace with scale parameter 1/( 𝑁 𝜖 ) (as described in Footnote 2 of Section 3). Since the scale parameter will not change throughout this proof, we omit it and write 𝜑 (ˆ𝑙 𝑖 ) in place of 𝜑 (ˆ𝑙 𝑖 ; 1 /( 𝑁 𝜖 )) for brevity. Also by inde-pendence of the 𝐿 𝑖 ’s, the conditional density of ˆ𝐿 given 𝐿 𝑛 −1 = 𝑙 𝑛 −1
+
+is also 𝜙 .Then we can write, ˆ𝐿 = 𝑔 𝜁 ( ˆ𝑉 ; 𝑙 𝑛 −1) for function 𝑔 𝜁 ( · ; 𝑙 𝑛 −1) :
+
+R𝑛 −1 → R𝑛 −1,
+
+𝑔 𝜁 ( ˆ𝑣 ; 𝑙 𝑛 −1)𝑖 = 𝑙 𝑛 −1 +
+
+> 𝑛 −2
+
+∑︁ 
+
+> 𝑗 =𝑖
+
+𝑣 𝑗 − 𝜁 𝑗 for all 𝑖 ∈ { 0, ..., 𝑛 − 2}
+
+Note that 𝑔 𝜁 ( · ; 𝑙 𝑛 −1) is a one-to-one function that relates random vector ˆ𝑉 with random vector ˆ𝐿 . For any ˆ𝑣 = (𝑣 0, ..., 𝑣 𝑛 −2) ∈ R𝑛 −1,let 𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1) denote the conditional probability density of ˆ𝑉 at 
+
+ˆ𝑣 , given 𝐿 𝑛 −1 = 𝑙 𝑛 −1. By the standard change of coordinates for probability densities, we have: 
+
+𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1) = |det (𝐽 ( ˆ𝑣 ))| 𝜙 (𝑔 𝜁 ( ˆ𝑣 ; 𝑙 𝑛 −1)) 
+
+where 𝐽 ( ˆ𝑣 ) is the Jacobian of 𝑔 𝜁 ( · ; 𝑙 𝑛 −1) evaluated at ˆ𝑣 . It can be verified that 𝐽 ( ˆ𝑣 ) is upper triangular with ones on the diagonal, so 
+
+|det (𝐽 ( ˆ𝑣 ))| = 1. Hence 𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1) = 𝜙 (𝑔 𝜁 ( ˆ𝑣 ; 𝑙 𝑛 −1)) .
+
+Step 3: Bound the ratio of conditional probability densities of ˆ𝑉 on neighboring inputs. Consider two neighboring tables of counts 𝑑 and 
+
+𝑑 ′, with corresponding histograms 𝜂 and 𝜂 ′, and with correspond-ing distributions of counts 𝜁 and 𝜁 ′, respectively. Without loss of generality, suppose 𝑑 ′ is formed from 𝑑 by adding an individual to row 𝑖 . Then 𝑑 ′ 
+
+> 𝑖
+
+= 𝑑 𝑖 + 1.Without loss of generality, suppose 𝑑 has count 𝑓 in row 𝑖 , 𝑑 ′
+
+has count 𝑓 + 1 in row 𝑖 and 𝑑 and 𝑑 ′ are otherwise identical. Let 
+
+I(·) be the indicator function. Then 
+
+𝜂 ′ 
+
+> 𝑓
+
+= 
+
+> 𝑁 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+I(𝑑 ′ 
+
+> 𝑗
+
+= 𝑓 ) =∑︁ 
+
+> 𝑗 ≠𝑖
+
+I(𝑑 ′ 
+
+> 𝑗
+
+= 𝑓 )
+
+because I(𝑑 ′ 
+
+> 𝑖
+
+= 𝑓 ) = 0. Also, 
+
+𝜂 𝑓 = 
+
+> 𝑁 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+I(𝑑 𝑗 = 𝑓 ) =∑︁ 
+
+> 𝑗 ≠𝑖
+
+I(𝑑 𝑗 = 𝑓 ) + 1 =∑︁ 
+
+> 𝑗 ≠𝑖
+
+I(𝑑 ′ 
+
+> 𝑗
+
+= 𝑓 ) + 1
+
+Hence, 𝜂 ′ 
+
+> 𝑓
+
+= 𝜂 𝑓 − 1 and 𝜁 ′ 
+
+> 𝑑 𝑖
+
+= 𝜁 𝑑 𝑖 − 1 
+
+> 𝑁
+
+. By a similar argument, 
+
+𝜂 ′  
+
+> 𝑓 +1
+
+= 𝜂 𝑓 +1 + 1 and 𝜁 ′  
+
+> 𝑓 +1
+
+= 𝜁 𝑓 +1 + 1 
+
+> 𝑁
+
+. For all other ¯𝑓 ∉ {𝑓 , 𝑓 + 1},
+
+𝜂 ¯𝑓 = 𝜂 ′¯𝑓 , so 𝜁 ¯𝑓 = 𝜁 ′ 
+
+> ¯𝑓
+
+.Next, consider the following ratio of conditional probability density functions. 
+
+𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1)
+
+𝜌 𝜁 ′ ( ˆ𝑣 |𝑙 𝑛 −1) = 𝜙 (𝑔 𝜁 ( ˆ𝑣 ; 𝑙 𝑛 −1)) 
+
+𝜙 (𝑔 𝜁 ′ ( ˆ𝑣 ; 𝑙 𝑛 −1)) =
+
+Î𝑛 −2 
+
+> 𝑖 =0
+
+𝜑 (𝑔 𝜁 ( ˆ𝑣 ; 𝑙 𝑛 −1)𝑖 )
+
+Î𝑛 −2 
+
+> 𝑖 =0
+
+𝜑 (𝑔 𝜁 ′ ( ˆ𝑣 ; 𝑙 𝑛 −1)𝑖 )
+
+Plugging in the values for 𝑔 𝜁 ( ˆ𝑣 ; 𝑙 𝑛 −1)𝑖 ) and 𝑔 𝜁 ′ ( ˆ𝑣 ; 𝑙 𝑛 −1)𝑖 ), we have 
+
+𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1)
+
+𝜌 𝜁 ′ ( ˆ𝑣 |𝑙 𝑛 −1) =
+
+Î𝑛 −2 
+
+> 𝑖 =0
+
+𝜑 (𝑙 𝑛 −1 + Í𝑛 −2 
+
+> 𝑗 =𝑖
+
+𝑣 𝑗 − 𝜁 𝑗 )
+
+Î𝑛 −2 
+
+> 𝑖 =0
+
+𝜑 (𝑙 𝑛 −1 + Í𝑛 −2 
+
+> 𝑗 =𝑖
+
+𝑣 𝑗 − 𝜁 ′ 
+
+> 𝑗
+
+)
+
+Notice that Í𝑗 ≤𝑖 𝜁 ′ 
+
+> 𝑗
+
+= Í𝑗 ≤𝑖 𝜁 𝑗 whenever 𝑖 ≠ 𝑓 . Canceling equal terms, 
+
+𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1)
+
+𝜌 𝜁 ′ ( ˆ𝑣 |𝑙 𝑛 −1) = 𝜑 (𝑙 0 + Í𝑗 ≤ 𝑓 𝜁 𝑗 − 𝑣 𝑗 )
+
+𝜑 (𝑙 0 + Í𝑗 ≤ 𝑓 𝜁 ′ 
+
+> 𝑗
+
+− 𝑣 𝑗 )
+
+Since Í𝑗 ≤ 𝑓 𝜁 ′ 
+
+> 𝑗
+
+= Í𝑗 ≤ 𝑓 𝜁 𝑗 − 1 
+
+> 𝑁
+
+, we have 
+
+𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1)
+
+𝜌 𝜁 ′ ( ˆ𝑣 |𝑙 𝑛 −1) = 𝜑 (𝑙 0 + Í𝑗 ≤ 𝑓 𝜁 𝑗 − 𝑣 𝑗 )
+
+𝜑 (𝑙 0 + Í𝑗 ≤ 𝑓 𝜁 𝑗 − 1 
+
+> 𝑁
+
+− 𝑣 𝑗 )
+
+= exp (𝑁 𝜖 |𝑙 0 + Í𝑗 ≤ 𝑓 𝜁 𝑗 − 𝑣 𝑗 |) 
+
+exp (𝑁 𝜖 |𝑙 0 + Í𝑗 ≤ 𝑓 𝜁 𝑗 − 1 
+
+> 𝑁
+
+− 𝑣 𝑗 |) ≤ exp (𝑁 𝜖 |1/𝑁 |) 
+
+= exp (𝜖 )
+
+where the inequality follows by the triangle inequality. By a sym-metric argument, 𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1 )      
+
+> 𝜌 𝜁 ′(ˆ𝑣 |𝑙 𝑛 −1)
+
+≥ exp (− 𝜖 ).
+
+Step 4: Bound the ratio of (unconditional) probability densities of ˆ𝑉 
+
+on neighboring inputs 𝜁 and 𝜁 ′. Define 𝜌 𝜁 ( ˆ𝑣 ) as the unconditional density of ˆ𝑉 . Then, 
+
+𝜌 𝜁 ( ˆ𝑣 )
+
+𝜌 𝜁 ′ ( ˆ𝑣 ) =
+
+∫ 
+
+> R
+
+𝜌 𝜁 ( ˆ𝑣 |𝑙 𝑛 −1)𝜑 (𝑙 𝑛 −1)𝑑𝑙 𝑛 −1
+
+∫ 
+
+> R
+
+𝜌 𝜁 ′ ( ˆ𝑣 |𝑙 𝑛 −1)𝜑 (𝑙 𝑛 −1)𝑑𝑙 𝑛 −1
+
+Upper-bounding the numerator using Step 3, 
+
+𝜌 𝜁 ( ˆ𝑣 )
+
+𝜌 𝜁 ′ ( ˆ𝑣 ) ≤
+
+∫ 
+
+> R
+
+𝑒 𝜖 𝜌 𝜁 ′ ( ˆ𝑣 |𝑙 𝑛 −1)𝜑 (𝑙 𝑛 −1)𝑑𝑙 𝑛 −1
+
+∫ 
+
+> R
+
+𝜌 𝜁 ′ ( ˆ𝑣 |𝑙 𝑛 −1)𝜑 (𝑙 𝑛 −1)𝑑𝑙 𝑛 −1
+
+= 𝑒 𝜖 
+
+By a symmetric argument using the other bound from Step 3, we similarly deduce 𝜌 𝜁 ( ˆ𝑣 )    
+
+> 𝜌 𝜁 ′(ˆ𝑣 )
+
+≥ 𝑒 −𝜖 .
+
+Step 5: Deduce that the original cyclic Laplace mechanism satisfies differential privacy. By Step 4, the ratio of probability density func-tions is between 𝑒 −𝜖 and 𝑒 𝜖 at every point ˆ𝑣 ∈ R𝑛 −1. Hence, by standard integration, for any measurable set ˆ𝐸 ⊆ R𝑛 −1, we have  
+
+> 15 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+𝑒 −𝜖 P( ˆ𝑉 (𝜁 ′) ∈ ˆ𝐸 ) ≤ P( ˆ𝑉 (𝜁 ) ∈ ˆ𝐸 ) ≤ 𝑒 𝜖 P( ˆ𝑉 (𝜁 ′) ∈ ˆ𝐸 ). By the re-duction argument from Step 1, this implies that the cyclic Laplace mechanism also satisfies 𝜖 -differential privacy. □
+
+Additional Applications of the Cyclic Approach. Our cyclic approach for the Laplace mechanism can also be used with other differentially private mechanisms, such as the Gaussian mechanism [4, 13]. 
+
+Definition 13. We define the cyclic Gaussian mechanism for dis-tributions of counts as a randomized algorithm that accepts a pa-rameter 𝜎 and table of counts 𝑑 as inputs. It then computes its dis-tribution of counts 𝜁 and independently samples 𝐺 0, ..., 𝐺 𝑛 −2 from Normal (0, 𝜎 2), defines 𝐺 𝑛 = 𝐺 0, and outputs 𝑉 𝑖 = 𝜁 𝑖 + 𝐺 𝑖 − 𝐺 𝑖 +1 for all 𝑖 ∈ { 0, ..., 𝑛 − 1}.This mechanism satisfies approximate differential privacy [ 13 ], for appropriately chosen values of 𝜎 . To sketch a proof, we first rewrite the cyclic Gaussian mechanism as 𝑉 = 𝜁 + 𝐻 , where 
+
+𝐻 𝑖 = 𝐺 𝑖 − 𝐺 𝑖 +1. We perform the technique in Step 1 of Theorem 1, and construct a new mechanism ˆ𝑉 = (𝑉 0, ..., 𝑉 𝑛 −2). This new mech-anism ˆ𝑉 is equivalent to the Exact Correlated Gaussian Mechanism of Xiao et al . [45] , with an (𝑛 − 1) × ( 𝑛 − 1) covariance matrix whose diagonal entries are 2𝜎 2, whose superdiagonal and subdiagonal entries are both −𝜎 2, and all other entries are 0. This covariance matrix is invertible, as it is a symmetric tridiagonal Toeplitz ma-trix, so its eigenvalues are given by 𝜆 𝑚 = 2𝜎 2 + 2𝜎 2 cos   𝑚𝜋 𝑛 
+
+ for 
+
+𝑚 ∈ { 1, ..., 𝑛 − 1} [ 43 ], all of which are positive. Hence ˆ𝑉 satisfies approximate differential privacy by Theorem 3 of Xiao et al . [45] for appropriately chosen values of 𝜎 . By the post-processing argument presented in Step 1 of Theorem 1, the cyclic Gaussian mechanism for distributions of counts 𝑉 also satisfies approximate differential privacy. 
+
+## B Proofs and Other Details from Section 4 B.1 Using Ψ to Represent 𝐹 
+
+Proof of Lemma 1. To prove Lemma 1, the following technical lemma will be helpful; it establishes the linear independence of the differential privacy constraints and the row sum constraints on a transition matrix. 
+
+Lemma 3. For any 𝜋 𝑖 ∈ { 𝜋 − 
+
+> 𝑖
+
+, 𝜋 + 
+
+> 𝑖
+
+} for 𝑖 ∈ { 0, ...𝑛 − 2}, the set of row vectors {𝜋 0, ..., 𝜋 𝑛 −2, 1⊤ 
+
+> 𝑛
+
+} are linearly independent. 
+
+Proof. (Of Lemma 3.) Let 𝑊 be the 𝑛 × 𝑛 matrix whose rows are 
+
+𝜋 0, ..., 𝜋 𝑛 −2, 1⊤ 
+
+> 𝑛
+
+in this order. Suppose 𝑣 ∈ R𝑛 is in the kernel of 𝑊 .If 𝑣 0 > 0, then row 0 of 𝑊 𝑣 = 0𝑛 specifies 𝜋 0𝑣 = 0. If 𝜋 0 = 𝜋 + 
+
+> 0
+
+, then 
+
+𝜋 0𝑣 = 𝑣 0 − 𝑒 𝜖 𝑣 1 = 0, yielding 𝑣 1 = 𝑒 −𝜖 𝑣 0 > 0. By similar argument, 
+
+𝜋 0 = 𝜋 − 
+
+> 0
+
+, also yields 𝑣 1 > 0. Repeating the process 𝑛 − 1 times, we know 𝑣 𝑖 > 0 for all 𝑖 ∈ { 0, .., 𝑛 − 1}. The last row of 𝑊 𝑣 = 0𝑛 
+
+specifies 1⊤ 
+
+> 𝑛
+
+𝑣 = 0. However, the left hand side is a sum of all positive entries, yielding a contradiction. By similar argument, 𝑣 0 cannot be negative. Therefore, 𝑣 0 = 0. By similar procedure as above, this implies 𝑣 𝑖 = 0 for all 𝑖 ∈ { 0, ..., 𝑛 − 1}. Hence the kernel of 𝑊 only contains the zero vector, so 𝑊 is full rank, implying the rows are linearly independent, as required. □
+
+Proof. (Of Lemma 1) Let 𝑄 denote the set of probability vectors that satisfy 𝜖 -neighbor indistinguishability. 
+
+𝑄 = {𝑡 ∈ Δ𝑛 : 𝜋 + 
+
+> 𝑖
+
+𝑡 ≤ 0, 𝜋 − 
+
+> 𝑖
+
+𝑡 ≤ 0 for all 0 ≤ 𝑖 ≤ 𝑛 − 2}
+
+Then 𝑄 is a convex polytope, and every scale Ψ𝑗 ∈ 𝑄 . To prove the result, we will first show that the extreme points of 𝑄 are the scales, 
+
+𝑒𝑥 (𝑄 ) = {Ψ0, ..., Ψ𝑘 −1 }.A point in a convex polytope in R𝑛 is an extreme point if and only if there are 𝑛 linearly independent binding constraints. The privacy constraints guarantee that any 𝑡 ∈ 𝑄 has all positive entries. So for each 𝑖 ∈ { 0, ..., 𝑛 − 1} only one of 𝜋 + 
+
+> 𝑖
+
+or 𝜋 − 
+
+> 𝑖
+
+can bind. Therefore, all binding constraints are linearly independent by Lemma 3. This implies that a point in 𝑄 is extreme if and only if there are 𝑛 binding constraints. In turn, this is equivalent to the statement that 𝑡 is an 
+
+𝜖 -scale. This establishes 𝑒𝑥 (𝑄 ) = {Ψ0, ..., Ψ𝑘 −1 }.We now complete the proof of the lemma. Suppose 𝑇 ∈ 𝑈 and consider the 𝑗 𝑡ℎ column. We can write 𝑇 𝑗 = 𝛼 𝑗 𝑞 for some 𝛼 𝑗 ≥ 0 and 
+
+𝑞 ∈ 𝑄 . Since the extreme points of 𝑄 are the 𝜖 -scales, we can write 
+
+𝑞 = Ψ𝛽 for 𝛽 ∈ Δ𝑛 . Hence 𝑇 𝑗 = 𝛼 𝑗 Ψ𝛽 , which is a conic combination of 𝜖 -scales. □
+
+Proof of Theorem 2. ( =⇒ ) Suppose 𝑇 ∈ 𝑒𝑥 (𝑈 ). A well known fact from geometry is that a point in a convex polytope in R𝑛 ×𝑛 is an extreme point if and only if there are 𝑛 2 linearly independent binding constraints. Since 𝑈 includes 𝑛 row constraints, 𝑇 must satisfy 𝑛 2 −𝑛 = 𝑛 (𝑛 −1) tight privacy constraints. Since each column is non-zero, only a single differential privacy constraint can bind for every pair of adjacent entries, meaning that each column is associated with a maximum of 𝑛 − 1 tight privacy constraints. It follows that every column must have exactly 𝑛 − 1 tight privacy constraints, hence every column of 𝑇 is a multiple of an 𝜖 -scale. The proof that the columns of 𝑇 are linearly independent follows by a similar argument to Theorem 2 of Holohan et al. [ 27 ], which we include below for completeness. Assume for contradiction that there exists a linear dependence among the columns of 𝑇 . Then there is a non-zero vector of weights, 𝜃 ∈ R𝑛 such that Í𝑛 −1 
+
+> 𝑗 =0
+
+𝜃 𝑗 𝑇 𝑗 = 0𝑛 . Let 
+
+𝑊 = 𝑇 diag (𝜃 ). Then 𝑊 ≠ 0𝑛 ×𝑛 as 𝜃 ≠ 0𝑛 . Also, 𝑊 1𝑛 = 0𝑛 by the linear dependency. Choose any 𝛿 ∈ ( 0, 1/max 𝑗 {| 𝜃 𝑗 |}) . Define 𝑋 = 𝑇 − 𝛿𝑊 and 𝑌 =
+
+𝑇 + 𝛿𝑊 . By construction, (𝑇 ± 𝛿𝑊 )1𝑛 = 𝑇 1𝑛 ± 𝛿𝑊 1𝑛 = 𝑇 1𝑛 = 1𝑛 ,so the row sums of both 𝑋 and 𝑌 are 1. Next, we show that all elements of 𝑋 are positive. For 𝑖, 𝑗 ∈ { 0, ..., 𝑛 − 1},
+
+𝑥 𝑖,𝑗 = 𝑡 𝑖,𝑗 − 𝛿𝑤 𝑖,𝑗 
+
+= 𝑡 𝑖,𝑗 − 𝛿 
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑢 =0
+
+𝑡 𝑖,𝑢 diag (𝜃 )𝑢,𝑗 
+
+= 𝑡 𝑖,𝑗 (1 − 𝛿𝜃 𝑗 )
+
+> 𝑡 𝑖,𝑗 
+
+
+
+1 − 𝜃 𝑗 
+
+max 𝑣 {| 𝜃 𝑣 |} 
+
+
+
+≥ 0
+
+By similar argument, all elements of 𝑌 are positive. Next, we note that any column 𝑗 of 𝑋 is a positive multiple of the corresponding column of 𝑇 , as 𝑋 𝑗 = 𝑇 𝑗 (1 − 𝛿𝜃 𝑗 ). Since 𝑇 𝑗 is 𝜖 -neighbor indistin-guishable, so is 𝑋 𝑗 . Therefore, 𝑋 ∈ 𝑈 . By a similar argument, 𝑌 ∈ 𝑈 
+
+as well. But then 𝑇 = 12 𝑋 + 12 𝑌 , implying that 𝑇 ∉ 𝑒𝑥 (𝑈 ), yielding a contradiction.  
+
+> 16 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+( ⇐ = ) Suppose 𝑇 ∈ 𝑈 and the columns of 𝑇 are linearly inde-pendent multiples of 𝜖 -scales. Assume for contradiction that 𝑇 is not an extreme point. Then, there exists 𝑋, 𝑌 ∈ 𝑈 , distinct, and 
+
+𝛼 ∈ ( 0, 1) such that 𝑇 = 𝛼𝑋 + ( 1 − 𝛼 )𝑌 .For each column 𝑗 we show that 𝑇 𝑗 is a constant multiple of 
+
+𝑋 𝑗 . This is equivalent to showing 𝑥 𝑖,𝑗 /𝑡 𝑖,𝑗 = 𝑥 𝑖 +1,𝑗 /𝑡 𝑖 +1,𝑗 for all 𝑖 ∈{0, ..., 𝑛 − 2}. Assume for contradiction that there exists some 𝑖 ∈{0, ..., 𝑛 − 2} such that 𝑥 𝑖,𝑗 /𝑡 𝑖,𝑗 ≠ 𝑥 𝑖 +1,𝑗 /𝑡 𝑖 +1,𝑗 . We proceed by cases. If 𝑡 𝑖,𝑗 = 𝑒 𝜖 𝑡 𝑖 +1,𝑗 , then 𝑥 𝑖,𝑗 < 𝑒 𝜖 𝑥 𝑖 +1,𝑗 . Hence, 
+
+𝑒 𝜖 𝑡 𝑖 +1,𝑗 = 𝑡 𝑖,𝑗 
+
+= 𝛼𝑥 𝑖,𝑗 + ( 1 − 𝛼 )𝑦 𝑖,𝑗 
+
+< 𝛼𝑒 𝜖 𝑥 𝑖 +1,𝑗 + ( 1 − 𝛼 )𝑦 𝑖,𝑗 
+
+≤ 𝛼𝑒 𝜖 𝑥 𝑖 +1,𝑗 + ( 1 − 𝛼 )𝑒 𝜖 𝑦 𝑖 +1,𝑗 
+
+= 𝑒 𝜖 𝑡 𝑖 +1,𝑗 
+
+producing a contradiction. An analogous argument holds when 
+
+𝑡 𝑖,𝑗 = 𝑒 −𝜖 𝑡 𝑖 +1,𝑗 , implying that 𝑋 𝑗 must be proportional to 𝑇 𝑗 . Simi-larly, 𝑌 𝑗 must be proportional to 𝑇 𝑗 . Hence, there must be weight vectors 𝜃, 𝜈 ∈ R𝑛 such that 𝑋 = 𝑇 diag (𝜃 ) and 𝑌 = 𝑇 diag (𝜈 ).Define 𝛽 = 𝜃 − 𝜈 and note that 𝛽 ≠ 0𝑛 since 𝑋 ≠ 𝑌 . Then 
+
+0𝑛 = (𝑋 − 𝑌 )1𝑛 
+
+= (𝑇 diag (𝜃 ) − 𝑇 diag (𝜈 )) 1𝑛 
+
+= 𝑇 diag (𝜃 − 𝜈 )1𝑛 
+
+= 𝑇 diag (𝛽 )1𝑛 
+
+which is a linear dependency on the columns of 𝑇 , yielding a con-tradiction. □
+
+Proof of Theorem 3. We first show that 𝐹 ⊆ Ψ(𝑅 𝐹 ). Given 𝑇 ∈ 𝐹 ,it is also in 𝑈 , so every column of 𝑇 can be expressed a conic combination of 𝜖 -scales by Lemma 1. So for every column 𝑗 there exists a column vector 𝛽 ( 𝑗 ) such that 𝑇 𝑗 = Ψ𝛽 ( 𝑗 ). Let 𝐵 ∈ R𝑘 ×𝑛  
+
+> ≥0
+
+be the matrix whose 𝑗 𝑡ℎ column is 𝛽 ( 𝑗 ). Then 𝑇 = Ψ𝐵 . To complete the proof, we show 𝐵 ∈ 𝑅 𝐹 . To do so, we show 𝑧 Ψ𝐵 = 𝑧 and Ψ𝐵 1𝑛 = 1𝑛 .We establish the first condition 𝑧 Ψ𝐵 = 𝑧 via contradiction. Sup-pose there exists some 𝑗 ∈ { 0, ..., 𝑛 − 1} such that 𝑧 𝑗 ≠ (𝑧 Ψ𝐵 )𝑗 =
+
+𝑧 Ψ𝐵 𝑗 . By construction, 𝑇 𝑗 = Ψ𝐵 𝑗 , so 𝑧 𝑗 ≠ 𝑧𝑇 𝑗 , so 𝑧 ≠ 𝑧𝑇 , contradict-ing 𝑇 ∈ 𝐹 . Hence 𝑧 Ψ𝐵 = 𝑧 .The second condition holds as well, as Ψ𝐵 1𝑛 = 𝑇 1𝑛 = 1𝑛 since 
+
+𝑇 ∈ 𝐹 . Hence, given 𝑇 ∈ 𝐹 there exists 𝐵 ∈ 𝑅 𝐹 such that 𝑇 = Ψ𝐵 .This establishes 𝑇 ∈ Ψ(𝑅 𝐹 ).Next, we show that 𝐹 ⊇ Ψ(𝑅 𝐹 ). Let 𝑇 ∈ Ψ(𝑅 𝐹 ). Then there exists some 𝐵 ∈ 𝑅 𝐹 such that 𝑇 = Ψ𝐵 . By definition of 𝑅 𝐹 , 𝑧𝑇 = 𝑧 Ψ𝐵 = 𝑧 ,and 𝑇 1𝑛 = Ψ𝐵 1𝑛 = 1𝑛 . Column 𝑗 of 𝑇 is given by Ψ𝐵 𝑗 . This is a conic combination of 𝜖 -neighbor indistinguishable vectors, and is hence 𝜖 -neighbor indistinguishable. Since every column of 𝑇 is 𝜖 -neighbor indistinguishable, 𝑇 is 𝜖 -differentially private, establishing 
+
+𝑇 ∈ 𝐹 . Hence, Ψ(𝑅 𝐹 ) ⊇ 𝐹 , producing Ψ(𝑅 𝐹 ) = 𝐹 . □
+
+Proof of Proposition 1. We provide two proofs of this result. 
+
+Proof. (Approach 1) For two matrices 𝑋 and 𝑌 of the same size, we write the Frobenius inner product as ⟨𝑋, 𝑌 ⟩ = 𝑡𝑟 [𝑋 ⊤𝑌 ]. A standard result from linear algebra is that a point 𝑋 in a convex polytope 𝑃 is an extreme point if and only if it is the unique maxi-mizer of some linear function from 𝑃 to R. We restate this result in our context as follows. 
+
+Lemma 4. Given convex polytope 𝑃 in some vector space of real matrices 𝑉 , a matrix 𝑇 ∈ 𝑃 is an extreme point if and only if there exists 𝑑 ∈ 𝑉 such that 𝑇 is the unique maximizer of 𝜙 (·) = ⟨· , 𝑑 ⟩ in 𝑃 .
+
+Now, we prove Proposition 1. Suppose 𝑇 ∈ 𝑒𝑥 (𝐹 ). Then by Lemma 4 there exists a 𝑐 ∈ R𝑛 ×𝑛 such that 𝑇 is the unique maximizer of ⟨𝑐,𝑇 ′⟩ for all 𝑇 ′ ∈ 𝐹 . Consider 𝑑 = Ψ⊤𝑐 and note for any 𝐵 ′ ∈ 𝑅 𝐹 ,
+
+⟨𝑑, 𝐵 ′⟩ = 𝑡𝑟 [𝑑 ⊤𝐵 ′] = 𝑡𝑟 [𝑐 ⊤Ψ𝐵 ′] = ⟨𝑐, Ψ𝐵 ′⟩. Let 𝐵 be any extreme point of 𝑅 𝐹 that maximizes ⟨𝑑, 𝐵 ′⟩ = ⟨𝑐, Ψ𝐵 ′⟩ over all 𝐵 ′ ∈ 𝑅 𝐹 . We must have Ψ𝐵 = 𝑇 because if Ψ𝐵 = 𝑇 ′ ≠ 𝑇 , then for any ¯𝐵 in the preimage of 𝑇 through Ψ, we have ⟨𝑑, 𝐵 ⟩ = ⟨𝑐, Ψ𝐵 ⟩ = ⟨𝑐,𝑇 ′⟩ <
+
+⟨𝑐,𝑇 ⟩ = ⟨𝑐, Ψ ¯𝐵 ⟩ = ⟨𝑑, ¯𝐵 ⟩ where the inequality follows from the maximality of 𝑇 . This contradicts the maximality of 𝐵 . Hence 𝐵 is an extreme point in 𝑅 𝐹 such that 𝑇 = Ψ𝐵 . □
+
+Proof. (Approach 2) Suppose 𝑇 ∈ 𝑒𝑥 (𝐹 ). Since Ψ is surjective, there exists some 𝑊 ∈ 𝑅 𝐹 such that 𝑇 = Ψ𝑊 . Since 𝑅 𝐹 is convex, 
+
+𝑊 = 𝜃 1𝐵 (1) +... +𝜃 𝑙 𝐵 (𝑙 ) for some 𝐵 (1) , ..., 𝐵 (𝑙 ) ∈ 𝑒𝑥 (𝑅 𝐹 ) and positive 
+
+𝜃 𝑖 ’s that sum to 1. Then 
+
+𝑇 = Ψ𝑊 =
+
+> 𝑙
+
+∑︁ 
+
+> 𝑖 =1
+
+𝜃 𝑙 (Ψ𝐵 (𝑖 ) )
+
+Since 𝑇 is extreme, the expression on the right-hand side must be the trivial convex combination. Hence, Ψ𝐵 (𝑖 ) = 𝑇 for all 𝑖 ∈ { 1, ..., 𝑙 }.Let 𝐵 = 𝐵 (1) . Then there is some 𝐵 ∈ 𝑒𝑥 (𝑅 𝐹 ) such that 𝑇 = Ψ𝐵 . □
+
+Example 1. Ψ is not a 1-1 mapping between 𝑒𝑥 (𝑅 𝐹 ) and 𝑒𝑥 (𝐹 ).
+
+Consider the target distribution 𝑧 =   13 , 13 , 13
+
+ with 𝜖 = ln (2) and 
+
+𝑛 = 3. There are 4 possible 𝜖 -scales, displayed in the matrix Ψ below. 
+
+Ψ =
+
+
+
+4/7 2/5 1/4 1/72/7 1/5 1/2 2/71/7 2/5 1/4 4/7
+
+
+
+Using the Avis-Fukuda vertex enumeration algorithm [ 3], we gen-erate all extreme points of 𝐹 and 𝑅 𝐹 . We find |𝑒𝑥 (𝐹 )| = 36 and 
+
+|𝑒𝑥 (𝑅 𝐹 )| = 78 .The matrices 𝐵 (1) and 𝐵 (2) below are extreme points of 𝑅 𝐹 , yet they both map to the same extreme point in 𝐹 under Ψ.
+
+𝐵 (1) =
+
+
+
+0 0 01 0 2/30 1 1/30 0 0
+
+
+
+∈ 𝑒𝑥 (𝑅 𝐹 )
+
+𝐵 (2) =
+
+
+
+0 0 14 /30 1 0 00 1 2/30 0 0 14 /30 
+
+
+
+∈ 𝑒𝑥 (𝑅 𝐹 )
+
+Ψ𝐵 (1) = Ψ𝐵 (2) =
+
+
+
+2/5 1/4 7/20 1/5 1/2 3/10 2/5 1/4 7/20 
+
+
+
+∈ 𝑒𝑥 (𝐹 )
+
+Additionally, matrix 𝐵 (3) below is an extreme point of 𝑅 𝐹 , yet 
+
+Ψ𝐵 (3) ∉ 𝑒𝑥 (𝐹 ), as the matrix Ψ𝐵 (3) is not an output of the Avis-Fukuda algorithm over 𝐹 .
+
+𝐵 (3) =
+
+
+
+5/6 0 1/30 0 00 0 2/31/6 1 0
+
+
+
+∈ 𝑒𝑥 (𝑅 𝐹 ) 
+
+> 17 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+△
+
+Proof of Lemma 2. ( =⇒ ) We proceed by the contrapositive. Suppose there exists a non-zero movement matrix 𝜇 ∈ 𝑀 𝐹 (Ψ)
+
+such that 𝜇 𝑖,𝑗 is zero whenever 𝑏 𝑖,𝑗 is zero. Since 𝜇 ≠ 0𝑘 ×𝑛 , there must be a column with at least one non-zero entry. Note that this column cannot have exactly one non-zero entry, because if 𝜇 𝑖,𝑗 ≠ 0
+
+yet 𝜇 𝑖 ′,𝑗 = 0 for all 𝑖 ′ ≠ 𝑖 , then (𝑧 Ψ𝜇 )𝑗 = (𝑧 Ψ)𝜇 𝑗 = 𝑧 Ψ𝑖 𝜇 𝑖,𝑗 ≠ 0,implying 𝑧 Ψ𝜇 ≠ 0⊤ 
+
+> 𝑛
+
+, contradicting 𝜇 ∈ 𝑀 𝐹 (Ψ). Hence, there is some column of 𝜇 with at least two non-zero entries. For column 𝑗 , let 𝑙 ( 𝑗 ) be the smallest row index 𝑖 such that 
+
+𝑏 𝑖,𝑗 > 0, and let 𝐷 ( 𝑗 ) be the set of all other indices 𝑖 such that 
+
+𝑏 𝑖,𝑗 > 0. Then there exists some 𝑗 ∈ { 0, ..., 𝑛 − 1} such that 𝐷 ( 𝑗 ) ≠ ∅
+
+because 𝜇 has a column with at least 2 non-zero entries and 𝐵 must be non-zero at those positions. We can then write, 
+
+Ψ𝜇 𝑗 = Ψ𝑙 ( 𝑗 ) 𝜇 𝑙 ( 𝑗 ),𝑗 +∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+Ψ𝑖 𝜇 𝑖,𝑗 
+
+For all 𝑖 ∈ 𝐷 ( 𝑗 ), define ℎ𝑗 𝑖 as the vector 
+
+ℎ𝑗 𝑖 = (𝑧 Ψ𝑖 )−1Ψ𝑖 − ( 𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 )
+
+Note that the set of vectors {ℎ𝑗 𝑖 : 𝑖 ∈ 𝐷 ( 𝑗 )} is the set 𝐻 (𝐵 𝑗 ). Rear-ranging gives, 
+
+Ψ𝑖 = 𝑧 Ψ𝑖 
+
+
+
+(𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 ) + ℎ𝑗 𝑖 
+
+
+
+Substituting into the above equation for Ψ𝜇 𝑗 yields, 
+
+Ψ𝜇 𝑗 = Ψ𝑙 ( 𝑗 ) 𝜇 𝑙 ( 𝑗 ),𝑗 +∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑖 
+
+
+
+(𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 ) + ℎ𝑗 𝑖 
+
+
+
+𝜇 𝑖,𝑗 
+
+Next, we rewrite each term on the right-hand side of the above equa-tion. The first term can be expressed as 𝑧 Ψ𝑙 ( 𝑗 ) (𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 ) 𝜇 𝑙 ( 𝑗 ),𝑗 
+
+and the sum can be rewritten as ∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑖 (𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 ) 𝜇 𝑖,𝑗 +∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑖 𝜇 𝑖,𝑗 ℎ𝑗 𝑖 
+
+Hence, 
+
+Ψ𝜇 𝑗 = 𝑧 Ψ𝑙 ( 𝑗 ) (𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 ) 𝜇 𝑙 ( 𝑗 ),𝑗 
+
++∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑖 (𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 ) 𝜇 𝑖,𝑗 
+
++∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑖 𝜇 𝑖,𝑗 ℎ𝑗 𝑖 
+
+which simplifies to 
+
+Ψ𝜇 𝑗 = (𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 )∑︁        
+
+> 𝑖 ∈𝐷 (𝑗 )∪{ 𝑙 (𝑗 ) }
+
+𝑧 Ψ𝑖 𝜇 𝑖,𝑗 +∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑖 𝜇 𝑖,𝑗 ℎ𝑗 𝑖 
+
+By the definition of 𝑀 (Ψ), 𝑧 Ψ𝜇 = 0⊤ 
+
+> 𝑛
+
+, meaning the first sum is 0.Therefore, we have 
+
+Ψ𝜇 𝑗 =∑︁     
+
+> 𝑖 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑖 𝜇 𝑖,𝑗 ℎ𝑗 𝑖 
+
+So then 
+
+0𝑛 = Ψ𝜇 1𝑛 =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+Ψ𝜇 𝑗 =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+∑︁ 𝑖 ∈𝐷 ( 𝑗 )
+
+𝑧 Ψ𝑖 𝜇 𝑖,𝑗 ℎ𝑗 𝑖 
+
+The above is a linear dependency among the vectors of the multiset 
+
+⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐻 (𝐵 𝑗 ), implying that 𝐵 is not Ψ-affinely simplified, as required. 
+
+( ⇐ = ) Again by the contrapositive, suppose 𝐵 is not Ψ-affinely simplified. Then ⊎𝑚 −1 
+
+> 𝑗 =0
+
+𝐻 (𝐵 𝑗 ) is linearly dependent. As above, let 
+
+𝑙 ( 𝑗 ) be the smallest row 𝑖 for which 𝑏 𝑖,𝑗 > 0 and 𝐷 ( 𝑗 ) be the set of all other indices 𝑖 such that 𝑏 𝑖,𝑗 > 0. The linear dependency can be written as, 
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+∑︁ 𝑥 ∈𝐷 ( 𝑗 )
+
+𝛼 𝑥,𝑗 
+
+ (𝑧 Ψ𝑖 )−1Ψ𝑥 − ( 𝑧 Ψ𝑙 ( 𝑗 ) )−1Ψ𝑙 ( 𝑗 )
+
+ = 0𝑛 
+
+for a collection of 𝛼 𝑥,𝑗 ’s, not all zero. We can rewrite the left-hand side of the above equation as 
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+©«
+
+−∑︁     
+
+> 𝑥 ∈𝐷 (𝑗 )
+
+𝛼 𝑥,𝑗 (𝑧 Ψ𝑙 ( 𝑗 ) )−1ª®¬
+
+Ψ𝑙 ( 𝑗 ) +
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+∑︁ 𝑥 ∈𝐷 ( 𝑗 )
+
+ 𝛼 𝑖,𝑗 (𝑧 Ψ𝑥 )−1  Ψ𝑥 
+
+Let 𝜇 be the matrix such that 𝜇 𝑖,𝑗 equals − Í𝑥 ∈𝐷 ( 𝑗 ) (𝑧 Ψ𝑙 ( 𝑗 ) )−1𝛼 𝑥,𝑗 
+
+when 𝑖 = 𝑙 ( 𝑗 ), equals 𝛼 𝑖,𝑗 (𝑧 Ψ𝑖 )−1 whenever 𝑖 ∈ 𝐷 ( 𝑗 ), and equals 0 otherwise. Since the 𝛼 𝑥,𝑗 ’s are not all zero, the matrix 𝜇 ≠ 0𝑘 ×𝑛 .Also, the sum above can be written in matrix notation as Ψ𝜇 1𝑛 = 0𝑛 .Additionally, the 𝑗 𝑡ℎ column constraint of 𝜇 can be written, 
+
+(𝑧 Ψ𝜇 )𝑗 = 𝑧 
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =0
+
+Ψ𝑖 𝜇 𝑖,𝑗 
+
+= 𝑧 Ψ𝑙 ( 𝑗 ) 𝜇 𝑙 ( 𝑗 ),𝑗 +∑︁     
+
+> 𝑥 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑥 𝜇 𝑥,𝑗 
+
+= −𝑧 Ψ𝑙 ( 𝑗 )∑︁     
+
+> 𝑥 ∈𝐷 (𝑗 )
+
+(𝑧 Ψ𝑙 ( 𝑗 ) )−1𝛼 𝑥,𝑗 +∑︁     
+
+> 𝑥 ∈𝐷 (𝑗 )
+
+𝑧 Ψ𝑥 (𝑧 Ψ𝑥 )−1𝛼 𝑥,𝑗 
+
+= −∑︁     
+
+> 𝑥 ∈𝐷 (𝑗 )
+
+𝛼 𝑥,𝑗 +∑︁     
+
+> 𝑥 ∈𝐷 (𝑗 )
+
+𝛼 𝑥,𝑗 
+
+= 0
+
+implying 𝑧 Ψ𝜇 = 0⊤ 
+
+> 𝑛
+
+. Therefore 𝜇 ∈ 𝑀 𝐹 (Ψ). □
+
+Proof of Theorem 4. ( =⇒ ) We proceed by the contrapositive. Suppose 𝐵 is not Ψ-simplified. By the equivalence of Ψ-simplified and movement matrices established in Lemma 2, there exists a movement matrix 𝜇 ∈ 𝑀 (Ψ) such that 𝜇 𝑖,𝑗 = 0 whenever 𝑏 𝑖,𝑗 = 0.Choose any positive 
+
+𝛿 < min    
+
+> { ( 𝑖,𝑗 ) | 𝜇 𝑖,𝑗 ≠0}
+
+ 𝑏 𝑖,𝑗 
+
+|𝜇 𝑖,𝑗 |
+
+
+
+Then 𝐵 ± 𝛿𝜇 ∈ 𝑅 𝐹 , as (1) For any 𝑖, 𝑗 entry, ±𝛿𝜇 𝑖,𝑗 ≤ 𝑏 𝑖.𝑗 with equality if and only if 
+
+𝑏 𝑖,𝑗 = 0. Hence (𝐵 ± 𝛿𝜇 )𝑖,𝑗 ≥ 0.(2) Ψ(𝐵 ± 𝛿𝜇 )1𝑛 = Ψ𝐵 1𝑛 ± 𝛿 Ψ𝜇 1𝑛 = 1𝑛 ± 0𝑛 = 1𝑛 
+
+(3) 𝑧 Ψ(𝐵 ± 𝛿𝜇 ) = 𝑧 Ψ𝐵 ± 𝛿𝑧 Ψ𝜇 = 𝑧 ± 0⊤ 
+
+> 𝑛
+
+= 𝑧 
+
+Hence, 𝐵 can be represented as 
+
+𝐵 = 12 (𝐵 + 𝛿𝜇 ) + 12 (𝐵 − 𝛿𝜇 )
+
+Therefore 𝐵 ∉ 𝑒𝑥 (𝑅 𝐹 ).
+
+( ⇐ = ) Proceed by the contrapositive yet again. Suppose 𝐵 ∉
+
+𝑒𝑥 (𝑅 𝐹 ). Then there exists distinct 𝑋, 𝑌 ∈ 𝑅 𝐹 and 𝜃 ∈ ( 0, 1) such that 𝐵 = 𝜃𝑋 + ( 1 − 𝜃 )𝑌 . By non-negativity, the convex combination above implies 𝑥 𝑖,𝑗 = 0 = 𝑦 𝑖,𝑗 whenever 𝑏 𝑖,𝑗 = 0. Let 𝜇 = 𝑋 − 𝑌 . Then 
+
+𝜇 𝑖,𝑗 = 0 whenever 𝑏 𝑖,𝑗 = 0. Also, 𝑧 Ψ𝜇 = 𝑧 Ψ𝑋 −𝑧 Ψ𝑌 = 𝑧 −𝑧 = 0⊤ 
+
+> 𝑛
+
+and 
+
+Ψ𝜇 1𝑛 = Ψ𝑋 1𝑛 − 𝜓𝑌 1𝑛 = 1𝑛 − 1𝑛 = 0𝑛 . So 𝜇 ∈ 𝑀 𝐹 (Ψ), implying 
+
+𝐵 is not Ψ-simplified. □ 
+
+> 18 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+Proof of Corollary 2. Let 𝐵 ∈ 𝑒𝑥 (𝑅 𝐹 ) and P be the set of positive indices of 𝑧 . First, observe that for each 𝑗 ∈ P , 𝐵 𝑗 ≠ 0𝑘 (as 𝑧 Ψ𝐵 𝑗 =
+
+𝑧 𝑗 ≠ 0), so there must be at least one positive entry in 𝐵 𝑗 , so 𝐵 must contain at least |P | positive entries. To show the upper bound on the number of positive entries is |P | + 𝑛 − 1, note that every element 
+
+ℎ ∈ ⊎ 𝑛 −1 
+
+> 𝑗 =0
+
+𝐻 (𝐵 𝑗 ) belongs to an 𝑛 − 1 dimensional subspace of R𝑛 
+
+because of the constraint 𝑧ℎ = 0. Since the elements are linearly independent, there can be at most 𝑛 − 1 of them. The number of positive entries in each column 𝑗 ∈ P of 𝐵 is at most one more than the number of difference vectors in 𝐻 (𝐵 𝑗 ) (because 𝐻 (𝐵 𝑗 )
+
+is constructed to include one vector corresponding to each index 
+
+𝑖 such that 𝑏 𝑖,𝑗 > 0 except the smallest). Hence the number of positive elements of 𝐵 is at most |P | plus the number of elements of 
+
+⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐻 (𝐵 𝑗 ), yielding a maximum of |P | + 𝑛 − 1 positive entries. □
+
+## B.2 Characterizing extreme points that are preserved under Ψ.
+
+In this section, we provide a necessary and sufficient condition that allows us to identify which extreme points in 𝑅 𝐹 are mapped to extreme points of 𝐹 . Our theorem is more general than required, referring to the extreme points of a convex polytope 𝑃 in an ar-bitrary ˆ𝑘 × ˆ𝑛 space of real matrices under affine surjection. We place hats over the dimensions as the following results hold for any dimensions ˆ𝑘 ≥ ˆ𝑛 , and not only the specific values of 𝑘 and 𝑛 used in this paper. As before, for matrices 𝑋 and 𝑌 of the same size, we write the Frobenius inner product as ⟨𝑋, 𝑌 ⟩ = 𝑡𝑟 [𝑋 ⊤𝑌 ]. We will make use of the following two definitions. 
+
+Definition 14. Given a convex polytope 𝑃 ⊂ Rˆ𝑘 × ˆ𝑛 and a matrix 
+
+𝐷 ∈ Rˆ𝑘 × ˆ𝑛 we define the maximizing set of the function ⟨· , 𝐷 ⟩ as opt 𝑃,𝐷 = argmax 𝐵 ∈𝑃 ⟨𝐵, 𝐷 ⟩.
+
+Definition 15. The kernel of a linear surjection Φ : Rˆ𝑘 × ˆ𝑛 → R ˆ𝑛 × ˆ𝑛 
+
+is denoted as 𝐾 [Φ] = {𝐵 ∈ Rˆ𝑘 × ˆ𝑛 : Φ𝐵 = 0 ˆ𝑛 × ˆ𝑛 ∈ R ˆ𝑛 × ˆ𝑛 }. We denote the orthogonal complement of the kernel of Φ as the set 𝐾 ⊥ [Φ] =
+
+{𝐵 ∈ Rˆ𝑘 × ˆ𝑛 : ⟨𝐵, 𝐵 ′⟩ = 0 for all 𝐵 ′ ∈ 𝐾 [Φ]} .
+
+Theorem 9. Let Φ : Rˆ𝑘 × ˆ𝑛 → R ˆ𝑛 × ˆ𝑛 be a linear surjection between convex polytopes 𝑃 ⊂ Rˆ𝑘 × ˆ𝑛 and ˜𝑃 ⊂ R ˆ𝑛 × ˆ𝑛 . Suppose 𝐵 ∈ 𝑃 . Then 
+
+Φ𝐵 ∈ 𝑒𝑥 ( ˜𝑃 ) if and only if there exists 𝐷 ∈ 𝐾 ⊥ [Φ] such that 𝐵 ∈
+
+opt 𝑃,𝐷 and Φ maps all the matrices in opt 𝑃,𝐷 to the same point in ˜𝑃 .
+
+Proof. ( =⇒ ) Since Φ𝐵 is an extreme point of ˜𝑃 , by Lemma 4 there exists 𝑊 ∈ R ˆ𝑛 × ˆ𝑛 such that ⟨𝑊 , Φ𝐵 ⟩ > ⟨𝑊 ,𝑇 ⟩ for all 𝑇 ∈
+
+ˆ𝑃 − { Φ𝐵 }. Consider 𝐷 = Φ⊤𝑊 ∈ Rˆ𝑘 × ˆ𝑛 . Then 𝐷 ∈ 𝐾 ⊥ [Φ] because for any ˆ𝐵 ∈ 𝐾 [Φ], ⟨𝐷, ˆ𝐵 ⟩ = 𝑡𝑟 [𝐷 ⊤ ˆ𝐵 ] = 𝑡𝑟 [𝑊 ⊤ (Φ ˆ𝐵 )] = 0. Also, for any 𝐵 ′ ∈ 𝑃 ,
+
+⟨𝐷, 𝐵 ′⟩ = 𝑡𝑟 [𝐷 ⊤𝐵 ′] = 𝑡𝑟 [( Φ⊤𝑊 )⊤𝐵 ′] = 𝑡𝑟 [𝑊 ⊤ (Φ𝐵 ′)] = ⟨𝑊 , Φ𝐵 ′⟩
+
+Then for any ˜𝐵 ∈ 𝑃 , if Φ ˜𝐵 = Φ𝐵 , then 
+
+⟨𝐷, 𝐵 ⟩ = ⟨𝑊 , Φ𝐵 ⟩ = ⟨𝑊 , Φ ˜𝐵 ⟩ = ⟨𝐷, ˜𝐵 ⟩
+
+Alternatively, if Φ ˜𝐵 ≠ Φ𝐵 , then 
+
+⟨𝐷, 𝐵 ⟩ = ⟨𝑊 , Φ𝐵 ⟩ > ⟨𝑊 , Φ ˜𝐵 ⟩ = ⟨𝐷, ˜𝐵 ⟩
+
+where the strict inequality follows from the definition of 𝑊 . Thus 
+
+𝐵 ∈ opt 𝑃,𝐷 and Φ sends all of opt 𝑃,𝐷 to Φ𝐵 .( ⇐= ) Suppose there exists 𝐷 ∈ 𝐾 ⊥ [Φ] such that 𝐵 ∈ opt 𝑃,𝐷 
+
+and Φ maps all of opt 𝑃,𝐷 to the same point. Define 𝑊 ∈ R ˆ𝑛 × ˆ𝑛 as 
+
+𝑊 = (Φ⊤)†𝐷 where † indicates the Moore–Penrose pseudoinverse. For any 𝐵 ′ ∈ 𝑃 ,
+
+⟨𝑊 , Φ𝐵 ′⟩ = 𝑡𝑟 [( Φ𝐵 ′)⊤𝑊 ] = 𝑡𝑟 [( Φ𝐵 ′)⊤ (Φ⊤)†𝐷 ] = 𝑡𝑟 [𝐵 ′⊤ Φ⊤ (Φ⊤)†𝐷 ]
+
+A standard result from linear algebra holds that Φ⊤ (Φ⊤)† is a pro-jection matrix onto 𝐾 ⊥ [Φ]. Since 𝐷 is in 𝐾 ⊥ [Φ], Φ⊤ (Φ⊤)†𝐷 = 𝐷 .Hence, 
+
+⟨𝑊 , Φ𝐵 ′⟩ = 𝑡𝑟 [𝐵 ′⊤ Φ⊤ (Φ⊤)†𝐷 ] = 𝑡𝑟 [𝐵 ′⊤ 𝐷 ] = ⟨𝐷, 𝐵 ′⟩
+
+Given some 𝑇 ∈ ˜𝑃 , the surjectivity of Φ guarantees the existence of a 𝐵 ′ ∈ 𝑃 with 𝑇 = Φ𝐵 ′. Either 𝐵 ′ is in opt 𝑃,𝐷 or it is not. If 
+
+𝐵 ′ ∈ opt 𝑃,𝐷 , since Φ maps all of opt 𝑃,𝐷 to the same point, we must have 𝑇 = Φ𝐵 . If 𝐵 ′ ∉ opt 𝑃,𝐷 , then 𝑇 ≠ Φ𝐵 so 
+
+⟨𝑊 ,𝑇 ⟩ = ⟨𝐷, 𝐵 ′⟩ < ⟨𝐷, 𝐵 ⟩ = ⟨𝑊 , Φ𝐵 ⟩
+
+Therefore, there exists a 𝑊 ∈ R ˆ𝑛 × ˆ𝑛 such that Φ𝐵 is the unique maximizer, implying Φ𝐵 ∈ 𝑒𝑥 ( ˜𝑃 ) by Lemma 4. □
+
+Using Theorem 9, we provide a geometric characterization of extreme points of 𝑅 𝐹 that are preserved under Ψ by setting Φ = Ψ,
+
+ˆ𝑘 = 𝑘 , ˆ𝑛 = 𝑛 , 𝑃 = 𝑅 𝐹 , and ˜𝑃 = 𝐹 .
+
+Corollary 3. Suppose 𝐵 ∈ 𝑅 𝐹 . Then Ψ𝐵 ∈ 𝑒𝑥 (𝐹 ) if and only if there exists 𝐷 ∈ 𝐾 ⊥ [Ψ] such that 𝐵 ∈ opt 𝑅 𝐹 ,𝐷 and Ψ maps all the matrices in opt 𝑅 𝐹 ,𝐷 to the same point. 
+
+Since the above result holds for any 𝐵 ∈ 𝑅 𝐹 , it also holds in particular when 𝐵 ∈ 𝑒𝑥 (𝑅 𝐹 ).
+
+## C Heuristic Constructor Analysis of Section 5 C.1 Runtime Analysis of Algorithm 1 
+
+The following proposition shows how Step 8 can be computed efficiently and will help us establish the runtime of Algorithm 1. 
+
+Proposition 2. The value of 𝑞 in Step 8 of the Algorithm 1 can be computed as 𝑞 = min 𝑞 0, ..., 𝑞 𝑛 −1, 𝑐 𝑗  
+
+> 𝑧𝑠
+
+where, 
+
+𝑞 𝑖 =
+
+( 𝑒 𝜖 𝑟 𝑖 +1 −𝑟 𝑖    
+
+> 𝑒 𝜖 𝑠 𝑖 +1−𝑠 𝑖
+
+, 𝑝 𝑖 = 1       
+
+> 𝑟 𝑖 −𝑒 −𝜖 𝑟 𝑖 +1
+> 𝑠 𝑖 −𝑒 −𝜖 𝑠 𝑖 +1
+
+, 𝑝 𝑖 = −1
+
+Proof. In Step 8 of the algorithm, for any possible value of 
+
+𝛾 , 𝑟 − 𝛾𝑠 is 𝜖 -neighbor indistinguishable if and only if for every 
+
+0 ≤ 𝑖 ≤ 𝑛 − 2 the following two constraints hold. 
+
+𝑒 −𝜖 (𝑟 𝑖 +1 − 𝛾𝑠 𝑖 +1) ≤ 𝑟 𝑖 − 𝛾𝑠 𝑖 
+
+and 
+
+𝑟 𝑖 − 𝛾𝑠 𝑖 ≤ 𝑒 𝜖 (𝑟 𝑖 +1 − 𝛾𝑠 𝑖 +1)
+
+Let L𝑖 be the set of values for 𝛾 for which the first constraint holds and let U𝑖 be the set of values for 𝛾 for which the second constraint holds. 
+
+L𝑖 =
+
+n
+
+𝛾 : 𝑒 −𝜖 (𝑟 𝑖 +1 − 𝛾𝑠 𝑖 +1) ≤ 𝑟 𝑖 − 𝛾𝑠 𝑖 
+
+o
+
+U𝑖 =
+
+n
+
+𝛾 : 𝑟 𝑖 − 𝛾𝑠 𝑖 ≤ 𝑒 𝜖 (𝑟 𝑖 +1 − 𝛾𝑠 𝑖 +1)
+
+o
+
+Additionally, let 
+
+V = {𝛾 : 𝛾𝑧𝑠 ≤ 𝑐 𝑗 } =
+
+
+
+−∞ , 𝑐 𝑗 
+
+𝑧𝑠 
+
+ 
+
+> 19 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+Then the value chosen for 𝑞 in Step 8 can be written as the maximum of the intersection of all of these sets. 
+
+𝑞 = max 
+
+(
+
+V ∩
+
+Ù 
+
+> 0≤𝑖 ≤𝑛 −2
+
+L𝑖 ∩ U𝑖 
+
+)
+
+The sets L𝑖 and U𝑖 can be rewritten as, 
+
+L𝑖 =
+
+n
+
+𝛾 : 𝛾  𝑠 𝑖 − 𝑒 −𝜖 𝑠 𝑖 +1
+
+ ≤ 𝑟 𝑖 − 𝑒 −𝜖 𝑟 𝑖 +1
+
+o
+
+U𝑖 =
+
+n
+
+𝛾 : 𝛾  𝑒 𝜖 𝑠 𝑖 +1 − 𝑠 𝑖 
+
+ ≤ 𝑒 𝜖 𝑟 𝑖 +1 − 𝑟 𝑖 
+
+o
+
+The right hand side of each inequality above is non-negative by 𝜖 -neighbor indistinguishability of 𝑟 . We consider two cases separately: when 𝑝 𝑖 = 1 and when 𝑝 𝑖 = −1.In the case when 𝑝 𝑖 = +1, the left hand side of the inequality of 
+
+L𝑖 is zero, so L𝑖 = R. Meanwhile, the left hand side of U𝑖 is 𝛾 times a positive quantity, so the inequality can be written as 
+
+𝛾 ≤ 𝑒 𝜖 𝑟 𝑖 +1 − 𝑟 𝑖 
+
+𝑒 𝜖 𝑠 𝑖 +1 − 𝑠 𝑖 
+
+= 𝑞 𝑖 
+
+where 𝑞 𝑖 is defined as in the statement of the lemma. Therefore 
+
+U𝑖 = (−∞ , 𝑞 𝑖 ) so L𝑖 ∩ U𝑖 = (−∞ , 𝑞 𝑖 ).Alternatively, in the case when 𝑝 𝑖 = −1, the left hand side of the inequality of U𝑖 is zero, so U𝑖 = R. Meanwhile, the left hand side of the inequality of L𝑖 is 𝛾 times a positive quantity, so the inequality can be written, 
+
+𝛾 ≤ 𝑟 𝑖 − 𝑒 −𝜖 𝑟 𝑖 +1
+
+𝑠 𝑖 − 𝑒 −𝜖 𝑠 𝑖 +1
+
+= 𝑞 𝑖 
+
+where 𝑞 𝑖 is defined as in the statement of the lemma. Therefore 
+
+L𝑖 = (−∞ , 𝑞 𝑖 ) so L𝑖 ∩ U𝑖 = (−∞ , 𝑞 𝑖 ). Therefore, in either case, 
+
+𝑞 = max 
+
+(
+
+−∞ , 𝑐 𝑗 
+
+𝑧𝑠 
+
+
+
+∩
+
+Ù 
+
+> 0≤𝑖 ≤𝑛 −2
+
+(−∞ , 𝑞 𝑖 )
+
+)
+
+= min 
+
+n
+
+𝑞 0, ..., 𝑞 𝑛 −1, 𝑐 𝑗 
+
+𝑧𝑠 
+
+o
+
+completing the proof. □
+
+Observe that each 𝑞 𝑖 can be computed in constant time, so the value of 𝑞 in Step 8 can be computed in O( 𝑛 ) time. Using this result, we can now establish the runtime of Algorithm 1 in Theorem 5. 
+
+Proof of Theorem 5. First, we show that the inner loop executes a maximum of 2𝑛 − 1 times during the entire program execution (and not per outer-loop execution). Our proof proceeds by demonstrating a map from the program state to the non-negative integers that decrements with each inner-loop iteration. At any point in the execution of the algorithm, define Ω to be the number of columns 𝑗 with 𝑐 𝑗 > 0, plus the number of rows 
+
+0 ≤ 𝑖 ≤ 𝑛 − 2 such that 𝑟 𝑖 ∉ {𝑒 −𝜖 𝑟 𝑖 +1, 𝑒 𝜖 𝑟 𝑖 +1 }. We show that Ω
+
+decreases with each pass through the inner loop. Since Ω can be no more than the number of columns plus the number of rows minus 1, this establishes that the algorithm’s inner loop executes at most 
+
+2𝑛 − 1 times. Once 𝑐 𝑗 = 0 for some 0 ≤ 𝑗 ≤ 𝑛 − 2, column 𝑗 will never be selected again by the algorithm, so the bound 𝑐 𝑗 = 0 will continue to hold through the remaining execution. Similarly, once there is a row 𝑖 with 𝑟 𝑖 +1 = 𝑒 𝜖 𝑟 𝑖 , pattern 𝑝 will be set in Step 6 so that 𝑝 𝑖 = +1.Let 𝑟 ′ be the next value of variable 𝑟 assigned in Step 9. Then we have, 
+
+𝑟 ′ 
+
+> 𝑖 +1
+
+= 𝑟 𝑖 +1 − 𝑞𝑠 𝑖 +1 = 𝑒 𝜖 𝑟 𝑖 − 𝑞𝑒 𝜖 𝑠 𝑖 = 𝑒 𝜖 𝑟 ′
+
+> 𝑖
+
+An analogous result follows when 𝑟 𝑖 +1 = 𝑒 −𝜖 𝑟 𝑖 , establishing that once a row 𝑖 meets the 𝜖 -neighbor-indistinguishability bound, the bound continues to hold through the remaining execution. Next, we show that in each inner loop iteration, Ω decreases. In one pass of Step 8, either 𝑞 = 𝑐 𝑗 , in which case, 𝑐 𝑗 is set to 0 in Step 9, decreasing Ω. Alternately, if 𝑞 ≠ 𝑐 𝑗 , then 𝑟 − 𝛾𝑠 is 𝜖 -neighbor-indistinguishable for 𝛾 = 𝑞 but not 𝜖 -neighbor-indistinguishable for any 𝛾 > 𝑞 . There must therefore be some position 𝑖 such that the ratio (𝑟 −𝛾𝑠 )𝑖 +1   
+
+> (𝑟 −𝛾𝑠 )𝑖
+
+is within [𝑒 −𝜖 , 𝑒 +𝜖 ] for 𝛾 ≤ 𝑞 , and outside the interval for 𝛾 > 𝑞 . Note that the numerator and denominator are both positive as long as 𝑐 𝑗 > 0, because the algorithm always up-dates each column so that it remains 𝜖 -neighbor indistinguishable. By the previous argument, position 𝑖 cannot be one for which the 
+
+𝜖 -neighbor indistinguishability bound already holds. Since the ra-tio is continuous in 𝛾 as long as the ratio is finite, we must have      
+
+> (𝑟 −𝛾𝑠 )𝑖 +1
+> (𝑟 −𝛾𝑠 )𝑖
+
+∈ { 𝑒 −𝜖 , 𝑒 +𝜖 } when 𝛾 = 𝑞 . This establishes that the 𝜖 -neighbor indistinguishability bound goes from not binding to bind-ing during Step 9, decreasing Ω.Since Ω decreases with each inner loop iteration and cannot be negative, the algorithm must halt. The number of inner loop iterations is bounded by the maximum possible value of Ω, which is at most 2𝑛 − 1 when the algorithm begins. Next, we show that the outer loop executes a maximum of 𝑛 
+
+times. To see this, note that once a column 𝑗 is selected in Step 3, the inner loop will continue executing until 𝑐 𝑗 = 0 (by the previous argument, we know the inner loop will halt). At that point, column 𝑗 
+
+will never be selected again, so 𝑐 𝑗 = 0 will continue to hold through the remaining execution. Since each of the 𝑛 columns can only be selected once, the outer loop executes a maximum of 𝑛 times. Applying the above analysis, Table 2 lists the total number of times each step may execute, along with a big-O bound for each time it executes. Note in particular the max repetitions are total for an entire program execution, and not per iteration of any loop. Totaling the values in the table, the runtime of the entire algorithm is O  max {𝜏𝑛, 𝑛 2 }. □
+
+Step Max Repetitions Runtime per Repetition 1 1 O( 𝑛 2)
+
+2 𝑛 O( 1)
+
+3 𝑛 O( 𝜏 )
+
+4 2𝑛 − 1 O( 1)
+
+5 2𝑛 − 1 O( 𝑛 )
+
+6 2𝑛 − 1 O( 𝑛 )
+
+7 2𝑛 − 1 O( 𝑛 )
+
+8 2𝑛 − 1 O( 𝑛 )
+
+9 2𝑛 − 1 O( 𝑛 )
+
+10 2𝑛 − 1 O( 1)
+
+11 𝑛 O( 1)
+
+12 1 O( 1)
+
+Table 2: Total execution time attributable to each step of Algorithm 1. 
+
+## C.2 Extreme Point Analysis of Algorithm 1 
+
+Given inputs 𝑧, 𝜖, and 𝜅 to Algorithm 1, we denote the output as 
+
+𝑂 [𝑧, 𝜖, 𝜅 ] ∈ R𝑛 ×𝑛 . For readability, we will omit the inputs and  
+
+> 20 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+simply refer to this matrix as 𝑂 . In Theorem 6 below, we prove that 
+
+𝑂 is an extreme point of 𝐹 .To do so, we first show in Lemma 5 that the probability placed on the diagonal by Algorithm 1 is maximal in a particular sense. Next, we consider the set of all possible vectors that could be valid choices for a column at a particular point in algorithm execution. We show in Lemma 6 that this set is a polytope and that the vector selected by the algorithm is one of its extreme points. Finally, we show that if an algorithm sequentially fills each column with a vector that is extreme in this sense, then 𝑂 is an extreme point of 
+
+𝐹 , thereby finishing the proof of Theorem 6. In the execution of the algorithm, the function 𝜅 will select columns in a particular sequence. For a column 𝑗 , let prev ( 𝑗 ) denote the set of all columns chosen before 𝑗 , and post ( 𝑗 ) denote the set of all columns chosen after 𝑗 .
+
+Definition 16. Given column 0 ≤ 𝑗 ≤ 𝑛 − 1, let 𝐹 𝑗 be the set of matrices 𝑂 ′ ∈ 𝐹 such that 𝑂 ′ 
+
+> 𝑙
+
+= 𝑂 𝑙 for all 𝑙 ∈ prev ( 𝑗 ).By construction, when 𝑗 is the first column selected, 𝐹 𝑗 = 𝐹 , and when 𝑗 is the last column selected, 𝐹 𝑗 = {𝑂 }. Moreover, for any columns 𝑗 and 𝑗 ′ ∈ post ( 𝑗 ), 𝐹 𝑗 ⊇ 𝐹 𝑗 ′ .Notice that each 𝐹 𝑗 is formed by adding linear constraints to 𝐹 ,so it is also a convex polytope. The following lemma shows that each time the algorithm fills in a column, it puts the maximum possible probability on the diagonal, given all the previously filled-in columns. 
+
+Lemma 5. For any 0 ≤ 𝑗 ≤ 𝑛 − 1 and for any 𝑂 ′ ∈ 𝐹 𝑗 such that 
+
+𝑂 ′ 
+
+> 𝑗
+
+≠ 𝑂 𝑗 , we have 𝑜 𝑗,𝑗 > 𝑜 ′ 
+
+> 𝑗,𝑗
+
+.
+
+Proof. Assume for contradiction that 𝑜 𝑗,𝑗 ≤ 𝑜 ′ 
+
+> 𝑗,𝑗
+
+. Since 𝑂 ′ 
+
+> 𝑗
+
+≠ 𝑂 𝑗 ,there must be some row 0 ≤ 𝑖 ≤ 𝑛 −1 such that 𝑜 ′ 
+
+> 𝑖,𝑗
+
+< 𝑜 𝑖,𝑗 (otherwise, we would have 𝑜 ′ 
+
+> 𝑖,𝑗
+
+≥ 𝑜 𝑖,𝑗 for all rows 𝑖 , with strict inequality in at least one row; this implies 𝑧𝑂 ′ 
+
+> 𝑗
+
+> 𝑧𝑂 𝑗 = 𝑧 𝑗 , so 𝑂 ′ ∉ 𝐹 , contradicting 
+
+𝑂 ′ ∈ 𝐹 𝑗 ⊆ 𝐹 ). We consider three possible cases for 𝑖 .Case 1 : Consider 𝑖 = 𝑗 . Then 𝑜 𝑗,𝑗 > 𝑜 ′ 
+
+> 𝑗,𝑗
+
+, yielding an immediate contradiction. Case 2 : Consider 𝑖 < 𝑗 . Since the condition 𝑜 ′ 
+
+> 𝑖 ′,𝑗
+
+< 𝑜 𝑖 ′,𝑗 holds for 
+
+𝑖 ′ = 𝑖 but not for 𝑖 ′ = 𝑗 , there must be some 𝑖 ≤ ˆ𝑖 < 𝑗 such that the condition holds for 𝑖 ′ = ˆ𝑖 but not for 𝑖 ′ = ˆ𝑖 + 1. That is, 
+
+𝑜 ′ 
+
+> ˆ𝑖,𝑗
+
+< 𝑜 ˆ𝑖,𝑗 and 𝑜 ′ 
+
+> ˆ𝑖 +1,𝑗
+
+≥ 𝑜 ˆ𝑖 +1,𝑗 
+
+There are two subcases to consider. Subcase 1 : Suppose 𝑜 ˆ𝑖,𝑗 = 𝑒 −𝜖 𝑜 ˆ𝑖 +1,𝑗 . Then 𝑜 ′ 
+
+> ˆ𝑖,𝑗
+
+< 𝑜 ˆ𝑖,𝑗 = 𝑒 −𝜖 𝑜 ˆ𝑖 +1,𝑗 ≤
+
+𝑒 −𝜖 𝑜 ′ 
+
+> ˆ𝑖 +1,𝑗
+
+, contradicting the 𝜖 -neighbor indistinguishability of 𝑂 ′ 
+
+> 𝑗
+
+.Subcase 2 : Suppose 𝑜 ˆ𝑖,𝑗 > 𝑒 −𝜖 𝑜 ˆ𝑖 +1,𝑗 . Then the scale variable 𝑠 
+
+that is added to column 𝑗 during Step 9, cannot always have 
+
+𝑠 ˆ𝑖 = 𝑒 −𝜖 𝑠 ˆ𝑖 +1. This means that at some point during the outer loop iteration for column 𝑗 , the value of pattern variable 𝑝 
+
+at the end of Step 6 had 𝑝 ˆ𝑖 = −1, which can only happen if the variable 𝑟 fulfills 𝑟 ˆ𝑖 = 𝑒 𝜖 𝑟 ˆ𝑖 +1. The proof of Theorem 5 establishes that once the remainder fulfills this bound, it always fulfills the bound. Let ˆ𝑟 be the value of variable 𝑟 at the start of the outer loop iteration for column 𝑗 . Then, the value at the end of the outer loop iteration would be given by ˆ𝑟 − 𝑂 𝑗 , and the bound above can be written as 
+
+ˆ𝑟 ˆ𝑖 − 𝑜 ˆ𝑖,𝑗 = 𝑒 𝜖 ( ˆ𝑟 ˆ𝑖 +1 − 𝑜 ˆ𝑖 +1,𝑗 )
+
+Since 𝑂 is an output of our algorithm, we also have 
+
+ˆ𝑟 = 1𝑛 −∑︁    
+
+> ¯𝑗 ∈prev (𝑗 )
+
+𝑂 ¯𝑗 
+
+Furthermore, since the rows of 𝑂 ′ must sum to 1, we can decompose 𝑂 ′ as follows. 
+
+1𝑛 =∑︁    
+
+> ¯𝑗 ∈prev (𝑗 )
+
+𝑂 ′ 
+
+> ¯𝑗
+
++ 𝑂 ′ 
+
+> 𝑗
+
++∑︁    
+
+> ˜𝑗 ∈post (𝑗 )
+
+𝑂 ′
+
+> ˜𝑗
+
+=∑︁    
+
+> ¯𝑗 ∈prev (𝑗 )
+
+𝑂 ¯𝑗 + 𝑂 ′ 
+
+> 𝑗
+
++∑︁    
+
+> ˜𝑗 ∈post (𝑗 )
+
+𝑂 ′
+
+> ˜𝑗
+
+where the second equality follows from 𝑂 ′ ∈ 𝐹 𝑗 . Combining the prior two equalities yields 
+
+ˆ𝑟 − 𝑂 ′ 
+
+> 𝑗
+
+=∑︁    
+
+> ˜𝑗 ∈post (𝑗 )
+
+𝑂 ′
+
+> ˜𝑗
+
+The right-hand side is a sum of 𝜖 −neighbor indistinguishable columns, so must be 𝜖 −neighbor indistinguishable. However, the left-hand side is not 𝜖 -neighbor indistinguishable because, 
+
+( ˆ𝑟 − 𝑂 ′ 
+
+> 𝑗
+
+)ˆ𝑖 = ˆ𝑟 ˆ𝑖 − 𝑜 ′ 
+
+> ˆ𝑖,𝑗
+
+> ˆ𝑟 ˆ𝑖 − 𝑜 ˆ𝑖,𝑗 
+
+= 𝑒 𝜖 ( ˆ𝑟 ˆ𝑖 +1 − 𝑜 ˆ𝑖 +1,𝑗 )≥ 𝑒 𝜖 ( ˆ𝑟 ˆ𝑖 +1 − 𝑜 ′ 
+
+> ˆ𝑖 +1,𝑗
+
+)
+
+= 𝑒 𝜖 ( ˆ𝑟 − 𝑂 ′ 
+
+> 𝑗
+
+)ˆ𝑖 +1
+
+This yields a contradiction. Since all subcases yield a contradiction, we deduce a contradiction for the entire case. Case 3 : Consider 𝑖 > 𝑗 . This case is also yields a contradiction. It is analogous to the prior case, and is hence omitted. Since each case yields a contradiction, we conclude 𝑜 𝑗,𝑗 > 𝑜 ′ 
+
+> 𝑗,𝑗
+
+. □
+
+Next, we consider the set of all possible vectors that could be inserted into column 𝑗 when the algorithm reaches the column. This is defined formally below. 
+
+Definition 17. Given column 0 ≤ 𝑗 ≤ 𝑛 − 1, let Γ𝑗 be the set of entries for column 𝑗 in 𝐹 𝑗 ; Γ𝑗 = {𝑂 ′ 
+
+> 𝑗
+
+: 𝑂 ′ ∈ 𝐹 𝑗 }.Notice that Γ𝑗 is a linear projection of 𝐹 𝑗 so it is also a convex polytope. We show the column 𝑂 𝑗 chosen by the algorithm is an extreme point of Γ𝑗 .
+
+Lemma 6. Given column 0 ≤ 𝑗 ≤ 𝑛 − 1, 𝑂 𝑗 ∈ 𝑒𝑥 (Γ𝑗 ).
+
+Proof. Consider any 𝑣 ∈ Γ𝑗 , where 𝑣 ≠ 𝑂 𝑗 . Then 𝑣 = 𝑂 ′ 
+
+> 𝑗
+
+for some 𝑂 ′ ∈ 𝐹 𝑗 , and since 𝑣 ≠ 𝑂 𝑗 , 𝑂 ′ 
+
+> 𝑗
+
+≠ 𝑂 𝑗 , By the Lemma 5, we have 𝑜 𝑗,𝑗 > 𝑣 𝑗 . Let 𝑢 ∈ R𝑛 be the column vector with 𝑢 𝑗 = 1,
+
+𝑢 𝑗 ′ = 0 for all 𝑗 ′ ≠ 𝑗 . Then 𝑢 ⊤𝑂 𝑗 = 𝑜 𝑗,𝑗 > 𝑣 𝑗 = 𝑢 ⊤𝑣 . Then 𝑂 𝑗 is the unique maximizer of the linear objective 𝑢 in Γ𝑗 , so it is an extreme point. □ 
+
+> 21 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+Finally, the last step is to show that if an algorithm always fills each column 𝑗 with a vector that is extreme in the sense above, the overall matrix will also be an extreme point of 𝐹 .
+
+Proof of Theorem 6. First, we show 𝑂 ∈ 𝐹 . First, note that local variables 𝐴, 𝑟, and 𝑐 are only updated in Step 9. This step ensures that the conditions 𝐴 1𝑛 + 𝑟 = 1𝑛 and 𝑧𝐴 + 𝑐 = 𝑧 are maintained. Since the algorithm continues until 𝑟 = 0𝑛 and 𝑐 = 0⊤ 
+
+> 𝑛
+
+, the final value of 𝐴 fulfills the conditions 𝐴 1𝑛 = 1𝑛 and 𝑧𝐴 = 𝑧 . Additionally, the update in Step 9 proceeds by adding a positive multiple of an 
+
+𝜖 -scale to a column of 𝐴 . At every point of execution, every column of 𝐴 is a conic combination of 𝜖 -scales, and is thus 𝜖 -neighbor indistinguishable. Since 𝑂 is the final value of 𝐴 , we have 𝑂 ∈ 𝐹 .Next, we show 𝑂 ∈ 𝑒𝑥 (𝐹 ). Assume for contradiction that there exists 0 < 𝛼 < 1 and distinct matrices 𝑋, 𝑌 ∈ 𝐹 such that 𝛼𝑋 + ( 1 −
+
+𝛼 )𝑌 = 𝑂 . Then there must be at least one column in which 𝑋 and 𝑌 
+
+differ. Let 𝑗 be the first column chosen by the algorithm for which 
+
+𝑋 𝑗 ≠ 𝑌 𝑗 . Then 𝑋, 𝑌 ∈ 𝐹 𝑗 so 𝑋 𝑗 , 𝑌 𝑗 ∈ Γ𝑗 . Moreover 𝛼𝑋 𝑗 + ( 1 − 𝛼 )𝑌 𝑗 =
+
+𝑂 𝑗 , contradicting 𝑂 𝑗 ∈ 𝑒𝑥 (Γ𝑗 ). □
+
+## D Characterization of Unfixed Polytope 𝑈 
+
+In this Appendix section, we turn our attention to the general prob-lem of describing extreme points of 𝑈 (including extreme points that include zero columns). Similar to 𝑒𝑥 (𝐹 ), it is possible to char-acterize 𝑒𝑥 (𝑈 ) using a framework that is based on 𝜖 -scales. We will see that extreme points may be built from conic combinations of scales that are linearly independent of each other in a particular sense (Definition 19). To make this explicit, we will define a new polytope 𝑅 𝑈 which encodes how much of each scale contributes to every column of 𝑇 ∈ 𝑈 .
+
+## D.1 Representing 𝑈 with 𝜖 -Scales 
+
+We now define the unfixed representation polytope 𝑅 𝑈 . Analogous to 𝑅 𝐹 , for a representation matrix 𝐵 ∈ 𝑅 𝑈 , 𝑏 𝑖,𝑗 quantifies the amount of scale 𝑖 that enters column 𝑗 of 𝑇 .
+
+Definition 18. We define the unfixed representation polytope 𝑅 𝑈 
+
+as 
+
+𝑅 𝑈 = 𝐵 ∈ R𝑘 ×𝑛  
+
+> ≥0
+
+: Ψ𝐵 1𝑛 = 1𝑛 
+
+The following theorem will show that every matrix in 𝑈 can be reached from a representation matrix in 𝑅 𝑈 under this linear map. 
+
+Theorem 10. Ψ is an affine surjection from 𝑅 𝑈 to 𝑈 .
+
+Proof. Since Ψ is a linear map, it is affine, and hence it only remains to show Ψ(𝑅 𝑈 ) = 𝑈 .Suppose 𝑇 ∈ Ψ(𝑅 𝑈 ). Then there is some 𝐵 ∈ 𝑅 𝑈 such that Ψ𝐵 =
+
+𝑇 . By definition of 𝑅 𝑈 , 𝑇 1𝑛 = Ψ𝐵 1𝑛 = 1𝑛 . Column 𝑗 of 𝑇 is given by 
+
+Ψ𝐵 𝑗 . This is a conic combination of 𝜖 -neighbor indistinguishable vectors, and is hence 𝜖 -neighbor indistinguishable. Since every column of 𝑇 is 𝜖 -neighbor indistinguishable, 𝑇 is 𝜖 -differentially private, establishing 𝑇 ∈ 𝑈 .Conversely, suppose 𝑇 ∈ 𝑈 . By Lemma 1, every column 𝑗 of 
+
+𝑇 can be written as a conic combination of 𝜖 -scales 𝑇 𝑗 = Ψ𝛽 𝑗 for some 𝛽 𝑗 ∈ R𝑘 
+
+> ≥0
+
+. Construct the 𝑛 × 𝑘 matrix 𝐵 where the 𝑗 𝑡ℎ column of 𝐵 is 𝛽 𝑗 . Then 𝑇 = Ψ𝐵 . Furthermore, Ψ𝐵 1𝑛 = 𝑇 1𝑛 = 1𝑛 , so 
+
+𝐵 ∈ 𝑅 𝑈 . Therefore, 𝑇 ∈ Ψ(𝑅 𝑈 ). Hence, Ψ(𝑅 𝑈 ) ⊇ 𝑈 , producing 
+
+Ψ(𝑅 𝑈 ) = 𝑈 . □
+
+In Proposition 3, we show the linear map Ψ also provides a relation between the extreme points of 𝑈 and the extreme points of 𝑅 𝑈 .
+
+Proposition 3. For all 𝑇 ∈ 𝑒𝑥 (𝑈 ) there exists 𝐵 ∈ 𝑒𝑥 (𝑅 𝑈 ) such that 
+
+𝑇 = Ψ𝐵 .
+
+The proof of Proposition 3 is very similar to that of Proposition 1, as is thus omitted. Hence, every extreme point in 𝑈 can be written as an extreme point in 𝑅 𝑈 under the mapping Ψ.However, as we discovered when Ψ represented matrices in 𝐹 
+
+using 𝑅 𝐹 , this representation is not unique for matrices in 𝑈 . As demonstrated in Example 2 below, it is possible for multiple extreme points of 𝑅 𝑈 to map to the same extreme point in 𝑈 , and it is possible for an extreme point of 𝑅 𝑈 to map to a non-extreme point of 𝑈 
+
+under Ψ.
+
+Example 2. Ψ is not a 1-1 mapping between 𝑒𝑥 (𝑅 𝑈 ) and 𝑒𝑥 (𝑈 ).
+
+Similar to Example 1, consider the case when 𝜖 = ln (2) and 𝑛 = 3.There are 4 possible 𝜖 -scales, presented as 
+
+Ψ =
+
+
+
+4/7 2/5 1/4 1/72/7 1/5 1/2 2/71/7 2/5 1/4 4/7
+
+
+
+Using the Avis-Fukuda vertex enumeration algorithm, we gener-ate all extreme points of 𝑈 and 𝑅 𝑈 . We find |𝑒𝑥 (𝑈 )| = 27 and 
+
+|𝑒𝑥 (𝑅 𝑈 )| = 36 . In particular, both matrices 𝐵 (4) and 𝐵 (5) are ex-treme points of 𝑅 𝑈 , yet they both map to the same extreme point in 𝑈 under Ψ.
+
+𝐵 (4) =
+
+
+
+7/6 0 00 0 02/3 0 07/6 0 0
+
+
+
+∈ 𝑒𝑥 (𝑅 𝑈 )
+
+𝐵 (5) =
+
+
+
+0 0 05/3 0 04/3 0 00 0 0
+
+
+
+∈ 𝑒𝑥 (𝑅 𝑈 )
+
+Ψ𝐵 (4) = Ψ𝐵 (5) =
+
+
+
+1 0 01 0 01 0 0
+
+
+
+∈ 𝑒𝑥 (𝑈 )
+
+Additionally, the mapping Ψ may send extreme points in 𝑅 𝑈 to non-extreme points in 𝑈 . For example, 
+
+𝐵 (6) =
+
+
+
+7/6 0 00 0 00 0 2/37/6 0 0
+
+
+
+∈ 𝑒𝑥 (𝑅 𝑈 )
+
+yet Ψ𝐵 (6) ∉ 𝑒𝑥 (𝑈 ), as 
+
+Ψ𝐵 (6) =
+
+
+
+5/6 0 1/64/6 0 2/65/6 0 1/6
+
+
+
+= 12
+
+
+
+11 /12 0 1/12 10 /12 0 2/12 11 /12 0 1/12 
+
+
+
++ 12
+
+
+
+9/12 0 3/12 6/12 0 6/12 9/12 0 3/12 
+
+
+
+△ 
+
+> 22 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+However, we can apply Theorem 9 to characterize the necessary and sufficient conditions for which an extreme point of 𝑅 𝑈 is also an extreme point of 𝑈 under Ψ (as we did in Corollary 3). 
+
+Corollary 4. Suppose 𝐵 ∈ 𝑅 𝑈 . Then Ψ𝐵 ∈ 𝑒𝑥 (𝑈 ) if and only if there exists 𝐷 ∈ 𝐾 ⊥ [Ψ] such that 𝐵 ∈ opt 𝑅 𝑈 ,𝐷 and Ψ maps all the matrices in opt 𝑅 𝑈 ,𝐷 to the same point. 
+
+Since the above result holds for any 𝐵 ∈ 𝑅 𝑈 , it holds in particular when 𝐵 ∈ 𝑒𝑥 (𝑅 𝑈 ).
+
+## D.2 Characterizing the Extreme Points of 𝑅 𝑈 
+
+Next, we establish necessary and sufficient conditions for points in 𝑅 𝑈 to be extreme, as as we did for 𝑅 𝐹 in Theorem 4. As we will see, an analogous theorem does hold, but the removal of a fixed-point constraint alters the affinely simplified condition. Whereas the condition of affinely simplified involved linear independence of weighted differences of scales, we will see that the unfixed case involves linear independence of scales directly. Given a column vector 𝑥 ∈ R𝑘 , let 𝐺 (𝑥 ) be the set of scales with positive coefficients in the corresponding positions of 𝑥 , 𝐺 (𝑥 ) =
+
+{Ψ𝑢 : 𝑥 𝑢 > 0}.
+
+Definition 19. We call a 𝑘 × 𝑛 matrix 𝐵 Ψ−linearly simplified if the additive union ⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐺 (𝐵 𝑗 ) is linearly independent. Let 𝑀 𝑈 (Ψ) be the set of 𝑘 × 𝑛 matrices 𝜇 such that Ψ𝜇 1𝑛 = 0𝑛 .By construction of 𝑀 𝑈 (Ψ), if 𝑋, 𝑌 ∈ 𝑅 𝑈 , then 𝑋 −𝑌 ∈ 𝑀 𝑈 (Ψ). This suggests that 𝑀 𝑈 represents “movement matrices” that can poten-tially be added to matrices in 𝑅 𝑈 to move through the affine space. The following lemma and theorem formalize the equivalence be-tween the extreme points of 𝑅 𝑈 , the notion of Ψ-linearly simplified matrices, and these movement matrices. 
+
+Lemma 7. Suppose 𝐵 ∈ 𝑅 𝑈 . Then 𝐵 is Ψ−linearly simplified if and only if there does not exist a non-zero matrix 𝜇 ∈ 𝑀 𝑈 (Ψ) such that 
+
+𝜇 𝑖,𝑗 is zero whenever 𝑏 𝑖,𝑗 is zero. 
+
+Proof. ( =⇒ ) We proceed by the contrapositive. Suppose there exists a non-zero movement matrix 𝜇 ∈ 𝑀 𝑈 (𝜓 ) such that 𝜇 𝑖,𝑗 is zero whenever 𝑏 𝑖,𝑗 is zero. For column 𝑗 , let 𝑃 ( 𝑗 ) be the set of row indices of 𝐵 𝑗 that are non-zero. Then 𝐺 (𝐵 𝑗 ) = {Ψ𝑝 : 𝑝 ∈ 𝑃 ( 𝑗 )} . We can then write, 
+
+Ψ𝜇 𝑗 =∑︁     
+
+> 𝑝 ∈𝑃 (𝑗 )
+
+Ψ𝑝 𝜇 𝑝,𝑗 
+
+So then 
+
+0𝑛 = Ψ𝜇 1𝑛 =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+Ψ𝜇 𝑗 =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑗 =0
+
+∑︁ 𝑝 ∈𝑃 ( 𝑗 )
+
+Ψ𝑝 𝜇 𝑝,𝑗 
+
+Since 𝜇 ≠ 0𝑘 ×𝑛 , and the nonzero entries in 𝜇 𝑗 can only occur in rows 
+
+𝑃 ( 𝑗 ), some of the coefficients in the sum above must be nonzero. Thus, the above is a linear dependency among the vectors of the multiset ⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐺 (𝐵 𝑗 ), implying that 𝐵 is not Ψ−linearly simplified, as required. 
+
+( ⇐ = ) Again by the contrapositive, suppose 𝐵 is not Ψ-linearly simplified. Then ⊎𝑚 −1 
+
+> 𝑗 =0
+
+𝐺 (𝐵 𝑗 ) is linearly dependent. The linear de-pendency can be written as, ∑︁ 
+
+> 𝑖,𝑗
+
+𝜇 𝑖,𝑗 Ψ𝑖 = 0𝑛 
+
+for a collection of 𝜇 𝑖,𝑗 ’s, not all zero, where 𝜇 𝑖,𝑗 ≠ 0 only when 
+
+𝑏 𝑖,𝑗 > 0, and equals 0 otherwise. Let 𝜇 be the matrix with value 
+
+𝜇 𝑖,𝑗 in position (𝑖, 𝑗 ). Then the sum above can be written in matrix notation as Ψ𝜇 1𝑛 = 0𝑛 . Therefore 𝜇 ∈ 𝑀 𝑈 (Ψ). □
+
+Theorem 11. Suppose 𝐵 ∈ 𝑅 𝑈 . Then 𝐵 ∈ 𝑒𝑥 (𝑅 𝑈 ) if and only if 𝐵 is 
+
+Ψ−linearly simplified. 
+
+Proof. ( =⇒ ) We proceed by the contrapositive. Suppose 𝐵 is not Ψ-linearly simplified. By the equivalence of Ψ-linearly simpli-fied and movement matrices established in Lemma 7, there exists a movement matrix 𝜇 ∈ 𝑀 𝑈 (Ψ) such that 𝜇 𝑖,𝑗 = 0 whenever 𝑏 𝑖,𝑗 = 0.Choose any positive 
+
+𝛿 < min    
+
+> { ( 𝑖,𝑗 ) | 𝜇 𝑖,𝑗 ≠0}
+
+ 𝑏 𝑖,𝑗 
+
+|𝜇 𝑖,𝑗 |
+
+
+
+Then 𝐵 ± 𝛿𝜇 ∈ 𝑅 𝑈 , as (1) For any 𝑖, 𝑗 entry, ±𝛿𝜇 𝑖,𝑗 ≤ 𝑏 𝑖.𝑗 with equality if and only if 
+
+𝑏 𝑖,𝑗 = 0. Hence (𝐵 ± 𝛿𝜇 )𝑖,𝑗 ≥ 0.(2) Ψ(𝐵 ± 𝛿𝜇 )1𝑛 = Ψ𝐵 1𝑛 ± 𝛿 Ψ𝜇 1𝑛 = 1𝑛 ± 0𝑛 = 1𝑛 
+
+But then 
+
+𝐵 = 12 (𝐵 + 𝛿𝜇 ) + 12 (𝐵 − 𝛿𝜇 )
+
+Therefore 𝐵 ∉ 𝑒𝑥 (𝑅 𝑈 ).
+
+( ⇐ = ) Proceed by the contrapositive yet again. Suppose 𝐵 ∉
+
+𝑒𝑥 (𝑅 𝑈 ). Then there exists distinct 𝑋, 𝑌 ∈ 𝑅 𝑈 and 𝜃 ∈ ( 0, 1) such that 
+
+𝐵 = 𝜃𝑋 +( 1−𝜃 )𝑌 . By non-negativity, the convex combination above implies 𝑥 𝑖,𝑗 = 0 = 𝑦 𝑖,𝑗 whenever 𝑏 𝑖,𝑗 = 0. Let 𝜇 = 𝑋 −𝑌 . Then 𝜇 𝑖,𝑗 = 0
+
+whenever 𝑏 𝑖,𝑗 = 0. Also Ψ𝜇 1𝑛 = Ψ𝑋 1𝑛 − Ψ𝑌 1𝑛 = 1𝑛 − 1𝑛 = 0𝑛 .So 𝜇 ∈ 𝑀 𝑈 (Ψ), implying 𝐵 is not Ψ-linearly simplified. □
+
+Speaking intuitively, Theorem 11 says that an extreme point of 
+
+𝑈 can be formed by summing multiples of linearly independent 
+
+𝜖 -scales, each one contributing to a unique column. It is useful to make two points of comparison. Since at most 𝑛 𝜖 -scales can be linearly independent, if we add the condition that all 𝑛 columns are non-zero, by the pigeonhole principle each column must have a multiple of a single 𝜖 -scale, so we immediately recover Theorem 2. In a related study, Ghosh et al. focus on finding an optimal point in 𝑈 under a natural class of linear objective functions [ 21 ] that we call row-wise concentrating (Definition 11). In Appendix E, we explain that the result of Ghosh et al. can be seen as a further restriction on 𝐵 in Theorem 11. One combinatorial comparison can be made between the extreme points of 𝑅 𝐹 and the extreme points of 𝑅 𝑈 . In the case of an extreme point of 𝑈 , the condition of Ψ-linearly simplified implies there must be at most 𝑛 positive matrix entries. Additionally, any row of 
+
+𝐵 ∈ 𝑒𝑥 (𝑅 𝑈 ) cannot have more than 1 positive entry – otherwise, the same same scale would appear twice in the multiset ⊎𝑚 −1 
+
+> 𝑗 =0
+
+𝐺 (𝐵 𝑗 ),contradicting Ψ-linear-simplified. This analysis is collected in the following corollary. 
+
+Corollary 5. Extreme matrices 𝐵 ∈ 𝑒𝑥 (𝑅 𝑈 ) contain at least 1 and at most 𝑛 positive entries. Also, such matrices 𝐵 have at most 1 positive entry in every row.  
+
+> 23 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+## E Two-Stage Unfixed Optimum Constructor Analysis of Section 5 
+
+In this section, we establish the key properties of the two-staged unfixed optimum constructor. In order to provide a fair compar-ison for fixed-point constructors, our design approach includes making reasonable assumptions where possible to enable efficient execution. Our algorithm leverages a key result from Ghosh et al. [ 21 ], who study count mechanisms that optimize a natural class of count error measures which we call row-wise concentrating (Definition 11). Ghosh et al. show that any count mechanism that optimizes a row-wise concentrating objective is equivalent to the truncated geometric mechanism with post-processing. We will restate their result in terms of our framework in this section. Recall from the main text that Σ denotes the matrix containing all single-peaked scales in order. That is, Σ𝑙 is the single-peaked scale at position 𝑙 . Also recall from Appendix D.2 that given a column vector 𝑥 ∈ R𝑘 , 𝐺 (𝑥 ) is defined to be the set of scales with positive coefficients in the corresponding positions of 𝑥 ; that is, 
+
+𝐺 (𝑥 ) = {Ψ𝑢 : 𝑥 𝑢 > 0}.
+
+Definition 20. Let T be the set of count mechanisms 𝑇 such that 
+
+𝑇 = Ψ𝐵 for 𝐵 ∈ 𝑅 𝑈 such that ⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐺 (𝐵 𝑗 ) is the set of all single-peaked scales, {Σ𝑙 }𝑛 −1 
+
+> 𝑙 =0
+
+.Let 𝜔 𝑙 be the entry of 𝐵 that indicates the amount of scale Σ𝑙 .
+
+Observation 3. The row constraint of 𝑅 𝑈 gives 
+
+Ψ𝐵 1𝑛 =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑙 =0
+
+Ψ𝜔 𝑙 Σ𝑙 = 1𝑛 
+
+It is straightforward to check that the single-peaked scales are linearly independent, and therefore there is a unique set of values for the 𝜔 𝑙 ,which can be computed as follows. 
+
+𝜔 𝑙 =
+
+( 1−𝑒 −𝜖 
+
+> 1+𝑒 𝜖
+
+Í𝑛 −1 
+
+> 𝑖 =0
+
+𝑒 −𝜖 |𝑖 −𝑙 | , 0 < 𝑙 < 𝑛 − 1   
+
+> 1−𝑒 −𝜖
+> (1+𝑒 𝜖 ) ( 1−𝑒 𝜖 )
+
+Í𝑛 −1 
+
+> 𝑖 =0
+
+𝑒 −𝜖 |𝑖 −𝑙 | , 𝑙 ∈ { 0, 𝑛 − 1}
+
+Note that the 𝜔 𝑙 do not depend on the specific 𝑇 ∈ T . Given this notation, a central result from Ghosh et al. can be stated as follows. 
+
+Theorem 12. (Adapted from Ghosh et al. [ 21 ]) If 𝑇 is an optimal count mechanism for row-wise concentrating weight matrix 𝑊 , then 
+
+𝑇 ∈ T .
+
+Given 𝑇 ∈ T , suppose 𝐵, 𝐵 ′ ∈ 𝑒𝑥 (𝑅 𝑈 ) with Ψ𝐵 = Ψ𝐵 ′ = 𝑇 and 
+
+⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐺 (𝐵 𝑗 ) = ⊎𝑛 −1 
+
+> 𝑗 =0
+
+𝐺 (𝐵 ′ 
+
+> 𝑗
+
+) is the set of all single-peaked scales. For each column 𝑗 , Ψ(𝐵 𝑗 − 𝐵 ′ 
+
+> 𝑗
+
+) = 𝑇 𝑗 − 𝑇 𝑗 = 0𝑛 . The left hand side is a linear combination of the single-peaked scales, but these are linearly independent. Hence 𝐵 𝑗 = 𝐵 ′ 
+
+> 𝑗
+
+. We can therefore define col 𝑇 (𝑙 ) to be the column of 𝐵 with a positive coefficient associated with Σ𝑙 .Using this notation, the count error associated with weight ma-trix 𝑊 can be written, 
+
+⟨𝑊 ,𝑇 ⟩ = ⟨𝑊 , Ψ𝐵 ⟩ =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑙 =0
+
+𝜔 𝑙 (𝑊 𝑐𝑜𝑙 𝑇 (𝑙 ) )⊤ Σ𝑙 
+
+We next observe that the scales that are part of the optimum are ordered according to where their peaks are. This is made precise in the following lemma. 
+
+Lemma 8. Given row-wise concentrating weight matrix 𝑊 , and 
+
+0 ≤ 𝑙 < 𝑙 ′ ≤ 𝑛 − 1, and 𝑐 is is the largest value of ¯𝑐 ∈ { 0, ..., 𝑛 − 1} that minimizes (𝑊 ¯𝑐 )⊤ Σ𝑙 , and 𝑐 ′ is the largest value of ¯𝑐 that minimizes 
+
+(𝑊 ¯𝑐 )⊤ Σ′ 
+
+> 𝑙
+
+, then 𝑐 ′ ≥ 𝑐 .
+
+Proof. We show that the claim holds when 𝑙 ′ = 𝑙 +1, as repeating the argument shows that the claim holds for any 𝑙 ′ > 𝑙 .Suppose 𝑐 is the largest value of ¯𝑐 that minimizes (𝑊 ¯𝑐 )⊤ Σ𝑙 . If 
+
+𝑐 = 0, then the claim follows trivially. If 𝑐 > 0, because it is a value of ¯𝑐 that minimizes (𝑊 ¯𝑐 )⊤ Σ𝑙 , setting ¯𝑐 to 𝑐 − 1 cannot decrease this quantity, so 
+
+(𝑊 𝑐 −1)⊤ Σ𝑙 ≥ ( 𝑊 𝑐 )⊤ Σ𝑙 
+
+Equivalently, (𝑊 𝑐 −1 − 𝑊 𝑐 )⊤ Σ𝑙 ≥ 0. Let Δ𝑤 𝑖 = 𝑤 𝑖,𝑐 −1 − 𝑤 𝑖,𝑐 . We can rewrite this inequality as 
+
+> 𝑙
+
+∑︁ 
+
+> 𝑖 =1
+
+(Δ𝑤 𝑖 )𝜎 𝑖,𝑙 +
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =𝑙 +1
+
+(Δ𝑤 𝑖 )𝜎 𝑖,𝑙 ≥ 0 (★)To prove the claim, we consider two cases: 𝑐 ≤ 𝑙 or 𝑐 > 𝑙 .First consider 𝑐 > 𝑙 . Then the Δ𝑤 𝑖 in the first sum are all non-positive (because |𝑐 − 𝑖 | = 𝑐 − 𝑖 > 𝑐 − 1 − 𝑖 = |( 𝑐 − 1) − 𝑖 | and row-wise concentrating implies 𝑤 𝑖,𝑐 ≥ 𝑤 𝑖,𝑐 −1), so the first sum is non-positive. Thus, the second sum must be non-negative for the inequality to hold. Note that for 𝑖 ≤ 𝑙 , 𝜎 𝑖,𝑙 +1 = 𝑒 𝑖𝜖 𝜎 0,𝑙 +1 = 𝛼𝑒 𝑖𝜖 𝜎 0,𝑙 = 𝛼𝜎 𝑖,𝑙 , where 
+
+𝛼 = 𝜎 0,𝑙 +1/𝜎 0,𝑙 < 1. Similarly, for 𝑖 ≥ 𝑙 + 1, 𝜎 𝑖,𝑙 +1 = 𝛽𝜎 𝑖,𝑙 , where 
+
+𝛽 = 𝜎 𝑛 −1,𝑙 +1/𝜎 𝑛 −1,𝑙 > 1. Then 
+
+(𝑊 𝑐 −1 − 𝑊 𝑐 )⊤ Σ𝑙 +1 =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =1
+
+(Δ𝑤 𝑖 )𝜎 𝑖,𝑙 +1
+
+= 𝛼 
+
+> 𝑙
+
+∑︁ 
+
+> 𝑖 =1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 + 𝛽 
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 
+
+Since 𝛼 < 1, and the first sum is non-positive, we have 𝛼 Í𝑙 𝑖 =1 Δ𝑤 𝑖 𝜎 𝑖,𝑙 ≥
+
+Í𝑙 𝑖 =1 Δ𝑤 𝑖 𝜎 𝑖,𝑙 . Since 𝛽 > 1, and the second sum is non-negative, we have 𝛽 Í𝑛 −1 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 ≥ Í𝑛 −1 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 . Thus, 
+
+(𝑊 𝑐 −1 − 𝑊 𝑐 )⊤ Σ𝑙 +1 ≥
+
+> 𝑙
+
+∑︁ 
+
+> 𝑖 =1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 +
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 
+
+= (𝑊 𝑐 +1 − 𝑊 𝑐 )⊤ Σ𝑙 ≥ 0
+
+Thus, moving Σ𝑙 +1 from column 𝑐 to column 𝑐 − 1 cannot decrease error; hence if 𝑐 ′ is the rightmost value of ¯𝑐 that minimizes (𝑊 ¯𝑐 )⊤ Σ′ 
+
+> 𝑙
+
+,we must have 𝑐 ′ ≥ 𝑐 .Next, consider the case when 𝑐 ≤ 𝑙 . Once again, consider the inequality in ( ★). In the second sum the Δ𝑤 𝑖 are all non-negative (because |𝑐 − 𝑖 | = 𝑖 − 𝑐 < 𝑖 − ( 𝑐 − 1) = |( 𝑐 − 1) − 𝑖 | and row-wise concentrating implies 𝑤 𝑖,𝑐 ≤ 𝑤 𝑖,𝑐 −1). If the first sum is also non-negative, then both 𝛼 Í𝑙 𝑖 =1 Δ𝑤 𝑖 𝜎 𝑖,𝑙 
+
+and 𝛽 Í𝑛 −1 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 are non-negative so their sum is non-negative. On the other hand, if the first sum is negative, then because 𝛼 < 1,
+
+𝛼 Í𝑙 𝑖 =1 Δ𝑤 𝑖 𝜎 𝑖,𝑙 > Í𝑙 𝑖 =1 Δ𝑤 𝑖 𝜎 𝑖,𝑙 . Because 𝛽 > 1, 𝛽 Í𝑛 −1 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 ≥
+
+Í𝑛 −1 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 . Thus 𝛼 Í𝑙 𝑖 =1 Δ𝑤 𝑖 𝜎 𝑖,𝑙 +𝛽 Í𝑛 −1 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 > Í𝑙 𝑖 =1 Δ𝑤 𝑖 𝜎 𝑖,𝑙 +
+
+Í𝑛 −1 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 ≥ 0.In either case, we have 
+
+(𝑊 𝑐 −1 − 𝑊 𝑐 )⊤ Σ𝑙 +1 = 𝛼 
+
+> 𝑙
+
+∑︁ 
+
+> 𝑖 =1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 + 𝛽 
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =𝑙 +1
+
+Δ𝑤 𝑖 𝜎 𝑖,𝑙 ≥ 0 
+
+> 24 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+So once again, moving Σ𝑙 +1 from column 𝑐 to column 𝑐 − 1 cannot decrease error, implying 𝑐 ′ ≥ 𝑐 . □
+
+As noted in the main text, we further restrict attention to weight matrices that are also row-wise convex . The following shows that for such a weight matrix, the error corresponding to a single-peaked scale is convex in the index of the column in which it is placed. 
+
+Lemma 9. Let 𝑊 be a row-wise convex weight matrix. For any scale 
+
+𝑠 , the inner product (𝑊 𝑗 )⊤𝑠 is convex in 𝑗 .
+
+Proof. Note that (𝑊 𝑗 +1)⊤𝑠 − ( 𝑊 𝑗 )⊤𝑠 = Í𝑛 −1 
+
+> 𝑖 =0
+
+(𝑤 𝑖,𝑗 +1 − 𝑤 𝑖,𝑗 )𝑠 𝑖 
+
+is the sum of terms that are non-decreasing in 𝑗 , so the total is non-decreasing in 𝑗 . Hence (𝑊 𝑗 )⊤𝑠 is convex in 𝑗 . □
+
+Our two-staged unfixed optimum constructor (Algorithm 2) leverages the results of Lemma 8 and Theorem 12 above. It be-gins by considering the single-peaked scale at position 0. To find the appropriate column for this scale, it begins at column 0 and scans to the right. Lemma 9 tells us that the associated cost is con-vex in the column, so once we find a local optimum, we know that it is a global optimum. In particular, this is true for the rightmost local optimum. The algorithm then moves on to the next single-peaked scale. By Lemma 8, we know that the rightmost optimum position for this scale cannot be to the left of the previous one, so the algorithm does not need to return to column 0, but can continue scanning from the current column. The process repeats until all single-peaked scales are assigned to columns. We are now ready to establish the runtime of Algorithm 2. 
+
+Proof of Theorem 7. For each iteration of the while loop, either 
+
+𝑙 increases by 1 or 𝑗 increases by 1. Both variables start at 0, and cannot be exceed 𝑛 − 1 at the start of a loop iteration – in particular, once 𝑙 is assigned the value 𝑛 , the algorithm will exit the while loop; if 𝑗 ever has the value of 𝑛 −1 at the start of the loop, then 𝑛𝑒𝑥𝑡 _𝑒𝑟𝑟𝑜𝑟 
+
+will be assigned the value of ∞, guaranteeing that the algorithm does not enter the else clause in which 𝑗 would be incremented. This guarantees that the while loop can execute no more than 2𝑛 
+
+times. Within the loop, there are two inner products that require O( 𝑛 )
+
+to complete, and all other instructions are assumed atomic. Thus, the loop requires O( 𝑛 2) steps. Initializing the matrices and {𝜔 𝑙 }𝑛 −1
+
+> 𝑙 =0
+
+in Steps 1 and 2 also requires O( 𝑛 2). Hence, the total runtime is 
+
+O( 𝑛 2). □
+
+Lastly, we prove that Algorithm 2 outputs a count mechanism that minimizes count error. 
+
+Proof of Theorem 8. First we show that 𝑂 ∈ T . To do so, we consider the theoretical 𝐵 associated with each step of our algorithm. In Step 1, initialize 𝑘 ×𝑛 matrix 𝐵 of all zeroes. In Step 11, set 𝐵 ˆ𝑖,𝑗 ←
+
+𝐵 ˆ𝑖,𝑗 + 𝜔 𝑙 where ˆ𝑖 is the column of Ψ equal to Σ𝑙 . Then the algorithm maintains 𝐴 = Ψ𝐵 at every point in execution. Furthermore, 𝐵 is formed by placing each single-peaked scale into a unique column, so the multiset ⊎𝑛 −1 
+
+> 𝑙 =0
+
+𝐺 (𝐵 𝑗 ) = {Σ𝑙 }𝑛 −1 
+
+> 𝑙 =0
+
+. Thus 𝑂 ∈ T .Next we show that 𝑂 is optimal for 𝑊 . Since 𝑂 ∈ T , we can write, 
+
+⟨𝑊 , 𝑂 ⟩ =
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑙 =0
+
+𝜔 𝑙 (𝑊 col 𝑂 (𝑙 ) )⊤ Σ𝑙 
+
+By Theorem 12, any optimal 𝑇 is in T , and so ⟨𝑊 ,𝑇 ⟩ can be simi-larly written as Í𝑛 −1 
+
+> 𝑙 =0
+
+𝜔 𝑙 (𝑊 col 𝑇 (𝑙 ) )⊤ Σ𝑙 . Thus, it suffices to show that 
+
+(𝑊 col 𝑂 (𝑙 ) )⊤ Σ𝑙 ≤ ( 𝑊 col 𝑇 (𝑙 ) )⊤ Σ𝑙 for all 𝑙 ; that is, col 𝑂 (𝑙 ) is a value of 
+
+¯𝑐 that minimizes (𝑊 ¯𝑐 )⊤ Σ𝑙 .Examining the while loop, variable 𝑙 records which single-peaked scale is being placed, and variable 𝑗 represents a potential column to place the current single-peaked scale. 𝑙 is initialized to zero and does not change until after scale Σ0 is placed into a column in Step 11. While 𝑙 is zero, 𝑗 begins at 0 and increments 1 at a time, scanning columns from left to right. At Step 4 of any loop iteration, 
+
+𝑐𝑢𝑟𝑟𝑒𝑛𝑡 _𝑒𝑟𝑟𝑜𝑟 is assigned the value (𝑊 𝑗 )⊤ Σ0. At Step 6, 𝑛𝑒𝑥𝑡 _𝑒𝑟𝑟𝑜𝑟 
+
+is assigned the value (𝑊 𝑗 +1)⊤ Σ0 (or ∞ if 𝑗 has reached the last column). The condition 𝑛𝑒𝑥𝑡 _𝑒𝑟𝑟𝑜𝑟 > 𝑐𝑢𝑟𝑟𝑒𝑛𝑡 _𝑒𝑟𝑟𝑜𝑟 indicates that incrementing 𝑗 any further would increase (𝑊 𝑗 )⊤ Σ0 (or that we have reached the last possible column). This implies that at this point in execution, 𝑗 is the right-most value of ¯𝑐 that minimizes 
+
+(𝑊 ¯𝑐 )⊤ Σ0.The argument for single-peaked scales at position 𝑙 > 0 is the same, except that the scan begins with 𝑗 equal to the column in which scale Σ𝑙 −1 was placed. The scan will still locate the largest value of ¯𝑐 that minimizes (𝑊 ¯𝑐 )⊤ Σ𝑙 because Lemma 8 guarantees that this value cannot be less than that corresponding to the previous scale. □
+
+## F Development of Rule of Thumb for Privacy Budget Allocation in Section 6 
+
+In the two-stage fixed-point framework, the total privacy budget 
+
+𝜖 𝑡 must be divided between 𝜖 1 for the distribution privatizer, and 
+
+𝜖 2 for the privatization of the table of counts. We let 𝑓 = 𝜖 1/𝜖 𝑡 . As noted in Section 6, to set 𝑓 , we consider a combined error objective that combines accuracy of counts and accuracy of distribution. 
+
+ln (count_error (𝑓 )) + ln (distribution_error (𝑓 )) 
+
+Let 𝑓 ★ be a value of 𝑓 that minimizes the above objective. As noted in the main text, deviating from 𝑓 ★ cannot decrease either type of error without also causing an equal or great increase in the other type of error (in a multiplicative sense). To see why, consider an 𝑓 ′
+
+that decreases count error by a factor of 𝑎 , and increases distribution error by a factor of 𝑏 . By optimality, 
+
+ln (count_error (𝑓 ★)) + ln (distribution_error (𝑓 ★)) ≤ ln (count_error (𝑓 ′)) + ln (distribution_error (𝑓 ′)) 
+
+The right-hand side is 
+
+ln (𝑎 −1· count_error (𝑓 ★)) + ln (𝑏 · distribution_error (𝑓 ★)) 
+
+= ln (count_error (𝑓 ★)) + ln (distribution_error (𝑓 ★)) − 𝑎 + 𝑏 
+
+Canceling terms, we deduce 𝑏 ≥ 𝑎 , as claimed. One might hope to use 𝑓 ★ to split the total privacy budget in practice, but it turns out that 𝑓 ★ is data-dependent. To approximate 
+
+𝑓 ★, one could consider privately testing different values of 𝑓 on the real data – however, this would require considerable privacy budget. While it may be possible to improve existing algorithms to select 
+
+𝑓 ★ with less privacy cost (e.g., adapting methods from differentially private budget selection [ 26 ]), we defer this possibility to future research. For the current work, we propose an alternate approach:  
+
+> 25 Proceedings on Privacy Enhancing Technologies YYYY(X) Kohli and Laskowski
+
+𝜖 𝑡 Uniform Left-skewed Right-skewed Bimodal symmetric Zero-inflated Top-inflated 0.10 0.8 0.4 0.5 0.7 0.3 0.4 0.15 0.8 0.3 0.4 0.8 0.3 0.3 0.22 0.4 0.3 0.3 0.5 0.3 0.3 0.32 0.3 0.3 0.2 0.4 0.2 0.3 0.48 0.3 0.2 0.2 0.3 0.2 0.3 0.71 0.2 0.2 0.2 0.3 0.2 0.2 1.05 0.2 0.1 0.2 0.1 0.1 0.2 1.55 0.1 0.1 0.1 0.1 0.1 0.1 2.29 0.1 0.1 0.1 0.1 0.1 0.1 3.38 0.1 0.1 0.1 0.1 0.1 0.1 5.00 0.1 0.1 0.1 0.1 0.1 0.1 
+
+Table 3: Optimal values of 𝑓 for each of our synthetic datasets. 
+
+Figure 8: Combined error objective as a function of 𝑓 for the crime dataset. The vertical green line displays the value of ˆ𝑓 
+
+selected by our rule of thumb. The horizontal green line depicts that value of the objective resulting from the rule of thumb. Finally, the horizontal blue line depicts the minimal objective value measured across all parameter settings. 
+
+a rule of thumb that practitioners can use to set 𝑓 that does not depend on the data. At a high level, our approach to attain a rule of thumb proceeds as follows. We begin by constructing six new synthetic datasets, chosen to have a wide range of distributional features. We then perform simulations for each dataset to determine the optimal 𝑓 
+
+for a range of total privacy budgets. We fit a parametric model to this data, resulting in a function that provides a recommended 𝑓 as a function of 𝜖 𝑡 . Finally, we assess the performance of our rule of thumb by applying it to the three datasets used in the main text. Our rule of thumb is fitted using six new synthetic datasets. One reason we created new data for this exercise is to capture a wide range of distributional features that may be observed in real-world applications. A second reason is that we would like our three canonical datasets to serve as a “holdout” to assess the performance of our rule of thumb. This mitigates the overfitting that would arise from training a model and evaluating it on the same data. The datasets we selected are as follows. 
+
+• Uniform: 3,000 draws from a discrete uniform distribution over the set {0, 1, ..., 29 }.
+
+• Left-skewed: 10,000 draws from the discrete distribution over the set {0, 1, ..., 69 } with mass function 𝑝 such that 
+
+𝑝 (𝑖 ) = 139 140 𝑝 (𝑖 + 1) for 0 ≤ 𝑖 ≤ 68 .
+
+• Right-skewed: 10,000 draws from the discrete distribution over the set {0, 1, ..., 69 } with mass function 𝑝 such that 𝑝 (𝑖 +
+
+1) = 139 140 𝑝 (𝑖 ) for 0 ≤ 𝑖 ≤ 68 .
+
+• Bimodal symmetric: 10,000 draws from a binomial dis-tribution over the set {0, 1, ..., 39 } with parameter 0.7 and 10,000 draws from a binomial distribution over the same set with parameter 0.3.
+
+• Zero-inflated: 9,800 draws from a discrete uniform distribu-tion over the set {0, 1, ..., 79 } and 200 additional datapoints set to 0. 
+
+• Top-inflated: 9,900 draws from a discrete uniform distribu-tion over the set {0, 1, ..., 79 } and 100 additional datapoints set to 79. For each synthetic dataset above, we perform a set of simula-tions to assess how 𝑓 affects the combined error objective. We operationalize count error using expected absolute deviation, and operationalize distribution error using Wasserstein distance. For the distribution privatizer we use the cyclic Laplace mechanism, and for the constructor algorithm we use Algorithm 1 with the sandwich selector. The total privacy budget 𝜖 𝑡 is varied from 0.1
+
+to 5.0, taking on 11 values that are evenly spaced on a logarithmic scale. We test every choice for 𝑓 in the set  110 , 210 , ..., 910 . For every combination of the above parameters, we perform 100 simulations  
+
+> 26 Preserving Target Distributions With Differentially Private Count Mechanisms Proceedings on Privacy Enhancing Technologies YYYY(X)
+
+of our two-stage framework, and record the value of 𝑓 with the lowest combined error. The results of our simulation study are presented in Table 3. We observe an inverse relationship between 𝜖 𝑡 and the optimal 
+
+𝑓 – generally, as 𝜖 𝑡 decreases, the optimal 𝑓 increases (or remains constant). As a robustness check, we perform additional simulations using MSE for count error, as well as total deviation and KS distance for distribution error. A similar inverse relationship between 𝜖 𝑡 and the optimal 𝑓 is observed in all cases. Based on the use case for our rule of thumb, we select a func-tional form with a small number of parameters, which outputs a recommended 𝑓 between 0 and 1. The form we select is 
+
+ˆ𝑓 (𝜖 𝑡 ) = 𝐵 + ( 𝐴 − 𝐵 ) exp (− 𝐾𝜖 𝑡 )
+
+Here, 𝐴 ∈ [ 0, 1] is the limit as 𝜖 𝑡 → 0+, 𝐵 ∈ [ 0, 1] is the limit as 
+
+𝜖 𝑡 → ∞ , and 𝐾 is a parameter that controls the curvature. We fit these parameters to the data in Table 3, yielding values 𝐴 = 0.639 ,
+
+𝐵 = 0.106 , and 𝐾 = 2.87 . This results in our rule of thumb, 
+
+ˆ𝑓 (𝜖 𝑡 ) = 0.106 + 0.533 exp (− 2.87 𝜖 𝑡 )
+
+We evaluate the performance of this rule of thumb for our three canonical datasets. For each dataset, we compute the combined error objective using the rule of thumb ˆ𝑓 and also the standard set of values 𝑓 ∈  110 , 210 , ..., 910 . This can be seen for the crime dataset in Figure 8. The corresponding plots for the binomial and schools datasets are similar and we omit them. In Figure 8, the vertical green line depicts the value of 𝑓 chosen by the rule of thumb. The value of the corresponding combined error objective is depicted by the horizontal green line. The horizontal blue line displays the best value of the objective across all values of 𝑓 we simulated. Thus, the distance between the two horizontal lines can serve as an approximate measure of the optimality gap induced by our rule of thumb. Since the combined error objective is on a natural log scale, as long as the optimality gap is small, it can be roughly interpreted as a percent change in accuracy. As observed for the crime data in Figure 8, the optimality gap tends to decrease as we increase 𝜖 𝑡 . Scanning the panels from left to right, as 𝜖 𝑡 increases from 0.1 to 0.5, 1.0, and 5.0, the corresponding optimality gap changes from 0.024 to 0.046 , 0.017 , and 0, respec-tively. Note that a measured optimality gap of 0 is possible anytime the objective at ˆ𝑓 matches the minimum objective over all values of 𝑓 we test. Similar decreasing patterns are also present for the binomial and schools datasets. The worst optimality gap we observe across all experiments is for the binomial data at 𝜖 𝑡 = 0.1, with a value of 0.42 .We use this rule of thumb throughout the experiments in Section 6. As we observe in that section, despite the optimality gaps that we observe in this appendix, our fixed-point techniques using the rule of thumb often provide a favorable tradeoff among our three main performance criteria: Large increases in accuracy of distribution can be attained with modest performance losses in both accuracy of counts and runtime.

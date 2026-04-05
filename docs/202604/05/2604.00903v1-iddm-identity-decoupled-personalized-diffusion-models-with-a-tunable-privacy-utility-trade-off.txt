@@ -1,0 +1,778 @@
+Title: IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off
+
+URL Source: https://arxiv.org/pdf/2604.00903v1
+
+Published Time: Thu, 02 Apr 2026 01:27:49 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off 
+
+# Linyan Dai 
+
+The Hong Kong Polytechnic University Hong Kong, China liann.dai@connect.polyu.hk 
+
+# Xinwei Zhang 
+
+The Hong Kong Polytechnic University Hong Kong, China xin-wei.zhang@connect.polyu.hk 
+
+# Haoyang Li 
+
+The Hong Kong Polytechnic University Hong Kong, China hao-yang9905.li@connect.polyu.hk 
+
+# Qingqing Ye 
+
+The Hong Kong Polytechnic University Hong Kong, China qqing.ye@polyu.edu.hk 
+
+# Haibo Hu ∗
+
+The Hong Kong Polytechnic University Hong Kong, China haibo.hu@polyu.edu.hk 
+
+## Abstract 
+
+Personalized text-to-image diffusion models (e.g., DreamBooth, LoRA) enable users to synthesize high-fidelity avatars from a few reference photos for social expression. However, once these gener-ations are shared on social media platforms (e.g., Instagram, Face-book), they can be linked to the real user via face recognition systems, enabling identity tracking and profiling. Existing defenses mainly follow an anti-personalization strategy that protects publicly released reference photos by disrupting model fine-tuning. While effective against unauthorized personalization, they do not address another practical setting in which personalization is authorized, but the resulting public outputs still leak identity information. To address this problem, we introduce a new defense setting, termed model-side output immunization , whose goal is to produce a personalized model that supports authorized personalization while reducing the identity linkability of public generations, with tunable control over the privacy-utility trade-off to accommodate diverse privacy needs. To this end, we propose Identity-Decoupled per-sonalized Diffusion Models (IDDM) , a model-side defense that integrates identity decoupling into the personalization pipeline. Concretely, IDDM follows an alternating procedure that interleaves short personalization updates with identity-decoupled data opti-mization, using a two-stage schedule to balance identity linkability suppression and generation utility. Extensive experiments across multiple datasets, diverse prompts, and state-of-the-art face recog-nition systems show that IDDM consistently reduces identity link-ability while preserving high-quality personalized generation. 
+
+## 1 Introduction 
+
+Text-to-image diffusion models, such as Stable Diffusion [ 6 ] and Nano Banana [ 11 ], have become a widely adopted paradigm for high-fidelity image synthesis [ 31 , 33 ]. Beyond general-purpose gen-eration, a particularly prominent application is subject-driven per-sonalization, where users adapt a pretrained model to a specific identity or character from only a handful of reference images, en-abling high-fidelity portraits and consistent characters for digi-tal storytelling [ 9, 32 ]. This approach is now common in creator communities. For example, Civitai reports about 3 million users 
+
+> ∗
+
+Corresponding author. Scenario A: 
+
+Anti-Personalization  
+
+> Diffusion Model Training
+> (e.g., DreamBooth)
+> Training Blocked
+> Scraped
+> Attacker User's Released Reference Images
+> Low-Utility Output
+
+Scenario B: 
+
+Model-Side Output Immunization   
+
+> Diffusion Model Training
+> (e.g., DreamBooth)
+> Training Allowed
+> User's Private Reference Images
+> High-Utility Output
+> Block
+> personalization
+> Private
+> Authorized Private Training
+> Public
+> Attacker
+> Protect
+> Public
+> Protect
+> Scraped
+> Human FR
+> Trusted / Private Side
+
+Figure 1: Comparison of protection paradigms under differ-ent threat models in personalized text-to-image generation: prior anti-personalization training (left) versus our model-side output immunization (right). 
+
+and 12-13 million monthly unique visitors [ 30 ]. The popularity of personalization is also clear from the number of trained diffusion models: a study reports that 868K+ LoRA models were trained in a single month on RunPod [36]. Despite this popularity, privacy concerns remain a major bar-rier, especially for face-centered personalization [ 9, 28 , 29 , 32 , 44 ]. Personalized diffusion models are designed to reproduce a user’s identity, so their outputs may retain recognizable biometric cues. Once publicly shared, such images can be scraped, redistributed, and linked back to the user by downstream face recognition systems. To mitigate this risk, prior work focuses on “ anti-personalization ” by adding imperceptible perturbations to publicly released reference images to prevent unauthorized fine-tuning [23, 41–43, 46, 47]. 
+
+> arXiv:2604.00903v1 [cs.CV] 1 Apr 2026 Linyan Dai, Xinwei Zhang, Haoyang Li, Qingqing Ye, and Haibo Hu
+
+However, in practical personalization workflows, users often keep clean reference images private and share only the personal-ized outputs, especially in avatar and AI-headshot services. For example, during the Lensa boom, users uploaded a few selfies to a service without releasing them as reference images and publicly shared the generated portraits on social media [ 26 , 37 ]. In this set-ting, the privacy risk shifts from unauthorized training on released references to biometric cues preserved in the outputs. Motivated by this, we study a different defense setting, termed model-side out-put immunization. As illustrated in Figure 1, anti-personalization protects publicly released reference images to prevent downstream personalization at the data level (Scenario A), whereas our approach targets model-side output immunization under authorized person-alization (Scenario B). This shift in threat model motivates a new goal: identity-decoupled personalization , where generated portraits remain visually useful and sufficiently faithful for creative applications, yet become harder to link back to the user by face recognition systems. Crucially, this goal requires a tunable privacy-utility trade-off as different users may prefer different operating points, which is practical and yet underexplored in real-world creation. For instance, a user who pub-lishes broadly or pseudonymously may prefer stronger protection against identity linkage, whereas a creator building a recurring avatar, branded persona, or story character may accept weaker privacy protection in exchange for higher identity consistency and fidelity. Therefore, a useful defense should allow authorized users to control how much identity signal is retained in their public outputs. To achieve this goal, we propose Identity-Decoupled personal-ized Diffusion Models (IDDM) , a new model-side privacy mech-anism for authorized personalization. IDDM integrates identity de-coupling directly into the personalization pipeline, enabling users to adapt diffusion models to diverse creative needs with tunable privacy-utility trade-offs. Specifically, IDDM alternates short per-sonalization updates with identity-decoupled data optimization on the user’s private reference set, producing portrait outputs that remain visually useful while becoming less linkable to the user by downstream face recognition systems. To support tunable con-trol, IDDM adopts a two-stage schedule in the identity-decoupled data optimization step, where the parameter 𝜌 adjusts the trade-off between privacy protection and generation utility: smaller 𝜌 
+
+emphasizes privacy, while larger 𝜌 better preserves utility. Further-more, this model-side design eliminates the need for per-image post-processing, making it suitable for deployment by a trusted platform or service provider. We extensively evaluate IDDM across multiple datasets and state-of-the-art face recognition systems. The results demonstrate that IDDM achieves a favorable trade-off between portrait fidelity and identity protection. As shown in Figure 2, compared with standard DreamBooth personalization (without defense), IDDM produces portraits that remain visually plausible while being harder to link back to the subject by downstream face recognition systems. In practice, IDDM can be integrated into vanilla DreamBooth/LoRA personalization by replacing the photo training procedure with an identity-decoupled version, while leaving the inference-time generation procedure unaltered. In summary, our contributions are as follows: Reference 
+
+> w/o
+> defense
+> with
+> defense
+> 0.5286
+> 0.3343
+> 0.4891
+> 0.2731
+> 0.3970
+> 0.1466
+> 0.5749
+> 0.4594
+> 0.5590
+> 0.3375
+
+Figure 2: Visualization examples on VGGFace2 with “a dslr portrait of sks person" under the same experimental setting. The white number below each generated image denotes the cosine similarity to the corresponding clean identity embed-ding (lower is less identity-related). 
+
+• We formalize a new privacy setting for personalized diffusion, shifting protection from reference images to released outputs. Unlike prior defenses that disrupt personalization, our setting reduces the linkability of generated images to the user with a tunable privacy-utility trade-off. 
+
+• We propose Identity-Decoupled personalized Diffusion Models (IDDM), a model-side privacy mechanism that integrates identity decoupling into personalization pipeline, producing immunized outputs automatically without per-image inference-time post-processing. 
+
+• Extensive experiments show that IDDM consistently reduces identity linkability across multiple datasets, state-of-the-art rec-ognizers, and diverse prompts, while maintaining high-quality personalized generation comparable to standard DreamBooth personalization. 
+
+## 2 Related Work 2.1 Personalized Diffusion Model 
+
+Diffusion-based text-to-image models have become a dominant paradigm for high-fidelity image synthesis by learning to reverse a progressive noising process [ 15 , 31 ]. Built on a pretrained diffusion backbone, personalization incorporates subject-specific informa-tion from only a few reference images, making the model render the same subject under diverse textual prompts. Some personalization methods keep the generator fixed and optimize the conditioning side. For instance, Text Inversion learns a new token embedding to represent a user-provided concept [ 9], and DeTeX improves disentanglement and controllability by learning more structured embeddings [ 2]. Another line fine-tunes parts of the denoiser so the model binds a unique identifier token to a specific subject. DreamBooth is a seminal method in this category and supports subject-driven generation under diverse prompts [ 32 ]. To reduce storage and training cost, many methods adopt parameter-efficient updates [ 16 , 21 , 40 ]. For example, Custom Diffusion updates only a small subset of cross-attention parameters [ 21 ], and low-rank adaptation (LoRA) has become a common tool for efficient diffu-sion customization [ 16 ]. Recent work also explores lightweight IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off 
+
+alternatives that inject reference cues at inference time via auxil-iary modules, improving usability while avoiding full fine-tuning [22 , 44 , 48 , 49 ]. Despite their effectiveness, personalized generators are inherently privacy-sensitive, as they aim to reproduce the fine-grained appearance of the subject from only a few reference images, which can encode identity-bearing traits [ 32 , 41 ]. In this paper, we focus on the DreamBooth-style fine-tuning setting, which remains one of the most widely used personalization pipelines and is the primary target of our defense design and evaluation. 
+
+## 2.2 Privacy Protection for Diffusion Models 
+
+With personalized diffusion models becoming increasingly pop-ular, privacy and misuse risks have arisen from pretraining and related downstream assignments. Some studies show that diffu-sion models may memorize and emit training examples, thereby facilitating data extraction and membership attacks [ 4, 17 ]. Ac-cordingly, model-centric mitigations have been explored, includ-ing privacy-preserving training with differential privacy [ 8 ] and post-hoc removal of sensitive concepts via unlearning or model editing [ 10 , 45 ]. In parallel, user-side defenses proactively protect images before uploading on social media by adding subtle noise into users’ images to resist unauthorized malicious personalization, including AdvDM [ 24 ], Anti-DreamBooth [ 41 ], SimAC [ 42 ], and CAAT [ 47 ]. MetaCloak further improves robustness by optimizing transformation-resilient perturbations for unauthorized subject-driven synthesis [ 25 ]. Beyond personalization, PhotoGuard [ 34 ]immunizes images against diffusion-based editing, whereas Anti-Diffusion [ 23 ] targets broader misuse spanning both tuning and editing modifications. Overall, existing user-side protections are designed for a deny-adaptation objective (i.e., to block downstream personalization or editing), thus sacrificing the utility of authorized users who still require high-fidelity personalization. 
+
+## 3 Preliminary and Threat Model 3.1 Diffusion Models 
+
+Diffusion models are probabilistic generative models that can create high-quality images from Gaussian noise by reversing a forward noising Markov chain. Given input image 𝑥 0 ∼ 𝑞 (𝑥 ), the forward process adds increasing noise to inputs by the noise scheduler 
+
+{𝛽 𝑡 : 𝛽 𝑡 ∈ ( 0, 1)} 𝑇 𝑡 =1 to produce a series of noisy variables over T steps: {𝑥 1, 𝑥 2, . . . , 𝑥 𝑇 }, and 𝑥 𝑡 can be formulated at timestep 𝑡 as follows: 
+
+𝑥 𝑡 = √ ¯𝛼 𝑡 𝑥 0 + √1 − ¯𝛼 𝑡 𝜖, (1) where 𝛼 𝑡 = 1 − 𝛽 𝑡 , ¯𝛼 𝑡 = Î𝑡 𝑠 =1 𝛼 𝑠 and 𝜖 ∼ N ( 0, I).In the backward process, the model learns to denoise the noisy sample 𝑥 𝑡 +1 from the previous noisy sample 𝑥 𝑡 by training a noise prediction neural network 𝜖 𝜃 (𝑥 𝑡 +1, 𝑡 ) to obtain the desired injected noise 𝜖 . Particularly, the denoising process can be formulated as an optimization objective of minimizing the ℓ2 distance between the predicted noise and true noise: 
+
+Luncond (𝜃, 𝑥 0) = E𝑥 0,𝑡,𝜖 ∼N ( 0,I) ∥𝜖 − 𝜖 𝜃 (𝑥 𝑡 +1, 𝑡 )∥ 22 , (2) 
+
+Lcond (𝜃, 𝑥 0) = E𝑥 0,𝑡,𝑐,𝜖 ∼N ( 0,I) ∥𝜖 − 𝜖 𝜃 (𝑥 𝑡 +1, 𝑡, 𝑐 )∥ 22 , (3) where 𝑐 denotes the conditional prompt directing the generation. 
+
+## 3.2 Subject-Driven Personalization 
+
+Subject-driven personalization adapts a pretrained text-to-image diffusion model to a specific subject from only a few reference images. DreamBooth [ 32 ] is a representative formulation, which fine-tunes the model using subject images paired with identifier prompts as depicted in (3), together with a prior-preservation term to retain class diversity. Its objective can be written as 
+
+L𝑑𝑏 (𝜃, 𝑥 0) = E𝑥 0,𝑡,𝑡 ′ ∥𝜖 − 𝜖 𝜃 (𝑥 𝑡 +1, 𝑡, 𝑐 )∥ 22
+
++𝜆 𝜖 ′ − 𝜖 𝜃 (𝑥 ′ 
+
+> 𝑡 ′+1
+
+, 𝑡 ′, 𝑐 𝑝𝑟 ) 22 , (4) where 𝜖 and 𝜖 ′ denote noise samples from N ( 0, I), 𝑥 ′  
+
+> 𝑡 ′+1
+
+is the noisy state originated from the class sample 𝑥 ′ over 𝑡 ′ + 1 timesteps, and 𝑐 𝑝𝑟 is prior prompt. In practice, personalization can be imple-mented either by full-model fine-tuning (e.g., DreamBooth [ 32 ]) or by parameter-efficient adaptation (e.g., LoRA [16]). 
+
+## 3.3 Threat Model 
+
+We consider a setting in which a user provides a small set of private photos X to an authorized personalization pipeline in order to obtain a personalized text-to-image diffusion model. The private photos X are not publicly released; instead, the public exposure arises from the generated images X𝑔𝑒𝑛 produced by the resulting personalized model. Accordingly, the privacy risk in our setting stems from the public dissemination of X𝑔𝑒𝑛 rather than leakage of the private training photos or the personalized model parameters. 
+
+Adversary. The adversary can scrape released images X𝑔𝑒𝑛 from the web and run a standard face-analysis pipeline, including face detection, alignment, feature extraction, and matching, to link them to the user’s real-world identity. We assume the adversary may query black-box state-of-the-art Face Recognition Systems (FRS), but has no access to the user’s private photos X, personalization prompts, or the personalized model parameters and gradients. 
+
+Defender. The defender is either the user or a trusted personaliza-tion service provider. Given access to the user’s private photos X
+
+and the authorized personalization pipeline, the defender is allowed to modify the personalization procedure to produce an identity-decoupled personalized model . The goal is to preserve the utility of personalized generation while reducing the linkability of its released outputs to the user by downstream FRS. Depending on the user’s privacy preferences or deployment requirements, the defender can further adjust the defense strength to realize a desired trade-off between generation utility and identity protection. Importantly, the defense is model-side : once the identity-decoupled personalized model has been obtained, its outputs are protected by default under normal use, without requiring per-image inference-time post-processing before release. To optimize the defense, the defender may use a set of surrogate face-recognition encoders, but does not know the exact recognizer deployed by the adversary. 
+
+## 4 Our Method: IDDM 4.1 Overview 
+
+The key idea of our method is to embed identity decoupling into 
+
+authorized personalization by optimizing the user’s private training Linyan Dai, Xinwei Zhang, Haoyang Li, Qingqing Ye, and Haibo Hu Pretrained Diffusion Model (  )
+
+> Private Images
+> Reference Images
+> Protection Images
+> Reference Images
+> Protection Images
+> Stage I
+> Fidelity-Preserving
+> Stage II
+> Identity-Decoupling
+> ID-Decoupled Images
+> 1. Short Fine-tuning on
+> 3. Fine-tuning on
+> 2. Identity-Decoupled Data Optimization
+
+Repeat for 
+
+𝑘  = 1, … , K-1  
+
+> OUTPUT:
+> Personalized Generations
+> Human
+> Visual Fidelity:
+> High
+> Facical Recognition:
+> Unlinkable
+> Tunable ratio
+
+Figure 3: The framework of our proposed IDDM. Each iteration alternates between a short personalization update on the fixed reference set X𝑐 (Step 1) and an identity-decoupled data update on the protection set X0, followed by fine-tuning on the updated set X′ (Steps 2–3). In Step 2, the tunable stage split ratio 𝜌 determines the relative allocation of optimization between Stage I and Stage II, allowing IDDM to operate at different privacy-utility trade-off points. 
+
+photos within a small bounded budget, so that the resulting person-alized diffusion model maintains generation utility while reducing identity linkability in its outputs. Figure 3 summarizes the overall procedure. IDDM follows an alternating loop over 𝐾 iterations that interleaves personalization updates with identity-decoupled data optimization. At iteration 𝑘 ,we first run a short fine-tuning on a fixed reference set X𝑐 to obtain a temporary model state Θ′ 
+
+> 𝑘
+
+that reflects the current personalization stage (Step 1). We then freeze Θ′ 
+
+> 𝑘
+
+and update the protection set X0
+
+under an ℓ∞ constraint to obtain an identity-decoupled training set X′ (Step 2). Conditioning this step on Θ′ 
+
+> 𝑘
+
+is essential, since identity leakage arises from the evolving personalization trajectory rather than from a fixed pretrained model. Finally, we fine-tune on 
+
+X′ to obtain the updated personalized model Θ𝑘 (Step 3), thereby incorporating the current identity-decoupling effect into the model before the next iteration. Section 4.2 details this alternating personalization-aware training loop, and Section 4.3 specifies the two-stage optimization in Step 2. This two-stage design explicitly balances fidelity preservation and identity-linkability suppression, yielding a more stable optimization process and a better utility-privacy trade-off than joint optimization, as shown in Table 9 in Appendix A.2. 
+
+Remark 1. IDDM differs from prior anti-personalization methods, despite using projected gradient updates to optimize training im-ages in Step 2. Existing anti-personalization defenses apply protec-tive perturbations to publicly released photos in order to disrupt unauthorized fine-tuning, whereas IDDM optimizes the user’s pri-vate training photos only as internal variables within an authorized personalization pipeline. The optimized identity-decoupled image set X′ is not published or exposed to the attacker, and it is used solely to shape the resulting personalized model toward reduced identity linkability. Therefore, as a model-side defense, IDDM does not rely on the persistence of released perturbations and is not directly affected by purification or denoising of public images at deployment time. 
+
+## 4.2 Alternating Personalization-Aware Training 
+
+To preserve utility, our defense must be compatible with standard personalization (e.g., DreamBooth/LoRA), rather than blocking fine-tuning. However, personalization continuously updates model pa-rameters and can (re-)introduce identity cues as training proceeds, which may weaken protections optimized for an earlier model snap-shot. Therefore, we adopt an alternating training scheme that up-dates the protection images using a model aligned with the current personalization stage, so that the protection persists after subse-quent fine-tuning. Given a user’s private photo set X = {𝑥 𝑖 }𝑁 𝑖 =1, we split it into two disjoint subsets X = X0 ∪ X 𝑐 with X0 ∩ X 𝑐 = ∅. Here, X𝑐 is a fixed reference set used for (i) short fine-tuning to approximate the current personalization state and (ii) identity prototype construction in our face-recognition space, while X0 is the protection set whose samples will be updated under a bounded budget. IDDM proceeds in 𝐾 iterations, starting from the pretrained diffusion model 𝑀 Θ0 . At iteration 𝑘 , we maintain the current model parameters Θ𝑘 and perform three steps (Figure 3): 
+
+Step 1: Short fine-tuning on X𝑐 . We initialize a temporary model from the current parameters and run a short personalization update on the fixed reference set: 
+
+Θ′ 
+
+> 𝑘
+
+← FT (Θ𝑘 −1; X𝑐 ), (5) where FT (·) denotes a few-step DreamBooth/LoRA fine-tuning. The resulting Θ′ 
+
+> 𝑘
+
+approximates the current fine-tuning state and provides an up-to-date model for guiding the subsequent data up-date. 
+
+Step 2: Identity-decoupled data update on X0. We then freeze 
+
+the temporary model 𝑀 Θ′ 
+
+> 𝑘
+
+and update the protection set under the bounded budget (Section 4.3): 
+
+X′ ← Update (X 0; 𝑀 Θ′ 
+
+> 𝑘
+
+), (6) where Update (·) is a two-stage procedure (Stage I fidelity-preserving, followed by Stage II identity-decoupling) producing ID-decoupled training photos X′. We refer to X′ as an ID-decoupled dataset since IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off 
+
+fine-tuning on X′ gets a personalized model whose outputs retain visual utility while being less linkable to the user in the downstream face-recognition space. 
+
+Step 3: Fine-tuning on X′. Finally, we continue personalization using the updated photos to obtain the next-iteration model: 
+
+Θ𝑘 ← FT (Θ′ 
+
+> 𝑘
+
+; X′). (7) This step ensures that the model used in the next iteration reflects training on the latest protected set, preventing the data update from optimizing against a stale personalization state. By repeatedly refreshing Θ′ 
+
+> 𝑘
+
+and updating X0 accordingly, IDDM couples training-data adaptation with the evolving personalization process. This prevents optimization against a stale model state and helps the identity-decoupling effect persist throughout subsequent fine-tuning. Algorithm 1 in Appendix B summarizes this alternating optimization procedure for IDDM. 
+
+## 4.3 Identity-Decoupled Data Optimization 
+
+At each iteration 𝑘 , we freeze the temporary model 𝑀 Θ′ 
+
+> 𝑘
+
+and up-date the protection set X0 under an ℓ∞ budget ∥𝛿 ∥∞ ≤ 𝜂 , yield-ing a identity-decoupled set X′ for authorized personalization. For each 𝑥 ∈ X0, we denote its identity-decoupled version as 
+
+𝑥 ′ = Π[0,1] (𝑥 +𝛿 ). As shown in Table 9 in Appendix A.2, optimizing identity suppression from the start (i.e., jointly optimization) often distorts facial structure and causes a large fidelity drop, leading to unstable or conflicting gradients. Therefore, we use a two-stage schedule to balance utility and identity privacy: stage I regularizes the identity-decoupled training set with a denoising-consistency ob-jective so that they remain compatible with diffusion training, and stage II reduces identity linkability in the face-recognition feature space based on denoised predictions. 
+
+Stage I: Fidelity-Preserving Optimization. For latent diffusion models, we first encode 𝑥 ′ into a latent 𝑧 0 via the VAE encoder. Given a timestep 𝑡 and Gaussian noise 𝜖 ∼ N ( 0, I), we form 𝑧 𝑡 =
+
+√ ¯𝛼 𝑡 𝑧 0 + √1 − ¯𝛼 𝑡 𝜖 , where ¯𝛼 𝑡 denotes the cumulative noise coeffi-cient. Let 𝜖 Θ′ 
+
+> 𝑘
+
+(·) denote the denoising network of the frozen tempo-rary model conditioned on prompt 𝑐 . The reconstruction (denoising) objective is: 
+
+Lrec (Θ′ 
+
+> 𝑘
+
+, 𝑥 ′) = E𝑡,𝜖 
+
+h
+
+𝜖 − 𝜖 Θ′ 
+
+> 𝑘
+
+(𝑧 𝑡 , 𝑡, 𝑐 ) 22
+
+i
+
+. (8) This objective regularizes bounded data adaptation to ensure de-noising consistency, so that the resulting training photos remain compatible with diffusion fine-tuning, helping mitigate fidelity degradation after identity decoupling. We obtain 𝛿 by optimizing: 
+
+arg min  
+
+> 𝛿
+
+Lrec (Θ′ 
+
+> 𝑘
+
+, 𝑥 ′) s.t. ∥𝛿 ∥∞ ≤ 𝜂. (9) 
+
+Stage II: Identity-Decoupling Optimization. Let {𝑓 𝑚 }𝑀 𝑚 =1 be a set of pretrained face-recognition (FR) encoders (e.g., MobileFace [ 5 ]and FaceNet [ 35 ]), and let A (·) denote a face pre-processing func-tion that detects, crops, and aligns the face region before feeding it to an FR encoder. We form an identity prototype for each encoder using the aligned reference set X𝑐 = {𝑥 𝑗 }𝑁 𝑐 
+
+> 𝑗 =1
+
+:
+
+𝑒 𝑚 = 1
+
+𝑁 𝑐 𝑁 𝑐 ∑︁ 
+
+> 𝑗 =1
+
+𝑓 𝑚 
+
+ A ( 𝑥 𝑗 ), (10) where 𝑓 𝑚 (·) outputs an ℓ2-normalized embedding and 𝑒 𝑚 is normal-ized to unit length. During optimization, given an adapted training image 𝑥 ′ ob-tained after stage I, we run a denoising step using the frozen tem-porary model 𝑀 Θ′ 
+
+> 𝑘
+
+and obtain the corresponding clean prediction 
+
+ˆ𝑥 0 (e.g., by decoding the predicted ˆ𝑧 0 through the VAE decoder). For each face recognizer 𝑓 𝑚 , we measure how easily the current sample can be linked to the user by the cosine similarity between its embedding and the identity prototype: 
+
+𝑠 𝑚 (𝑥 ′) = cos 
+
+
+
+𝑓 𝑚 
+
+ A ( ˆ𝑥 0), 𝑒 𝑚 
+
+
+
+∈ [− 1, 1]. (11) A larger 𝑠 𝑚 (𝑥 ′) indicates higher identity linkability under the 𝑚 -th recognizer. We then aggregate the ensemble responses with adaptive weights so that the most vulnerable recognizer (the one giving the largest similarity) has a larger influence on the objective, while keeping the aggregation differentiable 
+
+𝑤 𝑚 (𝑥 ′) = exp  𝑠 𝑚 (𝑥 ′)/ 𝜏 Í𝑀 𝑗 =1 exp  𝑠 𝑗 (𝑥 ′)/ 𝜏  ,𝑆 (𝑥 ′) =
+
+> 𝑀
+
+∑︁ 
+
+> 𝑚 =1
+
+𝑤 𝑚 (𝑥 ′) 𝑠 𝑚 (𝑥 ′). (12) Here 𝜏 > 0 controls how peaked the weights are, where a smaller 
+
+𝜏 makes 𝑆 (𝑥 ′) focus more on the largest 𝑠 𝑚 (𝑥 ′). Although 𝑤 𝑚 in-creases with 𝑠 𝑚 , we minimize 𝑆 (𝑥 ′), so this weighting concentrates gradients on the most identity-sensitive recognizer and drives its similarity down. We define the identity-decoupling objective as 
+
+Lid (Θ′ 
+
+> 𝑘
+
+, 𝑥 ′) = 1 + 𝑆 (𝑥 ′). (13) Since 𝑆 (𝑥 ′) ∈ [− 1, 1], (1+𝑆 (𝑥 ′)) ∈ [ 0, 2] provides a stable, bounded objective. Minimizing Lid encourages low similarity to the iden-tity prototypes across the recognizer ensemble. We optimize the bounded adaptation by solving 
+
+arg min  
+
+> 𝛿
+
+Lid (Θ′ 
+
+> 𝑘
+
+, 𝑥 ′) s.t. ∥𝛿 ∥∞ ≤ 𝜂, (14) where 𝑥 ′ = Π[0,1] (𝑥 + 𝛿 ) for each 𝑥 ∈ X 0.
+
+Two-stage schedule. To balance utility preservation and iden-tity suppression, we run projected gradient descent (PGD) on 𝛿 
+
+for 𝑇 steps. We use a split ratio 𝜌 ∈ ( 0, 1) to allocate the opti-mization budget between the two stages, where 𝜌𝑇 steps are used for Stage I (fidelity-preserving) and (1 − 𝜌 )𝑇 steps for Stage II (identity-decoupling). For the first 𝑇 rec = ⌊𝜌𝑇 ⌋ steps, we optimize 𝛿 
+
+using Lrec in Eq. (8); for the remaining steps, we switch to Lid in Eq. (13). Each update is followed by the projection Π𝜂 (·) to enforce 
+
+∥𝛿 ∥∞ ≤ 𝜂 . The resulting identity-decoupled training set is denoted as X′ = {𝑥 ′ 
+
+> 𝑖
+
+}𝑁 0
+
+> 𝑖 =1
+
+, which is then used for authorized personalization in Step 3. Here, the FR objective is used only as a differentiable proxy for identity linkability under frozen recognizers, rather than as a target for standalone adversarial evasion. This staged update avoids directly optimizing two objectives in a single loss. In face-centered personalization, reducing FR similarity often requires modifying identity-discriminative facial cues, while these cues are also vital for generation fidelity and subject consistency. As a result, jointly optimizing the two objectives can suffer from gradient tug-of-war and unstable trade-offs (see Table 9 in Appendix A.2). Linyan Dai, Xinwei Zhang, Haoyang Li, Qingqing Ye, and Haibo Hu 
+
+Table 1: Defense performance comparison with anti-personalization baselines on CelebA-HQ and VGGFace2 datasets. IDDM is reported under three values of the preset step-allocation ratio 𝜌 , which controls the trade-off between defense strength and generation utility. FSR measures output utility; ISM and ADA denote identity-related metrics; FID, SER, and BRQ denote the visual quality of generated images. 
+
+Dataset Method “a photo of sks person” “a dslr portrait of sks person” 
+
+FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+CelebA-HQ No Defense 0.57 0.69 0.66 158.09 0.76 10.65 0.50 0.48 0.44 214.35 0.74 4.88 Anti-DB 0.50 0.38 0.34 314.67 0.52 40.21 0.45 0.28 0.24 341.23 0.59 36.06 SimAC 0.30 0.21 0.17 395.81 0.27 37.34 0.15 0.03 0.03 458.58 0.22 42.23 Anti-Diff 0.33 0.13 0.11 383.80 0.26 41.96 0.32 0.16 0.13 417.32 0.38 37.70 IDDM ( 𝜌 = 0.1) 0.65 0.43 0.38 213.37 0.74 16.81 0.48 0.29 0.25 237.54 0.75 11.71 
+
+IDDM ( 𝜌 = 0.3) 0.62 0.51 0.47 172.80 0.75 21.31 0.52 0.36 0.33 208.40 0.75 12.56 IDDM ( 𝜌 = 0.5) 0.62 0.53 0.49 171.77 0.75 20.87 0.56 0.40 0.37 203.89 0.77 13.65 VGGFace2 No Defense 0.75 0.69 0.65 186.50 0.73 22.71 0.47 0.48 0.44 249.59 0.69 8.07 Anti-DB 0.62 0.44 0.40 324.03 0.48 37.36 0.49 0.30 0.26 351.49 0.54 34.27 SimAC 0.36 0.24 0.20 375.84 0.27 38.74 0.15 0.02 0.01 431.06 0.17 41.59 Anti-Diff 0.44 0.22 0.18 380.42 0.34 41.54 0.36 0.18 0.15 393.11 0.49 37.13 IDDM ( 𝜌 = 0.1) 0.81 0.49 0.45 216.68 0.73 21.68 0.57 0.34 0.30 260.18 0.71 14.17 IDDM ( 𝜌 = 0.3) 0.81 0.55 0.51 185.65 0.73 28.31 0.59 0.42 0.38 228.48 0.75 14.09 
+
+IDDM ( 𝜌 = 0.5) 0.77 0.56 0.51 186.15 0.73 30.12 0.57 0.46 0.39 234.04 0.73 14.93 
+
+Table 2: Defense performance of IDDM under four additional prompts with different values of the tunable step-allocation ratio 
+
+𝜌 on CelebA-HQ. “No Defense” denotes the standard DreamBooth personalization without defense. 
+
+Method “a photo of sks person wearing a hat” “a photo of sks person with glasses” 
+
+FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+No Defense 0.73 0.54 0.50 273 .25 0.70 8.31 0.33 0.55 0.50 208 .03 0.75 13 .89 
+
+IDDM ( 𝜌 = 0.1) 0.70 0.34 0.29 275 .65 0.70 12.31 0.29 0.35 0.30 235 .79 0.75 15.43 
+
+IDDM ( 𝜌 = 0.3) 0.73 0.44 0.41 272 .79 0.72 18 .18 0.30 0.45 0.41 194 .94 0.77 19 .72 
+
+IDDM ( 𝜌 = 0.5) 0.70 0.47 0.44 260.65 0.72 20 .85 0.26 0.49 0.44 192.21 0.76 22 .39 
+
+Method “a photo of sks person with red hair” “a photo of sks person with big eyes” 
+
+FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+No Defense 0.65 0.58 0.54 189 .17 0.72 10 .04 0.08 0.48 0.45 267 .91 0.59 14 .10 
+
+IDDM ( 𝜌 = 0.1) 0.54 0.39 0.35 195 .30 0.71 15.28 0.11 0.29 0.24 280 .63 0.59 14.99 
+
+IDDM ( 𝜌 = 0.3) 0.63 0.49 0.45 175 .01 0.72 23 .25 0.10 0.42 0.37 250 .88 0.60 15 .25 
+
+IDDM ( 𝜌 = 0.5) 0.59 0.53 0.49 171.66 0.73 24 .61 0.10 0.49 0.45 229.81 0.64 16 .85 
+
+## 5 Experiments 5.1 Setup 
+
+Datasets. We consider two complementary facial datasets for exper-iments: CelebA-HQ [ 19 ] and VGGFace2 [ 3 ]. CelebA-HQ provides high-quality face images for evaluating generation fidelity, while VGGFace2 is a large-scale in-the-wild face dataset with substantial intra-identity variation, making it suitable for evaluating identity linkability under more diverse pose and appearance conditions. For each dataset, we sample 50 identities and collect at least 16 face images per identity. For each identity, the images are partitioned into three disjoint subsets: (1) a fixed reference set 𝐴 (i.e., X𝑐 ) of 4 images for short fine-tuning of the surrogate personalized diffusion model and computation of the identity prototype; (2) a protection set 𝐵 (i.e., X0) of 4 images for identity-decoupled data optimization; and (3) an additional clean set with at least 4 images for metric evaluation. All images are center-cropped and resized to 512 × 512 .
+
+Baselines. To the best of our knowledge, existing defenses for personalized diffusion models mostly follow an anti-personalization 
+
+objective, i.e., preventing personalization from public reference images. In contrast, our setting is utility-preserving: personalization is still authorized for legitimate users, while identity traceability from generated outputs is reduced. As no prior defense is tailored to this setting, we compare against the closest available baselines from anti-personalization work, namely Anti-DreamBooth [ 41 ], IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off 
+
+Table 3: Top-𝑘 untargeted identity retrieval attack success rates (%, 𝑘 =1, 5) on CelebA-HQ across AdaFace [ 20 ], QMagFace [ 38 ], and ElasticFace [ 1]. The gallery contains 112 identities, including the evaluated identities. Lower is better; best results are in bold and second-best are underlined. 
+
+Method 
+
+“a photo of sks person” “a dslr portrait of sks person” 
+
+AdaFace QMagFace ElasticFace Average AdaFace QMagFace ElasticFace Average 
+
+R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U No Defense 87.06 87.06 87.06 88.24 89.41 89.41 87.84 88.24 88.61 89.87 89.87 96.20 94.94 96.20 91.14 94.09 Anti-DB 77.78 88.89 88.89 88.89 88.89 88.89 85.19 88.89 80.56 83.33 77.78 91.67 80.56 91.67 79.63 88.89 SimAC 83.33 83.33 83.33 83.33 66.67 100.00 77.78 88.89 0 0 0 0 0 0 0 0
+
+Anti-Diff 60.00 60.00 60.00 60.00 60.00 60.00 60.00 60.00 75.00 100.00 75.00 75.00 75.00 100.00 75.00 91.67 Ours 67.53 84.42 62.34 87.01 58.44 88.31 62.77 86.58 67.53 84.42 62.34 87.01 58.44 88.31 62.77 86.58 
+
+Table 4: Defense performance comparison of IDDM across different diffusion model versions on CelebA-HQ. 
+
+Version Method “a photo of sks person” “a dslr portrait of sks person” 
+
+FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+V2.1 No Defense 0.57 0.69 0.66 158.09 0.76 10.65 0.50 0.48 0.44 214.35 0.74 4.88 Defense 0.65 0.43 0.38 213.37 0.74 16.81 0.48 0.29 0.25 237.54 0.75 11.71 V1.5 No Defense 0.67 0.67 0.63 160.42 0.75 11.96 0.76 0.37 0.33 211.26 0.69 6.94 Defense 0.77 0.43 0.38 181.13 0.73 26.93 0.70 0.28 0.24 189.30 0.71 18.63 V1.4 No Defense 0.69 0.66 0.63 160.53 0.75 13.56 0.69 0.34 0.30 225.13 0.67 7.99 Defense 0.75 0.45 0.41 181.90 0.74 23.17 0.67 0.29 0.25 199.84 0.69 19.20 Reference        
+
+> Anti-DB SimAC Anti-Diff No defense IDDM (Ours)
+> No defense Anti-DB SimAC Anti-Diff IDDM (Ours)
+
+Figure 4: Qualitative defense results on CelebA-HQ. First row: reference image. Second row: generated images on the prompt “a dslr portrait of sks person". Third row: generated images on the prompt “a photo of sks person". 
+
+SimAC [ 42 ], and Anti-Diffusion [ 23 ]. For brevity, we refer to Anti-DreamBooth as Anti-DB and Anti-Diffusion as Anti-Diff. 
+
+Implementation details. We adopt Stable Diffusion v2.1-base as the pretrained backbone and DreamBooth [ 32 ] for subject-driven personalization. Unless otherwise stated, we run 𝐾 = 10 outer iterations with a stage split of 𝜌 = 0.1, and each outer iteration contains 8 PGD update steps. For fair comparison, all methods use the same step size 𝛼 = 0.008 and bounded budget 𝜂 = 0.08 at 
+
+512 × 512 resolution. For identity decoupling, we use four surrogate face recogniz-ers: IRSE50 [ 18 ], IR152 [ 13 ], MobileFaceNet [ 5], and FaceNet [ 35 ]. Before feature extraction, we detect faces and 5-point landmarks using SCRFD [ 12 ], align each face to a canonical template, and resize the aligned crop to match each input resolution required by each recognizer (e.g., 112 × 112 or 160 × 160 ). We set ensemble temperature 𝜏 = 0.03 . For evaluation, we use three additional off-the-shelf face recognizers, including AdaFace [ 20 ], QMagFace [ 38 ], and ElasticFace [1], which are kept frozen and are strictly disjoint from the surrogate recognizers used during optimization. Linyan Dai, Xinwei Zhang, Haoyang Li, Qingqing Ye, and Haibo Hu 
+
+The surrogate DreamBooth model is fine-tuned for 1000 steps with prior preservation (4) on the private image set, updating both the UNet and text encoder with batch size 2 and learning rate 
+
+5 × 10 −7. The instance prompt is “a photo of [sks] person” . All exper-iments are conducted on a single NVIDIA A100 GPU. Personalized diffusion model training takes about 20 minutes per identity, and inference takes about 1 minute per batch, making deployment prac-tical for authorized users. 
+
+Evaluation metrics. We evaluate both visual fidelity and iden-tity linkability. For portrait utility, we report the face detection success rate ( FSR ), i.e., the fraction of generated images in which SCRFD [ 12 ] detects a face. For identity linkability, we use three metrics. ISM is the mean cosine similarity between each detected generated face and the reference embedding computed from the corresponding clean set using ArcFace [ 7 ]. ADA is defined analo-gously using AdaFace [ 20 ]. Lower ISM and ADA indicate weaker identity preservation and thus stronger privacy protection. We also report the top-𝑘 untargeted identity retrieval success rate ( Rk-U) with 𝑘 ∈ { 1, 5}, which measures whether the correct identity appears among the top-𝑘 retrieved candidates. All identity-based metrics are computed on generated images with successful face detection. For visual fidelity, we report FID [14 ], SER-FIQ [ 39 ], and BRISQUE [27 ], denoted as SER and BRQ for brevity. FID measures distribution-level fidelity, while SER-FIQ and BRISQUE assess perceptual and no-reference image quality, respectively. 
+
+## 5.2 Experimental Results 
+
+Main results. We compare IDDM with state-of-the-art anti-perso -nalization baselines across multiple metrics and datasets. Table 1 reports the main results on CelebA-HQ and VGGFace2 under the two primary prompts, while Table 2 further evaluates IDDM under four additional prompts. Overall, IDDM achieves the most favorable balance between protection and generation quality. Compared with standard DreamBooth (No Defense), all defended variants of IDDM consistently reduce identity leakage, as reflected by lower ISM and ADA across datasets and prompts. Compared with existing anti-personalization baselines, IDDM also preserves substantially stronger portrait usability and visual quality. Although aggressive baselines (i.e., SimAC and Anti-Diff) indeed achieve more extreme identity suppression, this comes at the cost of severely de-graded usability and image quality. Anti-DB has moderate identity protection, yet still suffers from noticeable quality deterioration. Moreover, 𝜌 provides an explicit and tunable handle over the privacy-utility operating point of IDDM. As shown in Table 1 and Table 2, smaller values of 𝜌 (e.g., 𝜌 = 0.1) generally yield stronger identity suppression, making them more suitable for high-privacy deployments, while larger values (e.g., 𝜌 = 0.5) tend to improve portrait usability and visual fidelity, making them preferable when generation quality is prioritized. The intermediate setting 𝜌 = 0.3
+
+serves as a practical default, achieving reduced identity leakage over the DreamBooth personalization (without defense) while pre-serving strong portrait quality and usability. These results show that IDDM enables users to choose a deployment-oriented trade-off based on practical requirements. Qualitative examples in Fig. 4 further show that IDDM better preserves natural facial structure and appearance than competing defenses. 
+
+Identity retrieval analysis. We evaluate top-𝑘 untargeted iden-tity retrieval under multiple face recognizers. Table 3 reports the results on CelebA-HQ, and the corresponding VGGFace2 results are given in Table 10 of Appendix A.2. Overall, IDDM consistently reduces identity recoverability and achieves competitive average re-trieval performance without relying on severe visual corruption. In particular, under “a dslr portrait of sks person” , IDDM outperforms both Anti-DB and Anti-Diff in average retrieval success. Notably, severe visual distortion does not necessarily lead to low retrieval success: once a face can still be detected and aligned, the remaining identity cues may still be sufficient for matching. The near-zero retrieval rates of SimAC should be interpreted together with its severe utility collapse in Table 1, as only very few generated faces remain detectable. 
+
+Personalization performance for unseen prompts. We fur-ther evaluate four unseen prompts beyond the training prompt, including hat, glasses, red hair, and big eyes. Table 2 reports the quantitative results, and Figure 5 in Appendix C shows qualitative examples on CelebA-HQ. Across all prompts, IDDM continues to generate diverse and visually plausible portraits while weakening identity linkability beyond the training prompt. Once the personal-ized diffusion model is obtained, generating portraits under new prompts requires only standard inference, which is computationally lightweight. 
+
+## 5.3 Ablation Study. 
+
+We study several design choices and hyperparameters in IDDM, including the diffusion backbone, the FR ensemble used for opti-mization, the stage split ratio 𝜌 , the outer-loop iterations 𝐾 , the bounded budget 𝜂 , and the Softmin temperature 𝜏 . Among them, 𝜌 
+
+is the primary control parameter for the privacy-utility trade-off and is discussed in the main text. The remaining ablations serve as complementary analyses of robustness, sensitivity, and optimiza-tion behavior. In particular, the ablations of the FR ensemble, 𝜂 , 𝜏 ,and 𝐾 , together with detailed numerical results and discussions, are deferred to Appendix A.1. Finally, the ablation of the diffusion back-bone is reported in Table 4, showing that IDDM remains effective across different Stable Diffusion versions. 
+
+## 6 Conclusion 
+
+In this paper, we study a new defense scenario in face-centered personalized diffusion and introduce model-side output immuniza-tion . In contrast to anti-personalization defenses that block fine-tuning, our proposed IDDM enables authorized personalization while reducing downstream biometric linkability of the released outputs, with a tunable privacy-utility trade-off. IDDM alternates personalization updates with identity-decoupled data optimization under a two-stage schedule, yielding personalized outputs that re-main visually useful while becoming less biometrically linkable. We evaluate the effectiveness of IDDM across datasets, prompts, and state-of-the-art face recognizers. Moreover, IDDM can be plugged into standard DreamBooth pipelines to produce protected avatars by default, making privacy-compatible personalized creation the norm. We hope this work encourages broader adoption of utility-preserving privacy defenses in personalized diffusion systems and inspires future research on trustworthy generative personalization. IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off 
+
+## References 
+
+[1] Fadi Boutros, Naser Damer, Florian Kirchbuchner, and Arjan Kuijper. 2022. Elas-ticFace: Elastic Margin Loss for Deep Face Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 1578– 1587. [2] Yufei Cai, Yuxiang Wei, Zhilong Ji, Jinfeng Bai, Hu Han, and Wangmeng Zuo. 2024. Decoupled Textual Embeddings for Customized Image Generation. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence . 909–917. [3] Qiong Cao, Li Shen, Weidi Xie, Omkar M. Parkhi, and Andrew Zisserman. 2018. VGGFace2: A dataset for recognising faces across pose and age. In 2018 13th IEEE International Conference on Automatic Face & Gesture Recognition (FG 2018) .67–74. doi:10.1109/FG.2018.00020 [4] Nicholas Carlini, Jamie Hayes, Milad Nasr, Matthew Jagielski, Vikash Sehwag, Florian Tramèr, Borja Balle, Daphne Ippolito, and Eric Wallace. 2023. Extract-ing Training Data from Diffusion Models. In 32nd USENIX Security Symposium (USENIX Security 23) . 5253–5270. [5] Sheng Chen, Yang Liu, Xiang Gao, and Zhen Han. 2018. MobileFaceNets: Efficient CNNs for Accurate Real-Time Face Verification on Mobile Devices. In Chinese Conference on Biometric Recognition (CCBR) . 428–438. [6] CompVis. [n. d.]. CompVis/stable-diffusion: A latent text-to-image diffusion model. https://github.com/CompVis/stable-diffusion. [7] Jiankang Deng, Jia Guo, Niannan Xue, and Stefanos Zafeiriou. 2019. ArcFace: Additive Angular Margin Loss for Deep Face Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .4690–4699. [8] Tim Dockhorn, Tianshi Cao, Arash Vahdat, and Karsten Kreis. 2022. Differentially Private Diffusion Models. arXiv preprint arXiv:2210.09929 (2022). [9] Rinon Gal, Yuval Alaluf, Yuval Atzmon, Or Patashnik, Amit H. Bermano, Gal Chechik, and Daniel Cohen-Or. 2023. An image is worth one word: Personalizing text-to-image generation using textual inversion. In International Conference on Learning Representations (ICLR) .[10] Rohit Gandikota, Joanna Materzynska, Jaden Fiotto-Kaufman, and David Bau. 2023. Erasing Concepts from Diffusion Models. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) . 2426–2436. [11] Google. [n. d.]. Nano Banana image generation | Gemini API. https://ai.google. dev/gemini-api/docs/image-generation. [12] Jia Guo, Jiankang Deng, Alexandros Lattas, and Stefanos Zafeiriou. 2021. Sample and Computation Redistribution for Efficient Face Detection. arXiv preprint arXiv:2105.04714 (2021). [13] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Deep Resid-ual Learning for Image Recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) . 770–778. [14] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. 2017. GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium. In Advances in Neural Information Processing Systems (NeurIPS) .[15] Jonathan Ho, Ajay N. Jain, and Pieter Abbeel. 2020. Denoising diffusion proba-bilistic models. In Neural Information Processing Systems (NeurIPS) . 6840–6851. [16] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-Rank Adaptation of Large Language Models. In International Conference on Learning Representations (ICLR) .[17] Hailong Hu and Jun Pang. 2023. Membership Inference of Diffusion Models. 
+
+arXiv preprint arXiv:2301.09956 (2023). [18] Jie Hu, Li Shen, and Gang Sun. 2018. Squeeze-and-Excitation Networks. In 
+
+Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) . 7132–7141. [19] Tero Karras, Timo Aila, Samuli Laine, and Jaakko Lehtinen. 2018. Progressive Growing of GANs for Improved Quality, Stability, and Variation. In International Conference on Learning Representations (ICLR) .[20] Minchul Kim, Anil K. Jain, and Xiaoming Liu. 2022. AdaFace: Quality Adap-tive Margin for Face Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[21] Nupur Kumari, Bingliang Zhang, Richard Zhang, Eli Shechtman, and Jun-Yan Zhu. 2023. Multi-concept customization of text-to-image diffusion. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 1931–1941. [22] Zhen Li, Mingdeng Cao, Xintao Wang, Zhongang Qi, Ming-Ming Cheng, and Ying Shan. 2024. PhotoMaker: Customizing Realistic Human Photos via Stacked ID Embedding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 8640–8650. [23] Zheng Li, Liangbin Xie, Jiantao Zhou, Xintao Wang, Haiwei Wu, and Jinyu Tian. 2025. Anti-Diffusion: Preventing Abuse of Modifications of Diffusion-Based Models. In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) ,Vol. 39. 10582–10590. [24] Chumeng Liang, Xiaoyu Wu, Yang Hua, Jiaru Zhang, Yiming Xue, Tao Song, Zhengui Xue, Ruhui Ma, and Haibing Guan. 2023. Adversarial Example Does Good: Preventing Painting Imitation from Diffusion Models via Adversarial Examples. In International Conference on Machine Learning (ICML) .[25] Yixin Liu, Chenrui Fan, Yutong Dai, Xun Chen, Pan Zhou, and Lichao Sun. 2024. MetaCloak: Preventing Unauthorized Subject-driven Text-to-image Diffusion-based Synthesis via Meta-learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 24219–24228. [26] Kate Miltner. 2024. A.I. is holding a mirror to our society: Lensa and the discourse of visual generative AI. Journal of Digital Social Research 6, 4 (2024). https: //publicera.kb.se/jdsr/article/view/40456 [27] Anish Mittal, Anush Krishna Moorthy, and Alan Conrad Bovik. 2012. No-Reference Image Quality Assessment in the Spatial Domain. IEEE Transactions on Image Processing 21, 12 (2012), 4695–4708. [28] Thanh Thi Nguyen, Quoc Viet Hung Nguyen, Dung Tien Nguyen, Duc Thanh Nguyen, Thien Huynh-The, Saeid Nahavandi, Thanh Tam Nguyen, Quoc-Viet Pham, and Cuong M. Nguyen. 2022. Deep learning for deepfakes creation and detection: A survey.. In Computer Vision and Image Understanding .[29] Yan Pang, Tianhao Wang, Xuhui Kang, Mengdi Huai, and Yang Zhang. 2023. White-box Membership Inference Attacks against Diffusion Models. arXiv preprint arXiv:2308.06405 (2023). [30] Sarah Perez. 2023. Andreessen Horowitz backs Civitai, a generative AI content marketplace with millions of users. https://techcrunch.com/2023/11/14/andr eessen-horowitz-backs-civitai-a-generative-ai-content-marketplace-with-millions-of-users/. TechCrunch. [31] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. 2022. High-resolution image synthesis with latent diffusion models. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .10684–10695. [32] Nataniel Ruiz, Yuanzhen Li, Varun Jampani, Yael Pritch, Michael Rubinstein, and Kfir Aberman. 2023. DreamBooth: Fine-tuning text-to-image diffusion models for subject-driven generation. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 22500–22510. [33] Chitwan Saharia, William Chan, Saurabh Saxena, Lala Li, Jay Whang, Emily L Denton, Kamyar Ghasemipour, Raphael Gontijo Lopes, Burcu Karagol Ayan, Tim Salimans, Jonathan Ho, David J Fleet, and Mohammad Norouzid. 2022. Photorealistic text-to-image diffusion models with deep language understanding. In Neural Information Processing Systems (NeurIPS) .[34] Hadi Salman, Alaa Khaddaj, Guillaume Leclerc, Andrew Ilyas, and Aleksander Madry. 2023. Raising the Cost of Malicious AI-Powered Image Editing. arXiv preprint arXiv:2302.06588 (2023). [35] Florian Schroff, Dmitry Kalenichenko, and James Philbin. 2015. FaceNet: A Unified Embedding for Face Recognition and Clustering. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) . 815–823. [36] Pardeep Singh. 2025. How Civitai Scaled to 800K Monthly LoRAs on RunPod. https://runpod.ghost.io/how-civitai-trained-868k-loras-on-runpod-and-scaled-user-creativity-in-the-process/. RunPod Blog. [37] Adam Smith. 2022. AI image app Lensa helps some trans people to embrace themselves. https://www.reuters.com/world/ai-image-app-lensa-helps-some-trans-people-embrace-themselves--trfn-2022-12-21/ Reuters. [38] Philipp Terhörst, Malte Ihlefeld, Marco Huber, Naser Damer, Florian Kirchbuch-ner, Kiran Raja, and Arjan Kuijper. 2023. QMagFace: Simple and Accurate Quality-Aware Face Recognition. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) . 3484–3494. [39] Philipp Terhorst, Jan Niklas Kolf, Naser Damer, Florian Kirchbuchner, and Arjan Kuijper. 2020. SER-FIQ: Unsupervised Estimation of Face Image Quality Based on Stochastic Embedding Robustness. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 5651–5660. [40] Yoad Tewel, Rinon Gal, Gal Chechik, and Yuval Atzmon. 2023. Key-locked rank-one editing for text-to-image personalization. In ACM SIGGRAPH 2023 conference proceedings . 1–11. [41] Thanh Van Le, Hao Phung, Thuan Hoang Nguyen, Quan Dao, Ngoc N. Tran, and Anh Tran. 2023. Anti-DreamBooth: Protecting users from personalized text-to-image synthesis. In IEEE/CVF International Conference on Computer Vision (ICCV) . 2116–2127. [42] Feifei Wang, Zhentao Tan, Tianyi Wei, Yue Wu, and Qidong Huang. 2024. SimAC: A Simple Anti-Customization Method for Protecting Face Privacy against Text-to-Image Synthesis of Diffusion Models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 12047–12056. [43] Guanyu Wang, Kailong Wang, Yihao Huang, Mingyi Zhou, Zhang Qing cn-watcher, Geguang Pu, and Li Li. 2025. Privacy Protection Against Personalized Text-to-Image Synthesis via Cross-image Consistency Constraints. arXiv preprint arXiv:2504.12747 (2025). [44] Qixun Wang, Xu Bai, Haofan Wang, Zekui Qin, Anthony Chen, Huaxia Li, Xu Tang, and Yao Hu. 2024. InstantID: Zero-shot Identity-Preserving Generation in Seconds. arXiv preprint arXiv:2401.07519 (2024). [45] Yongliang Wu, Shiji Zhou, Mingzhuo Yang, Lianzhe Wang, Heng Chang, Wenbo Zhu, Xinting Hu, Xiao Zhou, and Xu Yang. 2025. Unlearning Concepts in Diffu-sion Model via Concept Domain Correction and Concept Preserving Gradient. In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) , Vol. 39. 8496–8504. [46] Zhihao Wu, Yushi Cheng, Tianyang Sun, Xiaoyu Ji, and Wenyuan Xu. 2025. MYOPIA: Protecting Face Privacy from Malicious Personalized Text-to-Image Linyan Dai, Xinwei Zhang, Haoyang Li, Qingqing Ye, and Haibo Hu 
+
+Synthesis via Unlearnable Examples. In AAAI Conference on Artificial Intelligence (AAAI) , Vol. 39. 905–913. [47] Jingyao Xu, Yuetong Lu, Yandong Li, Siyang Lu, Dongdong Wang, and Xiang Wei. 2024. Perturbing Attention Gives You More Bang for the Buck: Subtle Imaging Perturbations That Efficiently Fool Customized Diffusion Models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .24534–24543. [48] Hu Ye, Jun Zhang, Sibo Liu, Xiao Han, and Wei Yang. 2023. IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models. arXiv preprint arXiv:2308.06721 (2023). [49] Yu Zeng, Vishal M. Patel, Haochen Wang, Xun Huang, Ting-Chun Wang, Ming-Yu Liu, and Yogesh Balaji. 2024. JeDi: Joint-Image Diffusion Models for Finetuning-Free Personalized Text-to-Image Generation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 6786–6795. IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off 
+
+Algorithm 1 Alternating Optimization for IDDM 
+
+Input: Protection set X0; reference set X𝑐 ; pretrained diffusion model 𝑀 Θ0 ; outer iterations 𝐾 ; noise budget 𝜂 ; step size 𝛼 ; total PGD steps 𝑇 ; tunable stage ratio 𝜌 ∈ ( 0, 1).
+
+Output: trained personalized model 𝑀 Θ𝐾 . 
+
+> 1:
+
+𝑇 rec ← ⌊ 𝜌𝑇 ⌋ 
+
+> 2:
+
+for 𝑘 = 1 to 𝐾 do  
+
+> 3:
+
+Short fine-tuning:  
+
+> 4:
+
+Θ′ 
+
+> 𝑘
+
+← FT (Θ𝑘 −1; X𝑐 ) 
+
+> 5:
+
+Identity-Decoupled Data Optimization:  
+
+> 6:
+
+X′ ← X 0 
+
+> 7:
+
+for 𝑡 = 1 to 𝑇 do  
+
+> 8:
+
+if 𝑡 ≤ 𝑇 rec then  
+
+> 9:
+
+X′ ← Π𝜂 
+
+
+
+X′ − 𝛼 sign (∇ X′ Lrec (Θ′ 
+
+> 𝑘
+
+, X′)) 
+
+ 
+
+> 10:
+
+else  
+
+> 11:
+
+X′ ← Π𝜂 
+
+
+
+X′ − 𝛼 sign (∇ X′ Lid (Θ′ 
+
+> 𝑘
+
+, X′)) 
+
+ 
+
+> 12:
+
+end if  
+
+> 13:
+
+end for  
+
+> 14:
+
+Update model:  
+
+> 15:
+
+Θ𝑘 ← FT (Θ′ 
+
+> 𝑘
+
+; X′) 
+
+> 16:
+
+X0 ← X ′ 
+
+> 17:
+
+end for  
+
+> 18:
+
+return 𝑀 Θ𝐾 
+
+## A Additional Experimental Results A.1 Ablation Study 
+
+We provide additional ablations on four remaining design factors: the bounded budget 𝜂 for internal data optimization, the softmin temperature 𝜏 for ensemble identity aggregation, the face recog-nition (FR) ensemble used during optimization, and the number of outer iterations 𝐾 in the alternating optimization loop. These results complement the main analysis by examining the sensitivity, effectiveness, and stability of IDDM under different design choices. 
+
+Bounded budgets 𝜂 . We vary the ℓ∞ budget 𝜂 to study its effect on the optimized image set X′ and the resulting personalized model (Table 5). Here, 𝜂 determines the feasible range of the internal data optimization in our personalization pipeline. Since the optimized set X′ is never exposed to the attacker and is only used internally to introduce identity-decoupled supervision, PSNR/SSIM/LPIPS mainly reflect how far X′ deviates from the original references. As 
+
+𝜂 increases, identity-related cues are generally suppressed more strongly, but excessively large budgets may also harm fidelity and generation quality. This ablation verifies the impact of the opti-mization budget on privacy preservation and visual quality. We use 𝜂 = 0.08 as the default since it provides a favorable balance in practice. 
+
+Softmin temperature 𝜏 . We ablate the softmin temperature 𝜏 
+
+used in the ensemble identity loss (Table 6). A smaller 𝜏 places more emphasis on the most identity-sensitive face recognizer, while a larger 𝜏 produces smoother weights across the ensemble. The results are relatively stable for 𝜏 ∈ [ 0.01 , 0.10 ], suggesting that IDDM is not overly sensitive to this parameter. We set 𝜏 = 0.03 by default as it consistently provides strong identity suppression with competitive image quality. 
+
+FR ensemble for optimization. We further ablate the FR ensem-ble used in the identity-decoupling optimization (Table 7). Specifi-cally, we progressively expand the ensemble from a single recog-nizer (R50) to a four-model ensemble (R50+R152+MF+FN), where R50, R152, MF, and FN denote IRSE50, IR152, MobileFace, and FaceNet, respectively. Using only R50 yields the strongest iden-tity suppression on several metrics, suggesting that a single strong recognizer already provides effective identity guidance. However, expanding the ensemble generally improves the overall balance across utility and visual quality metrics. In particular, the full four-model ensemble achieves the most balanced overall performance while maintaining competitive identity suppression. This suggests that combining diverse FR backbones makes the optimization target more robust, and we adopt the full ensemble by default. 
+
+Outer iterations 𝐾 . We further study the number of outer-loop iterations 𝐾 during the alternating loop (Table 8). This parameter controls how long the optimized set X′ is updated to track the changing model parameters during personalization. Increasing 𝐾 
+
+generally improves the robustness of the learned identity-decoupled supervision, but also increases computation and may gradually reduce fidelity. The gains diminish once optimization approaches convergence. We therefore adopt 𝐾 = 10 as a moderate default that balances protection, quality, and efficiency. 
+
+## A.2 Other Results 
+
+We provide additional results on the optimization strategy, identity retrieval, and personalization under additional prompts. Table 9 compares joint optimization and stage-wise optimization, showing that the stage-wise design achieves consistently better or compa-rable results under both prompts, with clearer gains in FID and BRQ, indicating a more stable optimization process in our setting. Table 10 further reports Top-𝑘 untargeted identity retrieval on three face recognition models that are not used in optimization, where IDDM remains competitive and shows non-trivial transferability, especially under “a dslr portrait of sks person” . Tables 11 and 12 report retrieval results on the four face recognition models used in optimization, showing that IDDM effectively reduces identity re-trieval success on both CelebA-HQ and VGGFace2, while remaining competitive with prior defenses. 
+
+## B Implementation of IDDM 
+
+Algorithm 1 summarizes the alternating optimization procedure of IDDM, which alternates between short personalization fine-tuning and identity-decoupled data optimization. 
+
+## C Additional Qualitative Results 
+
+Figure 5 compares the generated images without defense and with defense under six prompts on CelebA-HQ. The first prompt, “a photo of sks person” , is the instance prompt used for training, while the other five prompts are additional prompts used only at inference time. For prompts such as “wearing a hat” , “with glasses” , and “with red hair” , the defended results largely preserve the main visual characteristics of the generated subject, since these prompts mainly modify attributes or accessories rather than core facial features. For “with big eyes” , the visual change is naturally more noticeable since the prompt directly alters facial features. Even in this case, the defended result does not appear to shift toward another specific Linyan Dai, Xinwei Zhang, Haoyang Li, Qingqing Ye, and Haibo Hu 
+
+Table 5: Effect of bounded budget on quality and identity-related metrics on CelebA-HQ. 
+
+𝜂 Quality “a photo of sks person” “a dslr portrait of sks person” 
+
+PSNR ↑ SSIM ↑ LPIPS ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ BRQ ↓
+
+0 – – – 0.57 0.69 0.66 158 .09 10 .65 0.50 0.48 0.44 214 .35 4.88 
+
+0.05 35 .12 0.90 0.11 0.60 0.49 0.43 203 .15 21 .78 0.46 0.37 0.33 217 .82 7.17 
+
+0.08 * 32 .83 0.84 0.21 0.65 0.43 0.38 213 .37 16 .81 0.48 0.29 0.25 237 .54 11 .71 
+
+0.10 31 .61 0.80 0.26 0.64 0.39 0.33 232 .58 15 .81 0.43 0.24 0.20 260 .44 15 .77 
+
+0.15 30 .00 0.74 0.34 0.70 0.31 0.26 248 .72 15 .83 0.44 0.19 0.15 281 .81 19 .63  
+
+> *Default setting used in our main experiments.
+
+Table 6: Defense performance of IDDM on CelebA-HQ under different values of 𝜏 defined in Eq. (12). ∗ denotes the default setting in our experiments. 
+
+𝜏 “a photo of sks person” “a dslr portrait of sks person” 
+
+FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+No defense 0.57 0.69 0.66 158 .09 0.76 10 .65 0.50 0.48 0.44 214 .35 0.74 4.88 
+
+0.01 0.59 0.43 0.38 218 .76 0.74 16 .90 0.49 0.28 0.24 245 .25 0.75 12 .69 
+
+0.03 ∗ 0.65 0.43 0.38 213.37 0.74 16 .81 0.48 0.29 0.25 237.54 0.75 11.71 
+
+0.05 0.64 0.43 0.38 213 .52 0.75 16.70 0.48 0.27 0.23 239 .04 0.75 12 .18 
+
+0.10 0.65 0.40 0.35 216 .65 0.74 18 .42 0.44 0.26 0.23 245 .03 0.75 13 .34 
+
+Table 7: Ablation of the face recognition (FR) ensemble used during optimization. R50, R152, MF, and FN denote IRSE50, IR152, MobileFace, and FaceNet, respectively. 
+
+Opt. FR ensemble 
+
+“a photo of sks person” “a dslr portrait of sks person” 
+
+FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+No Defense 0.57 0.69 0.66 158.09 0.76 10.65 0.50 0.48 0.44 214.35 0.74 4.88 R50 0.66 0.35 0.30 228.07 0.73 18.90 0.42 0.23 0.19 249.17 0.76 14.15 R50+R152 0.64 0.38 0.33 212.31 0.72 19.19 0.44 0.24 0.20 247.83 0.74 13.08 R50+R152+MF 0.66 0.43 0.37 219.88 0.73 18.79 0.44 0.29 0.24 245.15 0.75 12.59 R50+R152+MF+FN 0.65 0.43 0.38 213.37 0.74 16.81 0.48 0.29 0.29 237.54 0.75 11.71 
+
+Table 8: Defense performance with different outer iterations on CelebA-HQ under prompt “ a photo of sks person" .
+
+𝐾 FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+No defense 0.57 0.69 0.66 158.09 0.76 10.65 10 0.65 0.43 0.38 213.37 0.74 16.81 
+
+20 0.63 0.42 0.36 217.14 0.74 17.83 30 0.67 0.38 0.33 228.20 0.72 18.59 50 0.62 0.38 0.33 228.66 0.72 20.14 
+
+identity, which is consistent with our untargeted setting: the goal is to suppress identity leakage rather than redirect the generation to a target identity. 
+
+## D Ethical Considerations 
+
+This work studies a new privacy-oriented defense for authorized personalization . IDDM aims to reduce the identity linkability of public generations while preserving the utility of personalized gen-eration, with tunable control over the privacy-utility balance to meet users’ needs. 
+
+Potential benefits and risks. The method may help legitimate users share personalized avatars with lower risk of identity linkage, tracking, or profiling. However, it is also potentially dual-use and could be misused to make generated faces harder to identify in harmful settings. Moreover, IDDM does not guarantee anonymity, since stronger or adaptive face recognition systems may still recover identity cues. 
+
+Experimental scope and responsible release. All experiments are conducted on public datasets (CelebA-HQ and VGGFace2) in a controlled setting. We do not collect human-subject data or deploy the method in real-world surveillance scenarios. We scope IDDM explicitly to authorized personalization, do not claim complete anonymity, and do not release identity-specific protected images or personalized checkpoints tied to real individuals. IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off 
+
+Table 9: Comparing the defense performance between the joint optimization and the stage-wise optimization on CelebA-HQ under a convenient setting. 
+
+Method “a photo of sks person" “a dslr portrait of sks person" 
+
+FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓ FSR ↑ ISM ↓ ADA ↓ FID ↓ SER ↑ BRQ ↓
+
+No defense 0.57 0.69 0.66 158.09 0.76 10.65 0.50 0.48 0.44 214.35 0.74 4.88 Joint Opt. 0.65 0.43 0.39 220.14 0.75 16.97 0.38 0.29 0.25 250.06 0.75 13.27 Stage-wise Opt. 0.65 0.43 0.38 213.37 0.74 16.81 0.48 0.29 0.25 237.54 0.75 11.71 Table 10: Top-𝑘 untargeted identity retrieval attack success rates(%, 𝑘 = 1, 5) on VGGFace2 across three face recognition models. Best results are in bold, and second-best results are underlined. Lower values indicate better defense performance. 
+
+Method 
+
+“a photo of sks person” “a dslr portrait of sks person” 
+
+AdaFace QMagFace ElasticFace Average AdaFace QMagFace ElasticFace Average R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U No Defense 99.33 99.78 99.56 99.78 99.10 99.33 99.33 99.63 93.98 95.58 94.38 97.59 93.17 95.98 93.84 96.38 Anti-DB 96.62 97.30 96.62 97.97 95.95 97.30 96.40 97.52 83.72 90.70 86.82 90.70 85.27 92.25 85.27 91.22 SimAC 98.04 98.04 98.04 98.04 96.08 96.08 97.39 97.39 0 33.33 0 33.33 0 0 0 22.22 
+
+Anti-Diff 95.83 100.00 100.00 100.00 97.92 100.00 97.92 100.00 78.33 90.00 80.00 85.00 70.00 81.67 76.11 85.56 Ours 96.96 99.07 97.67 99.30 97.67 99.30 97.43 99.22 78.52 88.89 75.56 90.37 72.22 87.41 75.43 88.89 
+
+Table 11: Top-𝑘 untargeted identity retrieval attack success rates (%, 𝑘 =1, 5) on CelebA-HQ across four face recognition models. The gallery contains 112 identities including the evaluated identities. Lower is better; best results are in bold and second-best are underlined. 
+
+Method “a photo of sks person” 
+
+IRSE50 IR152 FaceNet MobileFace Average 
+
+R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U No Defense 100.00 100.00 100.00 100.00 98.00 100.00 99.50 100.00 99.38 100.00 Anti-DB 100.00 100.00 96.43 100.00 92.86 92.86 92.86 100.00 95.54 98.22 SimAC 94.12 94.12 76.47 88.24 70.59 82.35 82.35 94.12 80.88 89.71 Anti-Diff 100.00 100.00 80.00 100.00 80.00 90.00 100.00 100.00 90.00 97.50 Ours 85.35 90.45 84.71 93.63 54.14 77.07 75.80 90.45 75.00 87.90 Method “a dslr portrait of sks person” 
+
+IRSE50 IR152 FaceNet MobileFace Average R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U No Defense 93.02 97.29 89.15 95.74 82.56 92.64 90.70 95.74 88.86 95.35 Anti-DB 94.78 98.51 82.84 93.28 66.42 83.58 85.07 96.27 82.28 92.91 SimAC 71.43 85.71 42.86 71.43 28.57 42.86 57.14 57.14 50.00 64.29 
+
+Anti-Diff 81.25 93.75 56.25 75.00 43.75 62.50 65.63 81.25 61.72 78.13 Ours 70.67 89.42 54.81 77.40 35.10 61.54 58.17 80.77 54.69 77.28 
+
+## E Discussion and Future Work 
+
+A natural alternative is to protect personalized generations with face recognition adversarial examples or other post-processing perturbations. Such methods typically operate by adding image-level perturbations before release. As a result, they require every public image to be protected consistently, and their effectiveness may be weakened by subsequent denoising, purification, or editing pipelines. In contrast, IDDM is a model-side defense: it directly pro-duces personalized generations with reduced identity linkability, without relying on an additional perturbation step after genera-tion. This avoids making protection dependent on whether the perturbation can survive later processing. More broadly, we hope this work can encourage further study of privacy protection in personalized generation. Future research Linyan Dai, Xinwei Zhang, Haoyang Li, Qingqing Ye, and Haibo Hu 
+
+Table 12: Top-𝑘 untargeted identity retrieval attack success rates (%, 𝑘 =1, 5) on VGGFace2 across four face recognition models. The gallery contains 100 identities (including evaluated identities). Lower is better; best results are in bold and second-best are underlined. 
+
+Method “a photo of sks person” 
+
+IRSE50 IR152 FaceNet MobileFace Average 
+
+R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U No Defense 99.78 99.78 98.88 99.33 97.54 98.88 99.10 99.78 98.83 99.44 Anti-DB 97.30 97.97 95.27 95.95 90.54 95.95 95.27 98.65 94.60 97.13 SimAC 96.08 98.04 92.16 92.16 86.27 92.16 94.12 96.08 92.16 94.61 Anti-Diff 97.92 100.00 93.75 97.92 87.50 93.75 89.58 97.92 92.19 97.40 Ours 98.14 99.30 93.24 97.90 97.53 80.89 91.14 97.44 95.01 93.88 Method “a dslr portrait of sks person” 
+
+IRSE50 IR152 FaceNet MobileFace Average 
+
+R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U R1-U R5-U No Defense 93.98 97.19 90.36 93.98 83.94 93.98 90.76 97.19 89.76 95.59 Anti-DB 83.72 91.47 82.17 87.60 69.77 82.95 79.07 90.70 78.68 88.18 SimAC 0.00 33.33 0.00 33.33 0.00 66.67 0.00 66.67 0.00 50.00 
+
+Anti-Diff 73.33 88.33 73.33 85.00 65.00 80.00 71.67 83.33 70.83 84.17 Ours 81.11 94.07 67.41 83.70 57.41 81.48 71.48 91.11 69.35 87.59 
+
+may explore more general model-side defenses, stronger evaluation under diverse generation and post-processing pipelines, and more principled ways to balance privacy and generation utility. IDDM: Identity-Decoupled Personalized Diffusion Models with a Tunable Privacy-Utility Trade-off Reference 
+
+w/o 
+
+defense 
+
+w/o 
+
+defense 
+
+w/o 
+
+defense 
+
+with 
+
+defense 
+
+with 
+
+defense 
+
+with 
+
+defense 
+
+"a dslr portrait of sks person" 
+
+"a photo of sks person" 
+
+"a photo of sks person wearing a hat" 
+
+"a photo of sks person with glasses" 
+
+"a photo of sks person with red hair" 
+
+"a photo of sks person with big eyes" 
+
+Figure 5: Comparison of generated images without defense and with defense under different prompts on CelebA-HQ.

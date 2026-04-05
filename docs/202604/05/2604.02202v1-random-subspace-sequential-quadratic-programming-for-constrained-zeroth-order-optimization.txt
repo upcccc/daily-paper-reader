@@ -1,0 +1,1227 @@
+Title: Random-Subspace Sequential Quadratic Programming for Constrained Zeroth-Order Optimization
+
+URL Source: https://arxiv.org/pdf/2604.02202v1
+
+Published Time: Fri, 03 Apr 2026 01:09:08 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Random-Subspace Sequential Quadratic Programming for Constrained Zeroth-Order Optimization 
+
+Runyu Zhang, Gioele Zardini 
+
+Abstract — We study nonlinear constrained optimization problems in which only function evaluations of the objective and constraints are available. Existing zeroth-order methods rely on noisy gradient and Jacobian surrogates in high di-mensions, making it difficult to simultaneously achieve com-putational efficiency and accurate constraint satisfaction. We propose a zeroth-order random-subspace sequential quadratic programming method (ZO-RS-SQP) that combines two-point directional estimation with low-dimensional SQP updates. At each iteration, the method samples a random low-dimensional subspace, estimates the projected objective gradient and con-straint Jacobians using two-point evaluations, and solves areduced quadratic program to compute the step. As a result, the per-iteration evaluation cost scales with the subspace dimension rather than the ambient dimension, while retaining the struc-tured linearized-constraint treatment of SQP. We also consider an Armijo line-search variant that improves robustness in prac-tice. Under standard smoothness and regularity assumptions, we establish convergence to first-order KKT points with high probability. Numerical experiments illustrate the effectiveness of the proposed approach on nonlinear constrained problems. 
+
+I. I NTRODUCTION 
+
+We consider zeroth-order nonlinear constrained optimiza-tion problems of the form 
+
+min x f (x) s.t. h(x) = 0 , g (x) ≤ 0,
+
+where the objective and constraints are accessible only through function evaluations. Problems of this type arise in simulation-based optimization, engineering design, and learning-based systems, where gradients and constraint Jaco-bians are unavailable or prohibitively expensive to compute [1], [2]. In such settings, optimization algorithms must infer local first-order information from function values alone. While zeroth-order methods are now well developed for unconstrained optimization [3]–[6], extending them to gen-eral nonlinear constrained problems remains significantly more challenging. The main difficulty is that one must estimate not only the gradient of the objective, but also the Jacobians of the equality and inequality constraints. In high-dimensional problems, constructing these approximations in the ambient space can require a large number of function evaluations. As a consequence, methods that scale favorably with dimension often rely on coarse randomized estimators or penalty-based updates, which can make accurate constraint handling more difficult.           
+
+> The authors are with the Laboratory for Information and Decision Systems, Massachusetts Institute of Technology, Cambridge, MA, USA (e-mails: {runyuzha, gzardini }@mit.edu). Zhang was supported by the MIT Postdoctoral Fellowship Program for Engineering Excellence; Zardini was supported by DARPA (D25AC00373).
+
+Much of the existing literature on constrained zeroth-order optimization therefore adopts Lagrangian-based primal–dual or penalty-style formulations [7]–[13]. These methods are flexible and broadly applicable, but they can be sensitive to parameter tuning, may struggle to maintain feasibility throughout the optimization process, and often provide their strongest guarantees in convex settings. By contrast, sequen-tial quadratic programming (SQP) is one of the most effective frameworks for smooth constrained optimization, because it explicitly linearizes the constraints and computes structured search directions by solving quadratic subproblems [14], [15]. The challenge is that classical SQP relies on gradient and Jacobian information that is unavailable in the zeroth-order regime. This tension motivates the following question: can one retain the structured constraint handling of SQP while re-ducing the cost of derivative estimation so that it scales with a low-dimensional subspace rather than the full ambient dimension? In this paper, we answer this question by propos-ing a zeroth-order random-subspace sequential quadratic programming method (ZO-RS-SQP). At each iteration, ZO-RS-SQP samples a low-dimensional random subspace and restricts the search direction to that subspace. The objective gradient and constraint Jacobians are not estimated in full. Instead, we compute only their projections onto the sampled subspace using two-point di-rectional evaluations. These projected quantities define a re-duced quadratic program, analogous to an SQP subproblem, whose solution is then lifted back to the ambient space. In this way, the method combines explicit linearized constraint handling with a per-iteration evaluation cost that scales with the subspace dimension. We also consider an Armijo line-search variant that improves practical robustness by coupling the computed direction with an exact-penalty merit function. The contributions of this paper are threefold. First, we formulate a random-subspace SQP framework that is com-patible with zeroth-order information and preserves the ba-sic constrained structure of SQP updates. Second, under standard smoothness and regularity assumptions, we show that valid subspaces are accepted with positive probability and establish a high-probability O(T −1/2) bound on an averaged first-order KKT residual for the corresponding exact reduced model. Third, we illustrate on nonlinear con-strained problems that the proposed method is competitive in high-dimensional settings, and that the line-search variant typically yields more stable behavior. The proposed approach lies at the intersection of several lines of work. Subspace methods have long been used 
+
+> arXiv:2604.02202v1 [math.OC] 2 Apr 2026
+
+to reduce the cost of large-scale optimization, and sub-space variants of SQP have also been studied in first-order settings [16]–[19]. However, these methods typically rely on deterministic subspaces and exact derivatives. Random-subspace techniques have also been used in unconstrained zeroth-order optimization to reduce the dimension of gra-dient estimation [20]–[22], but they have not been system-atically integrated with SQP-style constraint handling for nonlinear constrained problems. Our method bridges these directions by combining random subspace exploration, two-point zeroth-order estimation, and reduced SQP updates in a single framework. Finally, this paper clarifies the connection to our prior work [23], which approached related constrained zeroth-order problems from a control-theoretic perspective via feedback linearization. The present formulation makes the underlying SQP structure explicit, interprets the update as optimization over random low-dimensional subspaces, and thereby places that earlier viewpoint within a broader constrained optimization framework. To isolate the effect of subspace restriction in the current analysis, Section IV studies the exact reduced SQP model induced by the sampled subspace; incorporating the finite-difference approximation error of the fully zeroth-order implementation is left for future work. II. P RELIMINARIES 
+
+We consider the nonlinear constrained optimization prob-lem min x∈Rn f (x)
+
+s.t. h(x) = 0 , g(x) ≤ 0, (1) where f : Rn → R is the objective function, h : Rn →
+
+Rme collects the equality constraints, and g : Rn → Rmi
+
+collects the inequality constraints. Throughout, we assume that f , h, and g are continuously differentiable, and denote by ∇f (x) ∈ Rn, Jh(x) ∈ Rme×n, and Jg (x) ∈ Rmi×n
+
+the gradient and Jacobians at x, respectively. We denote by 
+
+St( n, d ) := {U ∈ Rn×d : U ⊤U = Id} the Stiefel manifold, and say that a random matrix U is Haar-uniform on St( n, d )
+
+if it is distributed according to the unique probability measure invariant under left multiplication by orthogonal matrices. For a feasible point x, the first-order Karush–Kuhn–Tucker (KKT) conditions assert the existence of multipliers λ ∈ Rme
+
+and μ ∈ Rmi 
+
+> +
+
+such that 
+
+∇f (x) + Jh(x)⊤λ + Jg (x)⊤μ = 0 ,h(x) = 0 , g(x) ≤ 0,μ ≥ 0, μigi(x) = 0 , i = 1 , . . . , m i.
+
+(2) To quantify first-order optimality, we use the KKT gap 
+
+KKT-gap (x;λ, μ ) := max 
+
+n
+
+∥∇ f (x)+ Jh(x)⊤λ+Jg (x)⊤μ∥2,
+
+∥h(x)∥∞, ∥[g(x)] +∥∞, ∥μ ⊙ g(x)∥∞
+
+o
+
+, (3) where [g(x)] + := [max {g1(x), 0}, . . . , max {gmi (x), 0}]⊤,and ⊙ denotes the Hadamard product. In particular, 
+
+KKT-gap (x; λ, μ ) = 0 if and only if (x, λ, μ ) satisfies the KKT conditions in (2). When the multipliers are not explicitly available, one may consider the minimum residual over admissible multipliers, but for algorithmic development it is often convenient to work with (3) directly. 
+
+A. Sequential Quadratic Programming 
+
+Sequential quadratic programming (SQP) is a standard approach for solving (1). At an iterate xt, SQP constructs a local quadratic model of the objective together with lin-earized constraints, and computes a step ∆xt by solving the subproblem 
+
+min  
+
+> ∆x∈Rn
+
+⟨∇ f (xt), ∆x⟩ + Lt
+
+2 ∥∆x∥22
+
+s.t. h(xt) + Jh(xt)∆ x = 0 ,g(xt) + Jg (xt)∆ x ≤ 0,
+
+(4) Note that, to better align with the zeroth-order setting, here we adopt a first-order (proximal) SQP variant (cf. [24], [25]) in which the quadratic term Lt 
+
+> 2
+
+∥∆x∥22 replaces the exact or approximated Hessian. This choice is motivated by the fact that first-order information can be more reliably approximated in zeroth-order regimes, making it a natural foundation for building tractable SQP-type methods . The iterate is then updated as xt+1 = xt + ηt∆xt, possibly with a line search step to determine the stepsize ηt.The main computational bottleneck in (4) is that both the search direction and the linearized constraints are formed in the ambient space Rn. This becomes expensive in high dimensions, especially when evaluating or approximating 
+
+∇f (xt), Jh(xt), and Jg (xt) is itself costly. 
+
+B. Subspace and Random-Subspace SQP 
+
+A natural way to reduce the per-iteration complexity is to restrict the SQP step to a low-dimensional subspace. Let 
+
+Ut ∈ Rn×d be a matrix with orthonormal columns, where 
+
+d ≪ n, and consider search directions of the form 
+
+∆xt = Utαt, αt ∈ Rd. (5) Substituting (5) into (4) yields the reduced subproblem 
+
+min 
+
+> α∈Rd
+
+⟨U ⊤ 
+
+> t
+
+∇f (xt), α ⟩ + Lt
+
+2 ∥α∥22
+
+s.t. h(xt) + Jh(xt)Utα = 0 ,g(xt) + Jg (xt)Utα ≤ 0.
+
+(6) Since U ⊤ 
+
+> t
+
+Ut = Id, the quadratic regularization remains unchanged under this parametrization. The matrix Ut may be chosen deterministically or ran-domly. In this work, we focus on random-subspace SQP ,where Ut is sampled Haar uniformly on St( n, d ) (Algorithm 1 line 4-5), typically as an orthonormal basis of a randomly generated d-dimensional subspace. Since the reduced sub-problem may be infeasible for a given subspace, we adopt a rejection sampling strategy: if the resulting subproblem is infeasible or fails to admit bounded multipliers, the sampled subspace is discarded and resampled until a valid subspace is obtained (see Algorithm 1 Line 12-14). The effectiveness of (6) depends on access to the reduced quantities U ⊤ 
+
+> t
+
+∇f (xt), Jh(xt)Ut, Jg (xt)Ut, (7) rather than the full gradient and Jacobians. This observation is particularly useful in zeroth-order settings, where direct derivative information is unavailable. 
+
+C. Zeroth-Order Optimization and Two-Point Estimation 
+
+In zeroth-order optimization, the algorithm only has access to function evaluations, rather than explicit gradients or Jacobians. A standard approach is to estimate directional derivatives through finite differences. For a unit vector u ∈
+
+Rn and smoothing radius r > 0, the two-point estimator (cf. [3], [4]) for the directional derivative of f at x along u is 
+
+f (x + ru ) − f (x − ru )2r . (8) Under standard smoothness assumptions, (8) provides an accurate approximation of ⟨∇ f (x), u ⟩.This idea extends naturally to vector-valued constraint functions. For h : Rn → Rme and g : Rn → Rmi , the two-point estimators 
+
+h(x + ru ) − h(x − ru )2r and g(x + ru ) − g(x − ru )2r (9) approximate Jh(x)u and Jg (x)u, respectively. Hence, in the subspace setting, let Ut = [ ut, 1, . . . , u t,d ]
+
+with orthonormal columns. Applying (8) and (9) along each subspace direction yields approximations of the reduced quantities in (7). More precisely, the j-th entry of U ⊤ 
+
+> t
+
+∇f (xt)
+
+can be estimated by 
+
+f (xt + ru t,j ) − f (xt − ru t,j )2r , (10) and the j-th columns of Jh(xt)Ut and Jg (xt)Ut can be estimated by 
+
+h(xt +ru t,j )−h(xt −ru t,j )2r , g(xt +ru t,j )−g(xt −ru t,j )2r .
+
+(11) Thus, the reduced SQP model can be constructed using only zeroth-order information, with a cost that scales with the subspace dimension d rather than the ambient dimension n.In this paper, we focus on the two-point estimator de-scribed above. It provides a simple and effective mechanism for approximating the projected gradient and Jacobian infor-mation required by the random-subspace SQP subproblem. III. Z EROTH -O RDER RANDOM -S UBSPACE SQP (ZO-RS-SQP) We now describe the proposed method, which combines the subspace SQP formulation in (6) with the two-point estimators introduced in (10)–(11). The key idea is to con-struct the reduced SQP model directly from zeroth-order information, without forming full gradients or Jacobians. At iteration t, let Ut ∈ Rn×d be an orthonormal basis of the sampled subspace. Using the estimators defined in (10)– (11), we form approximations 
+
+bct ≈ U ⊤ 
+
+> t
+
+∇f (xt), bAt ≈ Jh(xt)Ut, bBt ≈ Jg (xt)Ut.
+
+These quantities are then used to construct the reduced SQP subproblem 
+
+min 
+
+> α∈Rd
+
+⟨bct, α ⟩ + Lt
+
+2 ∥α∥22
+
+s.t. h(xt) + bAtα = 0 , g(xt) + bBtα ≤ 0,
+
+(12) and the search direction is given by ∆xt = Utαt, where αt
+
+is a solution of (12). Compared to the full SQP step, the model in (12) depends only on reduced quantities and can be constructed using 2d function evaluations. The subspace Ut is generated by sampling a Gaussian matrix Gt ∈ Rn×d with i.i.d. standard normal entries and computing its thin QR factorization Gt = UtRt. The full algorithm is summarized as in Alg. 1. 
+
+Algorithm 1: ZO-RS-SQP 
+
+Input: Initial point x0 ∈ Rn, subspace dimension d,smoothing radius r > 0, parameters {Lt},
+
+{ηt}, thresholds Λ, M  
+
+> 1
+
+for t = 0 , 1, . . . , T − 1 do  
+
+> 2
+
+accepted ← false ; 
+
+> 3
+
+while accepted = false do  
+
+> 4
+
+Sample Gt ∈ Rn×d with i.i.d. N (0 , 1) entries;  
+
+> 5
+
+Compute the thin QR factorization 
+
+Gt = UtRt; 
+
+> 6
+
+for j = 1 , . . . , d do  
+
+> 7
+
+Let ut,j be the jth column of Ut; 
+
+> 8
+
+Evaluate f (xt ± ru t,j ), h(xt ± ru t,j ), and 
+
+g(xt ± ru t,j ); 
+
+> 9
+
+Set 
+
+bct,j = f (xt + ru t,j ) − f (xt − ru t,j )2r ,
+
+bAt, :,j = h(xt + ru t,j ) − h(xt − ru t,j )2r ,
+
+bBt, :,j = g(xt + ru t,j ) − g(xt − ru t,j )2r . 
+
+> 10
+
+Evaluate ht = h(xt) and gt = g(xt); 
+
+> 11
+
+Attempt to solve 
+
+min 
+
+> α∈Rd
+
+⟨bct, α ⟩ + Lt
+
+2 ∥α∥22
+
+s.t. ht + bAtα = 0 , dual variable λt,gt + bBtα ≤ 0, dual variable μt.
+
+(13) 
+
+if (13) is feasible and returns (αt, λ t, μ t)
+
+with ∥λt∥∞ ≤ Λ and ∥μt∥∞ ≤ M then  
+
+> 12
+
+accepted ← true ; 
+
+> 13
+
+else  
+
+> 14
+
+reject the sampled subspace Ut and resample from Line 4;  
+
+> 15
+
+Set ∆xt = Utαt; 
+
+> 16
+
+Update xt+1 = xt + ηt∆xt;
+
+Output: xTA. Merit Function and Armijo Line Search 
+
+To ensure stable progress toward both feasibility and optimality, we employ a merit-function-based line search under suitable smoothness assumptions (introduces in the next section). Specifically, we define the merit function 
+
+Φ( x) := f (x) + τ ∥h(x)∥1 + τ ∥[g(x)] +∥1, (14) where τ > 0 is a penalty parameter. For appropriately chosen 
+
+τ and stepsizes, one can show that the update direction produced by Algorithm 1 yields a sufficient decrease in Φ( x);this property is formalized in Theorem 2 in the next section. The existence of such a merit function motivates the use of a line-search procedure to ensure descent along the computed direction. Given a search direction ∆xt, the step size is selected via Armijo backtracking applied to Φ. Let σ ∈ (0 , 1) 
+
+and β ∈ (0 , 1) be fixed constants. Starting from an initial step size η = 1 , the algorithm reduces η geometrically until the sufficient decrease condition 
+
+Φ( xt + η∆xt) ≤ Φ( xt) + σηD t
+
+is satisfied, where Dt is a directional derivative surrogate of 
+
+Φ along ∆xt.In our implementation, Dt is computed using the reduced model. Let bct, bAt, and bBt be defined as in (12). Writing 
+
+∆xt = Utαt, we define 
+
+Dt := bc⊤ 
+
+> t
+
+αt + τ Pme 
+
+> i=1
+
+sign( hi(xt))   bAtαt
+
+
+
+> i
+
++τ Pmi 
+
+> i=1
+
+1{gi(xt) > 0}  bBtαt
+
+
+
+> i
+
+, (15) which approximates the directional derivative of Φ along 
+
+∆xt. The resulting line search procedure is summarized in Algorithm 2. 
+
+Algorithm 2: Armijo Line Search 
+
+Input: Current iterate xt, direction ∆xt, merit function Φ, parameters σ ∈ (0 , 1) , β ∈ (0 , 1) 
+
+Compute Dt using (15); Set η ← 1;
+
+if Dt ≥ 0 then return η = 0 ;
+
+while Φ( xt + η∆xt) > Φ( xt) + σηD t do 
+
+η ← βη ;
+
+return η;IV. C ONVERGENCE ANALYSIS 
+
+In this section, we establish convergence properties of the proposed method. Under standard smoothness assumptions, two-point zeroth-order estimators can approximate direc-tional derivatives arbitrarily well given sufficiently accurate function evaluations (cf. Eq. (24) in [3]). Hence, to facilitate the analysis while retaining the essential structure of the method, we consider the exact subproblem (6) and defer a treatment of approximation error to future work. We begin by stating the standing assumptions. 
+
+Assumption 1 (Smoothness) . The functions f , hi, and gi are continuously differentiable on Rn. Moreover, their gradients are Lipschitz continuous, with constants ℓf , ℓh,i , and ℓg,i ,respectively, on an open set containing the level set 
+
+L := {x ∈ Rn : Φ( x) ≤ Φ( x0)}, (16) 
+
+where Φ is defined in (14) . We also assume that L is compact. 
+
+Assumption 2 (Bounded constraint gradients) . There exist constants Hf , H h, H g > 0 such that for all x ∈ L ,
+
+∥∇ f (x)∥2 ≤ Hf ,
+
+∥∇ hi(x)∥2 ≤ Hh, i = 1 , . . . , m e,
+
+∥∇ gi(x)∥2 ≤ Hg , i = 1 , . . . , m i.
+
+Definition 1 (Mangasarian–Fromovitz constraint qualification) .
+
+Let A ∈ Rme×n and B ∈ Rmi×n. Given constants σ > 0,
+
+γ > 0, and R > 0, we say that the pair (A, B ) satisfies 
+
+MFCQ( σ, γ, R ) if 
+
+1) σmin (A) ≥ σ;
+
+2) there exists a direction d ∈ Rn such that 
+
+∥d∥2 ≤ R, Ad = 0 , Bd ≤ − γ1.
+
+Assumption 3 (Uniform MFCQ) . There exist constants σ∗ >
+
+0, γ > 0, and R∗ > 0 such that, for every x ∈ L , the pair 
+
+(Jh(x), J g (x)) satisfies MFCQ( σ∗, γ, R ∗).A. Acceptance Rate 
+
+Theorem 1 (Positive acceptance probability) . Suppose As-sumptions 1–3 hold, and let d ≥ me + 1 . At iteration t, let 
+
+Ut be a i.i.d. sample generated from Algorithm 1, and define the event 
+
+At := 
+
+n
+
+Eq (6) is feasible with ∥λt∥∞≤ Λ,∥μt∥∞≤ M
+
+o
+
+.
+
+Then there exists constant Λ∗, M ∗ and pacc > 0 (which only depends on the parameters in Assumption 1–3) such that for any Λ, M ≥ Λ∗, M ∗ we have P(At) ≥ pacc .Proof. Fix x ∈ L . By Lemma 1, if the sampled subspace lies within principal-angle distance at most θ∗ of S(x), then the reduced subproblem is feasible and admits multipliers bounded by Λ∗ and M∗. Therefore, 
+
+P(At) ≥ P
+
+
+
+∠max 
+
+  span( eUt), S(xt) ≤ θ∗ Ft
+
+
+
+whenever Λ ≥ Λ∗ and M ≥ M∗. Since Ut is Haar-uniform and L is compact, the right-hand side admits a uniform positive lower bound pacc > 0.
+
+B. Descent of the Merit Function 
+
+We analyze the one-sided directional derivative of the merit function (14). In particular, we consider the merit function with τ ≥ Λ, M .Note that in Algorithm 1 and Eq. (6) the KKT conditions hold for αt and multipliers (λt, μ t):
+
+U⊤ 
+
+> t
+
+∇f (xt)+ Ltαt +U⊤ 
+
+> t
+
+Jh(xt)⊤λt +U⊤ 
+
+> t
+
+Jg (xt)⊤μt = 0 ,h(xt) + Jh(xt)Utαt = 0 ,g(xt) + Jg (xt)Utαt ≤ 0,μt ≥ 0, (μt) ⊙  g(xt) + Jg (xt)Utαt
+
+ = 0 .
+
+(17) Theorem 2 (Decrease of Merit Function per-step) . Under Assumption 1, and define 
+
+CΦ := ℓf 
+
+> 2
+
++ τ
+
+> 2
+
+Pme 
+
+> i=1
+
+ℓh,i + τ
+
+> 2
+
+Pmi 
+
+> i=1
+
+ℓg,i . (18) 
+
+Then by running Algorithm 1 we get 
+
+Φ( xt+1 ) − Φ( xt) ≤ −  Lt − CΦ
+
+∥∆xt∥22 (19) 
+
+Proof. We estimate the three terms in the merit function separately. From Assumption 1 we have 
+
+f (xt + ∆ xt) ≤ f (xt) + ∇f (xt)⊤∆xt + ℓf 
+
+> 2
+
+∥∆xt∥22,
+
+and 
+
+hi(xt + ∆ xt) = hi(xt) + ∇hi(xt)⊤∆xt + ρh,i,t ,
+
+|ρh,i,t | ≤ ℓh,i  
+
+> 2
+
+∥∆xt∥22.
+
+Since ∆xt = Utαt, the linearized equality feasibility condi-tion gives 
+
+h(xt) + Jh(xt)∆ xt = h(xt) + Jh(xt)Utαt = 0 .
+
+Hence |hi(xt +∆ xt)| ≤ ℓh,i  
+
+> 2
+
+∥∆xt∥22. Summing over i yields 
+
+∥h(xt +∆ xt)∥1 −∥ h(xt)∥1 ≤−∥ h(xt)∥1 + 12
+
+> me
+
+X
+
+> i=1
+
+ℓh,i ∥∆xt∥22.
+
+Similarly, for each inequality constraint component, 
+
+gi(xt + ∆ xt) = gi(xt) + ∇gi(xt)⊤∆xt + ρg,i,t ,
+
+|ρg,i,t | ≤ ℓg,i 
+
+2 ∥∆xt∥22.
+
+And the linearized inequality feasibility condition gives 
+
+g(xt) + Jg (xt)∆ xt = g(xt) + Jg (xt)Utαt ≤ 0.
+
+Thus for each i,
+
+[gi(xt + ∆ xt)] + = gi(xt) + ∇gi(xt)⊤∆xt + ρg,i,t 
+
+
+
+> +
+
+≤ [ρg,i,t ]+ ≤ | ρg,i,t | ≤ ℓg,i 
+
+2 ∥∆xt∥22.
+
+Therefore 
+
+∥[g(xt + ∆ xt)] +∥1 − ∥ [g(xt)] +∥1
+
+≤ −∥ [g(xt)] +∥1 + 12
+
+Pmi 
+
+> i=1
+
+ℓg,i ∥∆xt∥22.
+
+Combining the three estimates gives 
+
+Φ( xt+1 ) − Φ( xt) ≤ ∇ f (xt)⊤∆xt + ℓf 
+
+> 2
+
+∥∆xt∥22
+
+− τ ∥h(xt)∥1 + τ
+
+> 2
+
+Pme 
+
+> i=1
+
+ℓh,i ∥∆xt∥22
+
+− τ ∥[g(xt)] +∥1 + τ
+
+> 2
+
+Pmi 
+
+> i=1
+
+ℓg,i ∥∆xt∥22
+
+= ∇f (xt)⊤∆xt − τ ∥h(xt)∥1 − τ ∥[g(xt)] +∥1 + CΦ∥∆xt∥22.
+
+We would also like to note that the above argument provide a proof that there always exists an nonnegative stepsize for Armijo linesearch (Algorithm 2). We now use the reduced KKT system to expand the first-order term. Since ∇f (xt)⊤∆xt = ∇f (xt)⊤Utαt. Multiply-ing the reduced stationarity condition (first equation in (17)) by αt gives 
+
+∇f (xt)⊤Utαt = −Lt∥αt∥22 −λ⊤ 
+
+> t
+
+Jh(xt)Utαt −μ⊤ 
+
+> t
+
+Jg (xt)Utαt.
+
+Since Jh(xt)Utαt = −h(xt), μ⊤ 
+
+> t
+
+Jg (xt)Utαt = −μ⊤ 
+
+> t
+
+g(xt),
+
+we obtain 
+
+∇f (xt)⊤Utαt = −Lt∥αt∥22 + λ⊤ 
+
+> t
+
+h(xt) + μ⊤ 
+
+> t
+
+g(xt).
+
+Substituting this into the previous estimate yields 
+
+Φ( xt+1 ) − Φ( xt) ≤ − Lt∥αt∥22 + λ⊤ 
+
+> t
+
+h(xt) + μ⊤ 
+
+> t
+
+g(xt)
+
+−τ ∥h(xt)∥1 −τ ∥[g(xt)] +∥1 + CΦ∥∆xt∥22.
+
+Next, H¨ older’s inequality and the multiplier bounds imply 
+
+λ⊤ 
+
+> t
+
+h(xt) ≤ ∥ λt∥∞∥h(xt)∥1 ≤ Λ∥h(xt)∥1,
+
+and, since μt ≥ 0,
+
+μ⊤ 
+
+> t
+
+g(xt) ≤ ∥ μt∥∞∥[g(xt)] +∥1 ≤ M ∥[g(xt)] +∥1.
+
+Hence 
+
+Φ( xt+1 ) − Φ( xt) ≤ − Lt∥αt∥22 − (τ − Λ) ∥h(xt)∥1
+
+− (τ − M )∥[g(xt)] +∥1 + CΦ∥∆xt∥22.
+
+Finally, since Ut has orthonormal columns we have 
+
+∥∆xt∥2 = ∥αt∥2. Therefore 
+
+Φ( xt+1 ) − Φ( xt) ≤ −  Lt − CΦ
+
+∥∆xt∥22.
+
+which is exactly the claimed estimate. 
+
+Theorem 3 (One-step residual bounds) . Under Assump-tions 1,2, let rt := ∇f (xt) + Jh(xt)⊤λt + Jg (xt)⊤μt Then 
+
+∥U ⊤ 
+
+> t
+
+rt∥2 ≤ Lt∥∆xt∥2, (20) 
+
+∥h(xt)∥∞ ≤ Hh∥∆xt∥2, (21) 
+
+∥[g(xt)] +∥∞ ≤ Hg ∥∆xt∥2, (22) 
+
+∥μt ⊙ g(xt)∥∞ ≤ M H g ∥∆xt∥2. (23) 
+
+Proof. The projected stationarity bound follows directly from the reduced stationarity equation: 
+
+U ⊤ 
+
+> t
+
+rt + Ltαt = 0 = ⇒ ∥ U ⊤ 
+
+> t
+
+rt∥2 = Lt∥αt∥2 = Lt∥∆xt∥2.
+
+Next, from the reduced equality feasibility condition, 
+
+h(xt) + Jh(xt)∆ xt = 0 = ⇒|hi(xt)| = |∇ hi(xt)⊤∆xt| ≤ ∥∇ hi(xt)∥2∥∆xt∥2 ≤ Hh∥∆xt∥2
+
+=⇒ ∥h(xt)∥∞ ≤ Hh∥∆xt∥2.
+
+Similarly, 
+
+g(xt) + Jg (xt)∆ xt ≤ 0 = ⇒
+
+[gi(xt)] +≤ |∇ gi(xt)⊤∆xt| ≤ ∥∇ gi(xt)∥2∥∆xt∥2 ≤ Hg∥∆xt∥2
+
+=⇒ ∥[g(xt)] +∥∞ ≤ Hg ∥∆xt∥2.
+
+Finally, by complementarity of the reduced subproblem, 
+
+(μt)igi(xt) = −(μt)i∇gi(xt)⊤∆xt, i = 1 , . . . , m i,
+
+=⇒ ∥ μt ⊙g(xt)∥∞ ≤ ∥ μt∥∞ max 1≤i≤mi ∥∇ gi(xt)∥2∥∆xt∥2
+
+≤ M H g ∥∆xt∥2.
+
+This proves the result. C. Convergence Rate 
+
+Theorem 4 (High-probability O(T −1/2) convergence) . Sup-pose the Λ, M in Algorithm 1 satisfies Λ ≥ Λ⋆, M ≥ M ⋆
+
+as in Theorem 1, and τ ≥ Λ, M for the merit function (14) ,and suppose Assumption 1–3 hold. Let 
+
+c := inf t Lt − CΦ > 0, Φ∗ := inf x∈L Φ( x),
+
+where CΦ is defined in (18) . Then for any ρ ∈ (0 , 1) , if the subspace dimension d ≥ 32 
+
+> ρ2
+
+h
+
+m log 
+
+ 12 nρm 
+
+
+
++ log 
+
+ Tδ p acc 
+
+i 
+
+,where m = mi + me + 1 then with probability at least 1 − δ, 
+
+> 1
+> T
+
+PTt=1 KKT-gap (xt; λt, μ t) ≤ Cρ
+
+q Φ( x0)−Φ∗ 
+
+> c T
+
+,
+
+where Cρ = max 
+
+
+
+sup t Lt
+
+q n 
+
+> (1 −ρ)d
+
+, H h, H g , M H g
+
+
+
+.
+
+Proof. From Theorem 2, 
+
+PT −1 
+
+> t=0
+
+∥∆xt∥22 ≤ Φ( x0)−Φ∗ 
+
+> c
+
+. (24) Since rt in Theorem 1 satisfies rt ∈
+
+span( ∇f (xt), J h(xt), J g (xt)) , applying Lemma 2 we get with probability at least 1 − δT , ∥rt∥ ≤ q n 
+
+> (1 −ρ)d
+
+∥Utrt∥
+
+By Theorem 1, Lemma 2 and Theorem 3 (Eq. (20)), 
+
+∥rt∥2 ≤ Lt
+
+q n 
+
+> (1 −ρ)d
+
+∥∆xt∥2
+
+holds uniformly over t = 0 , . . . , T − 1 with probability at least 1− Tpacc exp 
+
+
+
+− ρ2d
+
+> 8
+
+
+
+. Combining with (21) - (23) yields 
+
+KKT-gap (xt; λt, μ t) ≤ Cρ∥∆xt∥2.
+
+Combining with Eq (24) completes the proof. We note that the definition of the KKT gap explicitly incor-porates constraint violation terms. Therefore, convergence of the KKT gap directly implies convergence to feasible region. 
+
+Remark 1 (On the subspace dimension d). Note that d scales with the dimension of the constraints m = mi + me + 1 
+
+rather than the ambient dimension n. Consequently, the per-iteration reduced subproblem remains low-dimensional whenever m is small. This makes the proposed approach particularly appealing in regimes where the set of active constraints has relatively low effective dimension compared with the ambient problem dimension. 
+
+V. N UMERICAL EXPERIMENTS 
+
+A. Nonlinear Programming 
+
+We first evaluate the proposed method on a synthetic nonlinear programming problem designed to capture key challenges arising in constrained optimization. Specifically, we consider a high-dimensional problem of the form 
+
+min x∈Rn 12 x⊤Qx + p⊤x, 
+
+where n = 100 , Q ∈ Rn×n is positive definite and p ∈ Rn.The problem is subject to a nonlinear equality constraint and nonlinear inequality constraints: 
+
+Pni=1 xi + 110 
+
+Pni=1 x3 
+
+> i
+
+= 1 , x2 
+
+> i
+
+≤ 0.5, i = 1 ,. . . ,m ineq .        
+
+> Fig. 1: Learning curves over iterations: (left) objective value, (middle) constraint violation, and (right) KKT gap.
+
+The equality constraint introduces nonconvexity through the cubic term, while the inequality constraints impose ele-mentwise bounds on a subset of decision variables. This combination yields a nonconvex feasible region with both equality and inequality constraints. Both ZO-RS-SQP and its line-search variant (ZO-RS-SQP-LS) exhibit consistent convergence in objective value, constraint violation, and KKT residual, as shown in Fig. 1. In particular, both methods achieve high-accuracy solutions with vanishing constraint violation, indicating that ZO-RS-SQP is able to reliably solve the nonlinear program even without line search. However, ZO-RS-SQP-LS converges slightly faster and more smoothly across iterations. 
+
+B. Transient Dynamics Optimization Under Angle Separa-tion Constraints 
+
+We further illustrate the proposed ZO-RS-SQP method on a dynamical system inspired by transient stability in power networks. We consider a networked dynamical system defined over an undirected graph G = ( V, E) with n =
+
+|V| buses. The network is constructed as a ring topology augmented with second-neighbor (chordal) connections, re-sulting in a sparse but well-connected graph. The set of buses is partitioned into generator nodes Vg
+
+and load nodes Vℓ, with V = Vg ∪ V ℓ and Vg ∩ V ℓ = ∅.For each node i, we denote by θi the phase angle, and for generator nodes i ∈ V g we additionally introduce the frequency deviation ωi. The coupling strengths are encoded by a symmetric matrix B ∈ Rn×n that respects the graph structure, in the sense that Bij = 0 if (i, j ) /∈ E . The system dynamics follow a structure-preserving network model: 
+
+˙θi = ωi, i ∈ V g ,Mg ˙ωi = xi − Dg ωi − Pnj=1 Bij sin( θi − θj ), i ∈ V g ,
+
+˙θi = −di−Pnj=1 Bij sin( θi−θj ) 
+
+> Dℓ
+
+, i ∈ V ℓ,
+
+where Mg , Dg , and Dℓ are inertia and damping parame-ters. The electrical power flow is given by the sinusoidal coupling term P 
+
+> j
+
+Bij sin( θi − θj ). The vector x ∈ R|V g |
+
+denotes the controllable generation setpoints (optimization variables), and di are fixed demands at load buses. This model corresponds to a second-order Kuramoto-type system and is closely related to structure-preserving formulations of the classical swing equations used in transient stability Fig. 2: Learning curves over iterations: (left) objective value, (middle) constraint violation, and (right) KKT gap. 
+
+analysis [26], [27]. 1
+
+To emulate a disturbance, we consider a two-stage simu-lation. During the fault-on period t ∈ [0 , t clear ], the coupling matrix is modified to Bfault , obtained by scaling selected edge weights to model a temporary weakening of trans-mission lines. After clearing, the system evolves under the nominal coupling B.We consider the problem of selecting generation setpoints 
+
+x to minimize a quadratic cost while enforcing transient angle separation constraints: 
+
+min x∈R|V g |
+
+P
+
+> i∈V g
+
+ aix2 
+
+> i
+
++ bixi
+
+
+
+s.t. P 
+
+> i∈V g
+
+xi = P 
+
+> i∈V ℓ
+
+di,xmin  
+
+> i
+
+≤ xi ≤ xmax  
+
+> i
+
+, i ∈ V g ,
+
+max t∈[0 ,T ] max {i,j }∈E |θi(t; x) − θj (t; x)| ≤ δmax .
+
+The last constraint enforces a bound on relative phase differences over the entire trajectory and serves as a sur-rogate for transient stability, as excessive angle separation is associated with loss of synchronism. The trajectories 
+
+θ(t; x) are obtained through nonlinear simulation, and no gradient information with respect to x is assumed available, motivating the use of zeroth-order optimization methods. As shown in Fig. 2, both ZO-RS-SQP and ZO-RS-SQP-LS methods achieve similar objective values. While ZO-RS-SQP exhibits larger constraint violations and KKT gaps com-pared to ZO-RS-SQP-LS, it nevertheless attains reasonable feasibility and solution quality. In contrast, ZO-RS-SQP-LS consistently improves constraint satisfaction and reduces the KKT gap, indicating more stable convergence. These results suggest that line search effectively stabilizes zeroth-order updates by better balancing descent and feasibility. Figure 3 further illustrates the resulting transient dynamics. The an-gle separation constraint is active, as the baseline solution (solving a QP ignoring the angular constraint) exhibits larger angle excursions, whereas the ZO-RS-S solution keeps the trajectories within a tighter range. VI. C ONCLUSION AND FUTURE WORK 
+
+We proposed ZO-RS-SQP, a zeroth-order random-subspace SQP method for nonlinear constrained optimiza-tion. By combining subspace dimension reduction with SQP 
+
+> 1
+
+We emphasize that this model is a simplified abstraction and does not capture all aspects of large-scale power system dynamics. Nevertheless, it retains the essential nonlinear coupling and oscillatory behavior relevant to transient stability, and serves as a testbed for our methodology. 
+
+Fig. 3: Transient phase (offset) and frequency dynamics under a fault disturbance. Top: solution obtained ZO-RS-S-LS. Bottom: baseline QP solution ignoring angle separation constraints. 
+
+updates, the method reduces per-iteration cost while retaining explicit constraint handling. We proved convergence to first-order KKT points under standard assumptions, together with high-probability guarantees. Numerical results show that ZO-RS-SQP performs competitively and maintains strong constraint satisfaction, with line search improving stability. Future work includes incorporating approximation error into the analysis, developing adaptive subspace strategies, and extending the approach to large-scale learning and control applications. ACKNOWLEDGEMENT 
+
+The authors would like to thank Prof. Na Li , Prof. Jeff Shamma, and Dr. Yiqi Tian for the insightful discussions. REFERENCES [1] S. Liu, P.-Y. Chen, B. Kailkhura, G. Zhang, A. O. Hero III, and P. K. Varshney, “A primer on zeroth-order optimization in signal processing and machine learning: Principals, recent advances, and applications,” 
+
+IEEE Signal Processing Magazine , vol. 37, no. 5, pp. 43–54, 2020. [2] R. Pasupathy, P. Glynn, S. Ghosh, and F. S. Hashemi, “On sampling rates in simulation-based recursions,” SIAM Journal on Optimization ,vol. 28, no. 1, pp. 45–73, 2018. [3] J. C. Duchi, M. I. Jordan, M. J. Wainwright, and A. Wibisono, “Optimal rates for zero-order convex optimization: The power of two function evaluations,” IEEE Transactions on Information Theory ,vol. 61, no. 5, pp. 2788–2806, 2015. [4] Y. Nesterov and V. Spokoiny, “Random gradient-free minimization of convex functions,” Foundations of Computational Mathematics , 2017. [5] A. S. Berahas, L. Cao, K. Choromanski, and K. Scheinberg, “A theoretical and empirical comparison of gradient approximations in derivative-free optimization,” Foundations of Computational Mathe-matics , 2022. [6] Z. Ren, Y. Tang, and N. Li, “Escaping saddle points in zeroth-order optimization: the power of two-point estimators,” in International Conference on Machine Learning , PMLR, 2023. [7] Y. Zhou, R. Jin, S. Gao, J. Wang, and J. Song, “A Zeroth-Order Extra-Gradient Method for Black-Box Constrained Optimization,” July 2025. [8] X. Chen, J. I. Poveda, and N. Li, “Model-Free Feedback Constrained Optimization Via Projected Primal-Dual Zeroth-Order Dynamics,” June 2022. [9] X. Yi, S. Zhang, T. Yang, T. Chai, and K. H. Johansson, “Linear convergence of first-and zeroth-order primal–dual algorithms for dis-tributed nonconvex optimization,” IEEE Transactions on Automatic Control , 2021. [10] A. Nguyen and K. Balasubramanian, “Stochastic zeroth-order func-tional constrained optimization: Oracle complexity and applications,” 
+
+INFORMS Journal on Optimization , 2023. [11] Z. Li, P.-Y. Chen, S. Liu, S. Lu, and Y. Xu, “Zeroth-Order Optimization for Composite Problems with Functional Constraints,” Proceedings of the AAAI Conference on Artificial Intelligence , June 2022. [12] C. Maheshwari, C.-Y. Chiu, E. Mazumdar, S. Sastry, and L. Ratliff, “Zeroth-order methods for convex-concave min-max problems: Ap-plications to decision-dependent risk minimization,” in Proceedings of The 25th International Conference on Artificial Intelligence and Statistics (G. Camps-Valls, F. J. R. Ruiz, and I. Valera, eds.), Pro-ceedings of Machine Learning Research, PMLR, 2022. [13] S. Liu, S. Lu, X. Chen, Y. Feng, K. Xu, A. Al-Dujaili, M. Hong, and U.-M. O’Reilly, “Min-Max Optimization without Gradients: Conver-gence and Applications to Black-Box Evasion and Poisoning Attacks,” in Proceedings of the 37th International Conference on Machine Learning , PMLR, Nov. 2020. [14] N. I. Gould, D. Orban, and P. L. Toint, “Galahad, a library of thread-safe fortran 90 packages for large-scale nonlinear optimization,” ACM Transactions on Mathematical Software (TOMS) , 2003. [15] Z. Liu, F. Forouzanfar, and Y. Zhao, “Comparison of SQP and AL algorithms for deterministic constrained production optimization of hydrocarbon reservoirs,” Journal of Petroleum Science and Engineer-ing , 2018. [16] Z.-H. Wang and Y.-X. Yuan, “A subspace implementation of quasi-newton trust region methods for unconstrained optimization,” Nu-merische Mathematik , vol. 104, no. 2, pp. 241–269, 2006. [17] Y.-x. Yuan, “Subspace techniques for nonlinear optimization,” Some topics in industrial and applied mathematics , vol. 8, pp. 206–218, 2007. [18] J. H. Lee, Y. M. Jung, Y.-x. Yuan, and S. Yun, “A subspace sqp method for equality constrained optimization,” Computational Optimization and Applications , vol. 74, no. 1, pp. 177–194, 2019. [19] X. Zhao and J. Fan, “On subspace properties of the quadratically constrained quadratic program.,” Journal of Industrial & Management Optimization , vol. 13, no. 4, 2017. [20] R. Nozawa, P.-L. Poirion, and A. Takeda, “Zeroth-order random subspace algorithm for non-smooth convex optimization,” Journal of Optimization Theory and Applications , vol. 204, no. 3, p. 53, 2025. [21] D. Kozak, C. Molinari, L. Rosasco, L. Tenorio, and S. Villa, “Zeroth order optimization with orthogonal random directions,” arXiv preprint arXiv:2107.03941 , 2021. [22] C. Cartis and L. Roberts, “Scalable subspace methods for derivative-free nonlinear least-squares optimization,” Mathematical Program-ming , vol. 199, no. 1, pp. 461–524, 2023. [23] R. Zhang, G. Zardini, A. Ozdaglar, J. Shamma, and N. Li, “Zeroth-order constrained optimization from a control perspective via feedback linearization,” arXiv preprint arXiv:2509.24056 , 2025. [24] F. Oztoprak, R. Byrd, and J. Nocedal, “Constrained optimization in the presence of noise,” SIAM Journal on Optimization , 2023. [25] R. Zhang, A. Raghunathan, J. S. Shamma, and N. Li, “Constrained optimization from a control perspective via feedback linearization,” in 
+
+The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [26] F. Dorfler and F. Bullo, “Synchronization and transient stability in power networks and nonuniform kuramoto oscillators,” SIAM Journal on Control and Optimization , vol. 50, no. 3, pp. 1616–1642, 2012. [27] H.-D. Chiang, Direct methods for stability analysis of electric power systems: theoretical foundation, BCU methodologies, and applications .John Wiley & Sons, 2011. [28] J. Nocedal and S. J. Wright, Numerical optimization . Springer series in operation research and financial engineering, New York, NY: Springer, second edition ed., 2006. [29] S. Dasgupta and A. Gupta, “An elementary proof of a theorem of johnson and lindenstrauss,” Random Structures & Algorithms , vol. 22, no. 1, pp. 60–65, 2003. 
+
+APPENDIX 
+
+Lemma 1. Suppose Assumptions 1–3 hold. Let 
+
+S(x) := span 
+
+
+
+d∗(x), range( Jh(x)⊤)
+
+
+
+.
+
+Then there exists an angle θ∗ ∈ (0 , π/ 2) , depending only on 
+
+γ, R∗, σ∗, Hh, and Hg , such that the following holds: for every x ∈ L and every orthonormal matrix U ∈ St( n, d )
+
+with d ≥ me + 1 , if the largest principal angle between 
+
+span( U ) and S(x) is at most θ∗, then there exists Λ⋆, M ⋆
+
+such that the corresponding KKT multiplier pair (λ, μ )
+
+satisfies 
+
+∥λ∥∞ ≤ Λ∗, ∥μ∥∞ ≤ M∗.
+
+Proof. Fix x ∈ L and abbreviate d∗ := d∗(x) and S := 
+
+S(x). Since S is generated by d∗ and the columns of Jh(x)⊤,we have dim S ≤ me + 1 .Now suppose the largest principal angle between span( U )
+
+and S is at most θ. Let PU denote the orthogonal projector onto span( U ). By standard principal-angle geometry, for every z ∈ S , ∥PU z − z∥2 ≤ sin( θ)∥z∥2. In particular, 
+
+∥PU d∗ − d∗∥2 ≤ sin( θ)∥d∗∥2 ≤ sin( θ)R∗.
+
+We first establish reduced feasibility. Define ed := PU d∗ ∈
+
+span( U ). Since Jh(x) is bounded on L by Assumption 2, 
+
+∥Jh(x)( ed − d∗)∥∞ ≤ Hh∥ ed − d∗∥2 ≤ HhR∗ sin( θ).
+
+Because h(x) + Jh(x)d∗ = 0 , it follows that 
+
+∥h(x) + Jh(x) ed∥∞ ≤ HhR∗ sin( θ).
+
+Similarly, 
+
+g(x) + Jg (x) ed = g(x) + Jg (x)d∗ + Jg (x)( ed − d∗)
+
+≤ − γ1 + Hg R∗ sin( θ)1.
+
+Hence, if sin( θ) ≤ γ  
+
+> 4HgR∗
+
+, then g(x) + Jg (x) ed ≤ − γ 
+
+> 2
+
+1.
+
+The equality residual in ed can be corrected within 
+
+span( U ). Consider the restricted linear map AU := 
+
+Jh(x) span( U ) : span( U ) → Rm. Since span( U ) is θ-close to S and Jh(x) has minimum singular value at least σ∗ on 
+
+S, a standard subspace perturbation argument implies that 
+
+σmin (AU ) ≥ σ∗/2 for θ sufficiently small. Hence AU is surjective and admits a right inverse with operator norm at most 2/σ ∗. Therefore, there exists δd ∈ span( U ) such that 
+
+Jh(x)( ed + δd ) = −h(x),
+
+∥δd ∥2 ≤ C∥h(x) + Jh(x) ed∥2,
+
+=⇒ ∥δd ∥2 ≤ CH hR∗ sin( θ).
+
+for some constant C depending only on σ∗. Choosing θ
+
+small enough, we may ensure ∥δd ∥2 small enough so that for ref := ed + δd we still have g(x) + Jg (x)dref ≤ − γ 
+
+> 4
+
+1.
+
+The above statement shows that the reduced subproblem (6) also satisfies MFCQ (Definition 1) uniformly on x ∈L, and thus obtains uniformly bounded dual variable (cf. [28]). 
+
+Lemma 2. Let V ∈ St( n, m ) be Ft-measurable, and let Ut
+
+be obtained by rejection sampling from Haar-uniform draws on St( n, d ) until At occurs, with acceptance rate at least 
+
+pacc . Then for any ρ ∈ (0 , 1) ,
+
+P
+
+
+
+∥¯rt∥2 ≤ q n 
+
+> (1 −ρ)d
+
+∥U ⊤ 
+
+> t
+
+¯rt∥2 ∀ ¯rt ∈ span( V ) Ft
+
+
+
+≥ 1 − 1
+
+> pacc
+
+ 12 nρd 
+
+m
+
+exp 
+
+
+
+− ρ2d
+
+> 32
+
+
+
+.Equivalently, if d ≥ 32 
+
+> ρ2
+
+h
+
+m log 
+
+ 12 nρm 
+
+
+
++ log 
+
+ 1
+
+> δ p acc
+
+i 
+
+, then 
+
+P
+
+
+
+∥¯rt∥2 ≤ q n 
+
+> (1 −ρ)d
+
+∥U ⊤ 
+
+> t
+
+¯rt∥2, ∀¯rt ∈ span( V ) Ft
+
+
+
+≥ 1−δ. 
+
+Proof. Let 
+
+At := V ⊤UtU ⊤ 
+
+> t
+
+V ∈ Rm×m.
+
+It suffices to show that λmin (At) ≥ (1 −ρ)dn .
+
+Set ε := ρd  
+
+> 4n
+
+. Let Nε be an ε-net of the unit sphere Sm−1
+
+satisfying |N ε| ≤   3
+
+> ε
+
+m =
+
+ 12 nρd 
+
+m
+
+.
+
+For any z ∈ N ε, the vector V z is Ft-measurable and satisfies 
+
+∥V z ∥2 = 1 . Therefore, applying Lemma 3 with parameter 
+
+ρ/ 2 gives 
+
+P
+
+
+
+z⊤Atz = ∥U ⊤ 
+
+> t
+
+V z ∥22 ≥ (1 − ρ/ 2) dn Ft
+
+
+
+≥ 1 − 1
+
+pacc 
+
+exp 
+
+
+
+− ρ2d
+
+32 
+
+
+
+.
+
+A union bound over z ∈ N ε yields 
+
+P
+
+
+
+z⊤Atz ≥ (1 − ρ/ 2) dn ∀ z ∈ N ε Ft
+
+
+
+≥ 1 − 1
+
+pacc 
+
+ 12 nρd 
+
+m
+
+exp 
+
+
+
+− ρ2d
+
+32 
+
+
+
+.
+
+It remains to pass from the net to the whole sphere. Fix any x ∈ Sm−1 and choose z ∈ N ε such that ∥x − z∥2 ≤ ε.Then 
+
+x⊤Atx − z⊤Atz ≤ ∥ x − z∥2 ∥Atx∥2 + ∥z∥2 ∥At(x − z)∥2 ≤ 2ε. 
+
+Therefore, on the preceding net event, 
+
+x⊤Atx ≥ z⊤Atz − 2ε ≥ (1 − ρ/ 2) dn − ρd 
+
+2n = (1 − ρ)dn .
+
+Since this holds for every x ∈ Sm−1, we obtain 
+
+λmin (At) = inf ∥x∥2=1 x⊤Atx ≥ (1 −ρ)dn ,
+
+which is exactly the claim. 
+
+Lemma 3 (Random projection under rejection sampling) .
+
+Let ¯rt be Ft-measurable, and let Ut be obtained by rejection sampling from Haar-uniform draws on St( n, d ) until At
+
+occurs, with acceptance rate at least pacc . Then for any 
+
+ρ ∈ (0 , 1) ,
+
+P
+
+
+
+∥¯rt∥2 ≤ q n 
+
+> (1 −ρ)d
+
+∥U ⊤ 
+
+> t
+
+¯rt∥2 Ft
+
+
+
+≥ 1 − 1 
+
+> pacc
+
+exp 
+
+
+
+− ρ2d
+
+> 8
+
+
+
+.
+
+Proof. Conditioned on Ft, each proposal eUt is Haar-uniform. The accepted Ut has the law of eUt conditioned on At. Thus for any event Bt,
+
+P(Bt | F t, At) = P(Bt∩A t|F t) 
+
+> P(At|F t)
+
+.
+
+Let Bt be the standard projection concentration event. Then (cf. Lemma 2.2 in [29]) 
+
+P(Bct | F t) ≤ exp 
+
+
+
+− ρ2d
+
+> 8
+
+
+
+,
+
+and dividing by P(At | F t) ≥ pacc gives the result.

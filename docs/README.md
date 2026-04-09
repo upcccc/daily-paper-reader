@@ -6,61 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-08
-- 运行时间：2026-04-08 20:06:37 UTC
+- 最新运行日期：2026-04-09
+- 运行时间：2026-04-09 20:11:34 UTC
 - 运行状态：成功
-- 本次总论文数：13
-- 精读区：3
-- 速读区：10
+- 本次总论文数：17
+- 精读区：6
+- 速读区：11
 
 ### 今日简报（AI）
-今日精选 13 篇前沿论文，深度聚焦工业物联网与金属增材制造中的高精度隐私保护方案。
-重点推荐特征感知各向异性 LDP 与联邦异常检测技术，实现了工业数据效用与安全性的双重突破。
-建议关注隐私计算在特定工业场景的落地实践，以及大语言模型在联邦环境下的公平对齐与遗忘机制。
-- 详情：[/202604/08/README](/202604/08/README)
+今日精选 17 篇论文聚焦联邦学习隐私前沿，重点突破跨模态医疗影像分割与大规模安全聚合难题。
+满分论文揭示了自适应差分隐私在复杂医学场景的卓越表现，并提出了兼顾扩展性与安全性的分布式聚合新架构。
+建议关注时间序列大模型在联邦环境下的异构学习，以及语言生成任务中隐私保护与性能的平衡。
+- 详情：[/202604/09/README](/202604/09/README)
 
 ### 精读区论文标签
-1. [Feature-Aware Anisotropic Local Differential Privacy for Utility-Preserving Graph Representation Learning in Metal Additive Manufacturing](/202604/08/2604.05077v1-feature-aware-anisotropic-local-differential-privacy-for-utility-preserving-graph-representation-learning-in-metal-additive-manufacturing)  
+1. [Adaptive Differential Privacy for Federated Medical Image Segmentation Across Diverse Modalities](/202604/09/2604.06518v1-adaptive-differential-privacy-for-federated-medical-image-segmentation-across-diverse-modalities)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：针对图表示学习提出了各向异性本地差分隐私（LDP）
-2. [Towards Securing IIoT: An Innovative Privacy-Preserving Anomaly Detector Based on Federated Learning](/202604/08/2604.06101v1-towards-securing-iiot-an-innovative-privacy-preserving-anomaly-detector-based-on-federated-learning)  
+   evidence：医学图像联邦学习中的自适应差分隐私
+2. [DDP-SA: Scalable Privacy-Preserving Federated Learning via Distributed Differential Privacy and Secure Aggregation](/202604/09/2604.07125v1-ddp-sa-scalable-privacy-preserving-federated-learning-via-distributed-differential-privacy-and-secure-aggregation)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：基于联邦学习的隐私保护异常检测器
-3. [Styx: Collaborative and Private Data Processing With TEE-Enforced Sticky Policy](/202604/08/2604.04082v1-styx-collaborative-and-private-data-processing-with-tee-enforced-sticky-policy)  
+   evidence：通过本地差分隐私和安全聚合实现的隐私保护联邦学习
+3. [Private Federated Learning for High-dimensional Time Series](/202604/09/2604.07135v1-private-federated-learning-for-high-dimensional-time-series)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：结合差分隐私表示学习的隐私保护联邦学习
+4. [Optimal Rates for Pure {\varepsilon}-Differentially Private Stochastic Convex Optimization with Heavy Tails](/202604/09/2604.06492v1-optimal-rates-for-pure-varepsilon-differentially-private-stochastic-convex-optimization-with-heavy-tails)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：纯ε-差分隐私随机凸优化
+5. [Beyond End-to-End: Dynamic Chain Optimization for Private LLM Adaptation on the Edge](/202604/09/2604.06819v1-beyond-end-to-end-dynamic-chain-optimization-for-private-llm-adaptation-on-the-edge)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：用于隐私保护大模型适配的联邦微调
+6. [SubFLOT: Submodel Extraction for Efficient and Personalized Federated Learning via Optimal Transport](/202604/09/2604.06631v1-subflot-submodel-extraction-for-efficient-and-personalized-federated-learning-via-optimal-transport)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：使用可信执行环境的隐私保护AI训练
+   evidence：用于在保护数据隐私的同时进行协作模型训练的联邦学习框架
 
 ### 速读区论文标签
-1. [Beyond Corner Patches: Semantics-Aware Backdoor Attack in Federated Learning](/202604/08/2603.29328v2-beyond-corner-patches-semantics-aware-backdoor-attack-in-federated-learning)  
+1. [Bi-level Heterogeneous Learning for Time Series Foundation Models: A Federated Learning Approach](/202604/09/2604.06727v1-bi-level-heterogeneous-learning-for-time-series-foundation-models-a-federated-learning-approach)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：时间序列基础模型的联邦学习方法
+2. [FedDAP: Domain-Aware Prototype Learning for Federated Learning under Domain Shift](/202604/09/2604.06795v1-feddap-domain-aware-prototype-learning-for-federated-learning-under-domain-shift)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：不泄露隐私数据的联邦学习
+3. [On the Price of Privacy for Language Identification and Generation](/202604/09/2604.07238v1-on-the-price-of-privacy-for-language-identification-and-generation)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：差分隐私语言识别与生成算法
+4. [SL-FAC: A Communication-Efficient Split Learning Framework with Frequency-Aware Compression](/202604/09/2604.07316v1-sl-fac-a-communication-efficient-split-learning-framework-with-frequency-aware-compression)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：通信高效的拆分学习框架
+5. [GPU Acceleration of TFHE-Based High-Precision Nonlinear Layers for Encrypted LLM Inference](/202604/09/2604.04783v1-gpu-acceleration-of-tfhe-based-high-precision-nonlinear-layers-for-encrypted-llm-inference)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦学习设置下的后门攻击
-2. [Selective Forgetting for Large Reasoning Models](/202604/08/2604.03571v1-selective-forgetting-for-large-reasoning-models)  
+   evidence：隐私保护加密推理
+6. [FedSpy-LLM: Towards Scalable and Generalizable Data Reconstruction Attacks from Gradients on LLMs](/202604/09/2604.06297v1-fedspy-llm-towards-scalable-and-generalizable-data-reconstruction-attacks-from-gradients-on-llms)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：通过选择性遗忘实现隐私保护机器学习
-3. [APPA: Adaptive Preference Pluralistic Alignment for Fair Federated RLHF of LLMs](/202604/08/2604.04261v1-appa-adaptive-preference-pluralistic-alignment-for-fair-federated-rlhf-of-llms)  
+   evidence：联邦学习中的数据重构攻击研究
+7. [Equivalence Testing Under Privacy Constraints](/202604/09/2604.06499v1-equivalence-testing-under-privacy-constraints)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦人类反馈强化学习
-4. [Dynamic Free-Rider Detection in Federated Learning via Simulated Attack Patterns](/202604/08/2604.04611v1-dynamic-free-rider-detection-in-federated-learning-via-simulated-attack-patterns)  
+   evidence：差分隐私等效性检验程序
+8. [Variational Feature Compression for Model-Specific Representations](/202604/09/2604.06644v1-variational-feature-compression-for-model-specific-representations)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦学习安全与客户端更新聚合
-5. [Scalar Federated Learning for Linear Quadratic Regulator](/202604/08/2604.05088v1-scalar-federated-learning-for-linear-quadratic-regulator)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：异构代理模型无关学习的联邦算法
-6. [Beyond Corner Patches: Semantics-Aware Backdoor Attack in Federated Learning](/202604/08/2603.29328v3-beyond-corner-patches-semantics-aware-backdoor-attack-in-federated-learning)  
+   evidence：隐私保护特征提取框架
+9. [G-Drift MIA: Membership Inference via Gradient-Induced Feature Drift in LLMs](/202604/09/2604.00419v1-g-drift-mia-membership-inference-via-gradient-induced-feature-drift-in-llms)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：联邦学习环境中的安全与聚合
-7. [Secure Forgetting: A Framework for Privacy-Driven Unlearning in Large Language Model (LLM)-Based Agents](/202604/08/2604.00430v1-secure-forgetting-a-framework-for-privacy-driven-unlearning-in-large-language-model-llm-based-agents)  
+   evidence：隐私保护成员推理攻击分析
+10. [Adaptive Threshold-Driven Continuous Greedy Method for Scalable Submodular Optimization](/202604/09/2604.03419v1-adaptive-threshold-driven-continuous-greedy-method-for-scalable-submodular-optimization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：大语言模型智能体中隐私驱动的机器卸载
-8. [CURE:Circuit-Aware Unlearning for LLM-based Recommendation](/202604/08/2604.04982v1-curecircuit-aware-unlearning-for-llm-based-recommendation)  
+   evidence：分布式环境下的可扩展子模优化
+11. [From Measurement to Mitigation: Quantifying and Reducing Identity Leakage in Image Representation Encoders with Linear Subspace Removal](/202604/09/2604.05296v1-from-measurement-to-mitigation-quantifying-and-reducing-identity-leakage-in-image-representation-encoders-with-linear-subspace-removal)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：通过遗忘学习实现隐私保护机器学习
-9. [Distributed Load Frequency Control of Multi-Area Smart Grid](/202604/08/2604.05390v1-distributed-load-frequency-control-of-multi-area-smart-grid)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：信息隐私约束下的分布式算法
-10. [Distributed Algorithm for the Global Optimal Controller of Nonlinear Multi-Agent Systems](/202604/08/2604.05443v1-distributed-algorithm-for-the-global-optimal-controller-of-nonlinear-multi-agent-systems)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：具有私有智能体状态的分布式最优控制
+   evidence：隐私保护身份泄露缓解
 
 
 <div class="dpr-home-promo-card">

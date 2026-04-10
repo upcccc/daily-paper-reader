@@ -1,0 +1,538 @@
+Title: Reinforcement-Guided Synthetic Data Generation for Privacy-Sensitive Identity Recognition
+
+URL Source: https://arxiv.org/pdf/2604.07884v1
+
+Published Time: Fri, 10 Apr 2026 00:39:08 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Reinforcement-Guided Synthetic Data Generation for Privacy-Sensitive Identity Recognition 
+
+## Xuemei Jia 1,2 Jiawei Du 3 Hui Wei 4 Jun Chen 1,2† Joey Tianyi Zhou 3 Zheng Wang 1,2†
+
+> 1
+
+National Engineering Research Center for Multimedia Software, School of Computer Science, Wuhan University, Wuhan, China 
+
+> 2
+
+Hubei Key Laboratory of Multimedia and Network Communication Engineering, Wuhan, China 
+
+> 3
+
+Centre for Frontier AI Research (CFAR) & Institute of High Performance Computing (IHPC), A*STAR, Singapore 
+
+> 4
+
+Center for Machine Vision and Signal Analysis (CMVS), University of Oulu, Finland 
+
+{jiaxuemeil,chenj,wangzwhu }@whu.edu.cn, {dujw,Joey Zhou }@cfar.a-star.edu.sg, huiwei.truth@gmail.com 
+
+## Abstract 
+
+High-fidelity generative models are increasingly needed in privacy-sensitive scenarios, where access to data is severely restricted due to regulatory and copyright constraints. This scarcity hampers model development—ironically, in set-tings where generative models are most needed to compen-sate for the lack of data. This creates a self-reinforcing challenge: limited data leads to poor generative models, which in turn fail to mitigate data scarcity. To break this cy-cle, we propose a reinforcement-guided synthetic data gen-eration framework that adapts general-domain generative priors to privacy-sensitive identity recognition tasks. We first perform a cold-start adaptation to align a pretrained generator with the target domain, establishing semantic rel-evance and initial fidelity. Building on this foundation, we introduce a multi-objective reward that jointly optimizes se-mantic consistency, coverage diversity, and expression rich-ness, guiding the generator to produce both realistic and task-effective samples. During downstream training, a dy-namic sample selection mechanism further prioritizes high-utility synthetic samples, enabling adaptive data scaling and improved domain alignment. Extensive experiments on benchmark datasets demonstrate that our framework sig-nificantly improves both generation fidelity and classifica-tion accuracy, while also exhibiting strong generalization to novel categories in small-data regimes. 
+
+## 1. Introduction 
+
+High-performing visual models hinge on abundant and well-annotated data. Yet privacy regulations, annotation costs, and copyright constraints make large-scale collec-     
+
+> †Corresponding author Identity
+> Original Small -scale
+> Dataset 𝒯
+> Synthesized Dataset 𝒮
+> Distributional matching
+> Evaluation
+> Original Small -scale
+> Dataset 𝒯
+> General Prior
+> RL Tuning
+> Synthesized Dataset 𝒮
+> Task
+> Adaption
+> Target Scene
+> Diversity
+> Existing Methods Our proposed Method
+> Cold -
+> start
+
+Figure 1. Pipeline comparison. (a) Existing methods rely solely on specific data, resulting in limited diversity and low utility of synthesized images. (b) We adapt broad, general-domain priors to the target domain, improving both diversity and task utility. 
+
+tion increasingly difficult, throttling generalization in prac-tice [1, 8, 45]. These limitations hinder the development of deep learning models and restrict their generalization abil-ity. Synthetic data generation offers a promising alterna-tive [11, 14, 38, 50], but its success still depends on the availability of high-quality real data. In data-scarce set-tings, the absence of sufficient supervision often leads to low-fidelity samples and poor task utility, creating a vicious cycle: insufficient real data produces weak synthetic data, which in turn fails to mitigate the original data scarcity. Many efforts have sought to improve the utility of syn-thetic data. A straightforward direction is data augmenta-tion [66]. For example, Karras et al. [21] employed adap-tive augmentation to increase variation under limited data, while [44, 55] explored manipulating virtual environments 
+
+> arXiv:2604.07884v1 [cs.CV] 9 Apr 2026
+
+to enrich diversity. Although these methods expand ap-pearance variety, they struggle to close the domain gap be-tween synthetic and real images. With the emergence of GANs [11] and diffusion models [14], subsequent work at-tempted to enhance data diversity by factorizing visual at-tributes such as identity, pose, and background. Approaches like [24, 31, 64] decomposed and recombined visual com-ponents to synthesize new instances, yet the improvement in downstream performance remained limited. Overall, exist-ing methods primarily aim to match the distribution of real data, effectively mimicking the source distribution rather than surpassing it in task utility, as shown in Figure 1. Motivated by this observation, we advocate a paradigm shift: instead of relying solely on the scarce source dis-tribution, we leverage rich general-domain priors as guid-ance for synthesis. Pre-trained models encompassing large-scale vision backbones and generative architectures trained on diverse datasets encode structural, semantic, and contex-tual knowledge that complements the scarcity of domain-specific data. Incorporating such priors provides a broader representational basis and allows synthetic data to exhibit richer diversity and higher fidelity, even when direct super-vision is limited. The central challenge lies in effectively adapting general priors to target domains with limited data availability. In response, we formulate the synthesis process as a reinforce-ment learning problem, where the generative model acts as a policy that produces synthetic samples and receives re-wards according to their contribution to downstream tasks. This reward-guided formulation enables task-aligned adap-tation guided by performance feedback rather than direct supervision. Using proxy objectives, the generator learns to produce samples that are both visually plausible and func-tionally relevant to the target domain. Through this adaptive loop, the model progressively bridges the gap between gen-eral priors and domain-specific demands. Building on this insight, our approach forms a continu-ous adaptive process rather than three isolated stages. We begin with a cold-start adaptation that aligns a pre-trained generator with the target domain, establishing semantic consistency and basic fidelity as a foundation for further op-timization. On top of this initialization, we progressively re-fine the generator through a task-specific reinforcement sig-nal. A multi-component reward, capturing semantic align-ment, coverage diversity, and expression richness, guides the model to generate data that are both visually realistic and task-effective. This adaptation not only enhances syn-thesis quality but also yields an internal measure of sam-ple utility. During downstream task training, we extend this principle through a dynamic sample selection mecha-nism, which leverages the learned utility signals to empha-size task-relevant samples and mitigate distributional bias. In a nutshell, our contribution can be summarized as: • We identify and address the fundamental limitation of existing generative methods, where low-data supervi-sion perpetuates a data scarcity loop. We propose a reinforcement-guided synthesis framework that leverages general-domain priors to mitigate this issue. • We propose a task-specific reward that balances fidelity, diversity, and task relevance, guiding the generator to-ward utility-driven synthesis. • We design a dynamic sample selection strategy that fur-ther improves generalization under domain shift, achiev-ing consistent gains across privacy-sensitive benchmarks. 
+
+## 2. Related Works 
+
+2.1. Data Scarcity in Identity-related Tasks 
+
+Collecting and annotating real-world datasets is costly and time-consuming. In privacy-sensitive domains such as iden-tity recognition, these challenges are further intensified by legal and ethical restrictions that limit large-scale data ac-quisition and sharing [16, 19, 20]. To alleviate data scarcity, prior studies have explored both augmentation and syn-thesis strategies. Early methods relied on conventional augmentations, such as random resizing, cropping, flip-ping [30], erasing [66], and their combinations [21], to en-hance intra-dataset diversity. Beyond these, synthetic hu-man images have been generated through controllable vir-tual environments (e.g., GTA V) [44, 48, 55]. The rise of generative models such as GANs [11] and diffusion models [14, 65] has greatly advanced realistic per-son image synthesis [9, 18, 27, 35]. These efforts gen-erally fall into two paradigms: (i) disentangling and re-combining factors across real samples [51, 64], and (ii) conditional generation guided by attributes or control sig-nals [32, 57]. Despite these advances, their performance is still constrained by the limited scale, diversity, and repre-sentational richness of available data, an issue that becomes even more pronounced in privacy-constrained domains. 
+
+2.2. Conditional Diffusion Models 
+
+Diffusion models have emerged as a powerful class of generative models, achieving SOTA performance in high-fidelity image synthesis. Early methods, e.g. DDPM [14], formulate a generative process through a Markovian for-ward diffusion and a learned reverse denoising process, while subsequent variants [34, 43], improve sampling ef-ficiency and quality. To further reduce computational costs, Latent Diffusion Models (LDMs) [38] perform dif-fusion in a compact latent space, preserving semantic fi-delity while enabling large-scale text-guided generation, as demonstrated by Imagen [39] and Stable Diffusion [38]. However, convolution-based U-Nets in LDMs are in-herently limited in capturing long-range dependencies and global semantic coherence. To address it, Diffusion Trans-formers [36] (DiT) replace U-Net with a Transformer-based backbone, enhancing global context modeling and long-range interaction. This makes DiT particularly suitable for purely visual generation in the latent space without textual prompts, while preserving global semantic consistency. 
+
+2.3. RL-based Diffusion Model Optimization 
+
+Recent studies have reformulated the diffusion denoising process as a sequential decision-making problem under the reinforcement learning (RL) framework [46], enabling the model to optimize sample quality through reward-driven policy updates rather than fixed likelihood objec-tives. [10] introduces DPOK, an online RL framework with KL-regularized policy optimization for fine-tuning text-to-image diffusion models, achieving superior text–image alignment and image fidelity compared to reward-weighted supervised fine-tuning. [12] develops an RL framework with comparative feedback and adaptive condition embed-dings for accurate and consistent report-conditioned chest X-ray generation. [40] uses attribute recognition accuracy as a reward signal to guide policy optimization in medi-cal image synthesis. [31] proposes a diversity-oriented RL fine-tuning framework that enhances generative diver-sity but still depends on diverse, unbiased reference images. In contrast, our work targets privacy-constrained do-mains where large-scale data collection is infeasible. We emphasize learning robust and generalizable feature repre-sentations from restricted distributions, while ensuring the generated data remain diverse and semantically meaningful. 
+
+## 3. Preliminary 
+
+3.1. Diffusion Transformer 
+
+Diffusion Transformers (DiT) [36] excel at modeling global context and long-range spatial dependencies, enabling se-mantically coherent image generation without relying on textual prompts. It consists of two core components: Au-toencoder. The encoder E maps the input image x to a latent representation z = E(x), and the decoder D reconstructs the image as ˆx = D(z). This design enables the diffusion process to operate in a compressed yet semantically rich la-tent space. Latent Diffusion Transformer. The latent code is first patchified into a sequence of visual tokens which are then processed by a stack of DiT blocks. Each block applies self-attention and feed-forward layers, conditioned on the diffusion timestep and an optional class embedding, result-ing in an intermediate output. Finally, the processed tokens are reassembled into a refined latent feature map. 
+
+3.2. RL finetuned Diffusion 
+
+The iterative denoising process of diffusion probabilistic models can be formulated as a multi-step Markov decision process, where each denoising step corresponds to a state transition governed by the model policy. Through this se-quential refinement, the model progressively transforms a noisy input into a high-quality sample. In this formulation, conditional diffusion can be opti-mized via reinforcement learning, where the objective is to maximize the expected reward of generated samples given specific conditions: Jθ = Ep(c)
+
+Epθ (x|c)
+
+R(x, c ) . p(c)
+
+is the distribution over conditioning labels, pθ (x|c) denotes the sample distribution generated by a pretrained model un-der condition c, and R(x, c ) is a task-specific reward func-tion that evaluates the fidelity, utility, or realism of the gen-erated image x. The reward is typically calculated based on the terminal sample x0 produced by the diffusion trajectory. Following the DPOK framework [10], the gradient of the objective with respect to the model parameters  θ can be de-rived using the policy gradient theorem: 
+
+∇θ Jθ = Ex1: T
+
+"
+
+R(x, c ) X
+
+> t
+
+∇θ log pθ
+
+ xt−1 | xt, c, t #
+
+,
+
+(1) where T is the total number of timesteps in the diffusion process, and xt denotes the intermediate state at timestep t.Each gradient term optimizes the denoising policy to pro-duce samples that yield higher rewards. By iteratively ap-plying this policy gradient update, the diffusion model can be fine-tuned to enhance image fidelity, structural details, and semantic alignment with the conditioning signals, even when only limited supervision or feedback is available. 
+
+## 4. Proposed Method 
+
+We tackle the challenge of data scarcity in privacy-sensitive domains by adapting publicly available generative models pretrained on general-domain data to target tasks with lim-ited supervision. Our framework consists of three sequen-tial stages. First, a cold-start adaptation stage aligns the pre-trained generator with the target distribution, establishing a strong initialization for downstream optimization. Second, a reinforcement learning-based fine-tuning stage leverages a task-specific reward function to guide the generator to-ward producing samples with higher fidelity, diversity, and task relevance. Finally, a dynamic sample selection mech-anism prioritizes task-relevant samples to enhance general-ization under distribution shifts. Collectively, these compo-nents constitute a flexible and effective pipeline for gener-ating utility-preserving data in privacy-constrained settings. 
+
+4.1. Cold-Start Initialization 
+
+To enable effective adaptation of pre-trained diffusion mod-els to new domains with limited data, we introduce a cold-start initialization protocol as the first step of our frame-work. Specifically, given a publicly available DiT [36] pre-trained on large-scale generic datasets such as Im-ageNet [6], we define the initialization step as θ0 =Init (θpre , X ), where θpre denotes the pre-trained model pa-rameters and X represents the target-domain dataset. The function Init (·) performs lightweight fine-tuning to produce 
+
+θ0, which serves as a stable and semantically aligned start-ing point for subsequent reward-guided refinement. In practice, we replace the class embedding of the pre-trained DiT with a task-specific head aligned to the target label space. Fine-tuning is performed using a standard de-noising objective on limited target samples while keeping the backbone frozen. Only a few hyperparameters, such as the learning rate and iteration number, are adjusted to miti-gate overfitting. This minimal adaptation preserves the gen-eralization ability of the pre-trained model while introduc-ing task-relevant inductive bias into the generation process. This initialization step is particularly helpful under privacy-constrained conditions, where direct reward opti-mization can be unstable due to data scarcity. By providing a well-aligned initialization, the model achieves more reli-able convergence in the next reinforcement learning stage. 
+
+4.2. Reward-driven Optimization 
+
+While the cold-start initialization provides a stable and se-mantically aligned starting point, it does not explicitly en-force the generation of identity-relevant or diverse samples. To further refine the model toward these objectives, we in-troduce a reinforcement learning-based optimization stage. In this stage, a reward function is introduced to guide the conditional diffusion process toward identity-preserving and semantically meaningful image generation. The re-ward comprises three components: semantic consistency ,which enforces alignment between generated and reference representations; distributional coverage , which encourages coverage of target-domain variability; and expressive diver-sity , which promotes visually diverse yet coherent samples. These components jointly drive the diffusion model toward achieving both discriminative relevance and generative rich-ness in privacy-constrained settings. 
+
+4.2.1. Semantic Consistency 
+
+To preserve identity information during generation, we measure semantic consistency in the feature space, ensur-ing that the generated representation remains close to the semantic center of its corresponding identity. Let By =
+
+{fi}Ny 
+
+> i=1
+
+denote the set of reference features stored in a memory bank for identity y. The class prototype is com-puted as the mean-normalized feature vector: 
+
+¯fy = 1
+
+NyNy
+
+X
+
+> i=1
+
+fi, ˆfy = ¯fy
+
+∥ ¯fy ∥2
+
+. (2) The semantic reward is then defined by the cosine similarity between the generated feature and the class prototype: 
+
+Rsem = 12
+
+ ˆf ⊤ 
+
+> g
+
+ˆfy + 1 
+
+
+
+, (3) where ˆfg denotes the normalized feature of the generated image. This similarity is linearly rescaled to [0 , 1] , encour-aging the generator to produce identity-consistent represen-tations in the target feature space. 
+
+4.2.2. Distributional Coverage 
+
+While semantic consistency enforces identity preservation, it may constrain the generator to a limited region of the fea-ture space. To encourage exploration of a broader range of intra-class variations, we introduce a kernel-based coverage reward that compares the distribution of generated features with the corresponding reference distribution in the memory bank. Let ˆGy = { ˆfg,j }Bj=1 denote the normalized features of the generated samples of current batch with batchsize 
+
+B, and ˆBy = { ˆfy,i }Ny 
+
+> i=1
+
+denote the normalized reference features. We use a radial basis function (RBF) kernel that measures pairwise similarity in the feature space [26], with bandwidth σ controlling sensitivity to local variations, 
+
+kσ (u, v ) = exp  −∥ u − v∥22/2σ2 , (4) and define the diversity reward as                  
+
+> Rcov =Eg∈ˆGy,r ∈ˆBy
+> h
+> kσ( ˆfg,ˆfr)
+> i
+> −αEg,g ′∈ˆGy
+> h
+> kσ( ˆfg,ˆfg′)
+> i
+> ,(5)
+
+where the coefficient α > 0 controls the trade-off between distributional alignment and redundancy suppression. The first term encourages distributional alignment between gen-erated and reference features, whereas the second term pe-nalizes redundancy among generated samples. This formu-lation promotes intra-class coverage while mitigating mode collapse, fostering a balanced trade-off between representa-tional alignment and diversity. 
+
+4.2.3. Expressive Diversity 
+
+While the previous part promotes intra-class coverage, it does not explicitly control the overall spread of the gen-erated feature distribution. To regulate the global disper-sion of generated features and prevent over-concentration or under-dispersion, we define a covariance expansion re-ward based on the trace of the feature covariance matrices, 
+
+Σg = 1
+
+B − 1
+
+> B
+
+X
+
+> j=1
+
+( ˆfg,j − ¯fg )( ˆfg,j − ¯fg )⊤, (6) 
+
+Σr = 1
+
+Ny − 1
+
+> Ny
+
+X
+
+> i=1
+
+( ˆfy,i − ¯fy )( ˆfy,i − ¯fy )⊤, (7) where ¯fg and ¯fy denote the corresponding feature means. We use their traces 
+
+Sg = tr(Σ g ), Sr = tr(Σ r ), (8) to characterize the overall feature variance. The target vari-ance is set as (1 + ε)Sr , and the covariance expansion re-ward is formulated as, 
+
+Rexp = − (Sg − (1 + ε)Sr /τ )2 , (9) which softly encourages the generated feature distribution to maintain a controlled level ε of expansion relative to the reference distribution. To ensure numerical stability and comparability across heterogeneous terms, each reward component is standard-ized by its batch-wise mean and standard deviation: 
+
+˜Ri = Ri − μi
+
+σi + ϵ , i ∈ { sem , cov , exp }. (10) The final normalized total reward is 
+
+Rnorm = tanh 
+
+
+
+λsem ˜Rsem + λcov ˜Rcov + λexp ˜Rexp 
+
+
+
+, (11) where λsem , λcov , λexp control the relative importance of each component. tanh( ·) activation bounds the overall re-ward to a stable numerical range for optimization. 
+
+4.3. Dynamic Sample Selection Strategy 
+
+After RL fine-tuning, distributional discrepancies between synthesized and real data may persist, resulting in uneven training utility across synthetic samples. To address this, we propose a lookahead-guided strategy that dynamically selects high-utility synthetic samples during training. At each iteration, a mixed batch containing both real and synthetic samples is constructed across multiple identities. A one-step virtual gradient update is simulated on this batch to approximate the current optimization direction. The util-ity of each candidate synthetic sample ˆx is then estimated as the change in identity-specific loss, 
+
+∆l = lid (w′, ˆx) − lid (w, ˆx), (12) where w and w′ denote the model parameters before and af-ter the virtual update, respectively, and lid (·) is the identity-consistency loss. A smaller ∆l indicates that the sample better aligns with the ongoing optimization trajectory. Synthetic samples with the smallest ∆l are selected to form a refined batch for model updates. This lookahead-guided mechanism ensures that gradient steps are influ-enced by synthetic samples most compatible with the cur-rent model state, leading to more stable training and im-proved generalization under distributional shifts. 
+
+## 5. Experiments 
+
+5.1. Experimental Setup 
+
+Datasets and Evaluation Protocols. Focusing on task do-mains where real data collection is inherently constrained by privacy restrictions, we evaluate our approach on two identity-related tasks: person re-identification and face recognition. To enable fair evaluation and comparison, we employ two small-scale person re-identification datasets, Market-1501 [60] and CUHK03-NP [25] datasets, along 
+
+Table 1. Comparisons with different synthesis-based SOTA meth-ods on Market-1501 and CUHK03-NP. The comparison results are reproduced in our implementation to ensure fair and consis-tent evaluation. mAP(%) and Rank-1 (%) accuracy are reported. Types Methods Market-1501 CUHK03 mAP rank-1 mAP rank-1 Base ResNet-50 [13] † 85 .4 85 .4 74 .1 76 .5
+
+Real Aug. R-Erasing [66] †AAAI’20 87 .6 94 .8 76 .7 78 .4
+
+CIDAM [15] ACMMM’22 87 .4 95 .1 - -CaAug [28] †ACMMM’24 86 .4 94 .4 57 .4 59 .4
+
+Simulated Aug. FineGPR [52] TOMM’23 82 .4 92 .6 36 .4 37 .9
+
+InfnitePerson [56] TCSVT’25 57 .3 79 .6 24 .7 24 .6
+
+VIPerson [58] ICCV’25 86 .9 95 .1 - -Synthetic Aug. DG-Net [63] CVPR’19 86 .0 94 .8 - -GIF-SD [59] †NeurIPS’23 74 .9 88 .9 71 .7 74 .6
+
+IDiff [3] †CVPR’23 85 .4 94 .4 73 .1 75 .4
+
+Ours 88.6 94.9 76 .6 79 .3
+
+with a subset of the CASIA dataset [53] for face recogni-tion. LFW [17], AgeDB [33], CFP-FP [42], CA-LFW [62], and CP-LFW [61] are used for downstream face verifica-tion, RFW [49] is used for demographic bias assessment. 
+
+Implementing Details. All the experiments are imple-mented with NVIDIA H200 GPUs using pytorch. Cold-start. We adopt DiT-XL/2 [36] pretrained on ImageNet [6] as the base backbone, and set learning rate as 1e − 5, the person image size at 256 × 256 , and the face image size at 128 × 128 . We reset the weights of the class embed-ding layer to zero before training. The embedding was then learned from scratch using the target dataset labels to ensure compatibility with the new label space. Reward Optimization. DPOK algorithm [10] guides policy gradi-ent optimization learning rate of 1e − 5. λsem , λcov , and 
+
+λexp are at 1.0, 0.75 , and 0.25 . Downstreaming Task. For re-identification training, we use ResNet-50 [13] and ViT-16 [7] as the backbone with Adam optimizer [23], setting the weight decay to 5e − 4. The input images are resized to 
+
+256 × 128 for training. The initial mini-batch size is set to 64, containing P = 16 persons with N = 4 images each. The loss function is a combination of ID classification loss (cross-entropy) and metric learning loss (triplet loss with hard mining [41]). For face recognition training, we use ResNet-50 [13] with CosFace [47]. We set the mini-batch size to 128 and train with SGD optimizer [37], setting the momentum to 0.9 and the weight decay to 5e − 4.
+
+5.2. Quantitative Results. 
+
+Person Re-identification Evaluation We categorize main-stream methods into three groups: real-image augmenta-tion [15, 28, 66], simulation-based expansion [52, 56, 58], and synthetic enhancement. For the baseline, we apply Table 2. Comparison of on the proposed method with SOTA trained on small-scale CASIA-WebFace [54] subset. The highest and second-highest verification accuracies (%) are highlighted in red and blue, respectively. 
+
+Data Generation Methods LFW AgeDB CFP-FP CA-LFW CP-LWF Avg. 
+
+Authentic CASIA-Webface [54] subset 91 .58% 74 .72% 76 .00% 78 .78% 71 .15% 78 .47% 
+
+GAN SFace [2] IJCB’22 85 .40% 66 .82% 69 .14% 71 .50% 67 .35% 72 .04% 
+
+IDnet [24] CVPR’23 85 .53% 68 .73% 69 .91% 72 .67% 68 .12% 73 .00% 
+
+SFace2 [4] T-BIOM’24 85 .58% 68 .12% 69 .26% 72 .35% 66 .83% 72 .43% 
+
+DCFace [22] CVPR’23 87 .97% 69 .75% 66 .33% 76 .53% 64 .05% 72 .96% 
+
+DM IDiff-Face [3] CVPR’23 90 .65% 66 .60% 75 .64% 75 .42% 68 .70% 75.40% 
+
+NegFaceDiff [5] CVPR’25 91 .70% 74 .68% 75 .06% 78 .67% 70 .53% 78 .13% 
+
+Ours 93 .60% 76 .80% 73 .26% 81 .68% 70 .02% 79 .07% (a) Ref image of real set  (b) Finetuned DiT Model 
+
+No More Images 
+
+(b) Base DiT Model 
+
+Figure 2. Comparisons with the baseline on Market-1501 generation. Real reference images are randomly selected from training set, where certain identity classes have only a few samples. While the baseline DiT benefits from external ImageNet pretraining to introduce moderate diversity, our RL-based fine-tuning further enhances intra-class variability, generating more diverse yet identity-consistent images. Table 3. Demographic bias assessment of face recognition models trained with our method and SOTA approaches. The ethnicity-specific results report verification accuracies (%) on each subset of RFW [49]. 
+
+Methods Caucasian Indian Asian African Avg. 
+
+Authentic [54] 72 .85 70 .10 65 .45 60 .28 67 .17 
+
+SFace [2] 67 .17 66 .07 62 .92 56 .17 63 .08 
+
+IDnet [24] 69 .27 66 .83 64 .77 57 .85 64 .68 
+
+DCFace [22] 69 .80 65 .82 69 .80 57 .97 65 .85 
+
+SFace2 [4] 67 .78 66 .28 63 .68 58 .22 63 .99 
+
+IDiff-Face [3] 70 .78 67 .10 66 .18 58 .65 65 .68 
+
+NegFaceDiff [5] 72 .15 69 .78 67 .07 60 .13 67 .28 
+
+Ours 75 .87 71 .85 68 .72 62 .67 69 .78 
+
+standard data augmentation techniques, including horizon-tal flipping and padding. Table 1 compares three categories of approaches on Market-1501 and CUHK03-NP. Over-all, real-image augmentation methods provide stable but limited improvements over the ResNet-50 baseline, yield-ing about a 2% mAP gain on Market-1501. Such pixel-level perturbations slightly increase appearance variation but fail to introduce new identity structures. Simulation-based methods perform worse due to the large domain gap between virtual and real imagery. Without costly environ-ment calibration or domain alignment, their mAP stays low, far behind real-data augmentations. Among generation-based approaches, performance varies significantly. GIF-SD [59], which generates images for general classifica-tion via text-guided synthesis, performs poorly in iden-tity recognition since highly similar identity appearances limit the effectiveness of textual guidance. Consequently, its generated samples deviate from real distributions and even degrade training (mAP ↓ 10 .5% vs. baseline). In contrast, our reinforcement-guided method adapts general-domain priors to the target domain through a task-specific reward, achieving 88 .6% mAP ( 3.2% gain) on Market-1501 and 76 .6% (2.5% gain) on CUHK03. This demon-strates that reward-driven synthesis generates high-fidelity, diverse, and identity-preserving samples that consistently improve downstream recognition. 
+
+Face Recognition Evaluation. Table 2 reports verifica-tion results on the small-scale CASIA-WebFace [54] sub-#ID 0000099  
+
+> Original Images
+> Synthesized Images by Our Method Figure 3. Samples generated by our method. Real images are randomly selected from the training set of CASIA-WebFace, where certain identity classes have only a few available samples. While the baseline DiT benefits from external ImageNet pretraining to introduce moderate diversity, our RL-based fine-tuning generates more diverse images while largely preserving identity characteristics.
+
+set. GAN-based methods show limited improvement, with average accuracies remaining around 72 ∼ 73% , indi-cating that their generated samples provide weak iden-tity supervision under scarce data. Diffusion-based mod-els (DM) achieve higher fidelity, yet previous approaches such as IDiff-Face [3] and NegFaceDiff [5] still fall short in maintaining consistent identity cues. In contrast, our reinforcement-guided model achieves the best overall per-formance with an average accuracy of 79 .07% , surpassing NegFaceDiff [5] by 0.94% and the real-data baseline by 
+
+0.60% . These results confirm that our reward-driven adap-tation enhances both generation fidelity and task utility, es-pecially in data-limited face recognition scenarios. 
+
+Racial Bias Assessment. Table 3 evaluates model bias across ethnic subsets of RFW. Our method achieves the highest average accuracy of 69 .78% , surpassing all com-peting approaches. Compared with IDiff-Face [3] and Neg-FaceDiff [5], our model shows more balanced performance across groups, especially improving on the Indian ( 1.0% )and Asian ( 0.9% ) subsets. These results demonstrate that the proposed reinforcement-guided synthesis not only en-hances overall accuracy but also mitigates cross-ethnicity bias in face recognition. 
+
+5.2.1. Qualitative Results 
+
+As illustrated in Figure 2, our reinforcement-guided fine-tuning substantially improves both the quality and diversity of generated pedestrian images on the Market-1501 dataset. The Base DiT model, although benefiting from external Im-ageNet pretraining, produces limited intra-class variation and often replicates similar appearances, especially when the original identity class contains only a few real samples. In contrast, the finetuned DiT model guided by our rein-forcement strategy generates richer pose, viewpoint, and il-lumination variations while maintaining consistent identity cues. Even under data-scarce conditions, our method can Real Images  Real & R -Erased Images  Real & Our Syn. Images    
+
+> Figure 4. Feature distributions of real and synthesized samples across different methods. Image embeddings are extracted us-ing a pretrained ResNet-50 and projected into a shared space via DOSNES [29]. Circles, squares, and triangles denote real sam-ples, Random-Erasing synthesized samples, and synthesized sam-ples generated by our method, respectively. Each color represents an identity class, with ten randomly selected classes visualized.
+
+synthesize high-quality and diverse samples, demonstrating its strong potential for applications in privacy-sensitive or limited-data scenarios. As shown in Figure 3, our method generates a wide range of face images that retain the subject’s overall iden-tity while presenting clear variations in expression, pose, hairstyle, and illumination. Compared with the limited orig-inal samples in CASIA-WebFace, the synthesized results exhibit richer intra-class diversity and higher visual realism, effectively compensating for the scarcity of real data. These results demonstrate that the proposed reinforcement-guided synthesis can extend the visual representation of each iden-tity, providing a more comprehensive and diverse dataset foundation for recognition tasks. In Figure 4, the feature visualization reveals that our synthesized samples occupy a broader and more continu-ous region in the embedding space compared with base-line augmentations. In the DOSNES [29] projection, real samples form compact clusters, while those generated by Random-Erasing remain close to the original data and show 90.62             
+
+> 92.95 93.13 93.43 93.6
+> 90
+> 91
+> 92
+> 93
+> 94
+> 95
+> Base add
+> DSS
+> add
+> SC
+> add
+> DC
+> add
+> ED
+> LFW
+> 69.18
+> 75.28 75.57 76.28 76.8
+> 69
+> 71
+> 73
+> 75
+> 77
+> 79
+> Base add
+> DSS
+> add
+> SC
+> add
+> DC
+> add
+> ED
+> AgeDB
+> 74.24
+> 72.57 71.61
+> 73.2 73.26
+> 68
+> 70
+> 72
+> 74
+> 76
+> 78
+> Base add
+> DSS
+> add
+> SC
+> add
+> DC
+> add
+> ED
+> CFP -FP
+> 75.83
+> 80.8 80.68 81.5 81.68
+> 75
+> 77
+> 79
+> 81
+> 83
+> 85
+> Base add
+> DSS
+> add
+> SC
+> add
+> DC
+> add
+> ED
+> CA -LFW
+> 68.37 67.62
+> 69.9
+> 68.82
+> 70.02
+> 65
+> 67
+> 69
+> 71
+> 73
+> 75
+> Base add
+> DSS
+> add
+> SC
+> add
+> DC
+> add
+> ED
+> CP -LWF
+> 75.65
+> 77.84 78.18 78.65 79.07
+> 75
+> 76
+> 77
+> 78
+> 79
+> 80
+> Base add
+> DSS
+> add
+> SC
+> add
+> DC
+> add
+> ED
+> Avg.
+
+Figure 5. Ablation studies of our proposed method. Adding com-ponents consistently improve the face vertification accuracies (%). 
+
+limited variation. By contrast, the features of our synthe-sized images expand the local neighborhood of each iden-tity cluster, enriching intra-class structures without drifting away from the original centers. This demonstrates that our reinforcement-guided generation introduces meaningful di-versity while preserving identity consistency, resulting in a more complete and balanced representation manifold. 
+
+5.3. Ablation Studies 
+
+Components Effectiveness. As shown in Figure 5, each proposed component consistently improves the baseline performance. Starting from Base-DiT ( 75 .65% ), introduc-ing Dynamic Sample Selection (DSS) yields a clear gain of 2.2% , demonstrating that adaptively emphasizing task-relevant samples enhances data utility. Further integra-tion of semantic reward (SC) improves average accuracy to 78 .18% , indicating that enforcing semantic consistency helps preserve identity-related information. The coverage reward (DC) brings another improvement to 78 .65% by pro-moting feature coverage and intra-class diversity. Finally, adding the expression reward (ED) achieves the best over-all result of 79 .07% , confirming that encouraging expres-sion richness strengthens model robustness under appear-ance variations. Overall, the progressive gains validate the complementary effects of the designed rewards and the ef-fectiveness of the reinforcement-guided synthesis method. 
+
+Downstream Backbone Effectiveness. As depicted in Figure 6, our method improves discriminative cues across backbones with minimal tuning. On CNN, it delivers bal-anced gains, exceeding Base by 0.6 Rank-1 and 3.9 mAP on the two datasets. On ViT, it yields clear Rank-1 boosts while keeping mAP comparable to R-Erasing, indicating ro-bust compatibility with attention-based backbones. 
+
+Discussion and Limitation While our proposed framework effectively enhances sample diversity and task relevance 85.4       
+
+> 94.3
+> 87.6
+> 94.8
+> 88.6
+> 94.9
+> 82
+> 86
+> 90
+> 94
+> 98
+> mAP Rank-1
+> base
+> R-Erasing
+> Ours
+> 74.1
+> 76.5 76.7
+> 78.4
+> 76.6
+> 79.3
+> 72
+> 75
+> 78
+> 81
+> 84
+> mAP Rank-1
+> base
+> R-Erasing
+> Ours
+> 82.8
+> 92.1
+> 86
+> 92.6
+> 86.7
+> 93.6
+> 82
+> 86
+> 90
+> 94
+> 98
+> mAP Rank-1
+> base
+> R-Erasing
+> Ours
+> 73.5
+> 75.4
+> 79.5
+> 81.3
+> 78.9
+> 81.8
+> 72
+> 75
+> 78
+> 81
+> 84
+> mAP Rank-1
+> base R-Erasing Ours
+> Market -1501
+> CUHK03 -NP
+> CNN -based
+> CNN -based
+> ViT -based
+> ViT -based
+
+Figure 6. Comparison of baseline models with and without our method across person ReID datasets. 
+
+under limited data conditions, several limitations remain. The method still relies on the representational quality of the pretrained backbone, which may restrict performance in domains with poor prior alignment. In addition, the re-ward function requires task-specific tuning to balance util-ity and diversity. Our current study focuses on image-based privacy-sensitive tasks; extending to other modalities such as video or event data is left for future work. Despite these limitations, we believe the proposed approach offers a promising step toward data-efficient, privacy-aware genera-tion guided by general-domain priors. 
+
+## 6. Conclusion 
+
+In this work, we present a reinforcement-guided frame-work for synthetic data generation tailored to privacy-sensitive identity recognition tasks. By leveraging general-domain priors and casting synthesis as a reinforcement learning problem, the method enables task-oriented gen-eration under limited data. A multi-objective reward bal-ancing semantic consistency, diversity, and expression rich-ness guides the generator to produce visually realistic and utility-effective samples for downstream recognition. In addition, a dynamic sample selection strategy further im-proves generalization by emphasizing task-relevant samples during training. Experiments on face recognition and per-son re-identification benchmarks show that the proposed approach effectively alleviates data scarcity, achieving su-perior performance and robustness compared with existing distribution-matching methods. We believe that this study provides a promising step toward privacy-aware and utility-driven data synthesis, paving the way for broader applica-tions of generative models in identity-sensitive domains. Acknowledgements. 
+
+This work was supported by the National Natural Science Foundation of China (62571379) and the National Research Foundation, Singapore and Infocomm Media Development Authority under its Trust Tech Funding Initiative. Any opinions, findings and conclusions or recommendations expressed in this material are those of the author(s) and do not reflect the views of the National Research Foundation, Singapore and Infocomm Media Development Authority. 
+
+## References 
+
+[1] Saleema Amershi, Maya Cakmak, William Bradley Knox, and Todd Kulesza. Power to the people: The role of humans in interactive machine learning. AI magazine , 35(4):105– 120, 2014. 1 [2] Fadi Boutros, Marco Huber, Patrick Siebke, Tim Rieber, and Naser Damer. Sface: Privacy-friendly and accurate face recognition using synthetic data. In 2022 IEEE International Joint Conference on Biometrics (IJCB) , pages 1–11. IEEE, 2022. 6 [3] Fadi Boutros, Jonas Henry Grebe, Arjan Kuijper, and Naser Damer. Idiff-face: Synthetic-based face recognition through fizzy identity-conditioned diffusion model. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion , pages 19650–19661, 2023. 5, 6, 7 [4] Fadi Boutros, Marco Huber, Anh Thi Luu, Patrick Siebke, and Naser Damer. Sface2: Synthetic-based face recognition with w-space identity-driven sampling. IEEE Transactions on Biometrics, Behavior, and Identity Science , 6(3):290–303, 2024. 6 [5] Eduarda Caldeira, Naser Damer, and Fadi Boutros. Neg-facediff: The power of negative context in identity-conditioned diffusion for synthetic face generation. arXiv preprint arXiv:2508.09661 , 2025. 6, 7 [6] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical im-age database. In Computer Vision and Pattern Recognition ,pages 248–255, 2009. 3, 5 [7] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representa-tions , 2021. 5 [8] Jiawei Du, Yidi Jiang, Vincent YF Tan, Joey Tianyi Zhou, and Haizhou Li. Minimizing the accumulated trajectory error to improve dataset distillation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 3749–3758, 2023. 1 [9] Jiawei Du, Xin Zhang, Juncheng Hu, Wenxing Huang, and Joey T Zhou. Diversity-driven synthesis: Enhancing dataset distillation through directed weight adjustment. Advances in neural information processing systems , 37:119443–119465, 2024. 2 [10] Ying Fan, Olivia Watkins, Yuqing Du, Hao Liu, Moonkyung Ryu, Craig Boutilier, Pieter Abbeel, Moham-mad Ghavamzadeh, Kangwook Lee, and Kimin Lee. Dpok: Reinforcement learning for fine-tuning text-to-image diffu-sion models. Advances in Neural Information Processing Systems , 36:79858–79885, 2023. 3, 5 [11] Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron C. Courville, and Yoshua Bengio. Generative adversarial nets. In Ad-vances in Neural Information Processing Systems , pages 2672–2680, 2014. 1, 2 [12] Woojung Han, Chanyoung Kim, Dayun Ju, Yumin Shim, and Seong Jae Hwang. Advancing text-driven chest x-ray generation with policy-based reinforcement learning. In International Conference on Medical Image Computing and Computer-Assisted Intervention , pages 56–66. Springer, 2024. 3 [13] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In IEEE Con-ference on Computer Vision and Pattern Recognition , pages 770–778, 2016. 5 [14] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising dif-fusion probabilistic models. In Advances in Neural Informa-tion Processing Systems , 2020. 1, 2 [15] Pingting Hong, Dayan Wu, Bo Li, and Weipinng Wang. Camera-specific informative data augmentation module for unbalanced person re-identification. In Proceedings of the 30th ACM International Conference on Multimedia , pages 501–510, 2022. 5 [16] Zechao Hu, Zhengwei Yang, Hao Li, and Zheng Wang. Contrastive-generative-contrastive: Neutralize subjectivity in sketch re-identification. IEEE Transactions on Informa-tion Forensics and Security , 2025. 2 [17] Gary B Huang, Marwan Mattar, Tamara Berg, and Eric Learned-Miller. Labeled faces in the wild: A database forstudying face recognition in unconstrained environments. In Workshop on faces in’Real-Life’Images: detection, align-ment, and recognition , 2008. 5 [18] Xuemei Jia, Xian Zhong, Mang Ye, Wenxuan Liu, and Wenxin Huang. Complementary data augmentation for cloth-changing person re-identification. IEEE Trans. Image Process. , 31:4227–4239, 2022. 2 [19] Xuemei Jia, Jiawei Du, Hui Wei, Ruinian Xue, Zheng Wang, Hongyuan Zhu, and Jun Chen. Balancing privacy and perfor-mance: A many-in-one approach for image anonymization. In Proceedings of the AAAI Conference on Artificial Intelli-gence , pages 17608–17616, 2025. 2 [20] Kajal Kansal, Yongkang Wong, and Mohan S. Kankanhalli. Privacy-enhancing person re-identification framework - A dual-stage approach. In IEEE/CVF Winter Conference on Applications of Computer Vision , pages 8528–8537, 2024. 2 [21] Tero Karras, Miika Aittala, Janne Hellsten, Samuli Laine, Jaakko Lehtinen, and Timo Aila. Training generative adver-sarial networks with limited data. Advances in neural infor-mation processing systems , 33:12104–12114, 2020. 1, 2 [22] Minchul Kim, Feng Liu, Anil Jain, and Xiaoming Liu. Dc-face: Synthetic face generation with dual condition diffusion model. In Proceedings of the ieee/cvf conference on com-puter vision and pattern recognition , pages 12715–12725, 2023. 6 [23] Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In International Conference on Learning Representations , 2015. 5 [24] Jan Niklas Kolf, Tim Rieber, Jurek Elliesen, Fadi Boutros, Arjan Kuijper, and Naser Damer. Identity-driven three-player generative adversarial network for synthetic-based face recognition. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , pages 806–816, 2023. 2, 6 [25] Wei Li, Rui Zhao, Tong Xiao, and Xiaogang Wang. Deep-reid: Deep filter pairing neural network for person re-identification. In Conference on Computer Vision and Pat-tern Recognition , pages 152–159, 2014. 5 [26] Yujia Li, Kevin Swersky, and Rich Zemel. Generative mo-ment matching networks. In International conference on ma-chine learning , pages 1718–1727. PMLR, 2015. 4 [27] Yutian Lin, Xiaoyang Guo, Zheng Wang, and Bo Du. Privacy-protected person re-identification via virtual sam-ples. IEEE Transactions on Information Forensics and Se-curity , 18:5495–5505, 2023. 2 [28] Fangyi Liu, Mang Ye, and Bo Du. Cloth-aware augmen-tation for cloth-generalized person re-identification. In Pro-ceedings of the 32nd ACM International Conference on Mul-timedia , pages 4053–4062, 2024. 5 [29] Yao Lu, Jukka Corander, and Zhirong Yang. Doubly stochastic neighbor embedding on spheres. arXiv preprint arXiv:1609.01977 , 2016. 7 [30] Hao Luo, Wei Jiang, Youzhi Gu, Fuxu Liu, Xingyu Liao, Shenqi Lai, and Jianyang Gu. A strong baseline and batch normalization neck for deep person re-identification. IEEE Trans. Multim. , 22(10):2597–2609, 2020. 2 [31] Zichen Miao, Jiang Wang, Ze Wang, Zhengyuan Yang, Li-juan Wang, Qiang Qiu, and Zicheng Liu. Training diffusion models towards diverse image generation with reinforcement learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10844– 10853, 2024. 2, 3 [32] Mehdi Mirza and Simon Osindero. Conditional generative adversarial nets. arXiv preprint arXiv:1411.1784 , 2014. 2 [33] Stylianos Moschoglou, Athanasios Papaioannou, Chris-tos Sagonas, Jiankang Deng, Irene Kotsia, and Stefanos Zafeiriou. Agedb: The first manually collected, in-the-wild age database. In IEEE Conference on Computer Vision and Pattern Recognition Workshops , pages 1997–2005, 2017. 5 [34] Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models. In International Conference on Machine Learning , pages 8162–8171, 2021. 2[35] Ke Niu, Haiyang Yu, Xuelin Qian, Teng Fu, Bin Li, and Xiangyang Xue. Synthesizing efficient data with diffusion models for person re-identification pre-training, 2024. 2 [36] William Peebles and Saining Xie. Scalable diffusion models with transformers. In International Conference on Computer Vision , pages 4172–4182, 2023. 3, 5 [37] Herbert Robbins and Sutton Monro. A stochastic approxi-mation method. The annals of mathematical statistics , pages 400–407, 1951. 5 [38] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨ orn Ommer. High-resolution image syn-thesis with latent diffusion models. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10674– 10685, 2022. 1, 2 [39] Chitwan Saharia, William Chan, Saurabh Saxena, Lala Li, Jay Whang, Emily L. Denton, Seyed Kamyar Seyed Ghasemipour, Raphael Gontijo Lopes, Burcu Karagol Ayan, Tim Salimans, Jonathan Ho, David J. Fleet, and Mohammad Norouzi. Photorealistic text-to-image diffusion models with deep language understanding. In Advances in Neural Infor-mation Processing Systems , 2022. 2 [40] Parham Saremi, Amar Kumar, Mohamed Mohamed, Zahra TehraniNasab, and Tal Arbel. Rl4med-ddpo: reinforcement learning for controlled guidance towards diverse medical im-age generation using vision-language foundation models. In 
+
+International Conference on Medical Image Computing and Computer-Assisted Intervention , pages 478–488. Springer, 2025. 3 [41] Florian Schroff, Dmitry Kalenichenko, and James Philbin. Facenet: A unified embedding for face recognition and clus-tering. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 815–823, 2015. 5 [42] Soumyadip Sengupta, Jun-Cheng Chen, Carlos Domingo Castillo, Vishal M. Patel, Rama Chellappa, and David W. Jacobs. Frontal to profile face verification in the wild. In 
+
+IEEE Winter Conference on Applications of Computer Vi-sion , pages 1–9, 2016. 5 [43] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. arXiv preprint arXiv:2010.02502 , 2020. 2 [44] Xiaoxiao Sun and Liang Zheng. Dissecting person re-identification from the viewpoint of viewpoint. In IEEE Con-ference on Computer Vision and Pattern Recognition , pages 608–617, 2019. 1, 2 [45] Paul Voigt and Axel Von dem Bussche. The eu general data protection regulation (gdpr). A practical guide, 1st ed., Cham: Springer International Publishing , 10(3152676):10– 5555, 2017. 1 [46] Bram Wallace, Meihua Dang, Rafael Rafailov, Linqi Zhou, Aaron Lou, Senthil Purushwalkam, Stefano Ermon, Caiming Xiong, Shafiq Joty, and Nikhil Naik. Diffusion model align-ment using direct preference optimization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 8228–8238, 2024. 3 [47] Hao Wang, Yitong Wang, Zheng Zhou, Xing Ji, Dihong Gong, Jingchao Zhou, Zhifeng Li, and Wei Liu. Cosface: Large margin cosine loss for deep face recognition. In Pro-ceedings of the IEEE conference on computer vision and pat-tern recognition , pages 5265–5274, 2018. 5 [48] Likai Wang, Xiangqun Zhang, Ruize Han, Jialin Yang, Xi-aoyu Li, Wei Feng, and Song Wang. A benchmark of video-based clothes-changing person re-identification, 2022. 2 [49] Mei Wang, Weihong Deng, Jiani Hu, Xunqiang Tao, and Yaohai Huang. Racial faces in the wild: Reducing racial bias by information maximization adaptation network. In 
+
+Proceedings of the ieee/cvf international conference on com-puter vision , pages 692–702, 2019. 5, 6 [50] Yuran Wang, Bohan Zeng, Chengzhuo Tong, Wenxuan Liu, Yang Shi, Xiaochen Ma, Hao Liang, Yuanxing Zhang, and Wentao Zhang. Scone: Bridging composition and distinction in subject-driven image generation via uni-fied understanding-generation modeling. arXiv preprint arXiv:2512.12675 , 2025. 1 [51] Qiucheng Wu, Yujian Liu, Handong Zhao, Ajinkya Kale, Trung Bui, Tong Yu, Zhe Lin, Yang Zhang, and Shiyu Chang. Uncovering the disentanglement capability in text-to-image diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 1900–1910, 2023. 2 [52] Suncheng Xiang, Dahong Qian, Mengyuan Guan, Binjie Yan, Ting Liu, Yuzhuo Fu, and Guanjie You. Less is more: Learning from synthetic data with fine-grained attributes for person re-identification. ACM Transactions on Multime-dia Computing, Communications and Applications , 19(5s): 1–20, 2023. 5 [53] Dong Yi, Zhen Lei, Shengcai Liao, and Stan Z. Li. Learning face representation from scratch, 2014. 5 [54] Dong Yi, Zhen Lei, Shengcai Liao, and Stan Z Li. Learn-ing face representation from scratch. arXiv preprint arXiv:1411.7923 , 2014. 6 [55] Guoqing Zhang, Jin Li, Yuhui Zheng, and Ruili Wang. In-finiteperson: Innovating synthetic data creation for general-ization person re-identification. IEEE Transactions on Cir-cuits and Systems for Video Technology , pages 1–1, 2024. 1, 2[56] Guoqing Zhang, Jin Li, Yuhui Zheng, and Ruili Wang. In-finiteperson: Innovating synthetic data creation for general-ization person re-identification. IEEE Transactions on Cir-cuits and Systems for Video Technology , 2024. 5 [57] Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image diffusion models. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , pages 3836–3847, 2023. 2 [58] Xiao-Wen Zhang, Delong Zhang, Yi-Xing Peng, Zhi Ouyang, Jingke Meng, and Wei-Shi Zheng. Viperson: Flexi-bly generating virtual identity for person re-identification. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 23374–23384, 2025. 5 [59] Yifan Zhang, Daquan Zhou, Bryan Hooi, Kai Wang, and Ji-ashi Feng. Expanding small-scale datasets with guided imag-ination. Advances in neural information processing systems ,36:76558–76618, 2023. 5, 6 [60] Liang Zheng, Liyue Shen, Lu Tian, Shengjin Wang, Jing-dong Wang, and Qi Tian. Scalable person re-identification: A benchmark. In IEEE International Conference on Com-puter Vision , pages 1116–1124, 2015. 5 [61] Tianyue Zheng and Weihong Deng. Cross-pose lfw: Adatabase for studying cross-pose face recognition in un-constrained environments. Beijing University of Posts and Telecommunications, Tech. Rep , 5(7):5, 2018. 5 [62] Tianyue Zheng, Weihong Deng, and Jiani Hu. Cross-age lfw: A database for studying cross-age face recognition in un-constrained environments. arXiv preprint arXiv:1708.08197 ,2017. 5 [63] Zhedong Zheng, Xiaodong Yang, Zhiding Yu, Liang Zheng, Yi Yang, and Jan Kautz. Joint discriminative and generative learning for person re-identification. In IEEE Conference on Computer Vision and Pattern Recognition , pages 2138– 2147, 2019. 5 [64] Zhedong Zheng, Xiaodong Yang, Zhiding Yu, Liang Zheng, Yi Yang, and Jan Kautz. Joint discriminative and genera-tive learning for person re-identification. In proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 2138–2147, 2019. 2 [65] Xian Zhong, Zipeng Li, Shuqin Chen, Kui Jiang, Chen Chen, and Mang Ye. Refined semantic enhancement towards fre-quency diffusion for video captioning. In Proceedings of the AAAI conference on artificial intelligence , pages 3724–3732, 2023. 2 [66] Zhun Zhong, Liang Zheng, Guoliang Kang, Shaozi Li, and Yi Yang. Random erasing data augmentation. In AAAI Con-ference on Artificial Intelligence , pages 13001–13008, 2020. 1, 2, 5

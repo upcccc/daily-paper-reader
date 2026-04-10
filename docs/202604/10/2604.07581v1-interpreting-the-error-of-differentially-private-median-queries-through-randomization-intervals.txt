@@ -1,0 +1,391 @@
+Title: Interpreting the Error of Differentially Private Median Queries through Randomization Intervals
+
+URL Source: https://arxiv.org/pdf/2604.07581v1
+
+Published Time: Fri, 10 Apr 2026 00:17:47 GMT
+
+Number of Pages: 7
+
+Markdown Content:
+# Interpreting the Error of Differentially Private Median Queries through Randomization Intervals 
+
+Thomas Humphries 1, Tim Li 1, Shufan Zhang 1, Karl Knopf 1, Xi He 1,2 1University of Waterloo, 2Vector Institute 
+
+{thomas.humphries, tlli, shufan.zhang, karl.knopf, xi.he} @uwaterloo.ca 
+
+## Abstract 
+
+It can be difficult for practitioners to interpret the quality of differentially private (DP) statistics due to the added noise. One method to help analysts understand the amount of error introduced by DP is to return a Randomization Interval (RI), along with the statistic. A RI is a type of confidence interval that bounds the error introduced by DP. For queries where the noise distribution depends on the input, such as the median, prior work degrades the quality of the median itself to obtain a high-quality RI. In this work, we propose PostRI , a solution to compute a RI after the median has been estimated. 
+
+PostRI enables a median estimation with 14%-850% higher utility than related work, while maintaining a narrow RI. 
+
+## 1 Introduction 
+
+A core functionality of database management software is allowing analysts to query the database to learn aggregate statistics. Naively allowing analysts to obtain unperturbed statistics can open up a lucrative attack surface over sensitive data [ 4]. A popular defence to such attacks is Differential Privacy (DP) [ 7 ]. By adding a calibrated noise to each query result, the data owner enjoys a formal guarantee of privacy over the result of the queries. A challenge with DP is that it requires a certain level of expertise to apply correctly, as well as to interpret the results of a DP query. In this work, we focus on the problem of interpreting the level of error introduced by DP to satisfy privacy. One method to help analysts understand this error is to return a confidence interval alongside the noisy result. Specifically, an upper and lower bound on the noisy statistic such that the true answer is contained in the interval with high confidence (e.g., 95% ). To avoid confusion with confidence intervals from statistics that bound sampling error, we introduce the term 
+
+randomization intervals (RI) for a confidence interval that bound only the randomness of the DP mechanism itself. These randomization intervals allow the analyst to reason about the error of the query without understanding the DP mechanism. For example, if the interval is small, the analyst can be confident that the result is accurate. Conversely, con-sider an analyst conducting a count query to determine the number of people in the dataset with a specific attribute. If the RI for this query contains zero, the user may not trust that there are any people in the dataset with this attribute. For queries such as sums and counts, where the random-ness is independent of the input, one can use a tail bound to compute the RI at no additional privacy cost. However, this method does not extend to more general queries, such as the median, that require a data-dependent DP noise distri-bution (e.g. the exponential mechanism) for good utility. Sun et al. were the first to study the problem of randomization intervals for the median (and other queries) [ 19 ]. Instead of returning a high utility estimation for the median along with an estimated RI, Sun et al. focus on estimating the RI first, and then post-process the median as the average of the RI bounds. The challenge with this approach is that the utility of the median becomes significantly degraded as estimating an RI has an inherently larger error factor to ensure high confidence. Furthermore, the private data is not guaranteed to be evenly distributed within the RI, making the center of the RI a poor estimation of the median. We introduce PostRI , a new approach to computing the RI alongside the median, while maintaining the high utility of the classic DP median computation. PostRI first computes the DP median using an unmodified exponential mechanism approach. Then, using our single-shot, low-sensitivity util-ity function, we estimate the RI using a tunable amount of privacy budget left over from the median. PostRI outputs an RI of similar width to Sun et al. [ 19 ], while significantly improving the error of the median query itself. We prove the privacy and correctness of PostRI and derive optimal values for hyperparameters such as the ratio of privacy bud-get between the median and RI. We evaluate PostRI over real-world datasets and find a 14%-850% improvement in the average median error over Sun et al . [19] , while maintain-ing approximately the same or a slightly larger RI width, depending on the dataset. 
+
+## 2 Background 
+
+Differential privacy (DP) [ 7 ] guarantees that an algorithm’s output is approximately the same, regardless of the partici-pation of any single user. More formally, differential privacy can be defined as follows. 
+
+Definition 1 (Differential Privacy (DP)) . A randomized al-gorithm 𝑀 : D → O is 𝜖 -DP if for any pair of neighboring databases 𝐷, 𝐷 ′ ∈ D , and all 𝑂 ⊆ O we have Pr [𝑀 (𝐷 ) ∈ 
+
+𝑂 ] ≤ 𝑒 𝜖 Pr [𝑀 (𝐷 ′) ∈ 𝑂 ].
+
+> arXiv:2604.07581v1 [cs.CR] 8 Apr 2026
+
+We use the bounded neighbouring definition where datasets are neighbours if they differ in the replacement of a single record, |𝐷 ∩ 𝐷 ′ | = 𝑛 − 1. Note that if we apply a DP mecha-nism(s) sequentially, the privacy parameters are composed through summation or more advanced methods [9]. The exponential mechanism, introduced by McSherry and Talwar, is a general-purpose DP mechanism that maximizes a given utility function privately [16]. 
+
+Definition 2 (Exponential Mechanism [ 16 ]) . Given privacy budget 𝜖 and utility function 𝑢 : D × Y → R with sensitivity 
+
+Δ𝑢 := max 𝐷,𝐷 ′ ∈ D ,𝑦 ∈ Y |𝑢 (𝐷, 𝑦 ) − 𝑢 (𝐷 ′, 𝑦 )| , the exponential mechanism 𝐸𝑥𝑝 𝑢 (𝐷, 𝜖 ) outputs a sample 𝑦 ∈ Y , with the fol-lowing probability 𝑃𝑟 [𝑦 ] = exp 
+
+ 𝜖𝑢 (𝐷,𝑦 )
+
+> 2Δ𝑢
+
+
+
+/ Í 
+
+> 𝑖 ∈ Y
+
+exp 
+
+ 𝜖𝑢 (𝐷,𝑖 )
+
+> 2Δ𝑢
+
+
+
+.
+
+The exponential mechanism, as defined above, guarantees 
+
+𝜖 -differential privacy [16, Theorem 6]. 
+
+## 2.1 Problem Setup 
+
+Definition 3 (Randomization Interval) . Given a dataset 𝐷 of size 𝑛 , privacy budget 𝜖 , and a failure probability 𝛽 , we wish to output a triple (𝑙, 𝑜, 𝑢 ) called a Randomization Interval (RI) 
+
+such that: 
+
+• outputting (𝑙, 𝑜, 𝑢 ) satisfies 𝜖 -DP. 
+
+• 𝑜 is a DP estimate of the true median 𝑚 of dataset 𝐷 .
+
+• With probability 1 − 𝛽 , 𝑚 ∈ [ 𝑙, 𝑢 ].
+
+Intuitively, we wish to give a lower and upper bound on the noisy median estimate to make the error of the noisy median more interpretable. Another way to state this goal is that we are computing a confidence interval with respect to the error introduced by differential privacy (we clarify the relation to related work on DP confidence intervals in Appendix C). We consider computing the true median to be deterministic in this work. For simplicity, we assume Y is an integer domain of size 𝑁 ,denoted Y = [𝑁 ] = {0, 1, . . . , 𝑁 }. We also assume the utility function 𝑢 is 1-Lipshitz, that is, |𝑢 (𝐷, 𝑦 ) − 𝑢 (𝐷, 𝑦 +1)| ≤ ℓ = 1
+
+for any 𝐷 ∈ Y 𝑛 , 𝑦 ∈ Y . In the case of the median, this implies that the dataset 𝐷 contains no repeated elements. For datasets that do not satisfy this assumption, we follow Sun et al. [ 19 ] and remap the data to an expanded domain of size 𝑁 · 𝑛 . The de-duplicated domain can be found by mapping 𝐷 ∈ [ 𝑁 ]𝑛 to ˜𝐷 ∈ [ 𝑛 · 𝑁 ]𝑛 , where the 𝑘 repetitions of an element 𝑥 ∈ 𝐷 are mapped to consecutive elements of the new domain: 𝑛𝑥, 𝑛𝑥 + 1, . . . , 𝑛𝑥 + 𝑘 − 1.
+
+## 3 PostRI 
+
+In this section, we first overview the design of PostRI in the two main steps, the median estimation and then the randomization interval. We then analyze the privacy and correctness of the complete algorithm and finally discuss the optimal hyperparameters. 
+
+## 3.1 Median Mechanism 
+
+The first step in our algorithm is to derive a differentially private median using a standard approach [ 12 ]. We give the details of this algorithm for completeness. Since PostRI oper-ates in two parts, we must split the privacy budget between this median computation and the randomization interval. We denote the privacy budget of the median as 𝜖 1 and the privacy budget of the RI as 𝜖 2, where 𝜖 = 𝜖 1 + 𝜖 2 and discuss how to set these parameters in Section 3.3. The utility function we will use for the median is 
+
+𝑢 (𝐷, 𝑦 ) = −| R(𝐷, 𝑦 ) − |𝐷 |
+
+2 | (1) where R(𝐷, 𝑦 ) computes the number of data points less than or equal to 𝑦 after sorting the dataset 𝐷 .The utility function 𝑢 (𝐷, 𝑦 ), has sensitivity of 1, and thus applying the exponential mechanism satisfies 𝜖 1-DP [ 16 , The-orem 6]. In the case where multiple values in the domain Y
+
+have the same utility, it is common to weight the probability of selection by the number of elements with this utility, and then randomly select a candidate after [ 10 ]. We do this for the median since there can be many domain values between each data point, all with the same rank. 
+
+3.1.1 Median Utility. There is a well-established utility bound on the exponential mechanism that we can apply to get a utility bound on the median [9]. 
+
+Theorem 3.1. Let 𝑦 ∗ (𝐷 ) = 𝑎𝑟𝑔𝑚𝑎𝑥 𝑦 ∈ Y (𝑢 (𝐷, 𝑦 )) . Then, with probability 1 − 𝛽 1 the following statement holds [9]: 
+
+𝑢 (𝐷, 𝑜 ) ≥ 𝑢 (𝐷, 𝑦 ∗ (𝐷 )) − 𝛾 1 (2) 
+
+where 
+
+𝛾 1 = 2Δ𝑢 
+
+𝜖 1
+
+log 𝑁 𝛽 1
+
+(3) 
+
+## 3.2 RI Mechanism Design 
+
+Since there exists a bound on the error of the exponential mechanism (Theorem 3.1), constructing a randomization interval for the median seems simple. However, this error bound is in terms of the utility function, which presents several problems. First, we do not have the utility value of the outputted median as publishing the utility requires additional privacy budget. Second, even if we publish the utility, the value is relative and is not useful without knowledge of the private dataset. In the case of the median, a randomization interval using the utility bound would only tell us the rank error. For example, we could bound the median in a range of up to ten dataset positions, but depending on the dataset, the closest ten data points could be numerically very far away 
+
+> 2
+
+from the median. Thus, we want to give a randomization interval in the data domain. A strawman solution could be to compute the utility bound and then map it back onto the data domain. However, this would use a significant amount of privacy budget, paying both to compute the utility bound and select the values from the data domain. We instead develop a novel utility function to output the randomization interval in a single application of the exponential mechanism. In order to save additional privacy budget, we first refor-mulate the randomization interval problem as the private selection of a single value 𝑏 (rather than a separate upper and lower bound). 
+
+Simplified Randomization Interval Problem: Given an output median 𝑜 , find a minimal 𝑏 such that with probability 1 − 𝛽 2, while satisfying 𝜖 2-DP. 
+
+𝑚 ∈ [ 𝑜 − 𝑏, 𝑜 + 𝑏 ]
+
+where 𝑚 is the ground truth median. Using this simplified formulation, we can then design a utility function for the optimal 𝑏 . Our first step is to create a helper function 𝑓 that measures the worst-case coverage of a given 
+
+𝑏 in terms of rank using dataset 𝐷 . We define this function as 
+
+𝑓 𝑏 (𝐷 ) = min (| R(𝐷, 𝑜 + 𝑏 ) − R(𝐷, 𝑜 )| , |R(𝐷, 𝑜 ) − R(𝐷, 𝑜 − 𝑏 )|) .Intuitively, 𝑓 computes the smallest rank distance from the interval boundary to the median. We note that we chose the above function for two reasons. First, it allows us to consider both sides of the interval in one shot. Second, it has sensitivity one (shown in Appendix A.1), making it very efficient to compute privately. Recall the goal is to construct a valid randomization in-terval by making 𝑏 large enough that the true median 𝑚 is contained in the interval with high probability. To determine this width, we can use the utility bound in Theorem 3.1. Since we designed the helper function to measure rank distance, and the utility function of the median measures rank distance, we can simply find the minimum 𝑏 such that 𝑓 𝑏 (𝐷 ) > 𝛾 1. A natural way to privately select such a 𝑏 would be to use the sparse vector technique (SVT) [ 9]. SVT sequentially evalu-ates a given set of queries and halts (and outputs the query index) when the first query value exceeds this threshold. In our case, the set of queries would be defined by evaluating the helper function 𝑓 over a set of 𝑏 values and the threshold would be 𝛾 1. However, it was shown by Lyu et al. [ 15 ] that in a non-interactive setting such as this (the queries are known ahead of time), replacing SVT with the exponential mecha-nism gives better utility 1. Thus, in our work, we apply the exponential mechanism using a utility function that is the absolute difference between the query set and the threshold.  
+
+> 1Lyu et al. consider top-𝑘 queries, but we find the same result holds for our threshold queries
+
+We note that in addition to the threshold 𝛾 1, we must account for two additional sources of error. The first is due to the fact that we are selecting 𝑏 using another exponential mechanism. We must ensure correctness under the worst-case error of this second exponential mechanism in selecting the error of the first. Thus, we must incorporate a second error bound similar to Theorem 3.1 but with the following constant. 
+
+𝛾 2 = 2Δ𝑞 
+
+𝜖 2
+
+log 𝑁 𝑠𝛽 2
+
+(4) where 𝑠 is a quantization parameter determining the domain set we choose for 𝑏 . This quantization is the second source of error we must account for. Specifically, if we consider all possible 𝑏 values, we have a larger domain that negatively affects error; if we pick a smaller domain, we must account for the quantization error and the new domain size. We define the domain set to be 𝑏 ∈ { 𝑠, 2𝑠, . . . , ⌊ 𝑠 ·𝑁 𝑠 ⌋} . This gives a domain size of 𝑁 /𝑠 and introduces a quantization error. Namely, 𝑏 can be at most 𝑠 away from an optimal value. Since 
+
+𝑏 is in the data domain and the utility is in the rank domain, we multiply 𝑠 by ℓ (the Lipshitz coefficient assumed to be 1 if no repeated data elements) to obtain a bound on this error in terms of utility. Putting all of this together, we get our final utility function. 
+
+𝑞 (𝐷, 𝑏 ) = −| 𝑓 𝑏 (𝐷 ) − 𝛾 1 − 𝛾 2 − 𝑠 · ℓ | (5) We apply the exponential mechanism on 𝑞 to obtain an 𝜖 2-DP RI mechanism. 
+
+Theorem 3.2. 𝑞 has a sensitivity of 1 and thus applying the exponential mechanism satisfies 𝜖 2-DP. 
+
+We defer the proof of Theorem 3.2 to Appendix A.1. In Appendix A.2, we prove the correctness of PostRI . Namely: 
+
+Theorem 3.3. For a given private median estimation 𝑜 and randomization interval [𝑜 − ˆ𝑏, 𝑜 + ˆ𝑏 ] output using PostRI , with probability 1−𝛽 1 −𝛽 2, we have R(𝐷, 𝑜 − ˆ𝑏 ) ≤ 𝑛 /2 ≤ R(𝐷, 𝑜 + ˆ𝑏 )
+
+## 3.3 Hyperparameter Selection 
+
+PostRI has two hyperparameters that can be varied. The first is the split between 𝜖 1 and 𝜖 2. That is, more budget can be allotted to reduce the error of the median or to shorten the length of the RI. However, we note that one can not arbitrarily shorten the RI as it inherently depends on the error of the median in our approach. We derive the optimal split between 𝜖 1 and 𝜖 2 to give the shortest possible RI width in Appendix A.3. The result is 
+
+𝜖 1 = 𝜖 2
+
+vut log 𝑁 𝛽 1
+
+log 𝑁 𝑠𝛽 2
+
+(6) The second parameter is the step size 𝑠 , which determines the domain of 𝑏 . In Appendix A.4, we derive the optimal 
+
+> 3
+
+Table 1: Comparison of Median RI on Real Datasets with 𝜖 = 1 and 𝛽 = 0.01 .                                     
+
+> Dataset Technique Median Error Average RI Width Correctness Bank Ours 0.06 ( ±0.24) 14.19 ( ±0.67) 1.00 [19] 0.57 ( ±0.62) 13.63 ( ±0.55) 1.00 Adult Ours 32.40 ( ±28.61) 1264.00 ( ±74.33) 1.00 [19] 166.88 ( ±17.23) 1146.56 ( ±17.11) 1.00 Airplane Ours 7.88 ( ±4.81) 13.13 ( ±2.58) 1.00 [19] 9.00 ( ±0.00) 9.00 ( ±0.00) 1.00
+
+parameter setting for 𝑠 such that the RI length is minimized: 
+
+𝑠 = 2Δ𝑞 
+
+𝜖 2ℓ . (7) We note a circular dependence between the optimal choice of 𝜖 1, 𝜖 2, and 𝑠 . In practice, we find that substituting these equations into each other iteratively converges to a stable value after a few iterations. 
+
+## 4 Preliminary Experimental Results 
+
+To evaluate our method PostRI , we conduct a study over three real-world datasets and compare with the existing ap-proach by Sun et al. [ 19 ]. We give implementation details in Appendix D. We focus on the “balance” attribute (with values in range [− 8019 , 102127 ] and true median value of 448) for the Banking dataset, the “fnlwgt” attribute (with values in range [12285 , 1490400 ] and true median value of 178144.5) for the Adult dataset, and the “capacity” attribute (with val-ues in range [4, 396 ] and true median value of 162) for the Airplane dataset in the evaluation. We fix 𝑠 following Eqn 7. We use the average median error (i.e., numerical distance from true median), the average RI width (i.e., the distance between the lower and upper bounds), and the observed correctness (i.e., the percentage of how many times the true median is inside the reported RI) over 100 runs as evaluation metrics. Table 1 shows the comparison results with privacy budget 𝜖 = 1 and 𝛽 = 0.01 . Our PostRI method (default set-ting, with 𝜖 1 = 𝜖 2 = 12 𝜖 ) improves the average median error over Sun et al . [19] by 14%-850% with a moderately wider RI width by 3%-35%. The RI results reported by both methods contain the true median 100% of the time in our experiments, implying an observed correctness rate of 1. We also measure the average median error and RI width with varying privacy budgets ( 𝜖 = 0.25 , 0.5, 1, 2, 4) across datasets. We compare Sun et al . [19] and PostRI with different budget splitting: default ( 𝜖 1 = 𝜖 2), optimal (cf. Eq. 6), and median-focused ( 𝜖 1 = 9𝜖 2). As shown in Fig. 1-3, our PostRI 
+
+has lower median error over all privacy regimes on these datasets and yields a comparable RI width as the method in Sun et al . [19] , which matches our theoretical analysis (Appendix B). The shaded areas depict the standard deviation across 100 runs. Notably, an advantage of our approach is 
+
+Figure 1: Average median error and RI length vs. vary-ing privacy budget on the Banking dataset 
+
+Figure 2: Average median error and RI length vs. vary-ing privacy budget on the Adult dataset 
+
+Figure 3: Average median error and RI length vs. vary-ing privacy budget on the Airplane dataset 
+
+being able to tune the privacy budget split in favour of the median. Experiments on the Banking dataset (Fig. 1) show that the median-focused split (i.e., 90% of the budget is spent on the median) can achieve the most accurate result on high privacy regimes, albeit with a wider RI width, compared to the default setting and the optimal split that minimizes the overall error. 
+
+## 5 Concluding Remarks 
+
+In this work, we improve the state-of-the-art in computing randomization intervals for private median queries. Our so-lution PostRI uses a novel utility function to enable a high utility median estimation along with a narrow randomiza-tion interval. In the future, we look to extend this idea to other statistics. 
+
+## Acknowledgments 
+
+This work was supported by NSERC through a Snowflake research fund, a Discovery Grant, and the Canada CIFAR AI Chairs program. 
+
+> 4
+
+## References 
+
+[1] Karan Chadha, John Duchi, and Rohith Kuditipudi. 2024. Re-sampling methods for private statistical inference. arXiv preprint arXiv:2402.07131 (2024). [2] Edith Cohen, Xin Lyu, Jelani Nelson, Tamás Sarlós, and Uri Stemmer. 2024. Lower bounds for differential privacy under continual obser-vation and online threshold queries. In The Thirty Seventh Annual Conference on Learning Theory . PMLR, 1200–1222. [3] Christian Covington, Xi He, James Honaker, and Gautam Kamath. to appear. Unbiased statistical estimation and valid confidence intervals under differential privacy. Statistica Sinica (to appear). [4] Irit Dinur and Kobbi Nissim. 2003. Revealing information while pre-serving privacy. In Proceedings of the Twenty-Second ACM SIGACT-SIGMOD-SIGART Symposium on Principles of Database Systems, June 9-12, 2003, San Diego, CA, USA , Frank Neven, Catriel Beeri, and Tova Milo (Eds.). ACM, 202–210. doi:10.1145/773153.773173 [5] Jörg Drechsler, Ira Globus-Harris, Audra Mcmillan, Jayshree Sarathy, and Adam Smith. 2022. Nonparametric differentially private con-fidence intervals for the median. Journal of Survey Statistics and Methodology 10, 3 (2022), 804–829. [6] Wenxin Du, Canyon Foot, Monica Moniot, Andrew Bray, and Adam Groce. 2020. Differentially private confidence intervals. arXiv preprint arXiv:2001.02285 (2020). [7] Cynthia Dwork. 2006. Differential privacy. In IN ICALP . Springer. [8] Cynthia Dwork and Jing Lei. 2009. Differential privacy and robust statistics. In Proceedings of the forty-first annual ACM symposium on Theory of computing . 371–380. [9] Cynthia Dwork and Aaron Roth. 2014. The Algorithmic Foundations of Differential Privacy. Found. Trends Theor. Comput. Sci. (2014). [10] Jennifer Gillenwater, Matthew Joseph, Andres Munoz, and Mon-ica Ribero Diaz. 2022-07-17/2022-07-23. A Joint Exponential Mech-anism for Differentially Private Top-k. In Proceedings of the 39th In-ternational Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 162) , Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and Sivan Sabato (Eds.). PMLR, 7570–7582. https://proceedings.mlr.press/v162/gillenwater22a.html [11] Michael Hay, Ashwin Machanavajjhala, Gerome Miklau, Yan Chen, and Dan Zhang. 2016. Principled evaluation of differentially private algorithms using dpbench. In Proceedings of the 2016 International Conference on Management of Data . 139–154. [12] Ninghui Li, Min Lyu, Dong Su, and Weining Yang. 2017. Differential privacy: From theory to practice . Springer. [13] Katrina Ligett, Moshe Shenfeld, Tomer Shoham, and Noa Velner-Harris. 2025. DIFFERENTIALLY PRIVATE NON-PARAMETRIC CON-FIDENCE INTERVALS. Journal of Privacy and Confidentiality (2025). [14] Jiaxiang Liu, Karl Knopf, Yiqing Tan, Bolin Ding, and Xi He. 2021. Catch a blowfish alive: a demonstration of policy-aware differential privacy for interactive data exploration. Proceedings of the VLDB Endowment 14, 12 (2021), 2859–2862. [15] Min Lyu, Dong Su, and Ninghui Li. 2017. Understanding the Sparse Vector Technique for Differential Privacy. 10, 6 (2017), 637–648. doi:10. 14778/3055330.3055331 [16] Frank McSherry and Kunal Talwar. 2007. Mechanism Design via Differential Privacy. In Proceedings of the 48th Annual IEEE Sympo-sium on Foundations of Computer Science (USA, 2007) (FOCS ’07) . IEEE Computer Society, 94–103. doi:10.1109/FOCS.2007.41 [17] Priyanka Nanayakkara, Johes Bater, Xi He, Jessica Hullman, and Jennie Rogers. 2022. Visualizing privacy-utility trade-offs in differentially private data releases. arXiv preprint arXiv:2201.05964 (2022). [18] Liudas Panavas, Amit Sarker, Sara Di Bartolomeo, Ali Sarvghad, Cody Dunne, and Narges Mahyar. 2024. Illuminating the Landscape of Differential Privacy: An Interview Study on the Use of Visualization in Real-World Deployments. IEEE Transactions on Visualization and Computer Graphics (2024). [19] Dajun Sun, Wei Dong, and Ke Yi. 2023. Confidence Intervals for Private Query Processing. Proceedings of the VLDB Endowment 17, 3 (2023), 373–385. [20] Siyuan Xia, Beizhen Chang, Karl Knopf, Yihan He, Yuchao Tao, and Xi He. 2021. Dpgraph: A benchmark platform for differentially private graph analysis. In Proceedings of the 2021 International Conference on Management of Data . 2808–2812. 
+
+## A Proofs A.1 Proof of Theorem 3.2 
+
+We first prove the following lemma. 
+
+Lemma A.1. 𝑓 has sensitivity 1. Formally: 
+
+max      
+
+> 𝐷,𝐷 ′∈ D
+> 𝑏 ∈ { 𝑠, 2𝑠,..., ⌊𝑠 ·𝑁 𝑠 ⌋ }
+
+|𝑓 𝑏 (𝐷 ) − 𝑓 𝑏 (𝐷 ′)| ≤ 1 (8) 
+
+Proof. Recall 𝑓 𝑏 (𝐷 ) = min (| R(𝐷, 𝑜 +𝑏 )− R(𝐷, 𝑜 )| , |R(𝐷, 𝑜 )− 
+
+R(𝐷, 𝑜 − 𝑏 )|) . w.l.o.g assume that R(𝐷, 𝑜 − 𝑏 ) ≤ R(𝐷, 𝑜 ) ≤ 
+
+R(𝐷, 𝑜 + 𝑏 ). Then, the term |R(𝐷, 𝑜 − 𝑏 ) − R(𝐷, 𝑜 )| is equiv-alent to the number of data points that fall in the interval 
+
+(𝑜 −𝑏, 𝑜 ]. Replacing a data point can, in the worst case, move a point in or out of this interval, implying a sensitivity of one. A symmetric argument holds for |R(𝐷, 𝑜 + 𝑏 ) − R(𝐷, 𝑜 )| .Finally, we consider the min. The min either remains un-changed or the min swaps under the replacement of a record. In either case, the output can change by at most one, as both terms can change by at most one. □
+
+Now we can prove the Theorem: 
+
+Theorem 3.2. 𝑞 has a sensitivity of 1 and thus applying the exponential mechanism satisfies 𝜖 2-DP. 
+
+Proof. The sensitivity of 𝑞 is equivalent to the sensitivity of 𝑓 since all other terms are constant over neighbouring datasets. Then, by the privacy properties of the exponential mechanism, the result follows. □
+
+## A.2 Proof of Theorem 3.3 
+
+Theorem 3.3. For a given private median estimation 𝑜 and randomization interval [𝑜 − ˆ𝑏, 𝑜 + ˆ𝑏 ] output using PostRI , with probability 1−𝛽 1 −𝛽 2, we have R(𝐷, 𝑜 − ˆ𝑏 ) ≤ 𝑛 /2 ≤ R(𝐷, 𝑜 + ˆ𝑏 )
+
+Proof. With probability 1 − 𝛽 1 since 𝑜 is the output of the exponential mechanism, we have: 
+
+𝑢 (𝐷, 𝑜 ) ≥ 𝑢 (𝐷, 𝑦 ∗ (𝐷 )) − 𝛾 1 (9) subbing in the definition of the median utility function (1), gives the following 
+
+|R(𝐷, 𝑜 ) − 𝑛 /2| ≤ 𝛾 1 (10) 
+
+> 5
+
+which implies R(𝐷, 𝑜 ) − 𝛾 1 ≤ 𝑛 /2 ≤ R(𝐷, 𝑜 ) + 𝛾 1. (11) For a given output ˆ𝑏 of the second exponential mechanism, with probability 1 − 𝛽 2, we have the following statement 
+
+𝑞 (𝐷, ˆ𝑏 ) ≥ 𝑞 (𝐷, 𝑏 ∗ (𝐷 )) − 𝛾 2 − 𝑠 · ℓ (12) which gives 
+
+|𝑓 ˆ𝑏 (𝐷 ) − 𝛾 1 − 𝛾 2 − 𝑠 · ℓ | ≤ 𝛾 2 + 𝑠 · ℓ. (13) W.l.o.g assume that R(𝐷, 𝑜 − ˆ𝑏 ) ≤ R(𝐷, 𝑜 ) ≤ R(𝐷, 𝑜 + ˆ𝑏 ).We consider two cases R(𝐷, 𝑜 ) ≥ 𝑛 /2 and R(𝐷, 𝑜 ) < 𝑛 /2. In the first case, if R(𝐷, 𝑜 ) ≥ 𝑛 /2 then by assumption we have R(𝐷, 𝑜 + ˆ𝑏 ) ≥ R(𝐷, 𝑜 ) ≥ 𝑛 /2. We must show R(𝐷, 𝑜 − ˆ𝑏 ) < 𝑛 /2.Expanding Eqn 13 we get the following 
+
+−𝛾 2 − 𝑠 · ℓ ≤ 𝑓 ˆ𝑏 (𝐷 ) − 𝛾 1 − 𝛾 2 − 𝑠 · ℓ (14) where the absolute value is omitted following our initial assumption. Then we get 
+
+−𝛾 2 − 𝑠 · ℓ ≤ R(𝐷, 𝑜 ) − R(𝐷, 𝑜 − ˆ𝑏 ) − 𝛾 1 − 𝛾 2 − 𝑠 · ℓ. (15) We note that this holds regardless of which term is the min in 𝑓 ˆ𝑏 (𝐷 ). Then rearranging and subbing in Eqn 11, we get R(𝐷, 𝑜 − ˆ𝑏 ) ≤ R(𝐷, 𝑜 ) − 𝛾 1 ≤ 𝑛 /2. (16) In the second case, if R(𝐷, 𝑜 ) < 𝑛 /2 then by assumption we have R(𝐷, 𝑜 − ˆ𝑏 ) ≤ R(𝐷, 𝑜 ) < 𝑛 /2. We must show R(𝐷, 𝑜 +
+
+ˆ𝑏 ) > 𝑛 /2. Recall that expanding Eqn 13 we get the following 
+
+−𝛾 2 − 𝑠 · ℓ ≤ 𝑓 ˆ𝑏 (𝐷 ) − 𝛾 1 − 𝛾 2 − 𝑠 · ℓ. (17) Then we get 
+
+−𝛾 2 − 𝑠 · ℓ ≤ R(𝐷, 𝑜 + ˆ𝑏 ) − R(𝐷, 𝑜 ) − 𝛾 1 − 𝛾 2 − 𝑠 · ℓ. (18) We similarly note that this holds regardless of which term is the min in 𝑓 ˆ𝑏 (𝐷 ). Finally, rearranging and subbing in Eqn 11, we get R(𝐷, 𝑜 + ˆ𝑏 ) ≥ R(𝐷, 𝑜 ) + 𝛾 1 ≥ 𝑛 /2. (19) Taking the union bound over the probability of Eqn 9 and Eqn 12, the result follows. □
+
+## A.3 Epsilon Splitting Analysis 
+
+We minimize the following error 
+
+𝛾 1 + 𝛾 2 + 𝑠 · ℓ (20) using Lagrange multipliers with the condition that 𝜖 1 +𝜖 2 = 𝜖 .Let 
+
+𝐿 = 2
+
+𝜖 1
+
+log 𝑁 𝛽 1
+
++ 2
+
+𝜖 2
+
+log 𝑁 𝑠𝛽 2
+
++ 𝑠 · ℓ + 𝜆 (𝜖 1 + 𝜖 2 − 𝜖 ). (21) Then, differentiating, we get 
+
+𝜕𝐿 𝜕𝜖 1
+
+= − 2
+
+𝜖 21
+
+log 𝑁 𝛽 1
+
++ 𝜆 (22) 
+
+𝜕𝐿 𝜕𝜖 2
+
+= − 2
+
+𝜖 22
+
+log 𝑁 𝑠𝛽 2
+
++ 𝜆. (23) Setting these equal and rearranging gives us the following: 
+
+𝜖 21 = 𝜖 22 · log 𝑁 𝛽 1
+
+log 𝑁 𝑠𝛽 2
+
+(24) Taking the square root gives us the final result: 
+
+𝜖 1 = 𝜖 2
+
+vut log 𝑁 𝛽 1
+
+log 𝑁 𝑠𝛽 2
+
+(25) 
+
+## A.4 Optimal Step Size Analysis 
+
+Let us assume that the RI width of our algorithm is 𝛾 1 + 𝛾 2 +
+
+𝑠 · ℓ. We assume all other variables are constant. Assume we always conduct queries for 𝑏 ∈ { 𝑠, 2𝑠, . . . ⌊ 𝑠𝑁 𝑠 ⌋. Then, ignoring constants (the median error), the width of the RI is 
+
+𝛾 2 + 𝑠 · ℓ = 2Δ𝑞 
+
+𝜖 2
+
+log 𝑁 𝑠𝛽 2
+
++ 𝑠 · ℓ (26) The first derivative of this w.r.t. 𝑠 is 
+
+− 2Δ𝑞 
+
+𝜖 2𝑠 + ℓ (27) Solving for 𝑠 gives the optimal way to set this parameter 
+
+𝑠 = 2Δ𝑞 
+
+𝜖 2ℓ (28) where ℓ is the Lipschitz bound on the RI utility function. 
+
+## B Utility Analysis 
+
+To compare the utility to that of Sun et al. [ 19 ], we first state the utility bound from their paper. Namely, for any 
+
+𝑦 ∈ [ 𝐿 (𝐷 ), 𝑅 (𝐷 )] (in the RI), they show that 
+
+𝑢 (𝐷, 𝑦 ) ≥ 𝑢 (𝐷, 𝑦 ∗ (𝐷 )) − 17 Δ𝑢 
+
+𝜖 log 2𝑁 𝛽 − 2ℓ (29) To roughly compare the utilities of the work, we first define a constant term of factors common to both approaches. 
+
+𝜂 = 2Δ𝑢 
+
+𝜖 log 2𝑁 𝛽 (30) Using 𝜂 , we make the following observations. 
+
+Claim 1. Assuming the best case where the exponential mech-anisms return the candidates with optimal utility, the width of the RI for both approaches will be approximately 8𝜂 
+
+Proof Sketch. The utility function of Sun et al. is 𝑢 (𝐷, 𝑦 )− 
+
+𝑢 (𝐷, 𝑦 ∗ (𝐷 )) − 𝑠 − ℓ, where 𝑢 (𝐷, 𝑦 ∗ (𝐷 )) = 0, 𝑠 ≈ 4𝜂 , and we will ignore ℓ = 1. This means the distance from the median to the lower bound is approximately 4𝜂 . The upper bound is similar, resulting in a total width of 8𝜂 .Our utility function is |𝑓 ˆ𝑏 (𝐷 ) − 𝛾 1 −𝛾 2 −𝑠 · ℓ | where 𝛾 1 ≈ 2𝜂 ,
+
+𝛾 2 ≈ 2𝜂 , and we ignore the ℓ term. This gives an optimal 
+
+> 6
+
+helper function 𝑓 of 4𝜂 (the worst-case distance to either the upper or lower bound), which implies a total width of 
+
+8𝜂 . □
+
+Claim 2. Assuming the worst case where the exponential mechanisms return the candidates with the worst possible util-ity defined by Theorem 3.1. Then Sun et al. have an RI width of 16 𝜂 and PostRI has an RI width of 12 𝜂 .
+
+Proof Sketch. Building on Claim 1, we can assume the error of each application of the exponential mechanism in Sun et al. is 4𝜂 by applying the utility bound of the expo-nential mechanism with an extra factor of 2 from splitting epsilon over the lower and upper bound and another 2 from Lemma 3.3 of Sun et al. [ 19 ]. This means the lower bound estimates the distance of 4𝜂 from the median with at worst a 4𝜂 error, resulting in a total distance of 8𝜂 . Similarly, for the upper bound, giving the total width of 16 𝜂 .Our work builds the RI using the estimated median as the center. Then we estimate a width of 4𝜂 (as discussed in Claim 1) with error at most 𝛾 2 ≈ 2𝜂 . This leads to a total distance of 6𝜂 per side and an overall distance of 12 𝜂 . □
+
+Claim 3. Assuming the worst case where the exponential mechanisms return the candidates with the worst possible util-ity defined by Theorem 3.1. Then Sun et al. have a median error of 4𝜂 and PostRI has a median error of 2𝜂 .
+
+Proof Sketch. Building on Claim 2, if we assume the lower bound is the worst possible distance of 8𝜂 and in the worst case, the upper bound is the smallest possible distance of 0 from the true median (estimating 4𝜂 distance with error 
+
+4𝜂 that cancel each other out). Then the average of the lower and upper bounds is 4𝜂 away from the true median. Our work simply estimates the median with error at most 
+
+𝛾 1 ≈ 2𝜂 . □
+
+## C Related Work 
+
+There has been a significant amount of work done on ex-pressing the privacy-utility trade-off present in any DP mech-anism [ 7] to a non-expert. An approach can be to provide a set of benchmark utility scores for common privacy pa-rameter settings and datasets [ 11 , 20 ]. A more usable ap-proach is to provide scores as an interactive visualization tool [ 14 , 17 , 18 , 20 ], so that users can explore possible privacy settings. Our work looks at expressing the privacy utility trade-off using randomization intervals. We note that although randomization intervals provide a bound on the DP noise with high confidence, they do not provide a bound on the variance from the data (sample variance). Most prior work on DP confidence intervals focuses on bounding this error without considering the error from the noise itself [ 1– 3, 6 , 8 ,13]. In our work, we treat finding bounds for a confidence intervals as a maximizing a utility function problem. This then leads us to using an exponential mechanism based de-sign. Sun et al.[ 19 ] also take this approach. They provide confidence intervals for the median and other statistics us-ing both exponential mechanism and svt based approaches. Their approach first estimates valid upper and lower bounds for the statistic, before taking the average of the values. Drechsler et al.[ 5] consider solutions that estimate confi-dence intervals using both the exponential mechanism and post-processing an estimated DP CDF. Their solutions aim to to account for both sources of randomness (sample error and privacy noise). However, in both of their approaches, they do not directly estimate the median itself. 
+
+## D Implementation Details 
+
+Our implementation is based on the code of Sun et al. [ 19 ]: https://github.com/PrivateCI/DP_CI. We note that running their code unmodified did not reproduce the results Sun et al.’s paper exactly. We modified the domain size in their code to 𝑁 = 10 8 to be consistent across both approaches. We also note that the parameter 𝑠 in Sun et al.’s work is set to 9Δ𝑢  
+
+> 𝜖
+
+log 2𝑁 𝛽 in the paper, but 8Δ𝑢  
+
+> 𝜖
+
+log 2𝑁 𝛽 in the code. We follow their code as it gives a lower error and matches the settings of our work. We also fixed a couple of off by one errors in Sun et al.’s code. Our code can be found at https://github.com/Timliuw/Randomization-Intervals.

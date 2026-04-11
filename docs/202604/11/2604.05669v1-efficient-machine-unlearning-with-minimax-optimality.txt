@@ -1,0 +1,8598 @@
+Title: Efficient machine unlearning with minimax optimality
+
+URL Source: https://arxiv.org/pdf/2604.05669v1
+
+Published Time: Wed, 08 Apr 2026 01:01:05 GMT
+
+Number of Pages: 59
+
+Markdown Content:
+# Efficient machine unlearning with minimax optimality 
+
+Jingyi Xie 1 Linjun Zhang 2 Sai Li 3∗
+
+> 1
+
+Institute of Statistics and Big Data, Renmin University of China, Beijing 100872, China 
+
+> 2
+
+Department of Statistics, Rutgers University, Piscataway, NJ 08854, USA 
+
+> 3
+
+Department of Statistics and Data Science, Tsinghua University, Beijing 100084, China 
+
+Abstract. There is a growing demand for efficient data removal to comply with regulations like the GDPR and to mitigate the influence of biased or corrupted data. This has motivated the field of machine unlearning, which aims to eliminate the influence of specific data subsets without the cost of full retraining. In this work, we propose a statistical framework for machine unlearning with generic loss functions and establish theoretical guarantees. For squared loss, especially, we develop Unlearning Least Squares (ULS) and establish its minimax optimality for estimating the model parameter of remaining data when only the pre-trained estimator, forget samples, and a small subsample of the remaining data are available. Our results reveal that the estimation error decomposes into an oracle term and an unlearning cost determined by the forget proportion and the forget model bias. We further establish asymptotically valid inference procedures without requiring full retraining. Numerical experiments and real-data applications demonstrate that the proposed method achieves performance close to retraining while requiring substantially less data access. 
+
+Keywords: Data removal, fine-tuning, bias correction, statistical inference 
+
+# 1 Introduction 
+
+The rapid proliferation of machine learning and artificial intelligence has revolutionized data-driven decision-making across industries. However, this surge has precipitated critical ethical, legal, and practical concerns regarding data privacy, ownership, and control. In particular, regulatory frame-works such as Article 17 of GDPR 1 and the California Consumer Privacy Act (CCPA) have codified the “right to be forgotten”, granting individuals the right to request the erasure of their data from processing systems. These legal mandates have intensified the need for machine unlearning : the process of efficiently removing the influence of specific data points from pre-trained models, to ensure compliance and uphold user privacy [Ginart et al., 2019, Guo et al., 2020]. Applications of unlearning extend beyond privacy. In federated learning, where a global model is aggregated from decentralized clients, a participant may withdraw consent, necessitating the re-moval of their specific contributions [Nguyen et al., 2024, Jin et al., 2023]. Furthermore, unlearning 
+
+> ∗Corresponding author. Email: saili@tsinghua.edu.cn
+> 1https://gdpr-info.eu/art-17-gdpr/
+
+1
+
+> arXiv:2604.05669v1 [stat.ML] 7 Apr 2026
+
+serves as a critical mechanism for correcting outliers or contaminated data to enhance algorithmic fairness and robustness [Cao and Yang, 2015, Izzo et al., 2021]. In the context of Large Language Models (LLMs), unlearning is increasingly employed to excise toxic content or hazardous knowledge [Wu et al., 2020, Li et al., 2024a, Yao et al., 2024]. However, removing a subset of data from pre-trained models presents a significant challenge. Large-scale models often encapsulate the complete information of the training set, making clean removal computationally nontrivial. Naively retraining models from scratch is often computation-ally infeasible, especially in large-scale or real-time settings. In contrast, machine unlearning is a 
+
+post-processing task, aiming to make efficient local updates to a pre-trained model. In this paper, we study the statistical limits of machine unlearning: how accurately can one estimate the target parameter of the remaining data when only the pre-trained model, the forget data, and a small subsample of the retained data are available? 
+
+1.1 Related work 
+
+We first distinguish between two main purposes of machine unlearning in the existing literature. The first purpose is to protect privacy or copyright for forget samples. In this case, the desired unlearning algorithm should produce a model which is indistinguishable from a model trained solely on Dr. A formal definition has been proposed in Izzo et al. [2021] and another version based on differential privacy is introduced in Sekhari et al. [2021] and Neel et al. [2021]. The second purpose is to remove outliers or biased documents, where a significant challenge is that there exists a distribution shift between the forget and remaining data. In this case, the main goal of unlearning is bias correction but there is no strict requirement on whether the output is independent of the forget data or not. This scenario is critical in LLM safety alignment. For instance, Li et al. [2024a] develop a benchmark dataset for LLMs aiming at removing hazardous knowledge such as knowledge for developing biological, cyber, and chemical weapons. Yao et al. [2024] show that unlearning can be an efficient way to align LLMs with human preferences. In this work, we focus on the second scenario: unlearning for bias correction and outlier removal. A major class of machine unlearning methods is gradient-based. A baseline unlearning method, particularly for LLMs, is the gradient ascent (GA) algorithm [Yao et al., 2024, Maini et al., 2024], which updates model parameters towards maximizing the loss for the forget data. However, GA lacks convergence guarantees under typical conditions and can degrade model utility [Zhang et al., 2024]. Negative Preference Optimization [Zhang et al., 2024] is a gradient ascent based algo-rithm whose gradient is an adaptive weighting of that of GA. GradDiff method [Liu et al., 2022, 2025a] considers maximizing the forget loss and minimizing the loss for the remaining data at the same time, which has more reliable performance in practice. Variants such as Liu et al. [2025b], Wang et al. [2025], Yang et al. [2025] have been proposed to improve gradient direction and the learning rates. In the machine learning literature, exact and approximate unlearning have been actively studied. Cao and Yang [2015] first formally articulate the concept of machine unlearning. Guo et al. [2020] propose a one-step Newton update and establish its certified removal property. Izzo et al. [2021] develop a projective residual update method to approximate the leave-one-out residuals for linear 2models. Machine unlearning methods for tree-based models are studied in Brophy and Lowd [2021] and Lin et al. [2023]. While effective, these approaches often require storing Hessian matrices or accessing the full dataset, which can be prohibitive in high-dimensional or privacy-sensitive settings. Another class of unlearning methods uses synthetic data to fine-tune the pre-trained model. For instance, Graves et al. [2021] propose to relabel the sensitive data with randomly selected incorrect labels and then updates the model together with the remaining data. He et al. [2025] construct the fine-tuning dataset for unlearning by mixing up the remaining and forget dataset. See Shaik et al. [2024] for a systematic review. Unlearning shares conceptual similarities with transfer learning, as both aim to adapt a source model to a target distribution. Many recent works have studied transfer learning approaches for nonparametric regression [Cai and Wei, 2021, Reeve et al., 2021] and high-dimensional parametric models [Li et al., 2022, Tian and Feng, 2023, Li et al., 2024b] among many others. However, key distinctions exist. In transfer learning, users have access to the raw source data to construct the pre-trained model. In the unlearning, the pre-trained model is pre-determined. Another distinction is that there is no forget data in transfer learning. As we will show, state-of-the-art transfer learning approaches are sub-optimal for the unlearning problem. 
+
+1.2 Our contributions 
+
+Despite the pressing need for unlearning, existing methods often lack rigorous statistical guarantees, and the information-theoretic limits of the problem remain largely unknown. The contributions of this work are as follows. We propose an unlearning estimator ˆθ(unl)  
+
+> r
+
+for generic differentiable losses and develops a gradi-ent descent algorithm for its realization. For squared loss, especially, the proposed estimator reduces to so-called unlearning least squares (ULS), a computationally efficient algorithm that leverages the forget data to debias the pre-trained estimator. We rigorously establish the minimax optimality of ULS for estimating the true model of remaining data. Our lower bound analysis involves a novel perturbation analysis of the pre-trained estimator’s distribution. This new optimal rate highlights the dependency of the unlearning accuracy on the proportion of the forget data and on the model discrepancy between the forget and remaining data. Furthermore, we develop asymptotically valid inference procedures based on the unlearning estimator, enabling hypothesis testing and confidence interval construction without full retraining. 
+
+1.3 Organization and notation 
+
+The remainder of the paper is organized as follows. Section 2 formalizes the problem and introduces our main proposal, the unlearning estimate under generic loss functions. Section 3 develops the method and minimax optimal guarantees for our proposal with squared loss. In Section 4, we develop asymptotically valid inference procedures. Section 5 proposes a robust version of the main proposal and makes connections to existing LLM unlearning heuristics. Sections 6 and 7 present simulation studies and applications to Yelp and UK Biobank data, respectively. Section 8 concludes with a discussion of future directions. 3We introduce some notations that will be repeatedly used in the rest of this work. For a semi-positive definite matrix A, let Λ min (A) and Λ max (A) denotes the smallest and largest eigen-value of A, respectively. Let an = O(bn) and an . bn denote |an/b n| ≤ c for some constant c
+
+when n is large enough. Let an = o(bn) and an ≪ bn denote an/b n → 0 as n → ∞ . We use 
+
+C, C 0, C 1, . . . , c, c 0, c 1, . . . to denote generic constants which may vary across statements. 
+
+# 2 Problem set-up and generic unlearning estimate 
+
+In this section, we first formalize the unlearning problem in Section 2.1. Section 2.2 derives the rationale of our proposal via Taylor expansion. Section 2.3 presents the gradient descent realization of the proposed unlearning estimate. 
+
+2.1 Problem statement 
+
+To formalize the problem, let ˆθp ∈ Rp denote the pre-trained model parameter estimated from the full dataset D. Let Df ⊂ D denote the set of forget data, the data to be removed, and (( x(f ) 
+
+> i
+
+)⊤, y (f ) 
+
+> i
+
+) ∈ Rp × R denotes independent samples from Df for i = 1 , . . . , N f . Let Dr = D \ D f
+
+denote the set of remaining data and (( x(r) 
+
+> i
+
+)⊤, y (r) 
+
+> i
+
+) ∈ Rp × R denote the independent samples from 
+
+Dr, i = 1 , . . . , N r. The total dataset D = Dr ∪ D f with sample size N = Nr + Nf . We mention that the samples are not required to be identically distributed in each data set which allows for internal heterogeneity within each data. Let ℓ(θ; x, y ) denote the loss function for model training. If the outcome is continuous, one may consider the squared loss ℓ(θ; x, y ) = ( y − x⊤θ)2; if the outcome is binary, one may consider the cross entropy loss ℓ(θ; x, y ) = y log(1 + exp {− x⊤θ}) + (1 − y) log(1 + exp {x⊤θ}). To accommodate non-linearity and high-dimensionality, the input features can be latent representations, such as those extracted from deep neural networks, rather than raw covariates. In the unlearning setting, the target parameter of interest is 
+
+θr = arg min 
+
+> θ∈Rp
+
+E[ℓ(θ; Dr )] , (1) where ℓ(θ; Dr ) = ∑Nr 
+
+> i=1
+
+ℓ(θ; x(r) 
+
+> i
+
+, y (r) 
+
+> i
+
+) and the expectation is taken over the randomness of Dr.Notably, we do not assume that the samples in Dr are identically distributed. To ensure that 
+
+θr remains well-defined and stable as the sample size grows, we assume that the normalized loss 
+
+ℓ(θ; Dr )/N r converges in probability to a limiting objective function ℓ(r) 
+
+> ∞
+
+(θ) for any θ ∈ Rp as 
+
+Nr → ∞ .In practical unlearning scenarios, full access to remaining dataset Dr is often restricted due to massive size of Dr or privacy constraints. Instead, we assume access only to a random subsample 
+
+˜Dr ⊆ D r of size ˜ nr. Let (( ˜ x(r) 
+
+> i
+
+)⊤, ˜y(r) 
+
+> i
+
+) ∈ Rp × R denote the independent samples from ˜Dr, i =1, . . . , ˜nr. This setting aligns with practical constraints in LLM unlearning and has been empirically studied in many existing works [Liu et al., 2022, 2025a, Anjarlekar and Pombra, 2025]. The pre-trained model estimate is defined as the empirical minimizer of the full data set ˆθp = arg min 
+
+> θ∈Rp
+
+ℓ(θ; D), (2) 4where ℓ(θ; D) = ℓ(θ; Dr) + ℓ(θ; Df ) = ∑Nr 
+
+> i=1
+
+ℓ(θ; x(r) 
+
+> i
+
+, y (r) 
+
+> i
+
+) + ∑Nf 
+
+> i=1
+
+ℓ(θ; x(f ) 
+
+> i
+
+, y (f ) 
+
+> i
+
+). Our objective is to remove the effect of Df from ˆθp. Formally, the ideal unlearning estimator should approximate the re-trained (rtr) estimate ˚θ(rtr)  
+
+> r
+
+= arg min 
+
+> θ∈Rp
+
+ℓ(θ; Dr) (3) but without accessing or retraining the full Dr.To summarize, the accessible information consists of the forget data Df , the subsampled re-maining data ˜Dr , and the pre-trained estimate ˆθp. In typical settings, the forget set is relatively small. Hence, for ωf = Nf /N and ωr = Nr/N , we assume ωf is bounded away from 1, i.e., 
+
+ωf ≤ c < 1 for some constant c. For the size of ˜Dr, we consider ˜ ωr = ˜ nr/N r ∈ (0 , 1]. We allow the dimension p to grow to infinity but consider the setting p is relatively small to the sample size, i.e., 
+
+p ≪ min {Nf , ˜nr}.
+
+2.2 Rationale for our proposal 
+
+In view of (3), the ideal re-trained estimate ˚θ(rtr)  
+
+> r
+
+satisfies the stationary condition 0 = ˙ℓ(˚θ(rtr)  
+
+> r
+
+; Dr), where ˙ℓ(θ; D′) denote the first derivative of ℓ(θ; D′) with respect to θ for any given dataset D′.To approximate ˚θ(rtr)  
+
+> r
+
+efficiently, we propose a new machine unlearning method which fine-tunes the pre-trained model ˆθp using Df and ˜Dr . Note that ˙ℓ(˚θ(rtr)  
+
+> r
+
+; Dr) − ˙ℓ( ˆθp; Dr ) = 0 − ( ˙ℓ( ˆθp; D) − ˙ℓ( ˆθp; Df )) = ˙ℓ( ˆθp; Df ), (4) where the first equality leverages the stationary condition of ˚θ(rtr)  
+
+> r
+
+and the decomposition of the pre-trained loss and the second equality leverages the stationarity condition 0 = ˙ℓ( ˆθp; D). Equation (4) provides a viable way to approximate ˚θ(rtr)  
+
+> r
+
+by fine-tuning ˆθp. However, although 
+
+Df and ˆθp are both observed in the unlearning phase, Dr is not fully observed. As ˜Dr is a random sample from Dr, we replace ˙ℓ(θ; Dr) with ( Nr/˜nr) ˙ℓ(θ; ˜Dr ) in (4). This gives a generic unlearning estimator, ˆθ(unl)  
+
+> r
+
+, which is defined as the solution to 0 = Nr
+
+˜nr
+
+{ ˙ℓ(θ; ˜Dr ) − ˙ℓ( ˆθp; ˜Dr )} − ˙ℓ( ˆθp; Df ). (5) If the second-order derivative exists, by Taylor expansion, the unlearning estimate ˆθ(unl)  
+
+> r
+
+can be written as ˆθ(unl)  
+
+> r
+
+= ˆθp +
+
+{ Nr
+
+˜nr
+
+∫ 10
+
+¨ℓ( ˆθp + u( ˆθ(unl)  
+
+> r
+
+− ˆθp); ˜Dr )du 
+
+}−1
+
+˙ℓ( ˆθp; Df ). (6) Equation (6) reveals that unlearning can be viewed as a Hessian-weighted bias correction to the pre-trained estimator, where the gradient of the forget loss estimates the bias introduced by the forget samples. Intuitively, increasing the forget loss can force pre-trained estimate deviating from the minimum of the forget loss so that the effect of Df can be removed. From another perspective, the last term in (6) also approximates to the influence function of the forget data on the parameter vector ˆθp [Cook and Weisberg, 1982]. We mention that similar expansions as in (4) have been 5considered in a few existing works [Guo et al., 2020, Wu et al., 2020]. The novelty in (5) is that it uses subsampled remaining data as a proxy of the full remaining data, which does not require storing Hessian matrices or accessing the full dataset. More importantly, the statistical performance of (5) and (6) have not been formally established and its minimax optimality is unknown. 
+
+2.3 Gradient descent realization of the unlearning estimate 
+
+Based on the stationarity condition in (5), it is easy to derive the gradient descent algorithm to realize ˆθ(unl)  
+
+> r
+
+, as detailed in Algorithm 1. 
+
+Algorithm 1 Gradient descent algorithm for the unlearning estimate 
+
+Input : Pre-trained estimate ˆθp, forget data Df , and subsampled remaining data ˜Dr.
+
+Output : ˆθ(unl)  
+
+> r,T
+
+.Set the initial value ˆθ(unl)  
+
+> r, 0
+
+= ˆθp.For t = 1 , . . . , T : Compute ˆθ(unl)  
+
+> r,t
+
+= ˆθ(unl)  
+
+> r,t −1
+
+− α
+
+{ Nr
+
+˜nr
+
+˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr) − Nr
+
+˜nr
+
+˙ℓ( ˆθp; ˜Dr) − ˙ℓ( ˆθp; Df )
+
+}
+
+, (7) where α > 0 is the step size. 
+
+With proper choice of step size and regularity conditions, it is easy to show that ˆθ(unl)  
+
+> r,T
+
+converges to ˆθ(unl)  
+
+> r
+
+as T goes to infinity. The results for the convergence rate of Algorithm 1 are presented in the supplementary materials (Section A). Its convergence rate under squared loss is presented in Theorem 3.2. We mention that for common loss functions, such as squared loss and cross-entropy loss, the realization of ˆθ(unl)  
+
+> r
+
+and ˆθ(unl)  
+
+> r,T
+
+do not involve the outcome data ˜ y(r). Indeed, terms involving ˜ y(r)
+
+are canceled out in ˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr ) and in ˙ℓ( ˆθp; ˜Dr). We will show in later sections that the proposed estimator is minimax optimal for squared loss under mild conditions. It implies that for optimal estimation procedures, the outcome data in the subsampled remaining data are not needed, which can further reduce the data collection cost. However, for valid inference procedures, the remaining outcome data ˜ y(r) are needed to compute the variance of the estimator. This highlights a difference between estimation and inference in the unlearning problem. 
+
+# 3 Efficient machine unlearning under squared loss 
+
+In this section, we focus on the methods and theory under squared loss to maintain comparability with existing learning and unlearning methods. Crucially, this choice does not necessitate a linear relationship between features and outcomes; rather, our approach is designed to be robust under model misspecification. Section 3.1 derives the closed-form estimate under squared loss. Section 3.2 derives the finite-sample convergence rates for the ULS estimator. Section 3.3 establishes the minimax lower bound, proving that ULS achieves the fundamental limit of the unlearning problem. Section 3.4 introduces 6baseline methods for comparison and demonstrates the superiority of our proposal for unlearning tasks. 
+
+3.1 Proposed estimate under squared loss 
+
+Let ( ˜X(r), ˜y(r)) ∈ R˜nr ×(p+1) denote matrix representation of the data in ˜Dr and ( X(f ), y(f )) ∈
+
+RNf ×(p+1) denote matrix representation of the samples in Df . Under squared loss, formula (6) gives ˆθ(uls)  
+
+> r
+
+= ˆθp − ˜nr
+
+Nr
+
+{( ˜X(r))⊤ ˜X(r)}−1(X(f ))⊤(y(f ) − X(f ) ˆθp). (8) We term this estimate the unlearning least squares (ULS) estimator. Furthermore, ˆθ(uls)  
+
+> r
+
+is the exact solution to (9) as proved in Section B.1 of the supplements. This formulation highlights that ULS maximizes the loss on the forget data while being regularized to stay close to the pre-trained knowledge. Regularization is essential here because solely maximizing the squared loss ℓ(θ; Df )does not have a finite solution. The regularization term involves a weight matrix ˜Σp, which can be viewed as an approximation of the full-sample Hessian matrix ¨ℓ( ˆθp; D). We provide further discussions to (9) in comparison to other baseline methods in Section 3.4. The above unlearning procedure is summarized into Algorithm 2. Let ˜Σr = ( ˜X(r))⊤ ˜X(r)/˜nr and ̂ Σf = ( X(f ))⊤X(f )/N f .
+
+Algorithm 2 Proposed ULS estimator 
+
+Input : The pre-trained estimate ˆθp, forget data Df , and subsampled remaining data ˜Dr .
+
+Output : ˆθ(uls)  
+
+> r
+
+.Compute ˆθ(uls)  
+
+> r
+
+= arg min 
+
+> θ∈Rp
+
+{
+
+− ωf
+
+Nf
+
+ℓ(θ; Df ) + ( ˆθp − θ)⊤ ˜Σp( ˆθp − θ)
+
+}
+
+, (9) where ωf = Nf /N , ℓ(θ; Df ) = ∑Nf
+
+> i=1
+
+{y(f ) 
+
+> i
+
+− (x(f ) 
+
+> i
+
+)⊤θ}2, and ˜Σp = ωr ˜Σr + ωf̂ Σf .
+
+When p is large, directly calculating the inverse of Hessian matrices can be computationally expensive. In this case, one can perform the gradient descent version, Algorithm 1, with squared loss. 
+
+3.2 Convergence analysis for the proposed methods 
+
+We provide theoretical guarantees for the ULS estimate in this subsection. We first state the standard regularity conditions required for our theoretical analysis. 
+
+Condition 1 (Sub-Gaussian data) . The remaining data (( x(r) 
+
+> i
+
+)⊤, y (r) 
+
+> i
+
+), i = 1 , . . . , N r are independent sub-Gaussian vectors. Moreover, E[̂Σr] = Σ r and c−1Σ ≤ Λmin (Σ r) ≤ Λmax (Σ r) ≤ cΣ for some 
+
+cΣ > 1. The forget data (( x(f ) 
+
+> i
+
+)⊤, y (f ) 
+
+> i
+
+), i = 1 , . . . , N f are independent sub-Gaussian vectors with mean zero. Moreover, E[̂Σf ] = Σ f and c−1Σ ≤ Λmin (Σ f ) ≤ Λmax (Σ f ) ≤ cΣ.For the remaining and forget data, we assume the observations are independent sub-Gaussian. This assumption is commonly used in the analysis of strongly convex objective functions and in 7linear models [Izzo et al., 2021, Guo et al., 2020]. We do not require the samples to be identically distributed, which allows for internal heterogeneity within each dataset. Moreover, we do not require the true relationship between the response and covariates to be linear, which allows for model misspecification. In the next theorem, we establish the convergence rate of the ULS estimator ˆθ(uls)  
+
+> r
+
+defined in (8). Let θf ∈ Rp denote the true coefficient vector under squared loss for the forget data, i.e., 
+
+θf = arg min θ∈Rp E[ℓ(θ; Df )]. To ensure θf is well-defined, we assume that the normalized loss 
+
+ℓ(θ; Df )/N f converges in probability to a limiting objective function ℓ(f ) 
+
+> ∞
+
+(θ) for any θ ∈ Rp as 
+
+Nf → ∞ . Let δ = ‖θr − θf ‖2 denote the magnitude of discrepancy between the remaining and forget model distributions, quantifying the bias forget model relative to the remaining data. 
+
+Theorem 3.1. Assume Condition 1 and p = o(min {˜nr, N f }). Then with probability at least 1 −
+
+exp {− c1p} , it holds that 
+
+‖ ˆθ(uls)  
+
+> r
+
+− ˚θ(rtr)  
+
+> r
+
+‖2 ≤ c2ωf δ
+
+√ p
+
+˜nr
+
+‖ ˆθ(uls)  
+
+> r
+
+− θr‖2 ≤ c2
+
+√ p
+
+Nr
+
++ c2ωf δ
+
+√ p
+
+˜nr
+
+,
+
+where c1 and c2 are positive constants. 
+
+Theorem 3.1 decomposes the error of ˆθ(uls)  
+
+> r
+
+into two components: the oracle rate O(√p/N r)and the unlearning cost O(ωf δ√p/ ˜nr). Specifically, the second term quantifies the statistical price of unlearning: it increases linearly with the forget proportion and the discrepancy between the two distributions. The convergence rate gets faster when Nr and ˜ nr get larger but the rate gets slower when the forget sample size Nf and model discrepancy δ get larger. Intuitively, this is because the larger the Nf and δ, the larger the influence of the forget data made on ˆθp. Notably, if the forget set is small relative to the subsample, i.e., ωf δ . √˜nr/N r, the unlearning cost becomes negligible and ULS achieves the oracle efficiency of full retraining. Let ˆθ(uls)  
+
+> r,T
+
+denote gradient descent version of ˆθ(uls)  
+
+> r
+
+, the realization of Algorithm 1 based on squared loss. Next, we provide theoretical guarantees for this gradient descent realization. 
+
+Theorem 3.2. Assume Condition 1. Let the step size α be a constant such that 0 < α < (1 −
+
+cα)/[Nr Λmax (˜Σr)] for some cα < 1. Then with probability at least 1 − exp {− c1p}, for any given integer T ,
+
+‖ˆθ(uls)  
+
+> r,T
+
+− ˆθ(uls)  
+
+> r
+
+‖2 ≤ c2cTα ωf
+
+(
+
+δ +
+
+√ p
+
+min {Nf , N r }
+
+)
+
+.
+
+‖ ˆθ(uls)  
+
+> r,T
+
+− θr‖2 ≤ c2cTα ωf
+
+(
+
+δ +
+
+√ p
+
+min {Nf , N r}
+
+)
+
++ c2
+
+√ p
+
+Nr
+
++ c2ωf δ
+
+√ p
+
+˜nr
+
+for some positive constants c1 and c2.
+
+With proper step size α, the gradient descent estimate ˆθ(uls)  
+
+> r,T
+
+converges to the ULS estimate ˆθ(uls) 
+
+> r
+
+as T → ∞ . From the second inequality, we see that after T = O(ln ˜ nr) steps, the computational error becomes negligible compared to the statistical error, preserving the same convergence rate proved in Theorem 3.1. 83.3 Minimax optimality 
+
+In this subsection, we establish the minimax lower bound for estimating θr in the machine unlearn-ing setting. Consider the parameter space 
+
+Θp(δ) = {β = ( θr , θf , Σr, Σf , σ 2 
+
+> r
+
+, σ 2 
+
+> f
+
+) : θr ∈ Rp, θf ∈ Rp, ‖θr − θf ‖2 ≤ δ, σ 2 
+
+> r
+
+> 0, σ 2 
+
+> f
+
+> 0,c−11 ≤ Λmin (Σ r ) ≤ Λmax (Σ r ) ≤ c1, c −11 ≤ Λmin (Σ f ) ≤ Λmax (Σ f ) ≤ c1}, (10) 
+
+where p characterizes the dimension of target parameter and δ characterizes the model discrepancy between Dr and Df .
+
+Theorem 3.3. Assume that ωr ≥ 1/2, ωf δ ≤ 1, and p ≤ c0 min {√N , ˜nr} for some small enough positive constant c0. For the parameter space Θp(δ) defined in (10), it holds that 
+
+inf    
+
+> ˆθ∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Θp(δ)
+
+P
+
+(
+
+‖ ˆθ − θr‖2 ≥ c1
+
+√ p
+
+Nr
+
++ c1ωf δ
+
+√ p
+
+˜nr
+
+)
+
+≥ c2
+
+for some positive constants c1 and c2.
+
+The lower bound shows that any unlearning procedure based on ( ˆθp, Df , ˜Dr) must incur an additional error proportional to ωf δ
+
+√ p 
+
+> ˜nr
+
+under the conditions of Theorem 3.3. This term captures the intrinsic difficulty of correcting the bias induced by the forget samples when only partial access to the retained data is available. This result shows that the proposed ˆθ(uls)  
+
+> r
+
+is minimax optimal whenever the “unlearning cost” is not overwhelmingly large ( ωf δ ≤ 1). To accommodate the extreme scenarios ωf δ ≫ 1, we show that a regularized version of ˆθ(uls)  
+
+> r
+
+, defined in (15), can achieve the minimax optimal rate even when ωf δ ≫ 1. The proof of Theorem 3.3 presents a unique technical challenge due to the complex dependency between the pre-trained estimator ˆθp and the observed data {D f , ˜Dr}. Standard lower bound techniques typically assume independent observations. To overcome the complexity, we employ a novel perturbation analysis of the pre-trained estimator’s distribution, decoupling the dependency structure.This technique may be of independent interest for other problems when the observed statistics have complex dependency. 
+
+3.4 Comparison to baseline methods 
+
+To better illustrate the theoretical advantages of the proposed methods, we review some existing methods that can also be applied to the unlearning problem under the set-up introduced in Section 2.1. The counterparts for comparison include the pre-trained estimate, the OLS estimate based on 
+
+˜Dr, and transfer learning method for linear models. Given the observations { ˆθp, Df , ˜Dr}, a direct approach to estimate θr is the least square estimate based on subsampled remaining data: ˜θ(ols)  
+
+> r
+
+=
+
+{
+
+( ˜X(r))⊤ ˜X(r)}−1
+
+( ˜X(r))⊤ ˜y(r). (11) It is easy to see that ˜θ(ols)  
+
+> r
+
+is unbiased for θr but its variance is proportional to p/ ˜nr, which can be large when ˜ nr is relatively small. 9The second candidate estimate is the pre-trained estimate under squared loss, which is ˆθp =
+
+{
+
+(X(r))⊤X(r) + ( X(f ))⊤X(f )}−1 {
+
+(X(r))⊤y(r) + ( X(f ))⊤y(f )}
+
+.
+
+We know that it has relatively small variance but can have large bias when there is a large model distinction between Dr and Df .The third benchmark method is the transfer learning estimator. We may treat ˆθp as an estimate from the source data and treat ˜Dr as samples from the target data. Motivated by the idea of transfer learning, we define ˆθ(tl)  
+
+> r
+
+= arg min 
+
+> θ∈Rp
+
+{ 1
+
+˜nr
+
+ℓ(θ; ˜Dr) + λ(tl) ‖θ − ˆθp‖22
+
+}
+
+, (12) where λ(tl) > 0 is a tuning parameter. We consider the Ridge penalty to induce similarity between the pre-trained estimate ˆθp and the target parameter. Although transfer learning adapts to the remaining data efficiently, it ignores the information of the forget data Df . We will show that ˆθ(tl) 
+
+> r
+
+can be sub-optimal for unlearning when the distribution shift is significant. We treat the re-trained estimate based on Dr as the oracle baseline method. By (3), under squared loss, ˚θ(rtr)  
+
+> r
+
+= (( X(r))⊤X(r))−1(X(r))⊤y(r). (13) 
+
+Lemma 3.4 (Convergence rate of benchmark estimators) . Assume Condition 1. Given that p =
+
+o(min {˜nr, N f }), with probability at least 1 − exp {− c1p}, we have 
+
+‖˚θ(rtr)  
+
+> r
+
+− θr‖2 ≤ C
+
+√ p
+
+Nr
+
+‖ ˆθp − θr‖2 ≤ C(
+
+√ p
+
+N + ωf δ)
+
+‖ ˜θ(ols)  
+
+> r
+
+− θr‖2 ≤ C
+
+√ p
+
+˜nr
+
+.
+
+If we take λ(tl) = √p/ ˜nr/(√p/N + ωf δ) in (12), then 
+
+‖ ˆθ(tl)  
+
+> r
+
+− θr ‖2 ≤ C min 
+
+{√ p
+
+˜nr
+
+,
+
+√ p
+
+N + ωf δ
+
+}
+
+.
+
+From Lemma 3.4, we see that the convergence rate of transfer learning estimate ˆθ(tl)  
+
+> r
+
+is the minimum of the rates of ˜θ(ols)  
+
+> r
+
+and ˆθp with proper choice of λ(tl) . However, its convergence rate involves a bias term ωf δ. If ωf δ ≫ √p/ ˜nr, then the transfer learning estimate has the same convergence rate as ˜θ(ols)  
+
+> r
+
+, which fails to borrow information from the pre-trained estimate. When ˜nr ≪ Nr, the convergence rate of three baseline methods are much slower than the rate of the re-trained estimator. We now provide theoretical comparisons between ˆθ(uls)  
+
+> r
+
+and the benchmark estimators studied above. We see from Theorem 3.1 and Theorem 3.3 that ˆθ(uls)  
+
+> r
+
+is no worse than the three baseline methods and is minimax optimal under mild conditions. Comparing with the transfer learning estimate, especially, the bias term of ULS is scaled by √p/ ˜nr, which is significantly smaller. To summarize, the propose unlearning estimate provides a computationally efficient alternative to debias the pre-trained estimate which only leverages two small datasets Df and ˜Dr.10 4 Statistical inference 
+
+While current machine unlearning literature primarily focuses on approximating the point estimates of a fully retrained model, it frequently overlooks the uncertainty inherent in the post-deletion pa-rameters. Establishing a robust framework for statistical inference is crucial to quantify this result-ing variability, ensuring that downstream predictions and confidence intervals remain statistically valid after data removal. In this section, we develop asymptotically valid inference procedures for linear functionals of parameter θr. For any given constant vector v ∈ Rp, we study statistical inference for v⊤θr
+
+enabling hypothesis testing and confidence interval construction without full retraining. The main challenge is that the unlearning estimator depends on both the forget data and the covariates from subsampled remaining data, creating additional variability beyond the standard regression noise. Let ǫ(r) 
+
+> i
+
+= y(r) 
+
+> i
+
+− (x(r) 
+
+> i
+
+)⊤θr. For i = 1 , . . . , N r, define the noise terms 
+
+a(r) 
+
+> i
+
+= v⊤Σ−1 
+
+> r
+
+x(r) 
+
+> i
+
+ǫ(r) 
+
+> i
+
+and b(r) 
+
+> i
+
+= −v⊤Σ−1 
+
+> r
+
+(x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)( θr − θp),
+
+where a(r) 
+
+> i
+
+captures the variance of the outcome noise and b(r) 
+
+> i
+
+captures the additional variance introduced by approximating the population Hessian using the subsample ˜Dr.
+
+Condition 2 (Regularity conditions for asymptotic normality) . There exists some positive constant 
+
+c such that min 1≤i≤Nr Var( a(r) 
+
+> i
+
+) ≥ c‖v‖22 and min 1≤i≤Nr Var( b(r) 
+
+> i
+
+) ≥ cω 2 
+
+> f
+
+δ2‖v‖22. There exists some positive constant ρ such that max 
+
+> 1≤i≤Nr
+
+|Cov( a(r) 
+
+> i
+
+, b (r) 
+
+> i
+
+)|
+
+Var 1/2(a(r) 
+
+> i
+
+)Var 1/2(b(r) 
+
+> i
+
+) ≤ ρ < 1.
+
+Condition 2 puts mild conditions on the variance and covariance of a(r) 
+
+> i
+
+and b(r) 
+
+> i
+
+ensuring the non-degeneracy of the asymptotic variance. If E[ǫ(r) 
+
+> i
+
+|x(r) 
+
+> i
+
+] = 0, then the above inequality holds with 
+
+ρ = 0. As we do not assume a linear relationship between covariates and outcomes in (1) and the observations are allowed to be heterogeneous within Dr, Condition 2 guarantees that the variance patterns of the residuals are regular. If x(r) 
+
+> i
+
+and ǫ(r) 
+
+> i
+
+are independent and jointly normal with positive definite covariance matrix, then Condition 2 automatically holds. Let ˜Nr ⊆ [Nr] denote the index set corresponding to ˜Dr.
+
+Theorem 4.1. Assume Conditions 1 and 2, and p2 = o(min {˜nr, N f }). For any fixed v ∈ Rp, it holds that 
+
+v⊤( ˆθ(uls)  
+
+> r
+
+− θr)
+
+V 1/2
+
+> rD
+
+−→ N (0 , 1) 
+
+for 
+
+Vr = 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+E[( a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+b(r) 
+
+> i
+
+)2] + 1
+
+N 2
+
+> r
+
+∑  
+
+> i∈N r\˜Nr
+
+E[( a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2].
+
+In Theorem 4.1, we prove the asymptotic normality of v⊤ ˆθ(uls)  
+
+> r
+
+for any fixed v ∈ Rp. As shown in the proof, the variance term Vr = O(‖v‖2(N −1 
+
+> r
+
++ ω2 
+
+> f
+
+δ2/˜nr)), which matches the convergence rate proved in Theorem 3.1. 11 Next, we develop a consistent estimate of Vr. Since the second term in Vr involves the samples in Dr \ ˜Dr , which are unobserved, we cannot compute it directly. Nevertheless, as ˜Dr is a random sample from Dr , we can develop a consistent estimate based on ˜Dr. Specifically, define ̂
+
+Vr = 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+(ˆ a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+ˆb(r) 
+
+> i
+
+)2 + Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+(ˆ a(r) 
+
+> i
+
++ ˆb(r) 
+
+> i
+
+)2,
+
+where ˆa(r) 
+
+> i
+
+= v⊤(˜Σr)−1 ˜x(r) 
+
+> i
+
+(˜ y(r) 
+
+> i
+
+− ( ˜ x(r) 
+
+> i
+
+)⊤ ˆθ(uls)  
+
+> r
+
+)ˆb(r) 
+
+> i
+
+= v⊤(˜Σr)−1( ˜ x(r) 
+
+> i
+
+( ˜ x(r) 
+
+> i
+
+)⊤ − ˜Σr)( ˆθ(uls)  
+
+> r
+
+− ˆθp).
+
+We prove the consistency of ̂ Vr in the next lemma. 
+
+Lemma 4.2 . Assume Conditions 1, 2, and p2 = o(min {˜nr, N f }). For any fixed v ∈ Rp, it holds that 
+
+|̂Vr − Vr|
+
+Vr
+
+= o(1) with probability at least 1 − exp {− c1 log ˜ nr}.In view of Theorem 4.1 and Lemma 4.2, we can construct asymptotically valid 100(1 − α)%-confidence interval for v⊤θr as 
+
+(
+
+v⊤ ˆθ(uls)  
+
+> r
+
+− z(1 −α)/2̂ V 1/2 
+
+> r
+
+, v⊤ ˆθ(uls)  
+
+> r
+
++ z(1 −α)/2̂ V 1/2
+
+> r
+
+)
+
+, (14) where z1−α/ 2 is the standard normal quantile. Crucially, this interval is computable solely from the forget set, the pre-trained model, and the small subsample ˜Dr, preserving the efficiency and privacy benefits of our framework. 
+
+# 5 Robustifying the ULS estimator 
+
+From Theorem 3.1, we see that the ULS estimator can exhibit a slower convergence rate than ˜θ(ols)  
+
+> r
+
+if the forget model bias is overwhelmingly large ωf δ ≫ 1. In this section, we study a robust version of ULS that addresses this limitation and establish its theoretical connections to prevailing benchmark estimators used in LLMs. 
+
+5.1 Robustified ULS 
+
+We robustify the ULS estimate by adding a loss term for the subsampled remaining data ˆθ(uls+)  
+
+> r
+
+= arg min 
+
+> θ∈Rp
+
+{
+
+− ωf
+
+Nf
+
+ℓ(θ; Df ) + ( ˆθp − θ)⊤ ˜Σp( ˆθp − θ) + λ
+
+˜nr
+
+ℓ(θ; ˜Dr)
+
+}
+
+, (15) where λ > 0 is a tuning parameter. In comparison to the optimization in (9), the last term in (15) enforces that the solution ˆθ(uls+)  
+
+> r
+
+must also maintain a good fit to the subsampled remaining data 
+
+˜Dr.12 Theorem 5.1 (Convergence rate of robustified ULS) . Assume Condition 1 and p = o(min {˜nr, N f }).If we take λ = Cω rωf δ for any positive constant C, then 
+
+‖ ˆθ(uls+)  
+
+> r
+
+− θr‖2 ≤ C1
+
+√ p
+
+Nr
+
++ C2 min {ωf δ, 1}
+
+√ p
+
+˜nr
+
+with probability 1 − exp {− c1p}.
+
+Theorem 5.1 demonstrates that incorporating the loss term on ˜Dr successfully robustifies the unlearning estimator when ωf δ is large. Indeed, the estimate ˆθ(uls+)  
+
+> r
+
+is always no worse than the subsampled OLS ˜θ(ols)  
+
+> r
+
+. In the next theorem, we show the minimax optimality of ˆθ(uls)  
+
+> r
+
+.
+
+Theorem 5.2 (Minimax lower bound) . Assume that ωr ≥ 1/2 and p ≤ c0 min {√N , ˜nr} for some small enough positive constant c0. For the parameter space Θp(δ) defined in (10), it holds that 
+
+inf    
+
+> ˆθ∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Θp(δ)
+
+P
+
+(
+
+‖ ˆθ − θr‖2 ≥ c1
+
+√ p
+
+Nr
+
++ c1 min {ωf δ, 1}
+
+√ p
+
+˜nr
+
+)
+
+≥ c2
+
+for some positive constants c1 and c2.
+
+Theorem 5.2 shows that the robustified ULS achieves minimax optimality regardless of the magnitude of ωf δ.
+
+5.2 Connections to GradDiff 
+
+The formulation in (15) is conceptually related to the Gradient Difference (GradDiff) method [Liu et al., 2022, 2025a], a heuristic proposed to mitigate the well-known instability of standard gradient ascent in LLM unlearning tasks [Yao et al., 2024, Maini et al., 2024]. Specifically, GradDiff simultaneously maximizes the forget loss and minimizes the remaining loss ˆθ(diff)  
+
+> r
+
+= arg min 
+
+> θ∈Rp
+
+{
+
+− 1
+
+Nf
+
+ℓ(θ; Df ) + λ(diff) 
+
+˜nr
+
+ℓ(θ; ˜Dr )
+
+}
+
+,
+
+where λ(diff) > 0 is a tuning parameter. Empirical studies have demonstrated that the GradDiff has more reliable performance than gradient ascent in LLM unlearning [Fan et al., 2024]. In our framework, GradDiff can be viewed as a weighted average of the gradient ascent estimate and the OLS estimate ˜θ(ols)  
+
+> r
+
+but it omits the Hessian-weighted regularization term that anchors the optimization to the pre-trained model. We provide convergence analysis of ˆθ(diff)  
+
+> r
+
+in the next theorem. 
+
+Theorem 5.3 (Convergence rate of GradDiff) . Assume Condition 1 and p = o(min {˜nr, N f }). For any λ(diff) ≥ 2Λ max (Σ f )/Λmin (Σ r), we have with probability at least 1 − exp {− c1p},
+
+‖ ˆθ(diff)  
+
+> r
+
+− θr‖2 ≤ c2(
+
+√ p
+
+˜nr
+
++
+
+√ p 
+
+> Nf
+
++ δ
+
+λ(diff) ).
+
+Hence, if we take λ(diff) = max {
+
+√ ˜ωr 
+
+> ωf
+
++
+
+√ ˜nr 
+
+> p
+
+δ, 2Λ max (Σ f )/Λmin (Σ r)},
+
+‖ ˆθ(diff)  
+
+> r
+
+− θr‖2 ≤ c3
+
+√ p
+
+˜nr
+
+.
+
+13 In Theorem 5.3, the constraint on λ(diff) ensures the objective function remains strictly convex and admits a unique minimizer. We see from the first inequality that the risk upper bound de-creases as λ(diff) gets larger. In the second inequality, with optimal tuning, its convergence rate is 
+
+O(√p/ ˜nr), which merely matches the subsampled OLS estimator that relies solely on the remain-ing data. Therefore, unlike our proposed ULS framework, GradDiff is not minimax optimal when 
+
+ωf δ = o(1). 
+
+# 6 Numerical experiments 
+
+We conduct numerical experiments to assess the estimation and inference performance of the pro-posed unlearning estimator ˆθ(uls)  
+
+> r
+
+in comparison to several classical benchmark estimators. The code for all the methods is available at https://github.com/jyxie96/mu_minimax .For the remaining data, we simulate covariates x(r) 
+
+> i
+
+∼i.i.d. N (0 , I p) and responses y(r) 
+
+> i
+
+=(x(r) 
+
+> i
+
+)⊤θr + ǫ(r) 
+
+> i
+
+, where the random noise ǫ(r) 
+
+> i
+
+∼i.i.d. N (0 , 1). The true parameter θr is randomly drawn from N (0 , I p) and fixed in Monte Carlo replications. For the forget data, we introduce an autoregressive covariance structure for the covariates, x(f ) 
+
+> i
+
+∼i.i.d. N (0 , Σf ), where (Σ f )j,k = 0 .3|j−k|
+
+, and generate y(f ) 
+
+> i
+
+= ( x(f ) 
+
+> i
+
+)⊤θf + ǫ(f ) 
+
+> i
+
+, where the random noise ǫ(f ) 
+
+> i
+
+∼i.i.d. N (0 , 1). We set 
+
+θf = θr + cδ v/‖v‖2 for v = p−1/21p, where cδ = δ varies in different settings. 
+
+6.1 Estimation performance 
+
+We first evaluate estimation with a fixed remaining sample size Nr = 20000 and a forget sample size Nf = 1000. To isolate the influence of key theoretical quantities, we employ a controlled design varying one factor at a time: (a) Subsample Ratio: We vary ˜ nr/N r ∈ { 0.1, 0.2, 0.3} with fixed p = 50 and δ = 2. (b) Dimension: We vary p ∈ { 10 , 50 , 100 } with fixed ˜ nr/N r = 0 .2 and δ = 2. (c) Discrepancy: We vary the shift magnitude δ ∈ { 1, 2, 3} with fixed p = 50 and ˜ nr/N r = 0 .2. We compare ˆθ(uls)  
+
+> r
+
+against four baselines: the retrained estimate ˚θ(rtr)  
+
+> r
+
+, the pre-trained estimate ˆθp,the GradDiff estimate ˆθ(diff)  
+
+> r
+
+, and the subsampled OLS ˜θ(ols)  
+
+> r
+
+. For the tuning parameter λ in ˆθ(diff)  
+
+> r
+
+,we employ cross-validation to adaptively tune it, searching over the range λ(diff) ∈ [10 −4, 10 4]. For an arbitrary estimator ˆθ, its performance is measured by the estimation error ‖ ˆθ − θr‖2 averaged over 1,000 Monte Carlo replications. From Figure 1, we see that our proposed estimates have estimation errors comparable to the re-trained estimates and are more accurate than other benchmark methods ˆθp, ˆθ(diff)  
+
+> r
+
+, and ˜θ(ols) 
+
+> r
+
+across all the settings. Moreover, the dependence of the estimation errors on the three factors align with our theoretical analysis. As ˜ nr increases, the estimation errors of ˆθ(diff)  
+
+> r
+
+, ˜θ(ols)  
+
+> r
+
+, and ˆθ(uls)  
+
+> r
+
+decay. Increasing the dimension p leads to a monotonic increase in error across all methods. As δ grows, both ˆθ(uls)  
+
+> r
+
+and ˆθp have increasing errors, but the errors of ˆθ(uls)  
+
+> r
+
+grows much slower. This aligns with our theory that the effect of δ on the error of ˆθ(uls)  
+
+> r
+
+is attenuated by the shrinkage factor √p/ ˜nr. On the other hand, ˜θ(ols)  
+
+> r
+
+remains unaffected by the bias term as it only uses ˜Dr. Furthermore, with an 14 Figure 1: Boxplots of the estimation errors for five unlearning estimators: ˚θ(rtr)  
+
+> r
+
+(gray without hatch), ˆθp (gray with backward-slash hatch), ˆθ(diff)  
+
+> r
+
+(blue with vertical-line hatch), ˜θ(ols)  
+
+> r
+
+(yellow with horizontal-line hatch), and ˆθ(uls)  
+
+> r
+
+(red with forward-slash hatch). The three panels correspond to experimental settings (a), (b), and (c), with Nr = 20000 and Nf = 1000. Each setting is replicated with 1000 Monte Carlo trials. adaptively tuned λ(diff) , the estimation error of ˆθ(diff)  
+
+> r
+
+becomes virtually indistinguishable from that of ˜θ(ols)  
+
+> r
+
+. This empirical result is consistent with our theoretical derivation in Theorem 5.3. Overall, the empirical behavior matches the convergence rates established in the theory, demonstrating that the error decays with the effective subsample size and scales appropriately with the dimension, and model discrepancy. These patterns remain consistent under a more aggressive unlearning scenario with a larger forget set Nf = 2000 as shown in Figure 2. We also report the simulation results comparing ˆθ(uls) 
+
+> r
+
+with its gradient descent variant ˆθ(uls)  
+
+> r,T
+
+, and its robustified version ˆθ(uls+)  
+
+> r
+
+. Comprehensive details and further analysis are provided in the supplements (Section C.1). 
+
+6.2 Inference performance 
+
+We evaluate the inference performance of our proposed unlearning estimator ˆθ(uls)  
+
+> r
+
+in comparison to subsampled remaining estimator ˜θ(ols)  
+
+> r
+
+, which also enjoys asymptotic normality under mild con-ditions. For this OLS method based on ˜Dr, a 100(1 − α)%-confidence interval for v⊤θr can be constructed as 
+
+v⊤ ˜θ(ols)  
+
+> r
+
+± z1−α/ 2
+
+√ ∑˜nr
+
+> i=1
+
+(˜ y(r) 
+
+> i
+
+− ( ˜ x(r) 
+
+> i
+
+)⊤ ˜θ(ols)  
+
+> r
+
+)2
+
+˜nr − p
+
+√
+
+v⊤( ˜X⊤ 
+
+> r
+
+˜Xr)−1v (16) We maintain the same model setup and experimental configuration as in the estimation experiments of Figure 1 or Figure 2. For a fixed direction v = e1, we construct 100(1 − α)% confidence intervals with a nominal level α = 0 .05. We report the average coverage probabilities and average standard deviations in each experimental configuration in Table 1. 15 Figure 2: Boxplots of the estimation errors for five unlearning estimators: ˚θ(rtr)  
+
+> r
+
+(gray without hatch), ˆθp (gray with backward-slash hatch), ˆθ(diff)  
+
+> r
+
+(blue with vertical-line hatch), ˜θ(ols)  
+
+> r
+
+(yellow with horizontal-line hatch), and ˆθ(uls)  
+
+> r
+
+(red with forward-slash hatch). The three panels correspond to experimental settings (a), (b), and (c), with Nr = 20000 and Nf = 2000. Each setting is replicated with 1000 Monte Carlo trials. From Table 1, we see that when ˜ nr is small, both methods are slightly under coverage but they achieve nominal coverage in all the other scenarios. On the other hand, the average standard deviation of the proposed method is always smaller than that of ˜θ(ols)  
+
+> r
+
+. It demonstrates that the proposed inference method is asymptotically valid and achieves higher efficiency. In the supplements (Section C.2), we provide inference results when Nf = 2000, which give analogous conclusions as in Table 1. 
+
+# 7 Real data applications 
+
+In this section, we apply the proposed unlearning procedure to two datasets: the Yelp review public dataset [Zhang et al., 2015] and UK Biobank clinical records [Sudlow et al., 2015], for the purpose of outlier removal. We provide the code for this analysis at https://github.com/jyxie96/mu_minimax/ .
+
+7.1 Yelp dataset unlearning 
+
+The Yelp review public dataset ( https://huggingface.co/datasets/Yelp/yelp_review_full )comprises over six million user reviews and associated ratings. Our objective is to predict ratings based on the textual content of the reviews. This dataset was previously utilized for an unlearning task by Izzo et al. [2021]. For computational feasibility, we begin by drawing a random sample of 200,000 reviews from the full corpus. We define forget set based on the length of the reviews. Very short reviews often lack meaningful context, while excessively long reviews can be overly convoluted, making both extremes potential 16 ˜nr/N r p δ
+
+0.1 0.2 0.3 10 50 100 1 2 3
+
+Average Coverage 
+
+ULS 0.935 0.957 0.960 0.957 0.957 0.952 0.947 0.957 0.949 
+
+OLS 0.945 0.952 0.942 0.951 0.952 0.942 0.954 0.952 0.960 
+
+Average SD (×10 −2)
+
+ULS 0.81 0.75 0.73 0.74 0.75 0.76 0.72 0.75 0.80 
+
+OLS 2.26 1.59 1.30 1.58 1.59 1.60 1.59 1.59 1.59 
+
+Table 1: Inference results for settings (a), (b), and (c) with Nr = 20000 and Nf = 1000. Each setting is replicated with 1000 Monte Carlo trials. sources of predictive noise. Therefore, we define the forget set to be the reviews whose lengths fall into the bottom 10% and top 10% quantiles. These reviews constitute targeted outliers, and our objective is to unlearn their specific influence on the model. The remaining reviews constitute the dataset to be retained, which we randomly partition into two distinct subsets: 80% forms the remaining dataset Dr and the other 20% is held out as an independent test set for evaluating predictive performance. Accordingly, the full set of training data is D = Dr ∪D f with Nr = 129 , 144 and Nf = 38 , 569. For the subsampled remaining data ˜Dr, we randomly draw ˜ nr reviews from Dr
+
+with ˜ nr/N r = 0 .1. For text representation, following the methodology in Izzo et al. [2021], we use a separate sam-ple of reviews outside the unlearning dataset to construct a vocabulary of 1,500 most frequent words. We then employ this vocabulary to build a bag-of-words representation, yielding a p = 1500 dimensional feature vector for each review. We evaluate the prediction performance of the proposed ˆθ(uls)  
+
+> r
+
+and ˆθ(uls+)  
+
+> r
+
+against four bench-marks: the retrained estimate ˚θ(rtr)  
+
+> r
+
+, the pre-trained estimate ˆθp, the GradDiff estimate ˆθ(diff)  
+
+> r
+
+, the subsampled OLS ˜θ(ols)  
+
+> r
+
+and the so-called projective residual update (PRU) estimate introduced in Izzo et al. [2021]. Performance is evaluated using the Mean Prediction Error (MPE) on the test set: ∑ntest  
+
+> i=1
+
+(yi − x⊤ 
+
+> i
+
+ˆθ)2/n test for a generic estimator ˆθ.The prediction results are reported in Figure 3 and the running time cost is reported in Table 2. Notably, our proposed ULS and ULS+ methods achieve prediction accuracy closely tracking the oracle re-trained estimator, while maintaining high computational efficiency. In contrast, the other unlearning benchmarks, ˆθp, ˆθ(diff)  
+
+> r
+
+, and ˜θ(ols)  
+
+> r
+
+suffer large prediction errors due to the large model discrepancy or the relatively small subsample size. ˆθ(pru)  
+
+> r
+
+has comparable performance as ˚θ(rtr) 
+
+> r
+
+when the number of forgotten samples is large, but at a substantial computational cost. Even with matrix acceleration, it is still nearly 300 times slower than the computation time of other estimators. Indeed, it has been discussed in Izzo et al. [2021] that ˆθ(pru)  
+
+> r
+
+requires computations involving N 2 
+
+> f
+
+p
+
+and N 3 
+
+> f
+
+terms, making it impractical when Nf is large. To provide a comprehensive evaluation, we present corresponding results for ˜ nr/N r ∈ { 0.2, 0.3} in Figures 8 and 9 of the supplements. 17 Estimator ˚θ(rtr)            
+
+> rˆθ(pru)
+> rˆθ(diff)
+> r˜θ(ols)
+> rˆθ(uls)
+> rˆθ(uls+)
+> r
+> Running Time (s) 0.44 90.08 25.60 0.12 0.25 25.20
+
+Table 2: Average running time per estimator over 20 folds on the Yelp dataset. For ˆθ(diff)  
+
+> r
+
+and ˆθ(uls+)  
+
+> r
+
+, running time includes 5-fold cross-validation over 20 candidates for tuning parameter selec-tion. All experiments were conducted on an Intel Xeon Gold 5418Y CPU with 48 physical cores. 
+
+Figure 3: Boxplots of mean prediction errors for the Yelp review rating unlearning task under the setting ˜ nr/N r = 0 .1. Each boxplot is based on 20 random splits of training and test samples. 
+
+7.2 UK Biobank dataset unlearning 
+
+Given the pressing legal and ethical mandates for machine unlearning in medical informatics, we apply our framework to analyze inpatient lengths of stay using hospital episode records in 2022 from the UK Biobank repository [Sudlow et al., 2015]. In clinical settings, predictive models for inpatient length of stay are crucial for operational resource planning and bed management. The predictors include admission method, management strategy, operative status, and responsible clin-ician specialty, which are highly informative for predicting duration. Before constructing predictive model, we perform initial data cleaning by removing missing values and duplicate records to ensure data quality and integrity, resulting in a final dataset of 7, 602 records and 6 categorical predictors. These covariates are pre-processed to a design matrix with p = 16 columns. See Section D.1 in the supplements for more details. For the response variable y, it is highly right-skewed as shown in the left panel of Figure 4 and we apply a log 10 (y)transformation for reliable regression modeling. Hospital episode records frequently include atypical or administratively irregular cases. As the left panel of Figure 4 illustrates, certain episodes report extremely prolonged durations that do not represent routine inpatient trajectories. To systematically align the model with typical admissions, we employ the standard Interquartile Range (IQR) rule [Dekking, 2005] to define the outlier forget set. Specifically, we compute IQR = q3−q1 where q1 and q3 are the empirical quantiles of the original hospital stay duration. Episodes satisfying yi > q 3 + 1 .5 IQR are assigned to Df (corresponding to a threshold of 38 days). The remaining records constitute the data to be retained. For robust 18 Figure 4: Distribution of the response variable y within the full dataset D. The left panel shows the distribution of raw response, which is severely right-skewed. The right panel displays the transformed response log 10 (y), illustrating a significantly reduced scale. 
+
+Figure 5: Boxplots of mean prediction errors for the UK Biobank hospital episode unlearning task under the setting ˜ nr/N r = 0 .1. Each boxplot is based on 20 random splits of training and test samples. evaluation, we employ the same partitioning and replication scheme as the Yelp dataset to construct the remaining set Dr and the independent test set. This results in a forget set size of Nf = 577 and remaining set size of Nr = 5619. We evaluate the predictive performance using the MPE of the log-transformed responses on the independent test set: ∑ntest  
+
+> i=1
+
+(log 10 (yi) − x⊤ 
+
+> i
+
+ˆθ)2/n test for a generic estimator ˆθ. The results are re-ported in Figure 5. Our proposed ULS and ULS+ outperform the three baselines methods, demon-strating the lowest predictive error. Additional performance evaluations for ˜ nr/N r ∈ { 0.2, 0.3} are available in Figures 10 and 11 of the supplement. We further conduct statistical inference for the coefficient corresponding to the “one or more operative procedures performed” covariate. We compare the 95% confidence intervals produced by our ULS method defined in (14) with that of OLS method based on ˜Dr define in (16). As reported in Table 3, both methods demonstrate high statistical significance, yielding strictly positive intervals that exclude zero. This indicates a positive association between operative procedures and 19 ˜nr/N r 0.1 0.2 0.3                   
+
+> ULS 0.158 ±0.029 0.163 ±0.026 0.159 ±0.025 OLS 0.181 ±0.078 0.172 ±0.053 0.147 ±0.044
+
+Table 3: Inference results for the coefficient of the “one or more operative procedures performed” covariate. The table reports the 95% confidence intervals produced by ULS and OLS method across ˜nr/N r ∈ { 0.1, 0.2, 0.3}.hospital length of stay, which aligns perfectly with established clinical expectations. Crucially, the proposed ULS method exhibits superior statistical efficiency, yielding signficantly narrower confidence intervals compared to the subsampled OLS approach, thereby allowing for more precise clinical insights. 
+
+# 8 Discussion 
+
+In this work, we provide a rigorous statistical framework for machine unlearning under generic loss functions. We develop computationally efficient methods for exact bias correction under distribu-tion shifts and formally establish their minimax optimality. Furthermore, by proving the asymp-totic normality of the unlearning estimator, we enable valid statistical inference and uncertainty quantification without the prohibitive cost of full retraining. The core methodology introduced in this work relies on the smoothness of loss functions, adapting this approach to non-smooth optimization landscapes (e.g., Lasso or quantile regression) presents a substantial technical challenge. Looking forward, developing minimax-optimal unlearn-ing procedures for non-smooth problems, nonparametric models, and deep neural networks remains a vital frontier for future research. 
+
+# Supplementary materials 
+
+Supplement to “Efficient machine unlearning with minimax optimality”. We provide the proofs of theorems and further results on simulations and data applications. 
+
+# Competing interests 
+
+No competing interest is declared. 
+
+# Acknowledgments 
+
+SL is supported in part by funds from the National Natural Science Foundation of China (No. 12571314). LZ is partly supported by “AI for Math” Fund and NSF CAREER DMS-2340241. 20 References 
+
+A. Anjarlekar and S. Pombra. Llm unlearning using gradient ratio-based influence estimation and noise injection. arXiv preprint arXiv:2508.06467 , 2025. S. Balakrishnan, M. J. Wainwright, and B. Yu. Statistical guarantees for the em algorithm: From population to sample-based analysis. The Annals of Statistics , 45(1):77–120, 2017. J. Brophy and D. Lowd. Machine unlearning for random forests. In International Conference on Machine Learning , pages 1092–1104. PMLR, 2021. T. T. Cai and H. Wei. Transfer learning for nonparametric classification. The Annals of Statistics ,49(1):100–128, 2021. Y. Cao and J. Yang. Towards making systems forget with machine unlearning. In 2015 IEEE symposium on security and privacy , pages 463–480. IEEE, 2015. R. D. Cook and S. Weisberg. Residuals and influence in regression. 1982. F. M. Dekking. A Modern Introduction to Probability and Statistics: Understanding why and how .Springer Science & Business Media, 2005. C. Fan, J. Liu, L. Lin, J. Jia, R. Zhang, S. Mei, and S. Liu. Simplicity prevails: Rethinking negative preference optimization for llm unlearning. arXiv preprint arXiv:2410.07163 , 2024. A. Ginart, M. Guan, G. Valiant, and J. Y. Zou. Making ai forget you: Data deletion in machine learning. Advances in neural information processing systems , 32, 2019. L. Graves, V. Nagisetty, and V. Ganesh. Amnesiac machine learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, pages 11516–11524, 2021. C. Guo, T. Goldstein, A. Hannun, and L. Van Der Maaten. Certified data removal from machine learning models. In International Conference on Machine Learning , pages 3832–3842. PMLR, 2020. Z. He, T. Li, X. Cheng, Z. Huang, and X. Huang. Towards natural machine unlearning. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. Z. Izzo, M. A. Smart, K. Chaudhuri, and J. Zou. Approximate data deletion from machine learning models. In International conference on artificial intelligence and statistics , pages 2008–2016. PMLR, 2021. R. Jin, M. Chen, Q. Zhang, and X. Li. Forgettable federated linear learning with certified data unlearning. arXiv preprint arXiv:2306.02216 , 2023. A. K. Kuchibhotla and A. Chakrabortty. Moving beyond sub-gaussianity in high-dimensional statistics: Applications in covariance estimation and linear regression. Information and Inference: A Journal of the IMA , 11(4):1389–1456, 2022. 21 N. Li, A. Pan, A. Gopal, S. Yue, D. Berrios, A. Gatti, J. D. Li, A.-K. Dombrowski, S. Goel, L. Phan, et al. The wmdp benchmark: Measuring and reducing malicious use with unlearning. 
+
+arXiv preprint arXiv:2403.03218 , 2024a. S. Li, T. T. Cai, and H. Li. Transfer learning for high-dimensional linear regression: Prediction, estimation and minimax optimality. Journal of the Royal Statistical Society Series B: Statistical Methodology , 84(1):149–173, 2022. S. Li, L. Zhang, T. T. Cai, and H. Li. Estimation and inference for high-dimensional generalized linear models with knowledge transfer. Journal of the American Statistical Association , 119(546): 1274–1285, 2024b. H. Lin, J. W. Chung, Y. Lao, and W. Zhao. Machine unlearning in gradient boosting decision trees. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 1374–1383, 2023. B. Liu, Q. Liu, and P. Stone. Continual learning and private unlearning. In Conference on Lifelong Learning Agents , pages 243–254. PMLR, 2022. S. Liu, Y. Yao, J. Jia, S. Casper, N. Baracaldo, P. Hase, Y. Yao, C. Y. Liu, X. Xu, H. Li, et al. Rethinking machine unlearning for large language models. Nature Machine Intelligence , pages 1–14, 2025a. Y. Liu, H. Chen, W. Huang, Y. Ni, and M. Imani. Recover-to-forget: Gradient reconstruction from loRA for efficient LLM unlearning. In Socially Responsible and Trustworthy Foundation Models at NeurIPS 2025 , 2025b. URL https://openreview.net/forum?id=n7peBaPUmk .T. Ma, K. A. Verchand, and R. J. Samworth. High-probability minimax lower bounds. arXiv preprint arXiv:2406.13447 , 2024. P. Maini, Z. Feng, A. Schwarzschild, Z. C. Lipton, and J. Z. Kolter. Tofu: A task of fictitious unlearning for llms. arXiv preprint arXiv:2401.06121 , 2024. S. Neel, A. Roth, and S. Sharifi-Malvajerdi. Descent-to-delete: Gradient-based methods for machine unlearning. In Algorithmic Learning Theory , pages 931–962. PMLR, 2021. Y. Nesterov et al. Lectures on convex optimization , volume 137. Springer, 2018. T.-H. Nguyen, H.-P. Vu, D. T. Nguyen, T. M. Nguyen, K. D. Doan, and K.-S. Wong. Empirical study of federated unlearning: Efficiency and effectiveness. In Asian Conference on Machine Learning , pages 959–974. PMLR, 2024. H. W. Reeve, T. I. Cannings, and R. J. Samworth. Adaptive transfer learning. The Annals of Statistics , 49(6):3618–3649, 2021. A. Sekhari, J. Acharya, G. Kamath, and A. T. Suresh. Remember what you want to forget: Algorithms for machine unlearning. Advances in Neural Information Processing Systems , 34: 18075–18086, 2021. 22 T. Shaik, X. Tao, H. Xie, L. Li, X. Zhu, and Q. Li. Exploring the landscape of machine unlearning: A comprehensive survey and taxonomy. IEEE Transactions on Neural Networks and Learning Systems , 2024. C. Sudlow, J. Gallacher, N. Allen, V. Beral, P. Burton, J. Danesh, P. Downey, P. Elliott, J. Green, M. Landray, et al. Uk biobank: an open access resource for identifying the causes of a wide range of complex diseases of middle and old age. PLoS medicine , 12(3):e1001779, 2015. Y. Tian and Y. Feng. Transfer learning under high-dimensional generalized linear models. Journal of the American Statistical Association , 118(544):2684–2697, 2023. R. Tibshirani. Regression shrinkage and selection via the lasso. Journal of the Royal Statistical Society Series B: Statistical Methodology , 58(1):267–288, 1996. R. Vershynin. High-dimensional probability: An introduction with applications in data science ,volume 47. Cambridge university press, 2018. Q. Wang, J. P. Zhou, Z. Zhou, S. Shin, B. Han, and K. Q. Weinberger. Rethinking LLM unlearning objectives: A gradient perspective and go beyond. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum?id=huo8MqVH6t .Y. Wu, E. Dobriban, and S. Davidson. Deltagrad: Rapid retraining of machine learning models. In International Conference on Machine Learning , pages 10355–10366. PMLR, 2020. P. Yang, Q. Wang, Z. Huang, T. Liu, C. Zhang, and B. Han. Exploring criteria of loss reweighting to enhance LLM unlearning. In Forty-second International Conference on Machine Learning ,2025. URL https://openreview.net/forum?id=mGOugCZlAq .Y. Yao, X. Xu, and Y. Liu. Large language model unlearning. Advances in Neural Information Processing Systems , 37:105425–105475, 2024. R. Zhang, L. Lin, Y. Bai, and S. Mei. Negative preference optimization: From catastrophic collapse to effective unlearning. CoRR , 2024. X. Zhang, J. Zhao, and Y. LeCun. Character-level convolutional networks for text classification. 
+
+Advances in neural information processing systems , 28, 2015. 23 Supplementary Material 
+
+# A Convergence analysis of Algorithm 1 
+
+For any θ ∈ Rp, define B(θ, d ) = {θ′ ∈ Rp : ‖θ′ − θ‖2 ≤ d}.
+
+Condition 3 ( λ-strong convexity) . There exists some λ > 0 such that with probability at least 1 − exp {− c1 log ˜ nr},
+
+ℓ(θ; ˜Dr) − ℓ(θ′; ˜Dr ) − 〈 ˙ℓ(θ′; ˜Dr ), θ − θ′〉 ≥ λ˜nr
+
+2 ‖θ − θ′‖22
+
+for all θ, θ′ ∈ B(θr, d ) with some constant d > 0. 
+
+Condition 4 ( μ-smoothness) . There exists some μ > 0 such that with probability at least 1 −
+
+exp {− c1 log ˜ nr},
+
+ℓ(θ; ˜Dr) − ℓ(θ′; ˜Dr ) − 〈 ˙ℓ(θ′; ˜Dr ), θ − θ′〉 ≤ μ˜nr
+
+2 ‖θ − θ′‖22
+
+for all θ, θ′ ∈ B(θr, d ) with some constant d > 0. 
+
+Condition 5 (Gradient smoothness) . With probability at least 1 − exp {− c1 log ˜ nr},
+
+‖ ˙ℓ(θ; ˜Dr ) − ˙ℓ(θ′; ˜Dr)‖2 ≤ C ˜nr‖θ − θ′‖2
+
+for all θ, θ′ ∈ B(θr, d ) with some constant d > 0. 
+
+Condition 6 (Sub-exponential gradient vector) . Assume that ˙ℓ(θp; x(r) 
+
+> i
+
+, y (r) 
+
+> i
+
+) − ˙ℓ(θr; x(r) 
+
+> i
+
+, y (r) 
+
+> i
+
+), i =1, . . . , N r are independent sub-Gaussian vector with sub-exponential norm bounded by C‖θp −θr‖2.Moreover, assume ‖θp − θr‖2 ≤ C for some positive constant C.
+
+Condition 7 (Convergence rate of full-sample estimate) . With probability at least 1 −exp {− c1 log ˜ nr},
+
+‖ ˆθp − θp‖2 ≤ c2
+
+√ p + log ˜ nr
+
+N and ‖˚θ(rtr)  
+
+> r
+
+− θr‖2 ≤ c2
+
+√ p + log ˜ nr
+
+Nr
+
+for some positive constants c1 and c2.Conditions 3-5 are standard conditions for establishing the error contraction of a generic gradient descent algorithm [Balakrishnan et al., 2017, Nesterov et al., 2018]. Conditions 6 and 7 are the regularity conditions for the establishing the convergence rate of the limit ˆθ(unl)  
+
+> r,T
+
+when T → ∞ .For squared loss and cross-entropy loss, these conditions are satisfied under standard sub-Gaussian conditions on the covariates. 
+
+Theorem A.1. Assume Condition 3-7. For step size α = 2  
+
+> Nr(λ+μ)
+
+, it holds that 
+
+‖ ˆθ(unl)  
+
+> r,t
+
+− ˚θ(rtr)  
+
+> r
+
+‖2 ≤ |μ − λ|t
+
+|λ + μ|t ‖θr − θp‖2 + C‖θr − θp‖2
+
+√ p
+
+˜nr
+
++ C′
+
+√ p
+
+Nr
+
+for some positive constant C with probability at least 1 − exp {− c1 min {p, log ˜ nr}} .
+
+24 Proof of Theorem A.1. Let ˆ ut = ˆθ(unl)  
+
+> r,t
+
+− ˚θ(rtr)  
+
+> r
+
+. By (7), ˆut = ˆ ut−1 − α{ Nr
+
+˜nr
+
+˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr ) − Nr
+
+˜nr
+
+˙ℓ( ˆθp; ˜Dr ) − ˙ℓ( ˆθp; Df )}
+
+= ˆ ut−1 − α Nr
+
+˜nr
+
+{ ˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr ) − ˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr)}
+
+︸ ︷︷ ︸̂
+
+> Bt−1
+
+− α{ Nr
+
+˜nr
+
+˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr) − Nr
+
+˜nr
+
+˙ℓ( ˆθp; ˜Dr) − ˙ℓ( ˆθp; Df )}
+
+︸ ︷︷ ︸̂
+
+> E
+
+.
+
+Therefore, 
+
+‖ ˆut‖2 ≤ ‖ ̂Bt−1‖2 + ‖̂E‖2.
+
+For the first term, 
+
+‖̂Bt−1‖22 = ‖ ˆut−1‖22 + α2N 2
+
+> r
+
+˜n2
+
+> r
+
+‖ ˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr) − ˙ℓ(˚θ(rtr) ; ˜Dr )‖22 − 2α Nr
+
+˜nr
+
+〈 ˆut−1, ˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr ) − ˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr)〉.
+
+(17) To apply Conditions 3 and 4, we first show that 
+
+P( ˆθ(unl) 
+
+> r,t −1
+
+, ˚θ(rtr)  
+
+> r
+
+∈ B(θr, d ), ∀t = 1 , 2, . . . ) ≥ 1 − exp {− c1 log ˜ nr}. (18) By Condition 7, it is easy to see ˚θ(rtr)  
+
+> r
+
+∈ B(θr, d ) with high probability. By induction, we only need to show that ˆθ(unl)  
+
+> r, 0
+
+∈ B(θr, d ) due to the error contraction property developed below. As ˆθ(unl)  
+
+> r, 0
+
+= ˆθp, we know that 
+
+‖ ˆθ(unl)  
+
+> r, 0
+
+− θr‖2 ≤ ‖ ˆθp − θp‖2 + ‖θp − θr‖2 ≤ C + o(1) with probability at least 1 − exp {− c1 log ˜ nr}. Hence, for d ≥ C + 1, we have shown (18). In this event, Conditions 3 and 4 can be applied and by classical results such as Nesterov et al. [2018], with probability at least 1 − exp {− c2 log ˜ nr},
+
+〈 ˆut−1, ˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr ) − ˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr)〉 ≥ λμ ˜nr
+
+λ + μ ‖ ˆut−1‖22 + 1
+
+˜nr(λ + μ) ‖ ˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr ) − ˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr)‖22.
+
+Therefore, 
+
+‖̂Bt−1‖22 ≤ (1 − 2αλμN r
+
+λ + μ )‖ ˆut−1‖22 + ( α2 N 2
+
+> r
+
+˜n2
+
+> r
+
+− 2αN r
+
+(λ + μ)˜ n2
+
+> r
+
+)‖ ˙ℓ( ˆθ(unl) 
+
+> r,t −1
+
+; ˜Dr) − ˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr)‖22
+
+Hence, for α = 2  
+
+> Nr(λ+μ)
+
+,
+
+‖̂Bt−1‖22 ≤ (μ − λ)2
+
+(λ + μ)2 ‖ ˆut−1‖22.
+
+As ˙ℓ( ˆθp; Dr ) + ˙ℓ( ˆθp; Df ) = 0, we have ̂
+
+E = α{ Nr
+
+˜nr
+
+˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr) − Nr
+
+˜nr
+
+˙ℓ( ˆθp; ˜Dr) + ˙ℓ( ˆθp; Dr )}
+
+= αN r
+
+˜nr
+
+˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr ) − Nr
+
+˜nr
+
+˙ℓ( ˆθp; ˜Dr ) − α{ ˙ℓ(˚θ(rtr)  
+
+> r
+
+; Dr) − ˙ℓ( ˆθp; Dr)}
+
+= αN r
+
+˜nr
+
+˙ℓ(θr ; ˜Dr) − αN r
+
+˜nr
+
+˙ℓ(θp; ˜Dr ) − α ˙ℓ(θr ; Dr) + α ˙ℓ(θp; Dr )
+
+︸ ︷︷ ︸̂
+
+> E1
+
++rem E .
+
+25 By Condition 6, by Bernstein’s inequality 
+
+P
+
+(
+
+‖̂E1‖2 ≥ Cα ‖θr − θp‖2
+
+√ p
+
+˜nr
+
+)
+
+≤ exp {− c1p}.
+
+For the remainder term rem E , by Condition 5, 
+
+Nr
+
+˜nr
+
+‖ ˙ℓ(˚θ(rtr)  
+
+> r
+
+; ˜Dr) − ˙ℓ(θr; ˜Dr)‖2 ≤ CN r‖˚θ(rtr)  
+
+> r
+
+− θr‖2
+
+‖ ˙ℓ(˚θ(rtr)  
+
+> r
+
+; Dr) − ˙ℓ(θr; Dr )‖2 ≤ CN r‖˚θ(rtr)  
+
+> r
+
+− θr ‖2
+
+Nr
+
+˜nr
+
+‖ ˙ℓ( ˆθp; ˜Dr ) − ˙ℓ(θp; ˜Dr)‖2 ≤ CN r‖ ˆθp − θp‖2
+
+‖ ˙ℓ( ˆθp; Dr ) − ˙ℓ(θp; Dr )‖2 ≤ CN r‖ ˆθp − θp‖2.
+
+Hence, with probability at least 1 − exp {− c1p},
+
+‖rem E ‖2 ≤ CαN r(‖ ˆθp − θp‖2 + ‖˚θ(rtr)  
+
+> r
+
+− θr‖2)
+
+≤ C
+
+√ p
+
+Nr
+
+.
+
+To summarize, with probability at least 1 − exp {− c1p},
+
+‖ ˆut‖2 ≤ |μ − λ|
+
+|λ + μ| ‖ ˆut−1‖2 + C‖θr − θp‖2
+
+√ p
+
+˜nr
+
++ C′
+
+√ p
+
+Nr
+
+.
+
+By induction, 
+
+‖ ˆut‖2 ≤ |μ − λ|t
+
+|λ + μ|t ‖θp − θr‖2 + 1 − |μ−λ|t
+
+> |λ+μ|t
+
+1 − |μ−λ|
+
+> |λ+μ|
+
+(C‖θr − θp‖2
+
+√ p
+
+˜nr
+
++ C′
+
+√ p
+
+Nr
+
+)
+
+# B Proofs 
+
+Define the empirical covariance matrix and marginal statistics for each data set ̂
+
+Σr = 1
+
+Nr
+
+(X(r))⊤X(r),̂ Mr = 1
+
+Nr
+
+(X(r))⊤y(r),̂ Er = 1
+
+Nr
+
+(X(r))⊤(y(r) − X(r)θr)̂
+
+Σf = 1
+
+Nf
+
+(X(f ))⊤X(f ),̂ Mf = 1
+
+Nf
+
+(X(f ))⊤y(f ),̂ Ef = 1
+
+Nf
+
+(X(f ))⊤(y(f ) − X(f )θf )
+
+˜Σr = 1
+
+˜nr
+
+( ˜X(r))⊤ ˜X(r), ˜Mr = 1
+
+˜nr
+
+( ˜X(r))⊤ ˜y(r), ˜Er = 1
+
+˜nr
+
+( ˜X(r))⊤( ˜ y(r) − ˜X(r)θr).
+
+B.1 Proof of (9) 
+
+By (8), 
+
+˜Σr ˆθ(uls)  
+
+> r
+
+= ˜Σr ˆθp − ωf
+
+ωr
+
+(̂Mf −̂ Σf ˆθp).
+
+26 We know that for a loss function 
+
+θ⊤Aθ − 2θ⊤b,
+
+where A and b are given, the first-order condition gives A ˆθ = b. Therefore, the loss function of ˆθ(uls)  
+
+> r
+
+is 
+
+θ⊤ ˜Σrθ − 2θ⊤(˜Σr ˆθp − ωf
+
+ωr
+
+(̂Mf −̂ Σf ˆθp)) = 1
+
+ωr
+
+(ωrθ⊤ ˜Σrθ − 2θ⊤(ωr ˜Σr + ωf̂ Σf ) ˆθp + 2 ωf θ⊤̂ Mf )
+
+∝θ⊤(ωr ˜Σr + ωf̂ Σf )θ − 2θ⊤(ωr ˜Σr + ωf̂ Σf ) ˆθp + ωf (2 θ⊤̂ Mf − θ⊤̂ Σf θ)
+
+∝ − ωf
+
+Nf
+
+ℓ(θ; Df ) + ( ˆθp − θ)⊤(ωr ˜Σr + ωf̂ Σf )( ˆθp − θ).
+
+B.2 Proof of Lemma 3.4 
+
+Proof of Lemma 3.4. We only need to show the first and the fourth results. The second and third results follow from standard OLS theory. For ̂ Σp = ωf̂ Σf + ωr̂ Σr, we have ˆθp − θr =̂ Σ−1 
+
+> p
+
+(ωf̂ Mf + ωr̂ Mr −̂ Σpθr)=̂ Σ−1 
+
+> p
+
+(ωf̂ Mf + ωr̂ Er − ωf̂ Σf θr)= ωf̂ Σ−1 
+
+> p
+
+(̂Mf −̂ Σf θr) + ωr̂ Σ−1
+
+> p
+
+̂ Er
+
+= ωf̂ Σ−1
+
+> p
+
+̂ Σf (θf − θr) + ωr̂ Σ−1
+
+> p
+
+̂ Er + ωf̂ Σ−1
+
+> p
+
+̂ Ef .
+
+Define an event 
+
+E0 =
+
+{
+
+Λmin (˜Σr) ≥ c−1Σ , Λmin (̂Σp) ≥ c−1Σ , Λmax (̂Σf ) ≤ cΣ, ‖ωr̂ Er + ωf̂ Ef ‖2 ≤ C√p/N 
+
+}
+
+.
+
+We first show that P(E0) → 1. By Exercise 4.7.3 in Vershynin [2018], we know that 
+
+P
+
+(
+
+‖̂Σf − Σf ‖2 ≤ C
+
+√ p
+
+Nf
+
+‖Σf ‖2
+
+)
+
+≥ 1 − 2e−p.
+
+P
+
+(
+
+‖˜Σr − Σr‖2 ≤ C
+
+√ p
+
+˜nr
+
+‖Σr‖2
+
+)
+
+≥ 1 − 2e−p.
+
+P
+
+(
+
+‖̂Σr − Σr‖2 ≤ C
+
+√ p
+
+Nr
+
+‖Σr ‖2
+
+)
+
+≥ 1 − 2e−p. (19) For the last statement of E0, using the sub-exponential property of x(r) 
+
+> i
+
+ǫ(r) 
+
+> i
+
+and x(f ) 
+
+> i
+
+ǫ(f ) 
+
+> i
+
+, we have for any given ‖u‖2 = 1, 
+
+P(|u⊤(ωr̂ Er + ωf̂ Ef )| > t ) ≤ exp {− min {N t 2, N t }} .
+
+As 
+
+‖ωr̂ Er + ωf̂ Ef ‖2 = sup 
+
+> u∈Rp:‖u‖2=1
+
+u⊤(ωr̂ Er + ωf̂ Ef ),
+
+27 taking a covering over {u ∈ Rp : ‖u‖2 = 1 }, we have 
+
+P
+
+(
+
+‖ωr̂ Er + ωf̂ Ef ‖2 ≥ t
+
+)
+
+≤ exp {− min {N t 2, N t } + Cp }.
+
+Hence, for t = C√p/N , we arrive at desired results. In event E0 for some positive constant C, we have 
+
+‖ ˆθp − θr‖2 ≤ ωf ‖̂Σ−1
+
+> p
+
+̂ Σf (θf − θr)‖2 + ‖̂Σ−1 
+
+> p
+
+(ωr̂ Er + ωf̂ Ef )‖2
+
+≤ Cω f δ + C
+
+√ p
+
+N
+
+with probability at least 1 − exp {− c1p}.For the transfer learning estimate, we know that ˆθ(tl)  
+
+> r
+
+= ( ˜Σr + λ(tl) Ip)−1( ˜Mr + λ(tl) ˆθp),
+
+which is a weighted average of ˜θ(ols)  
+
+> r
+
+and ˆθp. Taking λ(tl) = C√p/ ˜nr/(√p/N + ωf δ) for some positive constant C, we have 
+
+‖ ˆθ(tl)  
+
+> r
+
+− θr‖2 ≤ C′ min {
+
+√ p
+
+˜nr
+
+,
+
+√ p
+
+N + ωf δ}
+
+with probability at least 1 − exp {− c1p}.
+
+B.3 Proof of Theorem 3.1 
+
+Lemma B.1 (A technical lemma) . If ‖A−1(̂A − A)‖2 = o(1), then 
+
+‖̂A−1̂ B − A−1B‖2 ≤ (1 + o(1)) ‖A−1(A −̂ A)A−1B‖2 + (1 + o(1)) ‖A−1(̂B − B)‖2.
+
+Proof of Lemma B.1. ̂
+
+A−1̂ B − A−1B = ( ̂A−1 − A−1)̂B + A−1(̂B − B)= A−1(A −̂ A)̂A−1̂ B + A−1(̂B − B).
+
+Therefore, 
+
+‖̂A−1̂ B − A−1B‖2 ≤ ‖ A−1(A −̂ A)̂A−1̂ B‖2 + ‖A−1(̂B − B)‖2
+
+≤ ‖ A−1(A −̂ A)A−1B‖2 + ‖A−1(̂B − B)‖2 + ‖̂A−1̂ B − A−1B‖2‖A−1(A −̂ A)‖2.
+
+If ‖A−1(̂A − A)‖2 = o(1), then 
+
+‖̂A−1̂ B − A−1B‖2 ≤ (1 + o(1)) ‖A−1(A −̂ A)A−1B‖2 + (1 + o(1)) ‖A−1(̂B − B)‖2.
+
+28 Proof of Theorem 3.1. We know that 
+
+‖ ˆθ(uls)  
+
+> r
+
+− θr‖2 ≤ ‖ ˆθ(uls)  
+
+> r
+
+− ˚θ(rtr)  
+
+> r
+
+‖2 + ‖˚θ(rtr)  
+
+> r
+
+− θr‖2.
+
+ˆθ(uls)  
+
+> r
+
+− ˚θ(rtr)  
+
+> r
+
+= ( ωr ˜Σr)−1(˜Σp ˆθp − ωf̂ Mf ) − ˚θ(rtr) 
+
+> r
+
+= ( ωr ˜Σr)−1[˜Σp ˆθp − ωf̂ Mf − ωr ˜Σr ˚θ(rtr)  
+
+> r
+
+]= ( ωr ˜Σr)−1[̂Σp ˆθp − ωf̂ Mf − ωr ˜Σr ˚θ(rtr)  
+
+> r
+
++ ωr(˜Σr −̂ Σr) ˆθp]= ( ωr ˜Σr)−1[ωr̂ Mr − ωr ˜Σr ˚θ(rtr)  
+
+> r
+
++ ωr(˜Σr −̂ Σr) ˆθp]= ( ωr ˜Σr)−1ωr(̂Σr − ˜Σr)( ˚θ(rtr)  
+
+> r
+
+− ˆθp)= ωf ˜Σ−1 
+
+> r
+
+(̂Σr − ˜Σr)̂Σ−1 
+
+> p
+
+(̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf ). (20) Define an event 
+
+E1 = E0 ∩
+
+{
+
+‖̂Er‖2 ≤ C
+
+√ p
+
+Nr
+
+, ‖̂Ef ‖2 ≤ C
+
+√ p
+
+Nf
+
+}
+
+.
+
+Analogous to the proof of Lemma 3.4, we can show that P(E1) ≥ 1 − exp {− c1p}.By (20), in event E1, we have 
+
+‖ ˆθ(uls)  
+
+> r
+
+− ˚θ(rtr)  
+
+> r
+
+‖2 ≤ ωf ‖˜Σ−1 
+
+> r
+
+‖2‖˜Σr − Σr‖2‖̂Σ−1 
+
+> p
+
+(̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf )‖2
+
+≤ ωf ‖˜Σ−1 
+
+> r
+
+‖2‖˜Σr −̂ Σr‖2‖̂Σ−1 
+
+> p
+
+‖2‖̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf ‖2
+
+≤ ωf
+
+c20
+
+√ p
+
+˜nr
+
+‖̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf ‖2.
+
+As ˚θ(rtr)  
+
+> r
+
+= θr +̂ Σ−1
+
+> r
+
+̂ Er, we have in event E1,
+
+‖̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf ‖2 = ‖̂Σf (θr − θf ) + ̂ Σf̂ Σ−1
+
+> r
+
+̂ Er −̂ Ef ‖2
+
+≤ ‖ ̂Σf ‖2δ + ‖̂Σf̂ Σ−1
+
+> r
+
+̂ Er ‖2 + ‖̂Ef ‖2
+
+≤ C
+
+(
+
+δ +
+
+√ p
+
+min {Nf , N r }
+
+)
+
+.
+
+To summarize, we arrive at with probability at least 1 − exp {− c1p},
+
+‖ ˆθ(uls)  
+
+> r
+
+− ˚θ(rtr)  
+
+> r
+
+‖2 ≤ Cω f
+
+√ p
+
+˜nr
+
+(
+
+δ +
+
+√ p
+
+min {Nf , N r}
+
+)
+
+≤ Cω f
+
+√ p
+
+˜nr
+
+(
+
+δ +
+
+√ p
+
+Nf
+
++
+
+√ p
+
+Nr
+
+)
+
+≤ Cω f
+
+√ p
+
+˜nr
+
+(
+
+δ +
+
+√ p
+
+Nf
+
+)
+
++ o(1) 
+
+√ p
+
+Nr
+
+,
+
+where the last step is due to p = o(˜ nr). Note that 
+
+ωf
+
+√ p
+
+˜nr
+
+√ p
+
+Nf
+
+= Nf p
+
+N √˜nrNf
+
+=
+
+√ p
+
+N
+
+√ p
+
+˜nr
+
+ωf = o(1) 
+
+√ p
+
+N = o(1) 
+
+√ p
+
+Nr
+
+.
+
+To summarize, with probability at least 1 − exp {− c1p},
+
+‖ ˆθ(uls)  
+
+> r
+
+− θr‖2 ≤ c2
+
+√ p
+
+Nr
+
++ c2ωf δ
+
+√ p
+
+˜nr
+
+.
+
+29 B.4 Proof of Theorem 3.2 
+
+Proof of Theorem 3.2. Let ˆ ut = ˆθ(uls)  
+
+> r,t
+
+− ˚θ(rtr)  
+
+> r
+
+and ̂
+
+Gt−1 = N (˜Σp ˆθp − ωf̂ Mf − ωr ˜Σr ˆθ(uls) 
+
+> r,t −1
+
+).
+
+Then ˆut = ˆ ut−1 + α̂Gt−1
+
+= ˆ ut−1 + αN (˜Σp ˆθp − ωf̂ Mf − ωr ˜Σr ˚θ(rtr)  
+
+> r
+
+) − αN r ˜Σr ˆut−1
+
+= ( Ip − αN r ˜Σr) ˆ ut−1 + αN (̂Σp ˆθp − ωf̂ Mf − ωr ˜Σr ˚θ(rtr)  
+
+> r
+
+) + αN (˜Σp −̂ Σp) ˆθp
+
+= ( Ip − αN r ˜Σr)
+
+︸ ︷︷ ︸
+
+> A
+
+ˆut−1 + αN r(̂Mr − ˜Σr ˚θ(rtr)  
+
+> r
+
+) + αN r (˜Σr −̂ Σr) ˆθp
+
+︸ ︷︷ ︸
+
+> ζ
+
+.
+
+By induction, we arrive at ˆut = At ˆu0 +
+
+> t−1
+
+∑
+
+> k=0
+
+Akζ
+
+= At( ˆθp − ˚θ(rtr)  
+
+> r
+
+) + ( Ip − At)( Ip − A)−1ζ. 
+
+Hence, 
+
+‖ ˆut‖2 ≤ ‖ At( ˆθp − ˚θ(rtr)  
+
+> r
+
+)‖2
+
+︸ ︷︷ ︸
+
+> T1
+
++ ‖(Ip − At)( Ip − A)−1ζ‖2
+
+︸ ︷︷ ︸
+
+> T2
+
+.
+
+We bound the two terms separately. For T1,
+
+T1 ≤ ‖ A‖t
+
+> 2
+
+‖ ˆθp − ˚θ(rtr)  
+
+> r
+
+‖2
+
+≤ (1 − αN rΛmin (˜Σr)) t‖ ˆθp − ˚θ(rtr)  
+
+> r
+
+‖2.
+
+We will choose α such that 1 − αN rΛmin (˜Σr) < c α and Λ min (A) ≥ 0,
+
+which gives 0 < α < 1−cα   
+
+> NrΛmax (˜Σr)
+
+. Moreover, 
+
+‖ ˆθp − ˚θ(rtr)  
+
+> r
+
+‖2 = ‖̂Σ−1 
+
+> p
+
+(ωr̂ Mr + ωf̂ Mf − ωr̂ Mr − ωf̂ Σf ˚θ(rtr)  
+
+> r
+
+)‖2
+
+= ‖ωf̂ Σ−1
+
+> p
+
+̂ Σf (θf − θr)‖2 + ‖ωf̂ Σ−1 
+
+> p
+
+(̂Ef +̂ Σf̂ Σ−1
+
+> r
+
+̂ Er)‖2
+
+≤ Cω f δ + Cω f
+
+√ p
+
+min {Nf , N r } .
+
+For T2,
+
+T2 ≤ ‖ (Ip − A)−1ζ‖2 = ‖(αN r ˜Σr)−1ζ‖2.
+
+30 Note that 
+
+ζ = αN r (̂Mr − ˜Σr ˚θ(rtr)  
+
+> r
+
+) + αN r(˜Σr −̂ Σr)˚θ(rtr)  
+
+> r
+
+− αN r(˜Σr −̂ Σr)( ˚θ(rtr)  
+
+> r
+
+− ˆθp)= αN r (̂Σr − ˜Σr)( ˚θ(rtr)  
+
+> r
+
+− ˆθp)= αN r (̂Σr − ˜Σr)̂Σ−1 
+
+> p
+
+ωf (̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Σf θf −̂ Ef ).
+
+Hence, 
+
+T2 ≤ ‖ (αN r ˜Σr)−1ζ‖2 = ωf ‖˜Σ−1 
+
+> r
+
+(̂Σr − ˜Σr)̂Σ−1 
+
+> p
+
+(̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Σf θf −̂ Ef )‖2.
+
+In view of (20) and the following proof, we can show that 
+
+P
+
+(
+
+T2 ≤ ωf δ
+
+√ p
+
+˜nr
+
+)
+
+≥ 1 − exp {− c1p}.
+
+Combining the upper bounds for T1 and T2, we have 
+
+‖ ˆut‖2 ≤ c1(1 − αN r Λmin (˜Σr)) t(ωf δ + ωf
+
+√ p
+
+min {Nf , N r } ) + c1ωf δ
+
+√ p
+
+˜nr
+
+with probability at least 1 − exp {− c2p}.
+
+B.5 Proofs in Section 4 
+
+Proof of Theorem 4.1. By (20), we have 
+
+v⊤( ˆθ(uls)  
+
+> r
+
+− θr) = v⊤(˚θ(rtr)  
+
+> r
+
+− θr) + ωf v⊤ ˜Σ−1 
+
+> r
+
+(̂Σr − ˜Σr)̂Σ−1 
+
+> p
+
+(̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf )= v⊤Σ−1
+
+> r
+
+̂ Er
+
+︸ ︷︷ ︸
+
+> T3
+
++ ωf v⊤Σ−1 
+
+> r
+
+(̂Σr − ˜Σr)Σ −1 
+
+> p
+
+Σf (θr − θf )
+
+︸ ︷︷ ︸
+
+> T4
+
++rem, 
+
+where Σ p = ωrΣr + ωf Σf and 
+
+rem = v⊤(̂Σ−1 
+
+> r
+
+− Σ−1 
+
+> r
+
+)̂Er
+
+︸ ︷︷ ︸
+
+> rem 1
+
++ ωf v⊤ ˜Σ−1 
+
+> r
+
+(̂Σr − ˜Σr)̂Σ−1 
+
+> p
+
+(̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf ) − ωf v⊤Σ−1 
+
+> r
+
+(̂Σr − ˜Σr)Σ −1 
+
+> p
+
+Σf (θr − θf )
+
+︸ ︷︷ ︸
+
+> rem 2
+
+.
+
+For rem 1, we have 
+
+rem 1 ≤ ‖ v⊤(̂Σ−1 
+
+> r
+
+− Σ−1 
+
+> r
+
+)̂Er‖2
+
+≤ ‖ v⊤Σ−1 
+
+> r
+
+(̂Σr − Σr)‖2‖̂Σ−1 
+
+> r
+
+(X(r))⊤ǫ(r)/N r‖2.
+
+Using the Bernstein’s inequality for sub-exponential random variables, we know that 
+
+P(‖v⊤Σ−1 
+
+> r
+
+(̂Σr − Σr)‖2 ≥ t1) ≤ ep exp 
+
+{
+
+− min { N 2 
+
+> r
+
+t21
+
+Nr ‖v‖22
+
+, Nrt1
+
+‖v‖2
+
+}
+
+}
+
+P(‖̂Er ‖2 ≥ t2) ≤ ep exp 
+
+{
+
+− min { N 2 
+
+> r
+
+t22
+
+Nr
+
+, N r t2}
+
+}
+
+.
+
+31 Taking t1 = C‖v‖2
+
+√(p + (log Nr)1/2)/N r and t2 = C√(p + (log Nr)1/2)/N r , we have 
+
+P
+
+(
+
+rem 1 ≥ C‖v‖2
+
+p + √log Nr
+
+Nr
+
+)
+
+≤ exp {− log Nr}.
+
+For rem 2, note that 
+
+rem 2 ≤ ωf |v⊤(Σ −1 
+
+> r
+
+− ˜Σ−1 
+
+> r
+
+)( ̂Σr − ˜Σr)̂Σ−1 
+
+> p
+
+(̂Σf ˚θ(rtr)  
+
+> r
+
+−̂ Mf )|
+
++ ωf |v⊤Σ−1 
+
+> r
+
+(̂Σr − ˜Σr){̂Σ−1 
+
+> p
+
+− Σ−1 
+
+> p
+
+}Σf (θr − θf )|
+
++ ωf |v⊤Σ−1 
+
+> r
+
+(̂Σr − ˜Σr)[ ̂Σ−1 
+
+> p
+
+(̂Σf̂ Σ−1
+
+> r
+
+̂ Er −̂ Ef )] |.
+
+By (19) and event E1,
+
+rem 2 ≤ pω f ‖v‖2
+
+˜nr
+
+‖θr − θf ‖2 + pω f ‖v‖2
+
+√˜nrN ‖θr − θf ‖2 + ωf ‖v‖2
+
+√ p
+
+˜nr
+
+√ p
+
+Nr ∧ Nf
+
+= ωf ‖v‖2‖θr − θf ‖2
+
+√˜nr
+
+p + √log Nr
+
+√min {˜nr, N r, N f }
+
+with probability at least 1 − exp {− c1 log Nr}.By our assumption that p2 = o(min {˜nr, N f }), we have 
+
+rem 1 = o
+
+( ‖v‖2
+
+√Nr
+
+)
+
+and rem 2 = o
+
+( ωf ‖v‖2δ
+
+√˜nr
+
+)
+
+(21) with probability at least 1 − exp {− c1 log Nr}.For T3, note that 
+
+T3 = 1
+
+Nr
+
+v⊤Σ−1 
+
+> r
+
+( ˜X(r))⊤ ˜ǫ(r) + 1
+
+Nr
+
+v⊤Σ−1 
+
+> r
+
+( ˇX(r))⊤ ˇǫ(r).T4 = ˜nr − Nr
+
+˜nrNr
+
+ωf v⊤Σ−1 
+
+> r
+
+(( ˜X(r))⊤ ˜X(r) − ˜nrΣr)Σ −1 
+
+> p
+
+Σf (θr − θf )+ 1
+
+Nr
+
+ωf v⊤Σ−1 
+
+> r
+
+(( ˇX(r))⊤ ˇX(r) − (Nr − ˜nr)Σ r)Σ −1 
+
+> p
+
+Σf (θr − θf ).
+
+By definition of a(r) 
+
+> i
+
+and b(r) 
+
+> i
+
+,
+
+T3 + T4 = ∑ 
+
+> i∈˜Nr
+
+( 1
+
+Nr
+
+a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nrNr
+
+b(r) 
+
+> i
+
+) + ∑ 
+
+> i / ∈˜Nr
+
+( 1
+
+Nr
+
+a(r) 
+
+> i
+
++ 1
+
+Nr
+
+b(r) 
+
+> i
+
+),
+
+E[T3 + T4] = 0, and Var( T3 + T4) = Vr.As E[a(r) 
+
+> i
+
+] = 0 and E[b(r) 
+
+> i
+
+] = 0 and a(r) 
+
+> i
+
++ cb (r) 
+
+> i
+
+are independent of each other for any constant c.We will apply Lyapunov’s central limit theorem. We first compute Var( T3 + T4) = 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+E[( a(r) 
+
+> i
+
++ Nr − ˜nr
+
+˜nr
+
+b(r) 
+
+> i
+
+)2] + 1
+
+N 2
+
+> r
+
+∑ 
+
+> i / ∈˜Nr
+
+E[( a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2].
+
+32 By Condition 2, Var( T3 + T4) ≥ 1 − ρ
+
+N 2
+
+> rNr
+
+∑
+
+> i=1
+
+E[( a(r) 
+
+> i
+
+)2] + (1 − ρ)( Nr − ˜nr)2
+
+˜n2 
+
+> r
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+E[( b(r) 
+
+> i
+
+)2] + 1 − ρ
+
+N 2
+
+> r
+
+∑ 
+
+> i / ∈˜Nr
+
+E[( b(r) 
+
+> i
+
+)2].
+
+As ˜ nr ≤ cN r for some constant 0 < c < 1, we have Var( T3 + T4) ≥ 1 − ρ
+
+N 2
+
+> rNr
+
+∑
+
+> i=1
+
+E[( a(r) 
+
+> i
+
+)2] + c(1 − ρ)
+
+˜n2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+E[( b(r) 
+
+> i
+
+)2] + 1 − ρ
+
+N 2
+
+> r
+
+∑ 
+
+> i / ∈˜Nr
+
+E[( b(r) 
+
+> i
+
+)2].
+
+Using Condition 2 again, we have Var( T3 + T4) ≥ c1‖v‖22
+
+Nr
+
++ c2‖v‖22ω2 
+
+> f
+
+‖θr − θf ‖22
+
+˜nr
+
+. (22) By (21), we have 
+
+rem 1 + rem 2 = o(1)Var 1/2(T3 + T4).
+
+We only need to check the fourth-moment conditions. Let 
+
+s4 = ∑ 
+
+> i∈˜Nr
+
+E[( 1
+
+Nr
+
+a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nrNr
+
+b(r) 
+
+> i
+
+)4] + ∑  
+
+> i6∈˜Nr
+
+E[( 1
+
+Nr
+
+a(r) 
+
+> i
+
++ 1
+
+Nr
+
+b(r) 
+
+> i
+
+)4].
+
+Note that 
+
+s4 ≤ 8
+
+N 4
+
+> rNr
+
+∑
+
+> i=1
+
+E[( a(r) 
+
+> i
+
+)4] + 8( ˜nr − Nr
+
+˜nrNr
+
+)4 ∑ 
+
+> i∈˜Nr
+
+E[( b(r) 
+
+> i
+
+)4] + 8
+
+N 4
+
+> r
+
+∑ 
+
+> i / ∈˜Nr
+
+E[( b(r) 
+
+> i
+
+)4].
+
+Using the sub-Gaussian properties of x(r) 
+
+> i
+
+and ǫ(r) 
+
+> i
+
+, we know that 
+
+E[( a(r) 
+
+> i
+
+)4] ≤ C‖v‖42 and E[( b(r) 
+
+> i
+
+)4] ≤ Cω 4 
+
+> f
+
+‖v‖42δ4.
+
+Hence, 
+
+s4 ≤ C‖v‖42
+
+N 3
+
+> r
+
++ ω4 
+
+> f
+
+‖v‖42δ4
+
+˜n3
+
+> r
+
+.
+
+By (22), 
+
+s4
+
+Var 2(T3 + T4) ≤ 1
+
+˜nr
+
+. (23) Therefore, by Lyapunov’s central limit theorem, we have 
+
+v⊤( ˆθ(uls)  
+
+> r
+
+− θr)
+
+√VrD
+
+−→ N (0 , 1) .
+
+33 Proof of Lemma 4.2. Note that 
+
+b(r) 
+
+> i
+
+= v⊤Σ−1 
+
+> r
+
+(x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)( θr − θp).
+
+Let 
+
+˜Vr = 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+(a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+b(r) 
+
+> i
+
+)2 + Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2.
+
+Let ˇVr = 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+(a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+b(r) 
+
+> i
+
+)2 + 1
+
+N 2
+
+> r
+
+∑ 
+
+> i / ∈˜Nr
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2.
+
+Consider the decomposition 
+
+|̂Vr − Vr| ≤ | ̂Vr − ˜Vr|
+
+︸ ︷︷ ︸
+
+> T5
+
++ | ˜Vr − ˇVr|
+
+︸ ︷︷ ︸
+
+> T6
+
++ | ˇVr − Vr|
+
+︸ ︷︷ ︸
+
+> T7
+
+. (24) We will bound each term separately. For T7, by Chebyshev’s inequality 
+
+P(| ˇVr − Vr|/V r ≥ t) ≤ E[ ˇV 2 
+
+> r
+
+]
+
+V 2 
+
+> r
+
+t2 .
+
+By (23), 
+
+E[ ˇV 2 
+
+> r
+
+] = s4 ≤ CV 2 
+
+> r
+
+/˜nr.
+
+Hence, 
+
+P(T7/V r ≥ ˜n−1/4 
+
+> r
+
+) ≤ 1
+
+√˜nr
+
+.
+
+For T6, note that 
+
+| ˜Vr − ˇVr| = Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2 − 1
+
+N 2
+
+> r
+
+∑ 
+
+> i / ∈˜Nr
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2
+
+= Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nrNr∑
+
+> i=1
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)21(i ∈ ˜Nr) − 1
+
+N 2
+
+> rNr
+
+∑
+
+> i=1
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)21(i 6 ∈ ˜Nr)= Nr
+
+N 2 
+
+> r
+
+˜nrNr∑
+
+> i=1
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)21(i ∈ ˜Nr) − 1
+
+N 2
+
+> rNr
+
+∑
+
+> i=1
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2.
+
+As ˜Dr is a random sample from Dr, we know that 
+
+E[ Nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑
+
+> i∈N r
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)21(i ∈ ˜Nr)|D r ] = 1
+
+N 2
+
+> r
+
+∑
+
+> i∈N r
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2.
+
+By Bernstein’s inequality, we have 
+
+P(T6 ≥ t|D r) ≤ exp 
+
+− t2  
+
+> 1
+> N2
+> r˜n2
+> r
+
+∑Nr
+
+> i=1
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)4P(i ∈ ˜Nr|D r) + 1  
+
+> Nr˜nr
+
+max i≤Nr (a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2t
+
+ .
+
+34 We know that P(i ∈ ˜Nr|D r) = ˜ nr/N r . For 
+
+t ≥ C max 
+
+√
+
+˜nr log Nr
+
+∑Nr
+
+> i=1
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)4/N r
+
+Nr ˜nr
+
+, log Nr max i≤Nr (a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2
+
+Nr ˜nr
+
+ ,
+
+we have 
+
+P(T6 ≥ t|D r ) ≤ exp {− c1 log Nr}.
+
+Using the sub-Gaussian property of x(r) 
+
+> i
+
+and ǫ(r) 
+
+> i
+
+, we know that max 
+
+> i≤N r
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2 ≤ C‖v‖22 log Nr(1 + ω2 
+
+> f
+
+‖δ‖22)with probability at least 1 − exp {− c1Nr}. Hence, 
+
+P
+
+(
+
+T6 ≥ ‖v‖22(1 + ω2 
+
+> f
+
+‖θr − θf ‖22) log Nr
+
+Nr
+
+√˜nr
+
+)
+
+≤ exp {− c1 log Nr}.
+
+By (22), we arrive at 
+
+P
+
+( T6
+
+Vr
+
+≥ C log Nr
+
+√˜nr
+
++ C√˜nr log Nr
+
+Nr
+
+)
+
+≤ exp {− c1 log Nr}
+
+and log Nr/√˜nr + √˜nr log Nr/N r = o(1). It is left to bound T5.̂
+
+Vr − ˜Vr = 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+(ˆ a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+ˆb(r) 
+
+> i
+
+)2 − 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+(a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+b(r) 
+
+> i
+
+)2
+
+︸ ︷︷ ︸
+
+> T5,1
+
++ Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+(ˆ a(r) 
+
+> i
+
++ ˆb(r) 
+
+> i
+
+)2 − Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+(a(r) 
+
+> i
+
++ b(r) 
+
+> i
+
+)2
+
+︸ ︷︷ ︸
+
+> T5,2
+
+.
+
+We first bound T5,1. Note that 
+
+T5,1 = 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+(ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+)}2
+
++ 2
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+(ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+)}{ a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+b(r) 
+
+> i
+
+}≤ 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+(ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+)}2
+
++ ˜V 1/2
+
+> r
+
+√√√√ 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
++ ˜nr − Nr
+
+˜nr
+
+(ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+)}2.
+
+35 As we have shown that | ˜Vr − Vr|/V r = oP (1), to show that T5,1/V r = oP (1), it suffices to show that 1
+
+N 2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
+}2/V r = oP (1) and 1
+
+N 2
+
+> r
+
+( ˜nr − Nr
+
+˜nr
+
+)2 ∑ 
+
+> i∈˜Nr
+
+{ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+}2/V r = oP (1) . (25) Similarly, for T5,2, we have 
+
+T5,2 ≤ Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
++ ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+}2
+
++ ˜V 1/2
+
+> r
+
+√√√√ Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
++ ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+}2.
+
+To show that T5,2/V r = oP (1), it suffices to show that 
+
+Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
+}2/V r = oP (1) and Nr − ˜nr
+
+N 2 
+
+> r
+
+˜nr
+
+∑ 
+
+> i∈˜Nr
+
+{ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+}2/V r = oP (1) . (26) In view of (25) and (26), to show ( T5,1 + T5,2)/V r = o(1), it suffices to show that 1
+
+Nr ˜nr
+
+∑ 
+
+> i∈˜Nr
+
+{ˆa(r) 
+
+> i
+
+− a(r) 
+
+> i
+
+}2/V r = oP (1) and 1
+
+˜n2
+
+> r
+
+∑ 
+
+> i∈˜Nr
+
+{ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+}2/V r = oP (1) . (27) Let ˆ ǫ(r) 
+
+> i
+
+= y(r) 
+
+> i
+
+− x(r) 
+
+> i
+
+ˆθ(ols)  
+
+> r
+
+, i = 1 , . . . , N r . By definition, 
+
+∑ 
+
+> i∈˜Nr
+
+(ˆ a(r) 
+
+> i
+
+− a(r) 
+
+> i
+
+)2 = ∑ 
+
+> i∈˜Nr
+
+{v⊤(˜Σ−1 
+
+> r
+
+x(r) 
+
+> i
+
+ˆǫ(r) 
+
+> i
+
+− Σ−1 
+
+> r
+
+x(r) 
+
+> i
+
+ǫ(r) 
+
+> i
+
+)}2
+
+≤ 2 ∑ 
+
+> i∈˜Nr
+
+{v⊤(˜Σ−1 
+
+> r
+
+− Σ−1 
+
+> r
+
+)x(r) 
+
+> i
+
+ǫ(r) 
+
+> i
+
+}2 + 2 ∑ 
+
+> i∈˜Nr
+
+{v⊤ ˜Σ−1 
+
+> r
+
+x(r) 
+
+> i
+
+(ˆ ǫ(r) 
+
+> i
+
+− ǫ(r) 
+
+> i
+
+)}2
+
+≤ 2‖v‖22
+
+∑ 
+
+> i∈˜Nr
+
+‖x(r) 
+
+> i
+
+ǫ(r) 
+
+> i
+
+‖22‖˜Σ−1 
+
+> r
+
+− Σ−1 
+
+> r
+
+‖22 + 2 ‖v‖22 max  
+
+> i∈˜Nr
+
+‖(x(r) 
+
+> i
+
+)⊤( ˆθ(uls)  
+
+> r
+
+− θr)‖22
+
+∑ 
+
+> i∈˜Nr
+
+‖(x(r) 
+
+> i
+
+)⊤ ˜Σ−1 
+
+> r
+
+v‖22,
+
+We know that E[|x(r) 
+
+> i
+
+ǫ(r) 
+
+> i
+
+‖22] ≤ Cp . By Markov’s inequality, 
+
+P
+
+ ∑ 
+
+> i∈˜Nr
+
+‖x(r) 
+
+> i
+
+ǫ(r) 
+
+> i
+
+‖22 ≥ C ˜nrp log ˜ nr
+
+ ≤ C
+
+log ˜ nr
+
+.
+
+On the other hand, 
+
+∑ 
+
+> i∈˜Nr
+
+‖x(r) 
+
+> i
+
+˜Σ−1 
+
+> r
+
+v‖22 = ∑ 
+
+> i∈˜Nr
+
+v⊤ ˜Σ−1 
+
+> r
+
+x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ ˜Σ−1 
+
+> r
+
+v = ˜ nrv⊤ ˜Σ−1 
+
+> r
+
+v.
+
+We have shown that 
+
+P
+
+(
+
+‖˜Σ−1 
+
+> r
+
+− Σ−1 
+
+> r
+
+‖2 ≤
+
+√ p + log ˜ nr
+
+˜nr
+
+, ‖ ˆθ(uls)  
+
+> r
+
+− θr‖2 ≤
+
+√ p + log ˜ nr
+
+Nr
+
++ ωf δ
+
+√ p + log ˜ nr
+
+˜nr
+
+)
+
+≥ 1−exp {− c1 log ˜ nr}.
+
+36 Hence, 
+
+P
+
+ ∑ 
+
+> i∈˜Nr
+
+‖x(r) 
+
+> i
+
+˜Σ−1 
+
+> r
+
+v‖22 ≥ C ˜nr
+
+ ≤ exp {− c1 ˜nr}.
+
+Moreover, 
+
+P
+
+(
+
+max  
+
+> i∈˜Nr
+
+‖xi‖22 ≥ p log ˜ nr
+
+)
+
+≤ exp {− c1 log ˜ nr}.
+
+To summarize, with probability at least 1 − 1/ log ˜ nr,
+
+∑ 
+
+> i∈˜Nr
+
+(ˆ a(r) 
+
+> i
+
+− a(r) 
+
+> i
+
+)2 ≤ 2‖v‖22(p log ˜ nr(p + log ˜ nr) + ˜ nrp log ˜ nr‖ ˆθ(uls)  
+
+> r
+
+− θr‖22)
+
+Nr − nr
+
+N 2 
+
+> r
+
+nr
+
+∑ 
+
+> i∈˜Nr
+
+(ˆ a(r) 
+
+> i
+
+− a(r) 
+
+> i
+
+)2 ≤ C ‖v‖22(p + log ˜ nr)p log ˜ nr
+
+Nr ˜nr
+
+.
+
+By (22), the first equation in (27) holds assuming max {p, log ˜ nr}2 = o(˜ nr). Similarly, 
+
+∑ 
+
+> i∈˜Nr
+
+(ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+)2 ≤ 4 ∑ 
+
+> i∈˜Nr
+
+{v⊤(˜Σ−1 
+
+> r
+
+− Σ−1 
+
+> r
+
+)( x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)( ˆθ(uls)  
+
+> r
+
+− ˆθp)}2
+
++ 4 ∑ 
+
+> i∈˜Nr
+
+{v⊤ ˜Σ−1 
+
+> r
+
+(˜Σr − Σr)( ˆθ(uls)  
+
+> r
+
+− ˆθp)}2
+
++ 4 ∑ 
+
+> i∈˜Nr
+
+{v⊤Σ−1 
+
+> r
+
+(x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)( ˆθ(uls)  
+
+> r
+
+− ˆθp − θr + θp)}2
+
+≤ C‖ ˆθ(uls)  
+
+> r
+
+− ˆθp‖22‖v⊤(˜Σ−1 
+
+> r
+
+− Σ−1 
+
+> r
+
+)‖22 sup 
+
+> ‖u‖2=1
+
+∑ 
+
+> i∈˜Nr
+
+|u⊤(x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)u|2
+
++ C ˜nr‖v‖22‖˜Σr − Σr‖22‖ ˆθ(uls)  
+
+> r
+
+− ˆθp‖22
+
++ C‖v‖22‖ ˆθ(uls)  
+
+> r
+
+− ˆθp − θr + θp‖22 sup 
+
+> ‖u‖2=1
+
+∑ 
+
+> i∈˜Nr
+
+|u⊤(x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)u|2.
+
+By (8), with probability at least 1 − exp {− c1 min {Nf , ˜nr}} ,
+
+‖ ˆθ(uls)  
+
+> r
+
+− ˆθp‖2 = Nf
+
+Nr
+
+‖˜Σ−1
+
+> r
+
+̂ Σf ( ˆθf − ˆθp)‖2 ≤ Cω f δ. 
+
+By Theorem 3.1 and Lemma 3.4, with probability at least 1 − exp {− c1 log n},
+
+‖ ˆθ(uls)  
+
+> r
+
+− ˆθp − θr + θp‖2 ≤ ‖ ˆθ(uls)  
+
+> r
+
+− θr‖2 + ‖ ˆθp − θp‖2
+
+≤ C
+
+√p + log ˜ nr
+
+Nr
+
++ ωf δ
+
+√ p + log ˜ nr
+
+˜nr
+
+.
+
+For any given u ∈ Rp such that ‖u‖2 = 1, u⊤x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤u is sub-exponential. Using the concentration inequality for sub-Weibull random variables [Kuchibhotla and Chakrabortty, 2022], we have 
+
+P
+
+ ∑ 
+
+> i∈˜Nr
+
+|u⊤(x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)u|2 ≥ t
+
+ ≤ exp 
+
+{
+
+−C min { t2
+
+˜nr
+
+, √t}
+
+}
+
+.
+
+37 Taking a uniform over the unit ball, we have 
+
+P
+
+ ∑ 
+
+> i∈˜Nr
+
+|u⊤(x(r) 
+
+> i
+
+(x(r) 
+
+> i
+
+)⊤ − Σr)u|2 ≥ √˜nrp + p2 + log ˜ nr
+
+ ≤ exp 
+
+{
+
+−C√log ˜ nr
+
+}
+
+.
+
+Combining above inequalities, we arrive at 
+
+∑ 
+
+> i∈˜Nr
+
+(ˆb(r) 
+
+> i
+
+− b(r) 
+
+> i
+
+)2 . ‖v‖22ω2 
+
+> f
+
+δ2 p + log ˜ nr
+
+˜nr
+
+(√˜nrp + p2 + log ˜ nr) + ‖v‖22ω2 
+
+> f
+
+δ2(p + log ˜ nr)+ ‖v‖22( p + log ˜ nr
+
+Nr
+
++ ω2 
+
+> f
+
+δ2 p + log ˜ nr
+
+˜nr
+
+)( √˜nrp + p2 + log ˜ nr)
+
+. ‖v‖22ω2 
+
+> f
+
+δ2(p + log ˜ nr) + ‖v‖22
+
+˜nr(p + log ˜ nr)
+
+Nr
+
+given that ˜ nr ≫ p2.By (22), we know that the second equation in (27) holds with probability at least 1 −exp {− c1 log ˜ nr}.Hence, we have shown that T5/V r = oP (1). Together with previous arguments, the proof is complete. 
+
+B.6 Proofs in Section 5 
+
+Proof of Theorem 5.1. The first-order condition gives 
+
+ωf (̂Mf −̂ Σf ˆθ(uls+)  
+
+> r
+
+) − ˜Σp( ˆθp − ˆθ(uls+)  
+
+> r
+
+) − λ( ˜Mr − ˜Σr ˆθ(uls+)  
+
+> r
+
+) = 0 .
+
+Therefore, ˆθ(uls+)  
+
+> r
+
+= {(ωr + λ)˜Σr}−1(˜Σp ˆθp + λ ˜Mr − ωf̂ Mf )ˆθ(uls+)  
+
+> r
+
+− θr = {(ωr + λ)˜Σr}−1(˜Σp ˆθp − ωf̂ Mf − ωr ˜Σrθr + λ ˜Er)= {(ωr + λ)˜Σr}−1(ωr ˜Σr( ˆθ(uls)  
+
+> r
+
+− θr) + λ ˜Er).
+
+Using the results of Theorem 3.1, we know that with probability at least 1 − exp {− c1p}, we have 
+
+‖ ˆθ(uls+)  
+
+> r
+
+− θr‖2 ≤ C ωr
+
+ωr + λ (
+
+√ p
+
+Nr
+
++ ωf δ
+
+√ p
+
+˜nr
+
+) + C λ
+
+ωr + λ
+
+√ p
+
+˜nr
+
+≤ C
+
+√ p
+
+Nr
+
++ C
+
+√ p
+
+˜nr
+
+( ωr
+
+ωr + λ ωf δ + λ
+
+ωr + λ ).
+
+Hence, for λ = Cω rωf δ for any positive constant C, we have ( ωr
+
+ωr + λ ωf δ + λ
+
+ωr + λ ) ≤ (1 + C) min {ωf δ, 1}.
+
+The proof is complete now. 
+
+38 Proof of Theorem 5.3. Let λ(diff) ≥ 2Λ max (Σ f )/Λmin (Σ r) so that λ(diff) ˜Σr −̂ Σf is positive definite with probability 1 − exp {− c1p}. In this case, Λmin (λ(diff) ˜Σr −̂ Σf ) ≥ cλ (diff) Λmin (Σ r)for some positive constant c with probability 1 − exp {− c1p}.ˆθ(diff)  
+
+> r
+
+= ( λ(diff) ˜Σr −̂ Σf )−1(λ(diff) ˜Mr −̂ Mf ).
+
+Hence, ˆθ(diff)  
+
+> r
+
+− θr = ( λ˜Σr −̂ Σf )−1(λ ˜Mr − λ(diff) ˜Σrθr −̂ Mf +̂ Σf θr)= ( λ(diff) ˜Σr −̂ Σf )−1(λ(diff) ˜Er −̂ Ef )
+
+︸ ︷︷ ︸
+
+> T8
+
++ ( λ(diff) ˜Σr −̂ Σf )−1̂ Σf (θr − θf )
+
+︸ ︷︷ ︸
+
+> T9
+
+.
+
+We know that 
+
+‖T9‖2 ≤ Λ−1min (λ(diff) ˜Σr −̂ Σf )‖̂Σf ‖2δ ≤ CΛ−1min (λ(diff) ˜Σr −̂ Σf )δ, 
+
+with probability at least 1 − exp {− cp }.For T8, with probability at least 1 − exp {− cp }, we have 
+
+‖T8‖2 ≤ CΛ−1min (λ(diff) ˜Σr −̂ Σf )( λ(diff) 
+
+√ p
+
+˜nr
+
++
+
+√ p
+
+Nf
+
+).
+
+Therefore, with probability at least 1 − exp {− cp },
+
+‖ ˆθ(diff)  
+
+> r
+
+− θr‖2 ≤ CΛ−1min (λ(diff) ˜Σr −̂ Σf )( λ(diff) 
+
+√ p
+
+˜nr
+
++
+
+√ p
+
+Nf
+
++ δ)
+
+≤ CΛ−1min (Σ r)( 
+
+√ p
+
+˜nr
+
++
+
+√ p 
+
+> Nf
+
++ δ
+
+λ(diff) ).
+
+For 
+
+λ(diff) = max 
+
+√ p 
+
+> Nf
+
++ δ
+
+√p/ ˜nr
+
+, 2Λ max (Σ f )/Λmin (Σ r)
+
+
+
+= max 
+
+{√ 
+
+˜ωr
+
+ωf
+
++
+
+√
+
+˜nr
+
+p δ, 2Λ max (Σ f )/Λmin (Σ r)
+
+}
+
+,
+
+we have 
+
+‖ ˆθ(diff)  
+
+> r
+
+− θr‖2 ≤ C
+
+√ p
+
+˜nr
+
++ C min 
+
+{√ p
+
+Nf
+
++ δ, 
+
+√ p
+
+˜nr
+
+}
+
+≤ C′
+
+√ p
+
+˜nr
+
+.
+
+39 B.7 Proof of Theorem 3.3 and Theorem 5.2 
+
+We see that Theorem 3.3 is a special case of Theorem 5.2. Hence, it suffices to prove the more general theorem, Theorem 5.2. 
+
+Proof of Theorem 5.2. Preliminaries. We will prove this bound based on Theorem 8 of Ma et al. [2024]. Specifically, we will first construct Bp(δ) ⊂ Θp(δ) and let D = max β,β′∈Bp(δ) ‖E1: p, (β−β′)‖2
+
+for E1: p, = ( Ip, 0) ∈ Rp×dim( β). We show that inf      
+
+> ˆθr∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Bp(δ)
+
+E[‖ ˆθr − θr ‖22] ≥ ρ2D2
+
+for some constant ρ > 0. Then Theorem 8 of Ma et al. [2024] implies that inf     
+
+> ˆθr∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Θp(δ)
+
+P(‖| ˆθr − θr‖22 ≥ c2D2) ≥ ρ2/2 (28) for some small enough constant c.We first describe the construction of Bp(δ). Let Φ = {φ(1) , . . . , φ(M )} = {0, 1}p for M = 2 p.Let β(j) = ( θ(j) 
+
+> r
+
+, θ(j) 
+
+> f
+
+, Σ(j) 
+
+> r
+
+, Σ(j) 
+
+> f
+
+, (σ(j) 
+
+> r
+
+)2, σ 2 
+
+> f
+
+). With parameter β(j), we specify the data distribution as 
+
+y(r) 
+
+> i
+
+= ( x(r) 
+
+> i
+
+)⊤θ(j) 
+
+> r
+
++ ǫ(r) 
+
+> i
+
+, x(r) 
+
+> i
+
+∼ N (0 , Σ(j) 
+
+> r
+
+), ǫ (r) 
+
+> i
+
+∼i.i.d N (0 , (σ(j) 
+
+> r
+
+)2), i = 1 , . . . , N r ,y(f ) 
+
+> i
+
+= ( x(f ) 
+
+> i
+
+)⊤θ(j) 
+
+> f
+
++ ǫ(f ) 
+
+> i
+
+, x(f ) 
+
+> i
+
+∼ N (0 , Σ(j) 
+
+> f
+
+), ǫ (f ) 
+
+> i
+
+∼i.i.d N (0 , σ 2 
+
+> f
+
+), i = 1 , . . . , N f .
+
+We set σ2 
+
+> f
+
+= 1 throughout the proof. Define dj (β, β′) = |e⊤ 
+
+> j
+
+(β − β′)| and g(x) = x2. Then 
+
+‖θr − θ′
+
+> r
+
+‖22 =
+
+> p
+
+∑
+
+> j=1
+
+g(dj (β, β′)) .
+
+Following the notations in Ma et al. [2024]. For φ, φ′ ∈ Φ, write φ ∼ φ′ whenever φ and φ′ differ in precisely one coordinate, and φ ∼j φ′ when that coordinate is the j-th. 
+
+Part 1. Let 
+
+θ(j) 
+
+> f
+
+= θ(j) 
+
+> r
+
+= crN −1/2φ(j) and Σ (j) 
+
+> r
+
+= Σ (j) 
+
+> f
+
+= Ip,
+
+where cr is a constant determined later. Let Bp(δ) = {β(1) , . . . , β(M )}. We note that Bp(δ) ⊆ Θp(δ)for any δ ≥ 0. We first show that there exists some constant C > 0 such that inf     
+
+> ˆθr∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Bp(δ)
+
+E[‖ ˆθr − θr‖22] ≥ Cp 
+
+N . (29) As ˆθp is a function of Dr and Df and ˜Dr ⊆ D r, we know that F( ˆθp, Df , ˜Dr ) ⊆ F (Df , Dr). Hence, inf     
+
+> ˆθr∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Bp(δ)
+
+E[‖ ˆθr − θr‖22] ≥ inf    
+
+> ˆθr∈F (Df,Dr)
+
+sup 
+
+> Bp(δ)
+
+E[‖ ˆθr − θr‖22]40 and it suffices to show that inf   
+
+> ˆθr∈F (Df,Dr)
+
+sup 
+
+> Bp(δ)
+
+E[‖ ˆθr − θr‖22] ≥ Cp 
+
+N . (30) Let αj = dj (β, β′) for β, β′ ∈ Bp(δ) and β ∼j β′. By our construction of β(j), j = 1 , . . . , M ,
+
+αj = crN −1/2 and p∑
+
+> j=1
+
+g(αj ) = p(crN −1/2)2 = c2 
+
+> r
+
+p/N. 
+
+By Lemma 23 in Ma et al. [2024], we know that inf    
+
+> ˆθr∈F (Df,Dr)
+
+sup 
+
+> Bp(δ)
+
+E[‖ ˆθr − θr‖22] ≥ 1
+
+2A {1 − max  
+
+> β,β′∈Bp(δ): β∼β′
+
+TV( pβ(Df , Dr), p β′ (Df , Dr)) }
+
+> p
+
+∑
+
+> j=1
+
+g(αj ),
+
+(31) where TV( pβ(Df , Dr ), p β′ (Df , Dr )) denotes the total variation distance between the density of (Df , Dr) under β and that under β′.It is left to bound max β,β′∈Bp(δ): β∼β′ TV( pβ(Df , Dr), p β′ (Df , Dr )). Note that the retain samples and forget samples are i.i.d. under Pβ(j) such that (( x(f ) 
+
+> i
+
+)⊤, y (f ) 
+
+> i
+
+) ∼β(j) (( x(r) 
+
+> i
+
+)⊤, y (r) 
+
+> i
+
+) ∼β(j) N (0 , Ω(j)) where Ω (j) =
+
+(
+
+‖θ(j) 
+
+> r
+
+‖22 + 1 (θ(j) 
+
+> r
+
+)⊤
+
+θ(j) 
+
+> r
+
+Ip
+
+)
+
+.
+
+Hence, TV 2(pβ(j) (Df , Dr ), p β(k) (Df , Dr)) ≤ KL( pβ(j) (Df , Dr), p β(k) (Df , Dr )) = N
+
+2 {Tr((Ω (k))−1(Ω (j) − Ω(k))) − log det ((Ω (k))−1Ω(j))}. (32) Let λ1 ≥ · · · ≥ λp denote the singular values of (Ω (k))−1(Ω (k) − Ω(j)). Given that λ1 ≤ 1/2, we have Tr((Ω (k))−1(Ω (j) − Ω(k))) − log det ((Ω (k))−1Ω(j)) = 
+
+> p
+
+∑
+
+> l=1
+
+{− λl − log(1 − λl)}≤
+
+> p
+
+∑
+
+> l=1
+> ∞
+
+∑
+
+> k=2
+
+λkl /k ≤
+
+> p
+
+∑
+
+> l=1
+
+λ2 
+
+> l
+
+= ‖(Ω (k))−1(Ω (j) − Ω(k))‖2 
+
+> F
+
+. (33) We can calculate that (Ω (k))−1 =
+
+(
+
+1 −θ(k)
+
+> r
+
+−θ(k) 
+
+> r
+
+Ip + θ(k) 
+
+> r
+
+(θ(k) 
+
+> r
+
+)⊤
+
+)
+
+Ω(j) − Ω(k) =
+
+(
+
+‖θ(k) 
+
+> r
+
+‖22 − ‖ θ(j) 
+
+> r
+
+‖22 (θ(k) 
+
+> r
+
+− θ(j) 
+
+> r
+
+)⊤
+
+θ(k) 
+
+> r
+
+− θ(j) 
+
+> r
+
+0
+
+)
+
+(Ω (k))−1(Ω (j) − Ω(k)) = 
+
+(
+
+(θ(k) 
+
+> r
+
+− θ(j) 
+
+> r
+
+)⊤θ(j) 
+
+> r
+
+(θ(k) 
+
+> r
+
+− θ(j) 
+
+> r
+
+)⊤
+
+−θ(k) 
+
+> r
+
+(( θ(k) 
+
+> r
+
+)⊤θ(j) 
+
+> r
+
+− ‖ θ(j) 
+
+> r
+
+‖22) + θ(k) 
+
+> r
+
+− θ(j) 
+
+> r
+
+−θ(k) 
+
+> r
+
+(θ(k) 
+
+> r
+
+− θ(j) 
+
+> r
+
+)⊤
+
+)
+
+.
+
+41 For θ(k) 
+
+> r
+
+∼ θ(j) 
+
+> r
+
+, θ(k) 
+
+> r
+
+and θ(j) 
+
+> r
+
+only differ at one coordinate. Suppose they differ at the l-th coordinate. Then θ(k) 
+
+> r
+
+− θ(j) 
+
+> r
+
+= ± cr√N el and (Ω (k))−1(Ω (j) − Ω(k)) = 
+
+( ± cr√N e⊤ 
+
+> l
+
+θ(j)  
+
+> rcr√N
+
+e⊤
+
+> l
+
+− cr√N (Ip − θ(k) 
+
+> r
+
+(θ(j) 
+
+> r
+
+)⊤)el cr√N θ(k) 
+
+> r
+
+e⊤
+
+> l
+
+)
+
+.
+
+Hence, 
+
+‖(Ω (k))−1(Ω (j) − Ω(k))‖2 
+
+> F
+
+= c2
+
+> r
+
+N (e⊤ 
+
+> l
+
+θ(j) 
+
+> r
+
+)2 + c2
+
+> r
+
+N + c2
+
+> r
+
+N ‖(Ip − θ(k) 
+
+> r
+
+(θ(j) 
+
+> r
+
+)⊤)el‖22 + c2
+
+> r
+
+N ‖θ(k) 
+
+> r
+
+‖22
+
+≤ c2 
+
+> r
+
+(1 + max j≤M ‖θ(j) 
+
+> r
+
+‖22)
+
+N ≤ c2 
+
+> r
+
+(1 + c2 
+
+> r
+
+p/N )
+
+N ≤ Cc 2
+
+> r
+
+N .
+
+where the last line is due to ‖(Ip − θ(k) 
+
+> r
+
+(θ(j) 
+
+> r
+
+)⊤)el‖22 ≤ 1 and p = o(N ). By (32) and (43), we arrive at max  
+
+> 1≤j≤k≤M
+
+TV 2(pβ(j) (Df , Dr), p β(k) (Df , Dr )) ≤ N
+
+2 ‖(Ω (k))−1(Ω (j) − Ω(k))‖2 
+
+> F
+
+≤ Cc 2 
+
+> r
+
+≤ 1/2for some small enough constant cr.In view of (31), by choosing cr to be a small enough constant, we arrive at inf   
+
+> ˆθr∈F (Df,Dr)
+
+sup 
+
+> Bp(δ)
+
+E[‖ ˆθr − θr‖22] ≥ Cp 
+
+N ,
+
+which concludes the proof of (29). On the other hand, 
+
+D = max  
+
+> β,β′∈Bp(δ)
+
+‖E1: p,. (β − β′)‖2 = cr
+
+√p/N . 
+
+By (28), we arrive at inf     
+
+> ˆθr∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Θp(δ)
+
+P(‖| ˆθr − θr‖22 ≥ c1p
+
+N ) ≥ c2
+
+for some small enough positive constants c1 and c2.
+
+Part 2. Next, we show that when ˜ nr ≤ c1N ,inf     
+
+> ˆθr∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Θp(δ)
+
+E[‖ ˆθr − θr‖22] ≥ min {ω2 
+
+> f
+
+δ2, 1} p
+
+˜nr
+
+. (34) Analogous to part (i), we will use Assouad’s lemma. Let ψ(j) = cr√˜nr δ φ(j),Σ(j) 
+
+> r
+
+= Ip + ψ(j)θ⊤ 
+
+> f
+
++ θf (ψ(j))⊤, Σ(j) 
+
+> f
+
+= Ip,
+
+θ(j) 
+
+> r
+
+= θf − (ωrΣ(j) 
+
+> r
+
+)−1Σ(j) 
+
+> p
+
+θf , θ(j) 
+
+> f
+
+= θf = ωr min {δ, c 0ω−1 
+
+> f
+
+}
+
+√p 1p
+
+(σ(j) 
+
+> r
+
+)2 = 5 − (θ(j) 
+
+> r
+
+)⊤Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+, σ 2 
+
+> f
+
+= 1 . (35) 42 for some constant 0 < c 0 ≤ 1. It is easy to verify the following facts: For any 1 ≤ j ≤ k ≤ M ,Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+= Σ (k) 
+
+> r
+
+θ(k) 
+
+> r
+
+= ωf
+
+ωr
+
+Σf θf
+
+ωf Σf θf + ωrΣ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+= 0 
+
+‖θ(j) 
+
+> r
+
+‖2 = ωf
+
+ωr
+
+‖(Σ (j) 
+
+> r
+
+)−1Σf θf ‖2 ≤ ωf
+
+ωr
+
+‖θf ‖2 ≤ min {ωf δ, 1}, (36) where the last line is due to Σ (j) 
+
+> r
+
+ Ip and ‖(Σ (j) 
+
+> r
+
+)−1‖2 ≤ 1. As (θ(j) 
+
+> r
+
+)⊤Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+≤ ‖ Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+‖22 ≤ min {ω2 
+
+> f
+
+δ2, 1} ≤ 1,
+
+we know that ( σ(j) 
+
+> r
+
+)2 = 5 − (θ(j) 
+
+> r
+
+)⊤Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+≥ 1 for all 1 ≤ j ≤ M . We now verify that Bp(δ) = 
+
+{β(1) , . . . , β(M )} ⊆ Θp(δ) for any δ ≥ 0. By (35) and (36), max  
+
+> 1≤j≤M
+
+‖θ(j) 
+
+> r
+
+− θ(j) 
+
+> f
+
+‖2 ≤ max  
+
+> j≤M
+
+‖θ(j) 
+
+> r
+
+‖2 + ‖θf ‖2 ≤ ‖ θf ‖2/ω r ≤ δ. 
+
+We can also check that for any c1 > 1 there exists some small enough cr > 0 such that for all 1 ≤ j ≤ M ,Λmin (Σ (j) 
+
+> r
+
+) ≥ 1 − 2‖ψ(j)‖2‖θf ‖2 ≥ 1 − cr
+
+√p
+
+√˜nr
+
+≥ 1/c 1
+
+and Λmax (Σ (j) 
+
+> r
+
+) ≤ 1 + 2 ‖ψ(j)‖2‖θf ‖2 ≤ 1 + cr
+
+√p
+
+√˜nr
+
+≤ c1.
+
+We have verified that Bp(δ) = {β(1) , . . . , β(M )} ⊆ Θp(δ) for any δ ≥ 0. 
+
+Part 2(i). By Lemma B.2, we know that 
+
+> p
+
+∑
+
+> j=1
+
+g(αj ) ≥ c2 
+
+> r
+
+p min {(ωf δ)2, 1}
+
+˜nr
+
+.
+
+Part 2(ii). Upper bound total variation distance .In view of (31) is left to show that max  
+
+> β(j),β(k)∈Bp(δ): β(j)∼β(k)
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(k) ( ˆθp, Df , ˜Dr)) ≤ 1/2.
+
+Define 
+
+zr = yr − Xrθp and zf = yf − Xf θp. (37) Note that by the definition of θp,ˆθp = θp + 1
+
+N̂ Σ−1 
+
+> p
+
+(X⊤ 
+
+> r
+
+yr/N + X⊤ 
+
+> f
+
+yf /N − ωr̂ Σrθp − ωf̂ Σf θp)= θp + 1
+
+N̂ Σ−1 
+
+> p
+
+(X⊤ 
+
+> r
+
+zr + X⊤ 
+
+> f
+
+zf ):= θp + 1
+
+N Σ−1 
+
+> p
+
+(X⊤ 
+
+> r
+
+zr + X⊤ 
+
+> f
+
+zf )
+
+︸ ︷︷ ︸
+
+> ˚θp
+
++ ˆ u, (38) 43 for any 1 ≤ j ≤ p, where ˆu = 1
+
+N (̂Σ−1 
+
+> p
+
+− Σ−1 
+
+> p
+
+)( X⊤ 
+
+> r
+
+zr + X⊤ 
+
+> f
+
+zf ).
+
+Therefore, max  
+
+> β(j),β(k)∈Bp(δ): β(j)∼β(k)
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr), p β(k) ( ˆθp, Df , ˜Dr )) 
+
+≤ max  
+
+> β(j),β(k)∈Bp(δ): β(j)∼β(k)
+
+TV( pβ(j) (˚θp, Df , ˜Dr), p β(k) (˚θp, Df , ˜Dr )) + 2 max  
+
+> β(j)∈Bp(δ)
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(j) (˚θp, Df , ˜Dr )) . (39) We now bound the first term of (39). Note that max 
+
+> β(j)∼β(k)
+
+TV( pβ(j) (˚θp, Df , ˜Dr), p β(k) (˚θp, Df , ˜Dr )) = max 
+
+> β(j)∼β(k)
+
+1
+
+2
+
+∫
+
+|pβ(j) (˚θp|D f , ˜Dr )pβ(j) (Df , ˜Dr) − pβ(k) (˚θp|D f , ˜Dr )pβ(k) (Df , ˜Dr )|d(˚θp, Df , ˜Dr)
+
+≤ max 
+
+> β(j)∼β(k)
+
+1
+
+2
+
+∫
+
+|pβ(j) (˚θp|D f , ˜Dr ) − pβ(k) (˚θp|D f , ˜Dr)|pβ(j) (Df , ˜Dr )d(˚θp, Df , ˜Dr)+ max 
+
+> β(j)∼β(k)
+
+1
+
+2
+
+∫
+
+pβ(k) (˚θp|D f , ˜Dr )|pβ(j) (Df , ˜Dr ) − pβ(k) (Df , ˜Dr)|d( ˆθp, Df , ˜Dr)= max 
+
+> β(j)∼β(k)
+
+Eβ(j) [TV( pβ(j) (˚θp|D f , ˜Dr), p β(k) (˚θp|D f , ˜Dr ))] + max 
+
+> β(j)∼β(k)
+
+TV( pβ(j) ( ˜Dr ), p β(k) ( ˜Dr)) , (40) where the last step is due to the distribution of Df is unchanged under β(j), j = 1 , . . . , M . We will bound each term separately. (ii-1) First, we bound the second term of (40). In Lemma B.6, we show that max  
+
+> β(j),β(k)∈Bp(δ): β(j)∼β(k)
+
+TV( pβ(j) ( ˜Dr ), p β(k) ( ˜Dr)) ≤ Cc r.
+
+(ii-2) Next, we bound the first term of (40). We first find the distribution of ˚θp conditioning on 
+
+Dr and Df . Let ˇNr = Nr − ˜nr. Let ˇXr ∈ R ˇNr ×p and ˇ zr ∈ R ˇNr denote the samples in Dr \ ˜Dr. Let ˇωr = ˇNr/N .As θ(j) 
+
+> p
+
+= 0, for j = 1 , . . . , M , we have 
+
+zr,i ∼β(j) N (0 , (θ(j) 
+
+> r
+
+)⊤Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
++ ( σ(j) 
+
+> r
+
+)2) = N (0 , 5) , j = 1 , . . . , M. zf,i ∼β(j) N (0 , ‖θf ‖22 + 1) , j = 1 , . . . , M. 
+
+We see that the distribution of zr and zf are invariant under different hypotheses. Moreover, ˇ zr is independent of Df and ˜Dr. Hence, max 
+
+> β(j)∼β(k)
+
+Eβ(j) [TV( pβ(j) (˚θp|D f , ˜Dr ), p β(k) (˚θp|D f , ˜Dr))] 
+
+≤ Eβ(j) [TV( pβ(j) (˚θp|D f , ˜Dr, ˇzr ), p β(k) (˚θp|D f , ˜Dr, ˇzr ))] .
+
+By Lemma B.4, we arrive at max 
+
+> β(j)∼β(k)
+
+Eβ(j) [TV( pβ(j) (˚θp|D f , ˜Dr ), p β(k) (˚θp|D f , ˜Dr))] ≤ Cc r
+
+√ p
+
+˜nr
+
+.
+
+44 Part 2(iii). Upper bound the second term of (39) . By Lemma B.5, max  
+
+> j≤M
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(j) (˚θp, Df , ˜Dr )) ≤ C′
+
+√ p(p + log ˜ nr)
+
+N + 1
+
+˜nr
+
+.
+
+Part 2(iv). Summarization. 
+
+By (39), and the results in Part 2(ii) and Part 2(iii), we know that max 
+
+> β(j)∼β(k)
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(k) ( ˆθp, Df , ˜Dr)) ≤ C(cr + cr
+
+√ p
+
+˜nr
+
++
+
+√ p(p + log ˜ nr)
+
+N + 1
+
+˜nr
+
+).
+
+As we assume p ≤ c0 min {˜nr, √N } for some small enough constant c0, there exists some small enough constant cr, such that max 
+
+> β(j)∼β(k)
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(k) ( ˆθp, Df , ˜Dr )) ≤ 1/2.
+
+On the other hand, 
+
+D = max  
+
+> β,β′∈Bp(δ)
+
+‖E1: p,. (β − β′)‖2 = max  
+
+> j,k ≤M
+
+‖θ(j) − θ(k)‖2 = cr
+
+√ p
+
+˜nr
+
+min {ωf δ, 1}.
+
+By (28), we arrive at inf     
+
+> ˆθr∈F ( ˆθp,Df,˜Dr)
+
+sup 
+
+> Θp(δ)
+
+P
+
+(
+
+‖| ˆθr − θr‖22 ≥ c1
+
+p
+
+˜nr
+
+min {ω2 
+
+> f
+
+δ2, 1}
+
+)
+
+≥ c2
+
+for some small enough positive constants c1 and c2.
+
+Lemma B.2 . Assume the conditions of Theorem 5.2. Under the distribution configuration in (35), it holds that 
+
+> p
+
+∑
+
+> j=1
+
+g(αj ) = 
+
+> p
+
+∑
+
+> j=1
+
+α2 
+
+> j
+
+≥ c2 
+
+> r
+
+p min {(ωf δ)2, 1}
+
+˜nr
+
+.
+
+Proof of Lemma B.2. We know that 
+
+αl = |e⊤ 
+
+> l
+
+(θ(j) 
+
+> r
+
+− θ(k) 
+
+> r
+
+)|
+
+= |e⊤ 
+
+> l
+
+{(ωrΣ(j) 
+
+> r
+
+)−1Σ(j) 
+
+> p
+
+θf − (ωrΣ(k) 
+
+> r
+
+)−1Σ(k) 
+
+> p
+
+θf }| 
+
+= ωf
+
+ωr
+
+|e⊤ 
+
+> l
+
+{(Σ (j) 
+
+> r
+
+)−1 − (Σ (k) 
+
+> r
+
+)−1}θf |. (41) We can calculate that 
+
+{(Σ (j) 
+
+> r
+
+)−1 − (Σ (k) 
+
+> r
+
+)−1}Σf θf
+
+= (Σ (j) 
+
+> r
+
+)−1(Σ (k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+)(Σ (k) 
+
+> r
+
+)−1θf
+
+= (Σ (k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+)θf + (Σ (j) 
+
+> r
+
+)−1(Σ (k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+)((Σ (k) 
+
+> r
+
+)−1 − Ip)θf + ((Σ (j) 
+
+> r
+
+)−1 − Ip)(Σ (k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+)θf .
+
+45 Therefore, 
+
+αl ≥ ωf
+
+ωr
+
+|e⊤ 
+
+> l
+
+(Σ (k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+)θf |
+
+︸ ︷︷ ︸
+
+> R1
+
+− ωf
+
+ωr
+
+‖(Σ (j) 
+
+> r
+
+)−1(Σ (k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+)( Ip − Σ(k) 
+
+> r
+
+)(Σ (k) 
+
+> r
+
+)−1θf ‖2
+
+︸ ︷︷ ︸
+
+> R2
+
+− ωf
+
+ωr
+
+‖(Σ (j) 
+
+> r
+
+)−1(Ip − Σ(j) 
+
+> r
+
+)(Σ (k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+)θf ‖2
+
+︸ ︷︷ ︸
+
+> R3
+
+.
+
+As Σ(k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+= ( ψ(k) − ψ(j))θ⊤ 
+
+> f
+
++ θf (ψ(k) − ψ(j))⊤, (42) we have 
+
+R1 = ωf
+
+ωr
+
+|e⊤ 
+
+> l
+
+(ψ(k) − ψ(j))‖θf ‖22 + e⊤ 
+
+> l
+
+θf (ψ(k) − ψ(j))⊤θf |≥ crωf |‖ θf ‖22 + ( e⊤ 
+
+> l
+
+θf )2|
+
+ωr
+
+√˜nrδ ≥ crω2 
+
+> f
+
+min {δ2, ω −2 
+
+> f
+
+}
+
+√˜nrωf δ ≥ min {ωf δ, 1}
+
+√˜nr
+
+R2 ≤ ωf
+
+ωr
+
+‖θf ‖2‖Σ(k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+‖2‖Ip − Σ(k) 
+
+> r
+
+‖2
+
+≤ ωf δ‖ψ(k) − ψ(j)‖2‖θf ‖2‖ψ(k)‖2‖θf ‖2
+
+≤ ωf δ‖θf ‖22|e⊤ 
+
+> l
+
+(ψ(k) − ψ(j))|‖ ψ(k)‖2
+
+≤ ω3 
+
+> f
+
+min {δ3, ω −3 
+
+> f
+
+}√p
+
+˜nrω2 
+
+> f
+
+δ2 = min {ωf , 1}√p
+
+˜nr
+
+= o(1) 1
+
+√˜nr
+
+R3 ≤ ωf
+
+ωr
+
+‖θf ‖2‖Σ(k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+‖2‖Ip − Σ(j) 
+
+> r
+
+‖2 = o(1) 1
+
+√˜nr
+
+where we use the facts that p = o(˜ nr) and ωr ≥ c0 > 0. Hence, min l≤p αl ≥ cr min {ωf δ, 1} 
+
+> √˜nr
+
+(1 − o(1)) and 
+
+> p
+
+∑
+
+> j=1
+
+g(αj ) = 
+
+> p
+
+∑
+
+> j=1
+
+α2 
+
+> j
+
+≥
+
+> p
+
+∑
+
+> j=1
+
+(R1 − R2 − R3)2 ≥ c2 
+
+> r
+
+p min {(ωf δ)2, 1}
+
+˜nr
+
+.
+
+Lemma B.3 . Let P (j) = N (μ(j), Ω(j)) where Σ (j) are positive definite. Given that ‖(Ω (k))−1(Ω (j) −
+
+Ω(k))‖2 ≤ 1/2, then TV( P (j), P (k)) ≤ 1
+
+2 (μ(j) − μ(k))⊤(Ω (k))−1(μ(j) − μ(k)) + 1
+
+2 ‖(Ω (k))−1(Ω (j) − Ω(k))‖2 
+
+> F
+
+.
+
+Proof of Lemma B.3. 
+
+TV 2(P (j), P (k)) ≤ KL( P (j), P (k))= 1
+
+2 (μ(j) − μ(k))⊤(Ω (k))−1(μ(j) − μ(k)) + 1
+
+2 Tr((Ω (k))−1(Ω (j) − Ω(k))) − 1
+
+2 log det ((Ω (k))−1Ω(j)).
+
+46 Let λ1 ≥ · · · ≥ λp denote the singular values of (Ω (k))−1(Ω (k) − Ω(j)). Given that λ1 ≤ 1/2, we have Tr((Ω (k))−1(Ω (j) − Ω(k))) − log det ((Ω (k))−1Ω(j)) = 
+
+> p
+
+∑
+
+> l=1
+
+{− λl − log(1 − λl)}≤
+
+> p
+
+∑
+
+> l=1
+> ∞
+
+∑
+
+> k=2
+
+λkl /k ≤
+
+> p
+
+∑
+
+> l=1
+
+λ2 
+
+> l
+
+= ‖(Ω (k))−1(Ω (j) − Ω(k))‖2 
+
+> F
+
+. (43) 
+
+Lemma B.4 . Assume the conditions of Theorem 5.2. Under the distribution configuration in (35), it holds that max 
+
+> β(j)∼β(k)
+
+Eβ(j) [TV( pβ(j) (˚θp|D f , ˜Dr, ˇzr ), p β(k) (˚θp|D f , ˜Dr, ˇzr ))] ≤ Cc r
+
+√ p
+
+˜nr
+
+.
+
+Proof of Lemma B.4. By the definition of zr in (37), conditioning on {D f , ˜Dr , ˇzr } is equivalent to conditioning on {D f , ˜Dr , zr }. Hence, ˚θp|D f , ˜Dr , ˇzr ∼β(j) ˚θp|D f , ˜Dr , zr ∼β(j) N (˚ μ(j), ˚Σ(j)),
+
+where by (38), ˚μ(j) = 1
+
+N (Σ (j) 
+
+> p
+
+)−1{X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ‖ ˇzr ‖22
+
+E[z2 
+
+> r
+
+] Σ(j) 
+
+> r
+
+(θ(j) 
+
+> r
+
+− θ(j) 
+
+> p
+
+)}
+
+= 1
+
+N (Σ (j) 
+
+> p
+
+)−1{X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr − E[X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr ] + (‖ ˇzr ‖22 − ˇnrE[z2 
+
+> r
+
+]) 
+
+E[z2 
+
+> r
+
+] Σ(j) 
+
+> r
+
+(θ(j) 
+
+> r
+
+− θ(j) 
+
+> p
+
+)}
+
+˚Σ(j) = ‖ ˇzr ‖22
+
+N 2 (Σ (j) 
+
+> p
+
+)−1
+
+(
+
+Σ(j) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+(θ(j) 
+
+> r
+
+− θ(j) 
+
+> p
+
+)( θ(j) 
+
+> r
+
+− θ(j) 
+
+> p
+
+)⊤Σ(j)
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+(Σ (j) 
+
+> p
+
+)−1.
+
+In the above equations, we use the fact that the distribution of Df and zr are unchanged under each hypothesis. We first show that ˚Σ(j) is positive definite. First, Λmin ((Σ (j) 
+
+> r
+
+)−1) ≥ ‖ Σ(j) 
+
+> r
+
+‖−12 ≥ 1
+
+1 + ‖θf ‖2‖ψ(j)‖2
+
+≥ 1
+
+1 + min {ωf δ, 1}√p 
+
+> ωfδ√˜nr
+
+≥ 1
+
+2 .
+
+As ωr > 1/2 and E[z2 
+
+> r
+
+] = 5, by (36), min  
+
+> 1≤j≤M
+
+Λmin 
+
+(
+
+Σ(j) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+(θ(j) 
+
+> r
+
+− θ(j) 
+
+> p
+
+)( θ(j) 
+
+> r
+
+− θ(j) 
+
+> p
+
+)⊤Σ(j)
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+≥ min  
+
+> 1≤j≤M
+
+Λmin (Σ (j) 
+
+> r
+
+) − ω2 
+
+> f
+
+‖θf ‖22
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+≥ 1 − 4 min {ω2 
+
+> f
+
+δ2, 1}
+
+5 ≥ 1/5.
+
+Hence, the distribution N (˚ μ(j), ˚Σ(j)) is well-defined. We move on to bound KL( N (˚ μ(j), ˚Ξ(j)), N (˚ μ(k), ˚Ξ(k)))). 47 By Lemma B.3, if ‖(˚Σ(k))−1(˚Σ(j) − ˚Σ(k))‖2 ≤ 1/2, TV 2(pβ(j) (˚θp|D f , ˜Dr , ˇzr), p β(k) (˚θp|D f , ˜Dr , ˇzr )) ≤ KL( N (˚ μ(j), ˚Σ(j)), N (˚ μ(k), ˚Σ(k))) 
+
+≤ 1
+
+2 (˚ μ(j) − ˚μ(k))⊤(˚Σ(k))−1(˚ μ(j) − ˚μ(k)) + 1
+
+2 ‖(˚Σ(k))−1(˚Σ(j) − ˚Σ(k))‖2 
+
+> F
+
+.
+
+As Σ (j) 
+
+> r
+
+θ(j) 
+
+> r
+
+= Σ (k) 
+
+> r
+
+θ(k) 
+
+> r
+
+= − ωf 
+
+> ωr
+
+θf and θ(j) 
+
+> p
+
+= 0, we have ˚μ(j) − ˚μ(k) = (Σ (k) 
+
+> p
+
+)−1(Σ (k) 
+
+> p
+
+− Σ(j) 
+
+> p
+
+)˚ μ(j)
+
+˚Σ(j) − ˚Σ(k) = ‖ ˇzr‖22
+
+N 2 (Σ (j) 
+
+> p
+
+)−1
+
+(
+
+Σ(j) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+(Σ (j) 
+
+> p
+
+)−1 − ‖ ˇzr ‖22
+
+N 2 (Σ (k) 
+
+> p
+
+)−1
+
+(
+
+Σ(k) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+(Σ (k) 
+
+> p
+
+)−1.
+
+We first check that ‖(˚Σ(k))−1(˚Σ(j) − ˚Σ(k))‖2 ≤ 1/2. Note that 
+
+{˚Σ(k)}−1(˚Σ(j) − ˚Σ(k)) = Σ (k)
+
+> p
+
+(
+
+Σ(k) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)−1
+
+Σ(k) 
+
+> p
+
+(Σ (j) 
+
+> p
+
+)−1
+
+(
+
+Σ(j) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+(Σ (j) 
+
+> p
+
+)−1 − Ip
+
+= Σ (k)
+
+> p
+
+(
+
+Σ(k) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)−1 (
+
+Σ(j) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+(Σ (j) 
+
+> p
+
+)−1 − Ip
+
++ Σ (k)
+
+> p
+
+(
+
+Σ(k) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)−1
+
+{(Σ (k) 
+
+> p
+
+(Σ (j) 
+
+> p
+
+)−1 − Ip}
+
+(
+
+Σ(j) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+(Σ (j) 
+
+> p
+
+)−1
+
+︸ ︷︷ ︸
+
+> A(j,k )1
+
+= A(j,k )1 + Σ (k) 
+
+> p
+
+(Σ (j) 
+
+> p
+
+)−1 − Ip + Σ (k) 
+
+> p
+
+{
+
+(
+
+Σ(k) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)−1 (
+
+Σ(j) 
+
+> r
+
+− ω2 
+
+> f
+
+θf θ⊤
+
+> f
+
+ω2 
+
+> r
+
+E[z2 
+
+> r
+
+]
+
+)
+
+− Ip}(Σ (j) 
+
+> p
+
+)−1
+
+︸ ︷︷ ︸
+
+> A(j,k )2
+
+.
+
+As Σ (j) 
+
+> p
+
+and Σ (k) 
+
+> p
+
+have finite positive eigenvalues, it is easy to show that max 
+
+> β(j)∼β(k)
+
+‖(˚Σ(k))−1(˚Σ(j) − ˚Σ(k))‖2 ≤ C‖Σ(j) 
+
+> p
+
+− Σ(k) 
+
+> p
+
+‖2 ≤ Cω r‖Σ(j) 
+
+> r
+
+− Σ(k) 
+
+> r
+
+‖2
+
+≤ 2Cω r‖ψ(k) − ψ(j)‖2‖θf ‖2 ≤ cr min {δ, 1/ω f }
+
+√˜nrδ ≤ cr
+
+√˜nr
+
+.
+
+Similarly, 
+
+‖˚μ(j) − ˚μ(k)‖2 ≤ Cω r‖˚μ(j)‖2‖Σ(j) 
+
+> r
+
+− Σ(k) 
+
+> r
+
+‖2 ≤ Cc r‖˚μ(j)‖2
+
+√˜nr
+
+‖(˚Σ(k))−1/2(˚ μ(j) − ˚μ(k))‖22 ≤ Cc 2
+
+> r
+
+N 2‖˚μ(j)‖22
+
+‖ ˇzr‖22 ˜nr
+
+.
+
+Hence, TV 2(N (˚ μ(j), ˚Σ(j)), N (˚ μ(k), ˚Σ(k))) ≤ Cc 2 
+
+> r
+
+‖˚μ(j)‖22N 2
+
+‖ ˇzr ‖22 ˜nr
+
++ Cc 2 
+
+> r
+
+p
+
+˜nr
+
+.
+
+48 Note that 
+
+‖˚μj ‖2 ≤ 1
+
+N ‖X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr ‖2 + ωf ‖θf ‖2
+
+ωrN
+
+|‖ ˇzr ‖22 − ˇNrE[z2 
+
+> r
+
+]|
+
+E[z2 
+
+> r
+
+] .
+
+Hence, 
+
+Ej [ ‖˚μ(j)‖22
+
+‖ ˇzr ‖22
+
+] ≤ 2
+
+N 2 E[‖X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr − E[X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr]‖22]E[ 1
+
+‖ ˇzr ‖22
+
+] + 2 min {(ωf δ)2, 1}
+
+5N 2 E[ (‖ ˇzr ‖22 − ˇNrE[z2 
+
+> r
+
+]) 2
+
+‖ ˇzr‖22
+
+]
+
+≤ C(˜ nr + Nf )p
+
+N 2( ˇNr − 2) + C min {(ωf δ)2, 1}
+
+N 2 ( ˇNr − 2 − 2 ˇNr + ˇN 2
+
+> r
+
+ˇNr − 2 )
+
+≤ C (˜ nr + Nf )p
+
+N 2 ˇNr
+
++ min {(ωf δ)2, 1}
+
+N 2 ,
+
+where we use the fact that ‖ ˇzr ‖22/5 follows chi-squared distribution with parameter ˇNr. Therefore, 
+
+Ej [TV 2(N (˚ μ(j), ˚Ξ(j)), N (˚ μ(k), ˚Ξ(k)))] ≤ Cc 2 
+
+> r
+
+((˜ nr + Nf )p/ ˇNr + min {(ωf δ)2, 1})
+
+˜nr
+
++ Cc 2 
+
+> r
+
+p
+
+˜nr
+
+≤ Cc 2 
+
+> r
+
+(p + min {(ωf δ)2, 1})
+
+˜nr
+
+= Cc 2 
+
+> r
+
+p
+
+˜nr
+
+,
+
+where we use the fact that ˇNr = Nr − ˜nr ≥ cN .
+
+Lemma B.5 . Assume the conditions of Theorem 5.2. Under the distribution configuration in (35), it holds that max 
+
+> β(j)∈Bp(δ)
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(j) (˚θp, Df , ˜Dr)) ≤ C′
+
+√ p(p + log ˜ nr)
+
+N + 1
+
+˜nr
+
+.
+
+Proof of Lemma B.5. Note that TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(j) (˚θp, Df , ˜Dr )) 
+
+≤ Eβ(j) [TV( pβ(j) ( ˆθp|D f , ˜Dr , ˇXr), p β(j) (˚θp|D f , ˜Dr, ˇXr ))] .
+
+As shown above, ˚θp|D f , ˜Dr, ˇXr ∼j
+
+N
+
+θp + 1
+
+N (Σ (j) 
+
+> p
+
+)−1(X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ˇNr ˇΣr(θ(j) 
+
+> r
+
+− θp)) 
+
+︸ ︷︷ ︸
+
+> ˚α(j)
+
+, (σ(j) 
+
+> r
+
+)2 ˇNr
+
+N 2 (Σ (j) 
+
+> p
+
+)−1 ˇΣr(Σ (j) 
+
+> p
+
+)−1
+
+︸ ︷︷ ︸
+
+> ˚Ω(j)
+
+
+
+ˆθp|D f , ˜Dr, ˇXr ∼j
+
+N
+
+θp + 1
+
+N̂ Σ−1 
+
+> p
+
+(X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ˇNr ˇΣr(θ(j) 
+
+> r
+
+− θp)) 
+
+︸ ︷︷ ︸
+
+> ˆα(j)
+
+, (σ(j) 
+
+> r
+
+)2 ˇNr
+
+N 2̂ Σ−1 
+
+> p
+
+ˇΣr̂ Σ−1
+
+> p
+
+︸ ︷︷ ︸̂
+
+> Ω(j)
+
+ .
+
+We apply Lemma B.3 again. Specifically, 
+
+‖{ ̂Ω(j)}−1(˚Ω(j) −̂ Ω(j))‖2 ≤ ‖ Ip −̂ Σp ˇΣ−1
+
+> r
+
+̂ Σp(Σ (j) 
+
+> p
+
+)−1 ˇΣr(Σ (j) 
+
+> p
+
+)−1‖2
+
+≤ ‖ ̂Σp ˇΣ−1 
+
+> r
+
+(̂Σp(Σ (j) 
+
+> p
+
+)−1 − Ip) ˇΣrΣ(j) 
+
+> p
+
+)−1‖2 + ‖Ip −̂ Σp(Σ (j) 
+
+> p
+
+)−1‖2.
+
+49 Let 
+
+Ej =
+
+{
+
+‖̂Σp − Σ(j) 
+
+> p
+
+|2 ≤ C
+
+√ p + log ˜ nr
+
+N , Λmax ( ˇΣr) ≤ c1, Λmin ( ˇΣr) ≥ c2
+
+}
+
+. (44) In event Ej , Λ min (̂Ω(j)) ≥ c/N , ‖{ ̂Ω(j)}−1(˚Ω(j) − Ω(j))‖2 ≤ C√(p + log ˜ nr)/N ≤ 1/2 and KL( N (˚ α(j), ˚Ω(j)), N ( ˆ α(j), ˆΩ(j))) ≤ N ‖˚α(j) − ˆα(j)‖22 + p(p + log ˜ nr)
+
+N .
+
+Moreover, in event Ej ,
+
+‖˚α(j) − ˆα(j)‖2 ≤ ‖ ̂Σ−1 
+
+> p
+
+(̂Σp − Σ(j) 
+
+> p
+
+)‖2‖˚α(j)‖2
+
+≤ C
+
+N ‖̂Σp − Σ(j) 
+
+> p
+
+‖2‖X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ˇNr ˇΣr(θ(j) 
+
+> r
+
+− θp)‖2.
+
+We arrive at in event Ej ,KL( N (˚ α(j), ˚Ω(j)), N ( ˆ α(j), ˆΩ(j))) 
+
+≤ C|̂Σp − Σ(j) 
+
+> p
+
+‖22
+
+N Λmin (˚ Ω(j)) ‖X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ˇNr ˇΣr(θ(j) 
+
+> r
+
+− θp)‖22
+
++ p(p + log ˜ nr)
+
+N .
+
+Therefore, 
+
+Ej [TV( N (˚ α(j), ˚Ω(j)), N ( ˆ α(j), ˆΩ(j)))] ≤ Ej [KL 1/2(N (˚ α(j), ˚Ω(j)), N ( ˆ α(j), ˆΩ(j))) 1(Ej )] 
+
+︸ ︷︷ ︸
+
+> T1,j
+
++ Ej [TV( N (˚ α(j), ˚Ω(j)), N ( ˆ α(j), ˆΩ(j))) 1(Ecj )] 
+
+︸ ︷︷ ︸
+
+> T2,j
+
+.
+
+By Lemma B.7, max  
+
+> j≤M
+
+T2,j ≤ max  
+
+> j≤M
+
+P(Ecj ) ≤ exp {− c2 log ˜ nr}.
+
+For T1,j , using the Gaussian property of xf , xr, zr , zf , we have 
+
+T1,j ≤ Ej [ C
+
+N Λmin (˚Ω(j)) ‖̂Σp − Σ(j) 
+
+> p
+
+‖22‖X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ˇNr ˇΣr(θ(j) 
+
+> r
+
+− θp)‖221(Ej )] + p(p + log ˜ nr)
+
+N
+
+≤ C(p + log ˜ nr)p
+
+N 2 Ej [‖X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ˇNr ˇΣr(θ(j) 
+
+> r
+
+− θp)‖22] + p(p + log ˜ nr)
+
+N
+
+≤ C(p + log ˜ nr)p
+
+N + p(p + log ˜ nr)
+
+N
+
+≤ C′p(p + log ˜ nr)
+
+N ,
+
+where the second last line is due to E[X⊤ 
+
+> f
+
+zf + ˜X⊤ 
+
+> r
+
+˜zr + ˇNr ˇΣr(θ(j) 
+
+> r
+
+− θp)] = 0. To summarize, max 
+
+> β(j)∈B
+
+TV( pβ(j) ( ˆθp, Df , ˜Dr ), p β(j) (˚θp, Df , ˜Dr )) ≤ C′√p(p + log ˜ nr)
+
+√N + exp {− c2 log ˜ nr}≤ C′
+
+√ p(p + log ˜ nr)
+
+N + 1
+
+˜nr
+
+.
+
+50 Lemma B.6 . Assume the conditions of Theorem 5.2. Under the distribution configuration in (35), it holds that max  
+
+> β(j),β(k)∈Bp(δ): β(j)∼β(k)
+
+TV( pβ(j) ( ˜Dr ), p β(k) ( ˜Dr)) ≤ Cc r.
+
+Proof of Lemma B.6. Note that (( x(r) 
+
+> i
+
+)⊤, y (r) 
+
+> i
+
+) ∼β(j) N (0 , Ω(j)) where Ω (j) =
+
+(
+
+(θ(j) 
+
+> r
+
+)⊤Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
++ ( σ(j) 
+
+> r
+
+)2 (Σ (j) 
+
+> r
+
+θ(j) 
+
+> r
+
+)⊤
+
+Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+Σ(j)
+
+> r
+
+)
+
+.
+
+Invoking (43), given that ‖(Ω (k))−1(Ω (j) − Ω(k))‖2 ≤ 1/2, TV 2(pβ(j) ( ˜Dr ), p β(k) ( ˜Dr)) ≤ KL( pβ(j) ( ˜Dr), p β(k) ( ˜Dr)) ≤ ˜nr
+
+2 ‖(Ω (k))−1(Ω (j) − Ω(k))‖2 
+
+> F
+
+. (45) By (35), we first calculate that Ω(k) − Ω(j) =
+
+(
+
+0 (Σ (k) 
+
+> r
+
+θ(k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+)⊤
+
+Σ(k) 
+
+> r
+
+θ(k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+θ(j) 
+
+> r
+
+Σ(k) 
+
+> r
+
+− Σ(j)
+
+> r
+
+)
+
+.
+
+By (36), Ω(k) − Ω(j) =
+
+(
+
+0 00 Σ(k) 
+
+> r
+
+− Σ(j)
+
+> r
+
+)
+
+.
+
+We know that 
+
+‖(Ω (k))−1(Ω (k) − Ω(j))‖2 
+
+> F
+
+≤ Λ−2min (Ω (k))‖Ω(k) − Ω(j)‖2 
+
+> F
+
+≤ Λ−2min (Ω (k))‖Σ(k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+‖2 
+
+> F
+
+. (46) We know that φ(k) and φ(j) only differ at one coordinate. Suppose they differ at the l-th coordinate. 
+
+‖Σ(k) 
+
+> r
+
+− Σ(j) 
+
+> r
+
+‖2 
+
+> F
+
+≤ ‖ (ψ(j) − ψ(k))θ⊤ 
+
+> f
+
++ θf (ψ(j) − ψ(k))⊤‖2
+
+> F
+
+≤ 2‖θf ‖22‖ψ(j) − ψ(k)‖22 + 2( θ⊤ 
+
+> f
+
+(ψ(j) − ψ(k))) 2 ≤ 4c2 
+
+> r
+
+min {δ2, ω −2 
+
+> f
+
+}
+
+˜nrδ2 ≤ Cc 2
+
+> r
+
+˜nr
+
+.
+
+On the other hand, Ω(k) 
+
+(
+
+5 ωf 
+
+> ωr
+
+θfωf 
+
+> ωr
+
+θf Ip
+
+)
+
+.
+
+To show that Λ min (Ω (k)) ≥ c1 for some positive constant c1, it suffices to show that 
+
+ω2
+
+> f
+
+ω2
+
+> r
+
+‖θf ‖22 ≤ c2 < 1.
+
+By the definition of θf in (35), we have 
+
+ω2
+
+> f
+
+ω2
+
+> r
+
+‖θf ‖22 ≤ min {ω2 
+
+> f
+
+δ2, c 20} < 1.
+
+To summarize, by (45) and (46), we have max  
+
+> β(j),β(k)∈Bp(δ): β(j)∼β(k)
+
+TV 2(pβ(j) ( ˜Dr ), p β(k) ( ˜Dr)) ≤ Cc 2 
+
+> r
+
+.
+
+51 Lemma B.7 . Assume the conditions of Theorem 5.2. Under the distribution configuration in (35), by taking C to be a large enough constant in Ej defined in (44), it holds that min  
+
+> 1≤j≤M
+
+Pβ(j) (Ej ) ≥ 1 − exp {− c1 log ˜ nr}.
+
+for some positive constant c1.
+
+Proof of Lemma B.7. As x(r) 
+
+> i
+
+∼j N (0 , Σ(j)) and x(f ) 
+
+> i
+
+∼j N (0 , I p), we know that for some large enough c0
+
+Pβ(j)
+
+(
+
+‖̂Σ(j) 
+
+> p
+
+− Σ(j) 
+
+> p
+
+‖2 ≥ c0
+
+√ p + log ˜ nr
+
+N
+
+)
+
+≤ exp {− c1 log ˜ nr}
+
+for some large enough constant c0. Hence, max  
+
+> 1≤j≤M
+
+Pβ(j)
+
+(
+
+‖̂Σ(j) 
+
+> p
+
+− Σ(j) 
+
+> p
+
+‖2 ≥ c0
+
+√ p + log ˜ nr
+
+N
+
+)
+
+≤ exp {− c1 log ˜ nr}
+
+The rest of the statements can be proved similarly. 
+
+# C Additional numerical experiments 
+
+C.1 Estimation performance 
+
+To complement the numerical analysis in Section 6, this section provides supplementary experiments comparing the proposed unlearning estimator ˆθ(uls)  
+
+> r
+
+with its gradient descent variant ˆθ(uls)  
+
+> r,T
+
+and its robustified counterpart ˆθ(uls+)  
+
+> r
+
+.These experiments follow the same setup and configuration as described in the main text. Specifically, for ˆθ(uls)  
+
+> r,T
+
+, we set the number of iterations at T = 500 iterations with a constant step size α = 0 .05. For ˆθ(uls+)  
+
+> r
+
+, we employ cross-validation to adaptively tune λ by searching over the range λ ∈ [10 −4, 10 4]. The estimation errors are summarized as boxplots in Figure 6 and Figure 7. 52 Figure 6: Boxplots of the estimation errors for three unlearning estimators: ˆθ(uls)  
+
+> r
+
+(yellow with horizontal-line hatch), ˆθ(uls)  
+
+> r,T
+
+(orange with vertical-line hatch) and ˆθ(uls+)  
+
+> r
+
+(dark orange with plus-sign hatch). The three panels correspond to experimental settings (a), (b), and (c), with fixed 
+
+Nr = 20000 and Nf = 1000. Each setting is replicated with 1000 Monte Carlo trials. 
+
+Figure 7: Boxplots of the estimation errors for three unlearning estimators: ˆθ(uls)  
+
+> r
+
+(red with forward-slash hatch), ˆθ(uls)  
+
+> r,T
+
+(dark orange solid) and ˆθ(uls+)  
+
+> r
+
+(orange with cross-hatch). The three panels correspond to experimental settings (a), (b), and (c), with fixed Nr = 20000 and Nf = 2000. Each setting is replicated with 1000 Monte Carlo trials. From Figure 6 and Figure 7, we see that ˆθ(uls ) 
+
+> r
+
+, ˆθ(uls)  
+
+> r,T
+
+and ˆθ(uls+)  
+
+> r
+
+exhibit consistent trends across varing subsample size ratio ˜ nr/N r, dimension p, and parameter discrepancy δ. Regarding the gradient descent variation ˆθ(uls)  
+
+> r,T
+
+, we observe that for sufficiently large T , the estimation error of ˆθ(uls)  
+
+> r,T
+
+becomes virtually indistinguishable from that of ˆθ(uls)  
+
+> r
+
+. For the robustified version ˆθ(uls+)  
+
+> r
+
+, the empirical results in Figure 7 illustrates that ˆθ(uls+)  
+
+> r
+
+demonstrates superior performance in scenarios where ωf δ is large. This observation aligns with the convergence rate established in Theorem 5.1, specifically the term min {ωf δ, 1}, which characterizes the robustification effect of the retain loss. 53 C.2 Inference results for Nf = 2000 
+
+To further investigate the robustness of our inference procedure, we report additional results for a larger Nf = 2000. Table 4 summarize the average coverage probabilities and average standard deviations under this setting. These results remain consistent with inference performance observed in Table 1. 
+
+˜nr/N r p δ
+
+0.1 0.2 0.3 10 50 100 1 2 3
+
+Average Coverage 
+
+ULS 0.954 0.950 0.951 0.948 0.950 0.942 0.957 0.950 0.943 
+
+OLS 0.963 0.947 0.956 0.951 0.947 0.946 0.939 0.947 0.944 
+
+Average SD (×10 −2)
+
+ULS 0.99 0.84 0.78 0.83 0.84 0.85 0.75 0.84 0.97 
+
+OLS 2.26 1.59 1.30 1.58 1.59 1.60 1.59 1.59 1.59 
+
+Table 4: Inference results for setting (a), (b) and (c) with Nr = 20000 and Nf = 2000. Each setting is replicated with 1000 Monte Carlo trials. 
+
+# D Additional details on real data applications 
+
+D.1 Pre-processing steps for the UK Biobank data 
+
+For predictor construction, we adopt a structured feature engineering pipeline utilizing six repre-sentative administrative and clinical covariates, all of which are categorical variables collectively defined by 114 unique categories. To handle the varying cardinality of these predictors, we im-plement a hybrid encoding scheme. The responsible clinician specialty feature, which contains 85 unique categories, is encoded using target encoding to mitigate the risk of feature explosion. All other features, having fewer than 20 unique categories, are handled using one-hot encoding. After removing all-zero columns, feature selection is then conducted using Lasso method [Tibshirani, 1996] with cross-validation on D, yielding an average final representation of p = 16 predictors. 
+
+D.2 Additional results for ˜nr/N r ∈ { 0.2, 0.3}
+
+We report the predictive performance across the Yelp review and the UK Biobank dataset with ˜nr/N r set to 0 .2 and 0 .3. As shown, our method is best regardless of the dataset or the value of ˜nr/N r. These results suggest the robustness of our proposed method. 54 Figure 8: Boxplots of mean prediction errors for the Yelp review rating prediction unlearning task. ˆθ(diff)  
+
+> r
+
+, ˜θ(ols)  
+
+> r
+
+, and ˆθ(uls)  
+
+> r
+
+are evaluated under the retained subsample proportion ˜ nr/N r = 0 .2. Each boxplot is based on 20 random splits of training and test samples. 
+
+Figure 9: Boxplots of mean prediction errors for the Yelp review rating prediction unlearning task. ˆθ(diff)  
+
+> r
+
+, ˜θ(ols)  
+
+> r
+
+, and ˆθ(uls)  
+
+> r
+
+are evaluated under the retained subsample proportion ˜ nr/N r = 0 .3. Each boxplot is based on 20 random splits of training and test samples. 55 Figure 10: Boxplots of mean prediction errors for the UK Biobank hospital episode unlearning task. ˆθ(diff)  
+
+> r
+
+, ˜θ(ols)  
+
+> r
+
+, and ˆθ(uls)  
+
+> r
+
+are evaluated under the retained subsample proportion ˜ nr/N r = 0 .2. Each boxplot is based on 20 random splits of training and test samples. 
+
+Figure 11: Boxplots of mean prediction errors for the UK Biobank hospital episode unlearning task. ˆθ(diff)  
+
+> r
+
+, ˜θ(ols)  
+
+> r
+
+, and ˆθ(uls)  
+
+> r
+
+are evaluated under the retained subsample proportion ˜ nr/N r = 0 .3. Each boxplot is based on 20 random splits of training and test samples. 
+
+# References 
+
+A. Anjarlekar and S. Pombra. Llm unlearning using gradient ratio-based influence estimation and noise injection. arXiv preprint arXiv:2508.06467 , 2025. S. Balakrishnan, M. J. Wainwright, and B. Yu. Statistical guarantees for the em algorithm: From population to sample-based analysis. The Annals of Statistics , 45(1):77–120, 2017. J. Brophy and D. Lowd. Machine unlearning for random forests. In International Conference on Machine Learning , pages 1092–1104. PMLR, 2021. 56 T. T. Cai and H. Wei. Transfer learning for nonparametric classification. The Annals of Statistics ,49(1):100–128, 2021. Y. Cao and J. Yang. Towards making systems forget with machine unlearning. In 2015 IEEE symposium on security and privacy , pages 463–480. IEEE, 2015. R. D. Cook and S. Weisberg. Residuals and influence in regression. 1982. F. M. Dekking. A Modern Introduction to Probability and Statistics: Understanding why and how .Springer Science & Business Media, 2005. C. Fan, J. Liu, L. Lin, J. Jia, R. Zhang, S. Mei, and S. Liu. Simplicity prevails: Rethinking negative preference optimization for llm unlearning. arXiv preprint arXiv:2410.07163 , 2024. A. Ginart, M. Guan, G. Valiant, and J. Y. Zou. Making ai forget you: Data deletion in machine learning. Advances in neural information processing systems , 32, 2019. L. Graves, V. Nagisetty, and V. Ganesh. Amnesiac machine learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, pages 11516–11524, 2021. C. Guo, T. Goldstein, A. Hannun, and L. Van Der Maaten. Certified data removal from machine learning models. In International Conference on Machine Learning , pages 3832–3842. PMLR, 2020. Z. He, T. Li, X. Cheng, Z. Huang, and X. Huang. Towards natural machine unlearning. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. Z. Izzo, M. A. Smart, K. Chaudhuri, and J. Zou. Approximate data deletion from machine learning models. In International conference on artificial intelligence and statistics , pages 2008–2016. PMLR, 2021. R. Jin, M. Chen, Q. Zhang, and X. Li. Forgettable federated linear learning with certified data unlearning. arXiv preprint arXiv:2306.02216 , 2023. A. K. Kuchibhotla and A. Chakrabortty. Moving beyond sub-gaussianity in high-dimensional statistics: Applications in covariance estimation and linear regression. Information and Inference: A Journal of the IMA , 11(4):1389–1456, 2022. N. Li, A. Pan, A. Gopal, S. Yue, D. Berrios, A. Gatti, J. D. Li, A.-K. Dombrowski, S. Goel, L. Phan, et al. The wmdp benchmark: Measuring and reducing malicious use with unlearning. 
+
+arXiv preprint arXiv:2403.03218 , 2024a. S. Li, T. T. Cai, and H. Li. Transfer learning for high-dimensional linear regression: Prediction, estimation and minimax optimality. Journal of the Royal Statistical Society Series B: Statistical Methodology , 84(1):149–173, 2022. S. Li, L. Zhang, T. T. Cai, and H. Li. Estimation and inference for high-dimensional generalized linear models with knowledge transfer. Journal of the American Statistical Association , 119(546): 1274–1285, 2024b. 57 H. Lin, J. W. Chung, Y. Lao, and W. Zhao. Machine unlearning in gradient boosting decision trees. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 1374–1383, 2023. B. Liu, Q. Liu, and P. Stone. Continual learning and private unlearning. In Conference on Lifelong Learning Agents , pages 243–254. PMLR, 2022. S. Liu, Y. Yao, J. Jia, S. Casper, N. Baracaldo, P. Hase, Y. Yao, C. Y. Liu, X. Xu, H. Li, et al. Rethinking machine unlearning for large language models. Nature Machine Intelligence , pages 1–14, 2025a. Y. Liu, H. Chen, W. Huang, Y. Ni, and M. Imani. Recover-to-forget: Gradient reconstruction from loRA for efficient LLM unlearning. In Socially Responsible and Trustworthy Foundation Models at NeurIPS 2025 , 2025b. URL https://openreview.net/forum?id=n7peBaPUmk .T. Ma, K. A. Verchand, and R. J. Samworth. High-probability minimax lower bounds. arXiv preprint arXiv:2406.13447 , 2024. P. Maini, Z. Feng, A. Schwarzschild, Z. C. Lipton, and J. Z. Kolter. Tofu: A task of fictitious unlearning for llms. arXiv preprint arXiv:2401.06121 , 2024. S. Neel, A. Roth, and S. Sharifi-Malvajerdi. Descent-to-delete: Gradient-based methods for machine unlearning. In Algorithmic Learning Theory , pages 931–962. PMLR, 2021. Y. Nesterov et al. Lectures on convex optimization , volume 137. Springer, 2018. T.-H. Nguyen, H.-P. Vu, D. T. Nguyen, T. M. Nguyen, K. D. Doan, and K.-S. Wong. Empirical study of federated unlearning: Efficiency and effectiveness. In Asian Conference on Machine Learning , pages 959–974. PMLR, 2024. H. W. Reeve, T. I. Cannings, and R. J. Samworth. Adaptive transfer learning. The Annals of Statistics , 49(6):3618–3649, 2021. A. Sekhari, J. Acharya, G. Kamath, and A. T. Suresh. Remember what you want to forget: Algorithms for machine unlearning. Advances in Neural Information Processing Systems , 34: 18075–18086, 2021. T. Shaik, X. Tao, H. Xie, L. Li, X. Zhu, and Q. Li. Exploring the landscape of machine unlearning: A comprehensive survey and taxonomy. IEEE Transactions on Neural Networks and Learning Systems , 2024. C. Sudlow, J. Gallacher, N. Allen, V. Beral, P. Burton, J. Danesh, P. Downey, P. Elliott, J. Green, M. Landray, et al. Uk biobank: an open access resource for identifying the causes of a wide range of complex diseases of middle and old age. PLoS medicine , 12(3):e1001779, 2015. Y. Tian and Y. Feng. Transfer learning under high-dimensional generalized linear models. Journal of the American Statistical Association , 118(544):2684–2697, 2023. 58 R. Tibshirani. Regression shrinkage and selection via the lasso. Journal of the Royal Statistical Society Series B: Statistical Methodology , 58(1):267–288, 1996. R. Vershynin. High-dimensional probability: An introduction with applications in data science ,volume 47. Cambridge university press, 2018. Q. Wang, J. P. Zhou, Z. Zhou, S. Shin, B. Han, and K. Q. Weinberger. Rethinking LLM unlearning objectives: A gradient perspective and go beyond. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum?id=huo8MqVH6t .Y. Wu, E. Dobriban, and S. Davidson. Deltagrad: Rapid retraining of machine learning models. In International Conference on Machine Learning , pages 10355–10366. PMLR, 2020. P. Yang, Q. Wang, Z. Huang, T. Liu, C. Zhang, and B. Han. Exploring criteria of loss reweighting to enhance LLM unlearning. In Forty-second International Conference on Machine Learning ,2025. URL https://openreview.net/forum?id=mGOugCZlAq .Y. Yao, X. Xu, and Y. Liu. Large language model unlearning. Advances in Neural Information Processing Systems , 37:105425–105475, 2024. R. Zhang, L. Lin, Y. Bai, and S. Mei. Negative preference optimization: From catastrophic collapse to effective unlearning. CoRR , 2024. X. Zhang, J. Zhao, and Y. LeCun. Character-level convolutional networks for text classification. 
+
+Advances in neural information processing systems , 28, 2015. 59

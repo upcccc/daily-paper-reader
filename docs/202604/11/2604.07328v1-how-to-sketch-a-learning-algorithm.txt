@@ -1,0 +1,1137 @@
+Title: How to sketch a learning algorithm
+
+URL Source: https://arxiv.org/pdf/2604.07328v1
+
+Published Time: Thu, 09 Apr 2026 01:26:15 GMT
+
+Number of Pages: 35
+
+Markdown Content:
+# How to sketch a learning algorithm 
+
+# Sam Gunn April 9, 2026 
+
+Abstract 
+
+How does the choice of training data influence an AI model? This broad question is of central importance to interpretability, privacy, and basic science. At its technical core is the data deletion problem: after a reasonable amount of precomputation, quickly predict how the model would behave in a given situation if a given subset of training data had been excluded from the learning algorithm. We present a data deletion scheme capable of predicting model outputs with vanish-ing error ε in the deep learning setting. Our precomputation and prediction algorithms are only poly(1 /ε ) factors slower than regular training and inference, respectively. The storage requirements are those of poly(1 /ε ) models. Our proof is based on an assumption that we call stability . In contrast to the assumptions made by prior work, stability appears to be fully compatible with learning powerful AI models. In support of this, we show that stability is satisfied in a minimal set of experiments with microgpt. Our code is available at microgpt-sketch. At a technical level, our work is based on a new method for locally sketching an arithmetic circuit by computing higher-order derivatives in random complex directions. Forward-mode automatic differentiation allows cheap computation of these derivatives. 
+
+1
+
+> arXiv:2604.07328v1 [cs.LG] 8 Apr 2026
+
+# Contents 
+
+1 Introduction 3
+
+1.1 Technical overview . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 41.2 Related work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+
+2 Preliminaries 12 
+
+2.1 Notation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12 2.2 Arithmetic circuits and machine learning . . . . . . . . . . . . . . . . . . . . . . . . . 13 
+
+3 The toolkit 14 
+
+3.1 Forward-mode automatic differentiation . . . . . . . . . . . . . . . . . . . . . . . . . 14 3.2 The symmetric subspace . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14 3.3 Stable arithmetic circuits . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 
+
+4 Local sketching by differentiation 18 5 Data deletion and attribution 23 
+
+5.1 Data deletion with local sketching . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 5.2 Experiments: the stability of microgpt . . . . . . . . . . . . . . . . . . . . . . . . . . 26 
+
+A Supplement to related work: post hoc unlearning 34 
+
+21 Introduction 
+
+One of the most fundamental problems in AI is to understand model behavior as a function of training data. Variations on this problem abound, going under names such as datamodel-ing, influence functions, data valuation, and machine unlearning. While the exact problem formulation depends on the application of interest, they are all addressed by data deletion .1
+
+A data deletion scheme consists of two algorithms: 
+
+• precomputation , which takes as input the description of a learning algorithm A and a training dataset T , and outputs the trained model A(T ) together with some arbitrary auxiliary information; and 
+
+• prediction , which takes as input the description of a function ϕ of the model parameters (called a “measurement”) together with a small subset D of the training dataset, and uses the precomputed auxiliary information to quickly predict ϕ(A(T \ D)): i.e., what the measurement outcome on the learned model would have been if the subset D had been excluded from the training dataset .Consider the following scenario. Suppose an artist posts their work online, and this work is then included in the training data for a new AI model. This model later generates some con-tent x that appears related to the artist’s work. How can we know whether the relationship is causal? If the model was trained using the precomputation algorithm of a data deletion scheme, then we can quickly compute the probability that the model would have produced the given content if all of the artist’s work were excluded from the set of training data. All we need to do is search the training data for the artist’s work and query the prediction algorithm using the measurement that asks “what is the probability that this model will produce x?” Although they would be extremely useful, data deletion schemes are notoriously hard to come by. There currently does not exist an efficient scheme capable of achieving arbitrary prediction error ε for actual AI algorithms—in theory or in practice. We believe this is largely due to a lack of good abstractions, making it difficult to understand the set of available algorithmic tools. As a result, existing data deletion schemes rely on surrogate models or heuristics and often only weakly correlate with the ground truth in practice [IE25]. In this work, we demonstrate that this situation may not be inevitable. We introduce a simple assumption about the learning algorithm which we call stability and use it to provably solve the data deletion problem with vanishing prediction error ε. We find that our assumption is practically reasonable using a small set of experiments with microgpt [Kar26]. Stability is an assumption about both the learning algorithm A and a given measurement 
+
+ϕ. Roughly, it quantifies the sensitivity of ϕ(A(T )) to small changes in T . The more robust  
+
+> 1This term also has multiple meanings in the literature. We use it because we feel it most accurately captures the problem we consider.
+
+3the measurement is to changes in training data, the more stable it is. Our data deletion scheme has the following properties: 
+
+• precomputation is only a poly(1 /ε ) factor more expensive than training the model; 
+
+• predicting the model behavior after deleting d examples is only a d · poly(1 /ε ) factor more expensive than evaluating the trained model once; 
+
+• the precomputed data can be stored in the space of poly(1 /ε ) trained models; and 
+
+• under the weakest form of our stability assumption, the prediction error is O(ε) for any constant number of deletions d, while a stronger form of our stability assumption bounds the prediction error for arbitrary d.Our techniques are based on a new method of locally sketching an arithmetic circuit, which may be of independent interest. 
+
+# 1.1 Technical overview 
+
+In this section we will explain our setting, assumption, and method in a more concise and intuitive format than the more technical sections which follow. We include references to the relevant technical sections throughout. 
+
+The setting. Let us begin by describing the setting and problem in more detail. Our guid-ing principle is that we do not wish to exclude real-world AI pipelines from our specification, but we still want it to be completely rigorous. For the purposes of this introduction, we restrict our attention to stochastic gradient descent on n training examples with single-example batches. This restriction is entirely pedagogical, and the technical sections use general arithmetic circuits. See Section 2.2 for details on arithmetic circuits and how they relate to machine learning. We define the learning algorithm A : Rn → Rp as the following function mapping a vector of per-example downweights 2 w to trained model parameters θn. Note that here, and in the rest of the paper, we are departing slightly from the terminology of the introduction by 
+
+> 2Our terminology is taken from [IE25], except that we downweight instead of upweight examples.
+
+4considering the training data itself to be hard-coded into A.
+
+A on input w ∈ Rn:1. Initialize θ0 ∈ Rp arbitrarily. 2. For i = 1 , . . . , n :(a) Let ℓi : Rp → R be the loss on example i.(b) Let wi be the ith coordinate of w.(c) Compute θi ← θi−1 − (1 − wi) ∇ℓi(θi−1). 3. Output θn.Observe that the downweights specify an extent to which data is ignored, so that if 1D is the indicator vector for the set D ⊆ [n] then A(1D) is the model trained on data indices [n] \ D. The model can be probed using a measurement function ϕ : Rp → R mapping model parameters to an outcome. For instance, ϕ can be the output of the model on some example (which should be hard-coded into ϕ). We assume that the measurement ϕ and loss functions ℓi are described by arithmetic circuits mapping Rp to R. By the Baur-Strassen theorem, this implies that A and ϕ ◦ A are also arithmetic circuits. A data deletion scheme decomposes the evaluation of the circuit f = ϕ ◦ A on input 1D into two parts: slow precomputation depending only on A, and fast prediction depending on ϕ
+
+and D. We say that a data deletion scheme has error ε for a given ϕ and D if the prediction is ε-close to f (1D). Throughout this work, we require the prediction to be accurate even for a fixed choice of all the randomness used in training and inference (such as the initialization, batch ordering, and latent noise). See the discussion on “single-model” data attribution in [IE25, Section 2.1] for an explanation of why this is a more useful, and stringent, definition. We will require that f = ϕ ◦ A satisfies a condition we call “stability.” 
+
+The stability assumption. Consider the Taylor expansion of f around 0,
+
+f (w) = 
+
+> ∞
+
+X
+
+> r=0
+
+1
+
+r! ⟨f (r)(0), w⊗r⟩,
+
+where ⟨· , ·⟩ denotes the inner product (after flattening tensors) and f (r)(0) ∈ (Rn)⊗r is the 
+
+rth derivative tensor of f at 0. We say that f : Rn → R is stable if the terms in the Taylor expansion decay rapidly with r,1
+
+r! f (r)(0) F = 2 −ω(r), (1) where ∥·∥ F denotes the Frobenius norm and ω(r) denotes growth that is super-linear in r.We require Equation (1) to hold for some fixed ω(r) function, even as the amount of training 5data n and the size of the model p grow; although in the technical sections we will use a more precise definition of stability which is not asymptotic at all. It turns out that Equation (1) is the only assumption we need . In Section 5.2, we find that Equation (1) is satisfied in minimal experiments with microgpt [Kar26]. 
+
+Theorem (Special case of Theorem 2) . For any ε, δ > 0, there exists a data deletion scheme such that the following holds. For any learning algorithm A : Rn → Rp,
+
+• precomputation requires ˜O(size (A) log(1 /δ )/ε 2) operations, 
+
+• the required storage is ˜O(p log(1 /δ )/ε 2), and for any measurement ϕ : Rp → R and any set D ⊆ [n] of O(1) examples, 
+
+• predicting (ϕ ◦ A )( 1D) requires ˜O(log(1 /δ )/ε 2 + size (ϕ) log(1 /δ )/ε 3) operations, and 
+
+• the prediction has error O(ε) with probability 1 − δ assuming f = ϕ ◦ A is stable in the sense of Equation (1), where ˜O hides polylog(1 /ε ) factors. 
+
+In the body of the paper, we use a more general and precise definition of stability that implies a bound on the approximation error under any number of deletions. This definition is given in Section 3.3, where we also explain how stability can be viewed as a combination of an intuitive continuity property and a bound on the “stable rank” of the derivatives. The remainder of this section is an introduction to our data deletion scheme. 
+
+The approach. For now, let us suppose that we know ϕ during precomputation. Our goal is then to compute a local sketch of f that enables fast approximation of f (1D) for any small set D, assuming that f is stable. At the end of this section we will explain how this extends to our data deletion scheme (where the function f is not fully known during precomputation). The method of local sketching with knowledge of f during precomputation is detailed in Section 4, and the extension to data deletion is detailed in Section 5. We begin by observing that, assuming Equation (1), the sth order Taylor approximation to 
+
+f (1D) has error roughly ε if we use s = log(1 /ε ) and any constant-sized set D.Predicting f (1D) from the Taylor approximation takes time roughly |D|s, since we only need to look up |D|r values of f (r)(0) at each order r. This is much faster than re-training for small D and s. However, the precomputed data itself has size ns. Precomputation must at the very least write this data down, so this scheme will require at least ns time. Since n can be in the trillions for large AI models, this is prohibitively expensive for even s = 2. 
+
+Sketching by random projections. The storage issue is easy to solve using random projections: Instead of storing the entire tensors f (r)(0), we can store ⟨f (r)(0), Ψi⟩ for many 6random directions Ψ1, . . . , Ψk ∈ (Rn)⊗r. Since 
+
+E
+
+> Ψ
+
+⟨f (r)(0), Ψ⟩ ⟨ Ψ, (1D)⊗r⟩ = ⟨f (r)(0), (1D)⊗r⟩,
+
+our prediction algorithm can use 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+⟨f (r)(0), Ψi⟩ ⟨ Ψi, (1D)⊗r⟩
+
+as an unbiased estimate for ⟨f (r)(0), (1D)⊗r⟩. The variance is also bounded, by the Johnson-Lindenstrauss lemma [JL84]. Of course, the main issue persists: Precomputation still needs to produce the entire tensor 
+
+f (r)(0) in order to compute ⟨f (r)(0), Ψi⟩. What we need is to compute a random projection of f (r)(0) implicitly , without ever materializing the tensor. 
+
+Sketching by differentiation. We use forward-mode automatic differentiation to com-pute random projections of the derivative tensors, without ever writing these tensors down . Precomputation works by sampling many random complex directions ψ1, . . . , ψk ∈
+
+Cn and then computing the derivatives (up to order s) of the univariate function gi : z 7 →
+
+f (z ψi) for each i. We can compute all of these derivatives in time roughly k s · size (f ) using forward-mode automatic differentiation; see Section 3.1 for details. How is this useful? First, observe that g(r) 
+
+> i
+
+(0) = ⟨f (r)(0), ψ⊗ri ⟩. The key fact is that for any symmetric tensors 
+
+A, B ∈ (Rn)⊗r, if ψ ∈ Cn is a random complex unit vector, then 
+
+n + r − 1
+
+r
+
+
+
+E
+
+> ψ
+
+⟨A, ψ⊗r⟩ ⟨ ψ⊗r, B⟩ = ⟨A, B⟩. (2) Using A := f (r)(0) and B := ( 1D)⊗r, this lets us estimate ⟨f (r)(0), (1D)⊗r⟩ for a given D
+
+using the precomputed values ⟨f (r)(0), ψ⊗ri ⟩. See Section 3.2 for background on Equation (2) and a proof 3 that the variance of the estimator is at most 4 r ∥A∥2F ∥B∥2F. Our prediction algorithm can therefore use 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+n + r − 1
+
+r
+
+
+
+⟨f (r)(0), ψ⊗ri ⟩ ⟨ ψi, 1D⟩r
+
+as an unbiased estimate for ⟨f (r)(0), (1D)⊗r⟩ with variance bounded by (4 |D|)rk−1 f (r)(0) 2F.   
+
+> 3The proof is straightforward, using the 2 rcase of Equation (2) to bound the variance in the rcase.
+
+7Putting the two approximations together, 
+
+f (1D) ≈ f (0) + 
+
+> s
+
+X
+
+> r=1
+
+1
+
+r! ⟨f (r)(0), (1D)⊗r⟩≈ f (0) + 
+
+> s
+
+X
+
+> r=1
+
+1
+
+r! k
+
+> k
+
+X
+
+> i=1
+
+n + r − 1
+
+r
+
+
+
+⟨f (r)(0), ψ⊗ri ⟩ ⟨ ψi, 1D⟩r.
+
+As noted earlier, stability implies that the first approximation incurs an error of roughly 
+
+ε as long as s = log(1 /ε ). The variance bound just discussed, together with another use of stability, implies that the second approximation incurs an additional error of ε for some 
+
+k = poly(1 /ε ). See Theorem 1 for a full derivation and the technical result. 
+
+Upgrading to data deletion. So far we have assumed that precomputation knows ϕ,which is not allowed in data deletion. This nonetheless constitutes a local sketching method for stable arithmetic circuits, and is presented in Section 4. It serves as the main technical component behind our data deletion scheme in Section 5. In our data deletion scheme, precomputation works identically except that f is replaced by 
+
+A. Even though A has many outputs, this does not increase the computational complexity: Precomputation can still be done in time roughly k s · size (A) using forward-mode automatic differentiation. Prediction, on the other hand, becomes more complicated. While it would be natural to simply compute the analogous approximation to A(1D) as was done for f (1D), and to then apply ϕ to this approximation, this is not guaranteed to be accurate by stability alone. For instance, imagine that A performed some arbitrarily unstable computation, which was then undone by ϕ so that f = ϕ ◦ A is a constant function. Then f is highly stable, but any approximation error on A(1D) translates to large error on the output of ϕ.Instead, our prediction algorithm will use the Fa` a di Bruno formula to push the derivatives of A through ϕ, thereby obtaining the exact same sketch of f that we would have obtained if we had applied precomputation directly to f . This involves computing multi-directional forward-mode derivatives, which can be done with fast subset convolution [BHKK07] (see Section 3.1). Interestingly, the final complexity of our data deletion scheme stated in our main theorem, Theorem 2, would be worse if we did not use fast subset convolution to compute forward-mode derivatives. We are optimistic that it may be possible to remove the need for the Fa` a di Bruno formula. While it does not significantly affect the asymptotic complexity stated in Theorem 2, it may be the most practically inefficient aspect of our data deletion scheme. 
+
+Minor differences from the main body. We have glossed over several subtleties for the purposes of this introduction, creating differences from the main body of the paper. To minimize confusion, we briefly explain the main differences now. 8First, the body considers the learning and measurement algorithms as arbitrary arithmetic circuits; our restriction to stochastic gradient descent in the introduction is not important. After Section 1, we do not even return to the “learning algorithm” and “measurement func-tion” terminology until we get to our data deletion scheme in Section 5. Our sketching algorithm presented in Section 4 is accordingly more general than suggested in the introduc-tion. It applies equally well to high-dimensional outputs, and can be used to locally sketch an arithmetic circuit around an arbitrary input x∗ as long as the circuit is stable at x∗.Second, we find it convenient to make most statements over the complex numbers C rather than R. Since our model for AI computations is simply arithmetic circuits, this does not cost us any generality. In any case, as explained in Section 2.2, this choice is not practically important and does not hinder our implementation in Section 5.2. Third, the definition of stability presented in Equation (1) is less general than the one we actually use in the body. The real definition, presented in Section 3.3, is more conducive to proving quantitative bounds on the error of our schemes. Fourth, we are unable to show that an average of estimates from Equation (2) concentrates well. We would therefore obtain a poor bound on the failure probability if we used the scheme from this introduction. Instead, we use a median-of-means estimator in our prediction algorithms of both Sections 4 and 5. We suspect that the median-of-means estimator is not necessary, and we hope that future work can prove this without sacrificing our parameters. 
+
+# 1.2 Related work 
+
+Variations on the data deletion problem abound, and we only survey some of the most relevant work here. Our work is most similar to the line of work on datamodeling or predictive data attribution , although there are several key differences which we outline below. For an introduction to the area, we recommend the tutorial of [IGEP24]. A surrogate model is an idealized model of a system which is used in place of the actual system. Every prior work with provable guarantees for data deletion in the deep learning setting relies on a surrogate model. This precludes a vanishing prediction error, as any method that relies on a surrogate model necessarily incurs the fixed approximation error of the surrogate model itself. In contrast, our stability assumption is not a surrogate model: It appears to be fully compatible with learning powerful models on large datasets. 
+
+The additivity assumption. Perhaps the most successful surrogate model for answering questions of data influence has been the additivity assumption. This assumption says that the function f mapping the list of data weights to a model prediction (on a fixed test query) is linear. In other words, it is assumed that the influence of a set of training data on any model prediction is the sum of the influences of the individual training examples. For instance, the work on datamodeling [IPE +22, PGI +23, IE25] and influence functions 
+
+[HRRS86, KL17, KATL19] uses the additivity assumption. 9In reality, it is of course understood that additivity does not hold for real models. The hope is rather that the additivity assumption does not incur too large an error, at least for small perturbations in the data weights. There are theoretical reasons to believe that the additivity assumption should incur bounded error for random perturbations [IPE +22, SGBA23], but in practice it is usually necessary to significantly alter learning algorithms in order to keep this error small [IE25]. Moreover, random perturbations may not capture many of the most important use cases such as removing many closely-related examples. Designing data deletion schemes with the additivity assumption has several major drawbacks: 
+
+• the prediction error becomes unreasonable past a certain number of deletions; 
+
+• there is no way to reduce the prediction error by expending more computation; 
+
+• even if additivity is a good approximation under random deletions, it can be a poor approximation for worst-case deletions. We therefore view our departure from the additivity assumption as an essential aspect of this work. However, we emphasize that even assuming additivity , our scheme greatly improves on prior work. The strongest result in the additivity model is the work of [IE25], which exactly computes counterfactuals assuming additivity. Accepting additivity, the main drawback of that work is that it is necessary to know the measurement function ahead of time during precomputation. Our work yields the first scheme in the deep learning setting to both (a) not require foreknowledge of the measurement function during precomputation and (b) guarantee a provable bound on the counterfactual prediction error. 
+
+Post hoc certified unlearning. It is common for machine unlearning schemes to make no reference to the algorithm used to train the model. For instance, one method is based on performing gradient ascent on the loss for the set of data to be deleted [TKP +24]. These methods can be applied to “delete” even data that was never seen during training of the model. We discuss this approach in more detail in Appendix A. 
+
+Fourier analysis. As mentioned in the paragraph on the additivity assumption, [SGBA23] argue that the additivity assumption should be a good approximation for the influence of random subsets of training data. They adopt the “discrete influence” perspective, where one views the datamodeling function as being restricted to the hypercube, f : {0, 1}n → R,allowing them to use ideas from the analysis of Boolean functions. It would be interesting to see whether similar arguments can be used to shed light on our stability assumption. It would also be interesting to see whether our techniques can be extended to the discrete influence setting. This could potentially enable data deletion using a stability assumption related to the Fourier spectrum of the discrete influence function. 10 Other work. Since we are not focused on any particular application of data deletion, we do not discuss considerations such as privacy concerns when applying data deletion as a solution to machine unlearning. We refer the interested reader to [GGV20, CSSV23]. We caution that data deletion by itself is not a complete solution to machine unlearning, and na¨ ıve applications of data deletion can in some cases actually harm privacy [CZW +21, CJZ +22, CS23]. There is also work on provable data deletion for particular algorithms such as k-means clus-tering [GGVZ19], linear classifiers [GGHvdM20], and linear or logistic regression [ISCZ21]. 11 2 Preliminaries 
+
+This section has two parts: Section 2.1, which contains all notation and basic definitions used throughout the paper; and Section 2.2, which explains the mathematical model we use to describe AI computations. 
+
+# 2.1 Notation 
+
+Let N denote the set of positive integers, R denote the real numbers, and C denote the complex numbers. Let [ t] := {1, . . . , t }. We write ( r1, . . . , r t) ⊨ r to denote that the ordered list ( r1, . . . , r t) is an integer composition of r, i.e., that r1 + · · · + rt = r and ri ≥ 1. We use 
+
+n[r] to denote the dimension of the symmetric subspace of ( Cn)⊗r, i.e., n[r] :=  n+r−1
+
+> r
+
+. See Section 3.2 for more background on the symmetric subspace. 
+
+Tensors and linear algebra. We use bold lowercase letters to denote vectors and bold uppercase letters to denote matrices, tensors, or other collections of vectors. If u ∈ Cn is a vector, we write ui to denote the ith coordinate of u; we write ui to denote a vector in a collection of vectors u1, . . . , ur.Let ψ† denote the conjugate transpose of ψ ∈ Cn, and let ⟨u, v⟩ := u†v denote the inner product of vectors u, v ∈ Cn. If u or v is a tensor, it is flattened and interpreted as a vector for the purposes of computing inner products. For a complex scalar, vector, matrix, or general tensor T, let T denote the complex conjugate. If T ∈ Cp ⊗ (Cn)⊗r and u1, . . . , ur ∈ Cn, then we use the notation T[u1 ⊗ · · · ⊗ ur] to refer to the vector in Cp obtained by contracting the ith Cn wire of T with ui, for each i ∈ [r]. In other words, if T = P 
+
+> i∈[p]
+
+1i ⊗ Ti where 1i is the ith indicator vector in Cp and Ti ∈ (Cn)⊗r,then T[u1 ⊗ · · · ⊗ ur] is the vector whose ith entry is ⟨Ti, u1 ⊗ · · · ⊗ ur⟩. For instance, if 
+
+r = 1 then T[u] is the matrix-vector product. For a vector u ∈ Cn, let ∥u∥ denote the 2-norm. For a tensor T ∈ (Cn)⊗r, let ∥T∥F =p⟨T, T⟩ denote the Frobenius norm and let ∥T∥op denote the operator norm defined as 
+
+∥T∥op := sup   
+
+> u1,..., ur∈Cn
+> ∥u1∥=··· =∥ur∥=1
+
+|T[u1 ⊗ · · · ⊗ ur]|.
+
+A random unit vector in Cn (resp. Rn) refers to a sample from the Haar distribution—i.e., the unique distribution which is invariant under the action of every unitary (resp. orthogonal) matrix—on unit vectors in Cn (resp. Rn). 
+
+Calculus. For a function f : C → Cp, let ∂rf (x) ∈ Cp denote the vector of rth-order derivatives of f evaluated at x. For a function f : Cn → Cp, let ∂ri f (x) ∈ Cp be the vector of rth order partial derivatives of f with respect to the ith input, evaluated at x. If r is not specified then it is interpreted as r = 1. 12 More frequently we will denote rth derivatives using the following notation. If f : Cn → Cp,then f (r)(x) ∈ Cp ⊗ (Cn)⊗r is the rth derivative tensor of f evaluated at x ∈ Cn. Note that if ψ ∈ Cn and g(z) = f (x + z ψ), then 
+
+∂rg(0) = f (r)(x)[ ψ⊗r],
+
+using the T[u1 ⊗ · · · ⊗ ur] notation defined in the “Tensors and linear algebra” paragraph. 
+
+Computation. We count real operations as constant time and we assume that real num-bers can be stored exactly in constant space. We further assume random access memory (RAM) with a word size large enough to look up any value in memory, so that arbitrary lookups take constant time. 
+
+# 2.2 Arithmetic circuits and machine learning 
+
+We make the pedagogical decision to model machine learning computations—both training and inference—as arithmetic circuits over the complex numbers. All of our results apply essentially identically to real computations including general gates such as ReLU, GELU, or Softmax; the technical details would just be more cumbersome. While these gates may not be defined on complex inputs, our method only requires that they have local polynomial approximations around real inputs. Indeed, we easily implemented the general case for microgpt (see Section 5.2). Formally, an arithmetic circuit is a function f : Cn → Cp defined by a directed acyclic graph with labeled nodes. Each node in the graph with in-degree zero is labeled by either an input index i ∈ [n] or a complex number. Each node with positive in-degree is labeled by either + or ×. The output of a gate is passed as input to all of its children. We do not restrict the in-degree or out-degree. Each node with out-degree zero is further labeled by an output index i ∈ [p]. Whereas input indices may be re-used, each output index is a label for exactly one node. For x ∈ Cn, the output f (x) ∈ Cp is computed by replacing each input-index node label i ∈ [n] with the corresponding input value xi, following the computation specified by the graph, and outputting the vector y ∈ Cp specified by the output values at the output indices. We define the size of f , denoted size (f ), as the maximum of n, p, and the number of edges in the graph. Since we count real operations as constant time, evaluating f requires 
+
+O(size (f )) operations. In the context of machine learning, note that if model evaluations can be described by arithmetic circuits acting on model parameters, then the Baur-Strassen theorem [CKW11, Theorem 9.10] implies that gradient steps can also be represented by arithmetic circuits. Therefore it is without further loss of generality to assume that training, in addition to inference, is an arithmetic circuit. 13 3 The toolkit 
+
+This section explains the basic facts and tools that we will use to build our sketching and data deletion schemes. In Section 3.1 we briefly recall the computational complexity of various kinds of differentiation. In Section 3.2 we explain some basic facts about the symmetric subspace which underlie our sketching and data deletion schemes. In Section 3.3 we give our definition of stability for arithmetic circuits, which we will later use to analyze our data deletion scheme. 
+
+# 3.1 Forward-mode automatic differentiation 
+
+Reverse-mode automatic differentiation (i.e., backpropagation) can compute the gradient of a circuit f : Cn → C in time O(size (f )). It does not extend to higher-order derivatives: There is no known size (f ) · poly( s)-time algorithm for computing the set of univariate higher-order derivatives {∂si f (x)}i∈[n]. Reverse-mode automatic differentiation also suffers from a memory issue, requiring the storage of size (f ) values from the forward pass. While the memory burden can sometimes be reduced using a technique called rematerialization [Ben73, GW08, EIC +25, IE25], this comes at the cost of increased computation. On the other hand, forward-mode automatic differentiation enables the computation of all derivatives up to order s of a circuit f : C → Cp in size (f ) · O(s log s) operations, with only an O(s log s) overhead in memory. Forward-mode automatic differentiation is extremely simple. Instead of computing the arithmetic circuit for f over C on an input value x, we compute it over C[z]/(zr+1 ) on an input polynomial x + z. If the output polynomials are 
+
+a1(z), . . . , a p(z), then the coefficient on zr in aj (z) is exactly (1 /r !) ∂rfj (x), where fj (x)is the jth output coordinate of f (x). Addition gates take O(s) operations per input and multiplication gates take O(s log s) per input using the fast Fourier transform, so the total complexity is size (f ) · O(s log s) as claimed. Note that if f : Cn → Cp and x, u ∈ Cn, then we can compute f (r)(x)[ u⊗r] for all r ∈ [s] in time size (f ) · O(s log s) by applying the above algorithm to g(z) := f (x + z u). For a function f : Cr → Cp, forward-mode automatic differentiation can also be used to compute multi-directional derivatives ∂1 . . . ∂ rf (x). We simply compute f over the ring 
+
+C[z1, . . . , z r]/(z21 , . . . , z 2 
+
+> r
+
+), using the polynomial xi + zi in place of input xi. The coefficient on 
+
+z1 · · · zr in the jth output polynomial is ∂1 . . . ∂ rfj (x). Addition gates take O(2 r) operations per input and multiplication gates take O(r2 2r) using fast subset convolution [BHKK07]. Finally, note that if f : Cn → Cp and x, u1, . . . , ur ∈ Cn then we can compute f (r)(x)[ u1 ⊗· · · ⊗ ur] in time size (f ) · O(r2 2r) by applying the above algorithm to g(z1, . . . , z r) := f (x +
+
+z1u1 + · · · + zrur). 
+
+# 3.2 The symmetric subspace 
+
+In this section we present the facts we will require about the symmetric subspace. For the reader interested in more background, we suggest the first section of the notes of Aram 14 Harrow [Har13]. While those notes are intended for a quantum information audience, the reader only needs to tolerate bra-ket notation in order to follow the first section. The symmetric subspace of ( Cn)⊗r, written ∨rCn, is the linear subspace that is fixed under permutations of the r tensor factors: 
+
+∨rCn := {T ∈ (Cn)⊗r | π(T) = T for all π ∈ Sr},
+
+where Sr is the symmetric group and π ∈ Sr acts by permuting the tensor factors. The symmetric subspace has dimension n[r] :=  n+r−1
+
+> r
+
+.The symmetric subspace can equivalently be defined as the span of all symmetric rank-1 tensors: 
+
+∨rCn = span {ψ⊗r ∈ (Cn)⊗r | ψ ∈ Cn}.
+
+In fact, it turns out that symmetric rank-1 tensors effectively capture the linear structure of 
+
+∨rCn in a very strong sense. Letting Π (n,r )sym be the orthogonal projection onto the symmetric subspace of ( Cn)⊗r, we have the following important fact. 
+
+Lemma 1 (Proposition 6 in [Har13]) . If ψ ∈ Cn is a random unit vector, then 
+
+E[( ψψ †)⊗r] = 1
+
+n[r] Π(n,r )sym .
+
+This fact gives us a convenient way to “sketch” symmetric tensors, and is the only result we will need about the symmetric subspace. Our method is based on the following lemma, which is proven using only Lemma 1 and elementary algebra. 
+
+Lemma 2. Let T ∈ (Cn)⊗r be a symmetric tensor and let x ∈ Cn be a vector. Let ξ := 
+
+n[r] · T[ψ⊗r] · ⟨ ψ, x⟩r where ψ ∈ Cn is a random unit vector. Then E[ξ] = T[x⊗r] and 
+
+Var [ξ] ≤ 4r · ∥ T∥2F · ∥ x∥2r.Proof. That E[ξ] = T[x⊗r] follows immediately from Lemma 1. Letting T denote the complex conjugate of T,
+
+Var [ξ] ≤ E |ξ|2
+
+= n[r]2 · E ⟨T, ψ⊗r⟩ 2 · ⟨ψ⊗r, x⊗r⟩ 2
+
+= n[r]2 · E ⟨T ⊗ x⊗r, ψ⊗2r⟩⟨ ψ⊗2r, T ⊗ x⊗r⟩
+
+= n[r]2
+
+n[2 r]⟨T ⊗ x⊗r, Π(n, 2r)sym (T ⊗ x⊗r)⟩≤ n[r]2
+
+n[2 r] · ∥ T∥2F · ∥ x∥2r
+
+where the last equality follows again from Lemma 1. Finally, we complete the proof by 15 observing that n[r] =  n+r−1
+
+> r
+
+ = n(n + 1) · · · (n + r − 1) /r ! and 
+
+n[r]2
+
+n[2 r] = (2 r)! (r!) 2 · (n(n + 1) · · · (n + r − 1)) 2
+
+n(n + 1) · · · (n + 2 r − 1) ≤ (2 r)! (r!) 2 =
+
+2rr
+
+
+
+≤ 4r.
+
+Interestingly, if we had instead used a random real unit vector ψ ∈ Rn, then the conclusions of Lemmas 1 and 2 would not hold. 
+
+# 3.3 Stable arithmetic circuits 
+
+Our stability condition is closely related to, and motivated by, the modulus of continuity. 
+
+Definition 1. Let f : Cn → Cq and α : R → R ∪ {∞} be functions. We say that a function 
+
+f has modulus of continuity α at a point x∗ ∈ Cn if 
+
+∥f (x) − f (x∗)∥ ≤ α(∥x − x∗∥)
+
+for all inputs x.
+
+Cauchy’s estimate implies that the modulus of continuity is related to a bound on the decay of derivatives, as explained in the following fact. This fact will not be used in any of our proofs, but it guides our definition of stability. 
+
+Fact. Let f : Cn → Cq be an arithmetic circuit, x∗ ∈ Cn be a point, and α : R → R. If f
+
+has modulus of continuity α at x∗, then for all γ ≥ 0 and all r ∈ N,
+
+γr
+
+r! f (r)(x∗) op ≤ α(γ). (3) 
+
+Conversely, if Inequality (3) holds for all γ ≥ 0 and all r ∈ N, then for any β > 1, f has modulus of continuity α′ at x∗ where α′(γ) := α(β γ )/(β − 1) .Proof. For any unit vectors ψ, ϕ ∈ Cn, let gψ,ϕ : C → C be the function defined by 
+
+gψ,ϕ(z) = ⟨ϕ, f (x∗ + zψ)⟩. Then for all z ∈ C, |gψ,ϕ(z) − gψ,ϕ(0) | ≤ α(|z|) because 
+
+f has modulus of continuity α at x∗. By Cauchy’s estimate [Rud87, Theorem 10.26], it follows that |g(r)
+
+> ψ,ϕ
+
+(0) | = |⟨ ϕ, f (r)(x∗)[ ψ⊗r]⟩| ≤ r! · α(γ)/γ r for all r ∈ N and all γ > 0. Inequality (3) follows by taking the maximum over all unit vectors ψ, ϕ ∈ Cn and using the fact that ∥T∥op = sup ψ∈Cn,∥ψ∥=1 T[ψ⊗r] for any symmetric tensor T ∈ (Cn)⊗r [FW20, Lemma 1(6)]. For the other direction, suppose that Inequality (3) holds for all γ ≥ 0 and all r ∈ N. Then 16 for all x ∈ Cn,
+
+∥f (x) − f (x∗)∥ = X
+
+> r∈N
+
+1
+
+r!f (r)(x∗)[( x − x∗)⊗r]
+
+≤ X
+
+> r∈N
+
+∥x − x∗∥r
+
+r! f (r)(x∗) op 
+
+= X
+
+> r∈N
+
+β−r (β∥x − x∗∥)r
+
+r! f (r)(x∗) op 
+
+≤ 1
+
+β − 1 α(β ∥x − x∗∥),
+
+where for the final inequality we have used that P 
+
+> r∈N
+
+β−r = 1 /(β − 1). Unfortunately, it is not enough that a function have bounded modulus of continuity for our sketching method to work. We need the following stronger condition. 
+
+Definition 2. We say that an arithmetic circuit f is α-stable at x∗ if 
+
+γr
+
+r! f (r)(x∗) F ≤ α(γ)
+
+for every γ ≥ 0 and every r ∈ N.
+
+Note that the stability condition is identical to Inequality (3), except that it uses the Frobe-nius norm instead of the operator norm. Stability is therefore a significantly stronger condi-tion: In general the only relationship between Frobenius and operator norms for a symmetric tensor T ∈ (Cn)⊗r is 
+
+∥T∥op ≤ ∥ T∥F ≤ pn[r] ∥T∥op .
+
+Stability can be viewed as a combination of a bound on the modulus of continuity and a bound on the stable tensor rank ∥T∥2F/∥T∥2op of the derivatives. 17 4 Local sketching by differentiation 
+
+In this section we explain how to use higher-order forward-mode automatic differentiation to compute a local “sketch” of a stable arithmetic circuit. The method is specified in Scheme 1. Let f : Cn → Cp be an arithmetic circuit and let x∗ ∈ Cn be an input. Our sketch is parameterized by s, k ∈ N and consists of random unit vectors ψ1, . . . , ψk ∈ Cn together with the sth-order truncated Taylor series of f at x∗ in each direction ψi. That is, for each 
+
+i ∈ [k], we store the vectors pi, 0, . . . , pi,s ∈ Cp defined by 4
+
+pi,r := 1
+
+r! f (r)(x∗)[ ψ⊗ri ].
+
+As explained in Section 3.1, for a given i we can compute all pi, 0, . . . , pi,s in O(size (f )·s log s)operations. The key observation behind our method of sketching is that these pi,r ’s can be used to compute an unbiased estimate of the sth-order Taylor approximation to f , even though actually storing the entire truncated Taylor series f (x∗), f (1) (x∗), . . . , f (s)(x∗) would require a prohibitive O(p n s) space. If f is α-stable at x∗ under the definition in Section 3.3, then we can prove that this unbiased estimate has low variance. In more detail, Lemma 2 implies that 
+
+n[r] E 
+
+> ψ
+
+[pi,r · ⟨ ψ, x − x∗⟩r] = n[r]
+
+r! E
+
+> ψ
+
+f (r)(x∗)[ ψ⊗r] · ⟨ ψ, x − x∗⟩r
+
+= 1
+
+r! f (r)(x∗)[( x − x∗)⊗r],
+
+so the sth order truncated Taylor series is 
+
+> s
+
+X
+
+> r=0
+
+1
+
+r! f (r)(x∗)[( x − x∗)⊗r] = E
+
+> ψ
+
+" sX
+
+> r=0
+
+n[r] · pi,r · ⟨ ψ, x − x∗⟩r
+
+#
+
+.
+
+It would therefore be natural to use the empirical average, 1
+
+k
+
+> k
+
+X
+
+> i=1
+> s
+
+X
+
+> r=0
+
+n[r] · pi,r · ⟨ ψi, x − x∗⟩r,
+
+as our estimator. However, Lemma 2 is not sufficient to show that this average concentrates well because it only gives us a bound on the variance. Instead, in Algorithm 2 we give an estimator that achieves exponential concentration by taking a median-of-means separately at each order r. We remark that, while the average cannot be shown to concentrate expo-nentially fast from just a bound on the variance of the individual estimators, it may do so        
+
+> 4Note that pi, 0=f(x∗) is independent of i, but we nonetheless treat it identically to the other pi,r ’s for convenience.
+
+18 anyway. We made only a very weak attempt to determine whether this is the case, which could obviate our more complicated median-of-means estimator. We recall the median-of-means algorithm now. For ξ1, . . . , ξ k ∈ C, let MOM m(ξ1, . . . , ξ k) be the following algorithm. 1. Partition [ k] into m equal-sized blocks B1, . . . , B m.2. Compute ηi := 1
+
+> |Bi|
+
+P 
+
+> j∈Bi
+
+ξj for each i ∈ [m]. 3. Output median( {Re( ηi)}i∈[m]) + i · median( {Im( ηi)}i∈[m]). If ξ1, . . . , ξk ∈ Cp, define MOM m(ξ1, . . . , ξk) by using the above algorithm separately on each coordinate. Note that this can be computed in O(pk ) operations. 
+
+Lemma 3. If D is a distribution on Cp with mean μ and each coordinate has variance at most σ2 < ∞, then 
+
+Pr  
+
+> ξ1,..., ξk∼D
+
+
+
+∥MOM m(ξ1, . . . , ξk) − μ∥ > 2σ
+
+rpm k
+
+
+
+≤ 2pe −m/ 8
+
+Proof. Assume that p = 1, as the general case follows by a union bound over coordinates. Let σ2Re be the variance of Re( ξ) and σ2Im be the variance of Im( ξ), for ξ ∼ D . A standard argument (see, for instance, [Ler19, Proposition 12]) implies that Pr  
+
+> ξ1,...,ξ k∼D
+
+
+
+|MOM m(Re( ξ1), . . . , Re( ξk)) − Re( μ)| > 2σRe 
+
+rmk
+
+
+
+≤ e−m/ 8 and Pr  
+
+> ξ1,...,ξ k∼D
+
+
+
+|MOM m(Im( ξ1), . . . , Im( ξk)) − Im( μ)| > 2σIm 
+
+rmk
+
+
+
+≤ e−m/ 8.
+
+Since Re( MOM m(ξ1, . . . , ξ k)) = MOM m(Re( ξ1), . . . , Re( ξk)) and Im( MOM m(ξ1, . . . , ξ k)) = 
+
+MOM m(Im( ξ1), . . . , Im( ξk)), by a union bound we have Pr  
+
+> ξ1,...,ξ k∼D
+
+
+
+|MOM m(ξ1, . . . , ξ k) − μ| > 2
+
+q
+
+σ2Re + σ2Im 
+
+rmk
+
+
+
+≤ 2e−m/ 8
+
+as desired. We are now ready to present our local sketching method. 19 Algorithm 1: SKETCH s,k (x∗, f ): Sketching an arithmetic circuit 
+
+data: Parameters s, k ∈ N.
+
+input: A base point x∗ ∈ Cn and an arithmetic circuit f : Cn → Cp.
+
+output: A list of directions Ψ = {ψi}i∈[k] ⊆ Cn and Taylor approximation data 
+
+P = {pi,r }i∈[k],r ∈{ 0,...,s } ⊆ Cp.
+
+for i = 1 to k do 
+
+Sample a random unit vector ψi ∈ Cn;Using the method from Section 3.1, compute 
+
+pi,r = 1
+
+r! f (r)(x∗)[ ψ⊗ri ]for r ∈ { 0, . . . , s };
+
+return Ψ := {ψi}i∈[k] and P := {pi,r }i∈[k],r ∈{ 0,...,s };
+
+Algorithm 2: EVAL x∗,Ψ,P,m (x): Evaluating an arithmetic circuit sketch 
+
+data: Base point x∗ ∈ Cn, directions Ψ = {ψi}i∈[k] ⊆ Cn, Taylor approximation data P = {pi,r }i∈[k],r ∈{ 0,...,s } ⊆ Cp, and m ∈ N.
+
+input: A point x ∈ Cn to evaluate on. 
+
+output: An approximation of f (x). Compute vr := MOM m
+
+n
+
+n[r] ⟨ψi, x − x∗⟩r pi,r 
+
+o
+
+> i∈[k]
+
+
+
+for r ∈ { 0, . . . , s };
+
+return v 0 + · · · + vs;Scheme 1: Arithmetic circuit sketching and sketch evaluation. Each individual sketch i in SKETCH s,k (x∗, f ) only requires pushing the polynomial z through the circuit f (x∗ + z ψi), using O(size (f ) · s log s) operations. Therefore the complexity of Algorithm 1 is O(size (f ) · ks log s). Computing EVAL x∗,Ψ,P,m (x) uses 1. O(nk ) operations to compute all the inner products ⟨ψi, x − x∗⟩;2. O(ks ) operations to compute all the powers ⟨ψi, x − x∗⟩r; and 3. O(pks ) operations to compute all the vr and sum them up. All together Algorithm 2 uses O(k · (n + ps )) operations. 
+
+Theorem 1. Let f : Cn → Cp be an arithmetic circuit, let x∗ ∈ Cn be a point, and let 
+
+20 (Ψ, P) ← SKETCH s,k (x∗, f ). If f is α-stable at x∗, then for any x ∈ Cn and any m ∈ [k],
+
+∥EVAL x∗,Ψ,P,m (x) − f (x)∥ ≤ 14s +
+
+r4pm k
+
+!
+
+α(4 ∥x − x∗∥)
+
+with probability at least 1 − 2sp e −m/ 8.Proof. We will bound the error in two components: the error from truncating to order s
+
+and the error on each vr in Algorithm 2. The error from truncating to order s is at most 
+
+> ∞
+
+X
+
+> r=s+1
+
+1
+
+r! f (r)(x∗)[( x − x∗)⊗r] ≤
+
+> ∞
+
+X
+
+> r=s+1
+
+1
+
+r! f (r)(x∗) F ∥x − x∗∥r
+
+=
+
+> ∞
+
+X
+
+> r=s+1
+
+14r r! f (r)(x∗) F (4 ∥x − x∗∥)r
+
+≤
+
+> ∞
+
+X
+
+> r=s+1
+
+14r α(4 ∥x − x∗∥)
+
+≤ 14s α(4 ∥x − x∗∥) .
+
+We now turn to the error on each vr. First notice that we always have v0 = f (x∗) because 
+
+pi, 0 = f (x∗) deterministically. And for each r ∈ [s], Lemma 2 implies that 
+
+n[r] · E[pi,r ⟨ψi, x − x∗⟩r] = n[r]
+
+r! · E f (r)(x∗)[ ψ⊗ri ] · ⟨ ψi, x − x∗⟩r
+
+= 1
+
+r! · f (r)(x∗)[( x − x∗)⊗r]and each coordinate has variance at most σ2 where 
+
+σ = 2r
+
+r! · f (r)(x∗) F · ∥ x − x∗∥r.
+
+By Lemma 3, it follows that each median-of-means estimate vr satisfies 
+
+vr − 1
+
+r! f (r)(x∗)[( x − x∗)⊗r] ≤ 2r+1 
+
+r!
+
+rpm k f (r)(x∗) F ∥x − x∗∥r
+
+with probability 1 − 2p e −m/ 8. By a union bound, with probability 1 − 2sp e −m/ 8 the final 21 error up to order s is 
+
+> s
+
+X
+
+> r=1
+
+vr −
+
+> s
+
+X
+
+> r=1
+
+1
+
+r! f (r)(x∗)[( x − x∗)⊗r] ≤
+
+> s
+
+X
+
+> r=1
+
+2r+1 
+
+r!
+
+rpm k f (r)(x∗) F ∥x − x∗∥r
+
+=
+
+> s
+
+X
+
+> r=1
+
+12r r!
+
+r4pm k f (r)(x∗) F (4 ∥x − x∗∥)r
+
+≤
+
+r4pm k α(4 ∥x − x∗∥) .
+
+The theorem follows from adding this to the truncation error. 22 5 Data deletion and attribution 
+
+This section begins with a discussion of the data deletion problem. We then explain our scheme in Section 5.1, and we conclude with our experiments on microgpt in Section 5.2. A data deletion scheme allows us to quickly predict model behavior after deleting training data. It consists of two phases: 1. precomputation , which is allowed to expend resources comparable to those required to train the entire model; and 2. prediction , which should use the precomputed data to perform inference as if the model was trained without a given subset of training data. Using random access to the precomputed data, prediction should run in time much faster than re-training. Ideally, it should run in time independent of the number of training exam-ples n.We assume that training and inference are deterministic, which is without loss of generality as one can always fix the randomness. See [IE25, Section 2.1] for a discussion on the benefits of this approach, which they refer to as “single-model” predictive data attribution. We adopt a similar terminology and setting as in that paper, although crucially we do not assume that 
+
+ϕ is known ahead of time. 
+
+• A : Rn → Rp is a learning algorithm specified by an arithmetic circuit. The input to A is a vector of downweights w ∈ Rn where wi ∈ [0 , 1] specifies an amount to “remove” example i. For instance, we can multiply the loss on example i by 1 − wi
+
+before backpropagation. When w = 0, the model is trained as usual; when wi = 1, 
+
+A(w) contains no information about example i.
+
+• ϕ : Rp → R is a measurement function specified by an arithmetic circuit. 
+
+• f : Rn → R is the composition ϕ ◦ A .
+
+# 5.1 Data deletion with local sketching 
+
+We now present our method of data deletion in Scheme 2. It relies only on the assumption that f = ϕ ◦ A is a stable arithmetic circuit in the sense of Section 3.3. Note that, while pre-computation does not know which measurement ϕ will ultimately be used during prediction, the accuracy of the prediction nonetheless does not require any condition on A directly. The prediction will be accurate for any ϕ such that ϕ ◦ A is stable, even if ϕ or A alone is highly unstable. 23 Algorithm 3: PRECOMP s,k (A): Precomputation 
+
+data: Parameters s, k.
+
+input: Learning algorithm A : Rn → Rp specified as an arithmetic circuit. 
+
+output: Sketch data ( Ψ, P). Let SKETCH be Algorithm 1; Compute ( Ψ, P) ← SKETCH s,k (0, A); 
+
+return (Ψ, P). 
+
+Algorithm 4: PREDICT Ψ,P,m (D, ϕ ): Counterfactual prediction 
+
+data: Precomputed sketch ( Ψ, P) and m ∈ N.
+
+input: Deletion set D ⊆ [n] and measurement function ϕ : Rp → R specified as an arithmetic circuit. 
+
+output: Estimate ν for post-deletion measurement ( ϕ ◦ A )( 1D). Parse Ψ as a list of directions ψi ∈ Cn for i ∈ [k]; Parse P as a list of vectors pi,r ∈ Cp for i ∈ [k] and r ∈ { 0, . . . , s };Compute v0 ← ϕ(p1,0); 
+
+for r = 1 , . . . , s do 
+
+Using the method from Section 3.1, compute 
+
+ui,r ← X
+
+> (r1,...,r t)⊨r
+
+1
+
+t! ϕ(t)(pi, 0)[ pi,r 1 ⊗ · · · ⊗ pi,r t ]for each i ∈ [k], where the sum is over all integer compositions ( r1, . . . , r t) of r;Compute 
+
+vr ← n[r] · MOM m
+
+( X
+
+> j∈D
+
+ψi,j 
+
+!r
+
+ui,r 
+
+)
+
+> i∈[k]
+
+
+
+where ψi,j is the jth coordinate of ψi;Compute ν ← v0 + · · · + vs;
+
+return ν;Scheme 2: Data deletion scheme. We emphasize that PRECOMP (Algorithm 3) does not require knowledge of the measurement function ϕ; the same precomputed data can be used for arbitrary measurements. The work for the analysis of Scheme 2 was mostly done in Theorem 1. 
+
+Theorem 2. For any ε, δ > 0, there exists a choice of parameters s, k, m ∈ N in Algorithms 3 and 4 such that, for any learning algorithm A : Rn → Rp,
+
+• precomputation requires ˜O(size (A) log(1 /δ )/ε 2) operations, 
+
+24 • the required storage is ˜O(( n + p) log(1 /δ )/ε 2), and for any measurement ϕ : Rp → R and any set D ⊆ [n] of up to d examples, 
+
+• predicting (ϕ ◦ A )( 1D) requires ˜O(d log(1 /δ )/ε 2 + size (ϕ) log(1 /δ )/ε 3) operations, and 
+
+• if ϕ ◦ A is α-stable then the prediction ν has error |ν − (ϕ ◦ A )( 1D)| ≤ ε · α(4 √d) with probability 1 − δ,where ˜O hides polylog(1 /ε ) factors. Proof. Let f := ϕ ◦ A . Mathematically, Scheme 2 is equivalent to applying Scheme 1 to 
+
+f at 0 and evaluating on 1D, as we explain now. Recall that pi,r = 1 
+
+> r!
+
+A(r)(0)[ ψ⊗ri ], so by Fa` a di Bruno’s formula, 1
+
+r! f (r)(0)[ ψ⊗ri ]= X
+
+> (r1,...,r t)⊨r
+
+1
+
+t! ϕ(t)(A(0)) 
+
+ 1
+
+r1! A(r1)(0)[ ψ⊗r1 
+
+> i
+
+] ⊗ · · · ⊗ 1
+
+rt! A(rt)(0)[ ψ⊗rt 
+
+> i
+
+]
+
+
+
+= X
+
+> (r1,...,r t)⊨r
+
+1
+
+t! ϕ(t)(pi, 0) [ pi,r 1 ⊗ · · · ⊗ pi,r t ]= ui,r .
+
+Also note that 
+
+⟨ψi, 1D⟩ = X
+
+> j∈D
+
+ψi,j .
+
+Therefore Scheme 2 computes the exact same approximation to f (1D) that would have been obtained by applying Scheme 1 directly to f , even though our precomputation algorithm does not know ϕ. Since ∥1D∥ = √d, it follows from Theorem 1 that our estimate ν has error 
+
+|ν − f (1D)| ≤ 14s +
+
+r4mk
+
+!
+
+· α
+
+
+
+4√d
+
+
+
+with probability 1 − 2s e −m/ 8. We get the desired bounds in terms of ε, δ by setting 
+
+• s = log 4(2 /ε ) = ˜O(1), 
+
+• m = 8 ln(2 s/δ ) = ˜O(log(1 /δ )), and 
+
+• k = 16 m/ε 2 = ˜O(log(1 /δ )/ε 2). It only remains to analyze the complexity. Algorithm 3 requires O(size (A) ks log s) = ˜O(size (A) log(1 /δ )/ε 2) operations because it is identical to Algorithm 1. In Algorithm 4, we first compute the multi-directional derivatives ϕ(t)(pi, 0)[ pi,r 1 ⊗ · · · ⊗ 
+
+pi,r t ] for each of the 2 r−1 compositions ( r1, . . . , r t) of r. Each multi-directional derivative 25 requires O(size (ϕ) · r2 2r) operations using the method from Section 3.1. Computing all the 
+
+ui,r ’s therefore requires O(size (ϕ) · s3 4s k) = ˜O(size (ϕ) · log(1 /δ )/ε 3) operations. Finally, computing each vr involves computing P 
+
+> j∈D
+
+ψi,j for all i ∈ [k] in time O(dk ), and then computing MOM m in time O(k). In total, Algorithm 4 requires ˜O(size (ϕ) · log(1 /δ )/ε 3 +
+
+d log(1 /δ )/ε 2) operations. The storage requirements in Theorem 2 can be reduced to ˜O(p log(1 /δ )/ε 2) by using a pseudorandom function to select the components of the tangent directions ψi,j as a function of i ∈ [k] and j ∈ [n]. 
+
+# 5.2 Experiments: the stability of microgpt 
+
+Theorem 2 fully specifies the performance of our data deletion method up to the stability function α. In this section we investigate this function for microgpt [Kar26], finding that it appears to behave favorably for our method. The experiments in this section are extremely minimal, and intended as a proof of concept. We hope that future work can better understand the scaling of α with the size of the model and amount of training data. All of our experiments are done with the same set-up as microgpt [Kar26], except that we increase eps adam from 10 −8 to 10 −3 and move it inside the square root (a similar modifica-tion was used in [EIC +25, IE25]), and we replace ReLU gates with GELU gates. The code is available at https://github.com/SamSpo1/microgpt-sketch. Let f = ϕ ◦ A be the composition of the learning algorithm and measurement function. Theorem 2 requires a bound on the stability α of f at 0, which (recall Section 3.3) controls the Frobenius norm of f (r)(0): γr
+
+r! f (r)(0) F ≤ α(γ)for all γ > 0. Given that f (r)(0) ∈ (Rn)⊗r, it is prohibitively expensive to compute even 
+
+f (2) (0) F directly. Instead we use Lemma 2, which tells us that if ψ ∈ Cn is a random unit vector then 5
+
+n[r] E
+
+> ψ
+
+"
+
+1
+
+r! f (r)(0)[ ψ⊗r]
+
+> 2
+
+#
+
+= 1
+
+r! f (r)(0)
+
+> 2F
+
+and the variance is at most 4 r 1 
+
+> r!
+
+f (r)(0) 4F. Motivated by this, we estimate 1 
+
+> r!
+
+f (r)(0) F by computing pn[r] 1
+
+r! f (r)(0)[ ψ⊗r]
+
+for several random unit vectors ψ ∈ Cn and r ∈ [100]. The results are presented in Figure 1 on a logarithmic scale.     
+
+> 5Technically, Lemma 2 only applies for estimating T[x⊗r]. However the exact same argument applies for estimating ⟨T,T′⟩.
+
+26 1 10 20 30 40 50 60 70 80 90 100 
+
+−150 
+
+−100 
+
+−50 
+
+0
+
+order r
+
+> log
+> √n[r]
+> r! f (r)(0)[ ψ⊗r]
+> 
+
+Figure 1: Estimates of log   1 
+
+> r!
+
+f (r)(0) F
+
+, where f = ϕ ◦ A . The estimates are obtained as log 
+
+pn[r] 1 
+
+> r!
+
+f (r)(0)[ ψ⊗r]
+
+
+
+for random complex directions ψ. The learning algorithm A
+
+trains microgpt with Adam for 1000 steps on a dataset of names with a batch size of 1, as in [Kar26]. Here ϕ is the loss of the given model on a random training example (chosen independently for each direction ψ). Each curve represents a different direction ψ and measurement ϕ.
+
+Let us briefly explain how the decay of f (r)(0) F translates to α. If 1
+
+r! f (r)(0) F = 2 −ω(r),
+
+then for any γ > 0, we will have a finite bound α(γ) < ∞. In particular, for any constant 
+
+d, Theorem 2 will guarantee an error of O(ε). Our experiments with microgpt in Figure 1 suggest that in fact we have something more like 1
+
+r! f (r)(0) F = 2 −ω(r3/2).
+
+These results show that our data deletion scheme should achieve vanishing error for at least small numbers of deletions. This is borne out by Figures 2 and 3, explained below. We did not attempt to figure out how f (r)(0) F scales with the number of training examples n and the number of model parameters p, which could be important for determining the behavior for larger numbers of deletions. We conclude with two figures describing the function z 7 → f (z 1D) for z ∈ [0 , 1]. In Figure 2, we examine how this function compares to the exact Taylor approximations around z = 0. In Figure 3, we examine how it compares to the sketched Taylor approximations obtained from 27 our data deletion scheme, Scheme 2. Figure 3 is therefore a demonstration that our method works in practice, at least for microgpt. Together, Figures 2 and 3 show that higher-order approximations are both necessary and sufficient for achieving accurate predictions in our set-up. 
+
+Remark. As explained in Section 1.2, our method is already novel in the linear case, but higher-order approximations allow us to get the strong guarantees of Theorem 2. Even if one modifies the set-up to ensure that the linear approximation is accurate, our method is still the only one to achieve a guaranteed bound on the prediction error without needing foreknowledge of the measurement function during precomputation. 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+3.1
+
+3.2
+
+3.3
+
+3.4
+
+3.5
+
+3.6
+
+downweight z
+
+> f (z1D)
+> empirical
+> degree 1
+> degree 2
+> degree 3
+> degree 4
+> degree 5
+
+Figure 2: Taylor approximations to f (z 1D), where f = ϕ ◦ A . As in Figure 1, the learning algorithm A trains microgpt for 1000 steps on a dataset of names [Kar26]. The deleted set 
+
+D is all names containing the letter “x” (there are 18) and the measurement function ϕ is the loss on the name “max.” The black dots are the values f (z 1D) for z ∈ { 0, 0.1, . . . , 1},and the colored lines are Taylor approximations to the function z 7 → f (z 1D) around z = 0 .
+
+In Figure 3, we evaluate our actual data deletion scheme with k = 500 samples in the same set-up as Figure 2. Interestingly, although the number of deletions is large enough that the variance grows with the degree, higher-order approximations nonetheless outperform the linear approximation. 28 0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+3.1
+
+3.2
+
+3.3
+
+3.4
+
+3.5
+
+3.6
+
+3.7
+
+downweight z
+
+> f (z1D)
+> empirical
+> degree 1
+> degree 2
+> degree 3
+
+Figure 3: Predicted loss obtained using Scheme 2 with the same A, ϕ, and D as in Figure 2. We use s ∈ { 1, 2, 3} and k = 500 in PRECOMP s,k (A) and m = 1 in PREDICT Ψ,P,m (D, ϕ ).The lines are the predictions obtained by the data deletion scheme, with 1 standard deviation shaded. In this case the approximation to the degree 3 expansion happens to be more accurate than the degree 3 expansion itself (cf. Figure 2), but this is pure chance. 
+
+29 References 
+
+[Ben73] Charles H. Bennett. Logical reversibility of computation. IBM Journal of Research and Development , 17(6):525–532, 1973. [BHKK07] Andreas Bj¨ orklund, Thore Husfeldt, Petteri Kaski, and Mikko Koivisto. Fourier meets M¨ obius: Fast subset convolution. In David S. Johnson and Uriel Feige, editors, Proceedings of the 39th Annual ACM Symposium on Theory of Computing, San Diego, California, USA, June 11-13, 2007 , pages 67–74. ACM, 2007. [CJZ +22] Nicholas Carlini, Matthew Jagielski, Chiyuan Zhang, Nicolas Papernot, An-dreas Terzis, and Florian Tram` er. The privacy onion effect: Memorization is relative. In Sanmi Koyejo, S. Mohamed, A. Agarwal, Danielle Belgrave, K. Cho, and A. Oh, editors, Advances in Neural Information Processing Sys-tems 35: Annual Conference on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 ,2022. [CKW11] Xi Chen, Neeraj Kayal, and Avi Wigderson. Partial derivatives in arithmetic complexity and beyond. Foundations and Trends in Theoretical Computer Science , 6(1–2):1–138, 2011. [CS23] Rishav Chourasia and Neil Shah. Forget unlearning: Towards true data dele-tion in machine learning. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett, editors, In-ternational Conference on Machine Learning, ICML 2023, 23-29 July 2023, Honolulu, Hawaii, USA , Proceedings of Machine Learning Research, pages 6028–6073. PMLR, 2023. [CSSV23] Aloni Cohen, Adam D. Smith, Marika Swanberg, and Prashant Nalini Va-sudevan. Control, confidentiality, and the right to be forgotten. In Weizhi Meng, Christian Damsgaard Jensen, Cas Cremers, and Engin Kirda, editors, 
+
+Proceedings of the 2023 ACM SIGSAC Conference on Computer and Commu-nications Security, CCS 2023, Copenhagen, Denmark, November 26-30, 2023 ,pages 3358–3372. ACM, 2023. [CZW +21] Min Chen, Zhikun Zhang, Tianhao Wang, Michael Backes, Mathias Humbert, and Yang Zhang. When machine unlearning jeopardizes privacy. In Yongdae Kim, Jong Kim, Giovanni Vigna, and Elaine Shi, editors, CCS ’21: 2021 ACM SIGSAC Conference on Computer and Communications Security, Vir-tual Event, Republic of Korea, November 15 - 19, 2021 , pages 896–911. ACM, 2021. 30 [EIC +25] Logan Engstrom, Andrew Ilyas, Benjamin Chen, Axel Feldmann, William Moses, and Aleksander Madry. Optimizing ML training with metagradient descent. CoRR , abs/2503.13751, 2025. [FW20] Shmuel Friedland and Li Wang. Spectral norm of a symmetric tensor and its computation. Math. Comput. , 89(325):2175–2215, 2020. [GGHvdM20] Chuan Guo, Tom Goldstein, Awni Y. Hannun, and Laurens van der Maaten. Certified data removal from machine learning models. In Proceedings of the 37th International Conference on Machine Learning, ICML 2020, 13-18 July 2020, Virtual Event , Proceedings of Machine Learning Research, pages 3832– 3842. PMLR, 2020. [GGV20] Sanjam Garg, Shafi Goldwasser, and Prashant Nalini Vasudevan. Formalizing data deletion in the context of the right to be forgotten. In Anne Canteaut and Yuval Ishai, editors, Advances in Cryptology - EUROCRYPT 2020 - 39th Annual International Conference on the Theory and Applications of Crypto-graphic Techniques, Zagreb, Croatia, May 10-14, 2020, Proceedings, Part II ,Lecture Notes in Computer Science, pages 373–402. Springer, 2020. [GGVZ19] Antonio Ginart, Melody Y. Guan, Gregory Valiant, and James Zou. Making AI forget you: Data deletion in machine learning. In Hanna M. Wallach, Hugo Larochelle, Alina Beygelzimer, Florence d’Alch´ e-Buc, Emily B. Fox, and Ro-man Garnett, editors, Advances in Neural Information Processing Systems 32: Annual Conference on Neural Information Processing Systems 2019, NeurIPS 2019, December 8-14, 2019, Vancouver, BC, Canada , pages 3513–3526, 2019. [GW08] Andreas Griewank and Andrea Walther. Evaluating derivatives - principles and techniques of algorithmic differentiation, Second Edition . SIAM, 2008. [Har13] Aram Harrow. The church of the symmetric subspace. CoRR , abs/1308.6595, 2013. [HRRS86] Frank R. Hampel, Elvezio M. Ronchetti, Peter J. Rousseeuw, and Werner A. Stahel. Robust Statistics: The Approach Based on Influence Functions . Wiley Series in Probability and Mathematical Statistics. John Wiley & Sons, New York, 1986. [IE25] Andrew Ilyas and Logan Engstrom. MAGIC: Near-optimal data attribution for deep learning. CoRR , abs/2504.16430, 2025. [IGEP24] Andrew Ilyas, Kristian Georgiev, Logan Engstrom, and Sung Min Park. Data attribution at scale. Tutorial at ICML 2024, 2024. [IPE +22] Andrew Ilyas, Sung Min Park, Logan Engstrom, Guillaume Leclerc, and Alek-sander Madry. Datamodels: Predicting predictions from training data. In Ka-malika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesv´ ari, Gang Niu, 31 and Sivan Sabato, editors, International Conference on Machine Learning, ICML 2022, 17-23 July 2022, Baltimore, Maryland, USA , volume 162 of Pro-ceedings of Machine Learning Research , pages 9525–9587. PMLR, 2022. [ISCZ21] Zachary Izzo, Mary Anne Smart, Kamalika Chaudhuri, and James Zou. Ap-proximate data deletion from machine learning models. In Arindam Banerjee and Kenji Fukumizu, editors, The 24th International Conference on Artificial Intelligence and Statistics, AISTATS 2021, April 13-15, 2021, Virtual Event ,Proceedings of Machine Learning Research, pages 2008–2016. PMLR, 2021. [JL84] William B. Johnson and Joram Lindenstrauss. Extensions of Lipschitz map-pings into a Hilbert space. In Conference in Modern Analysis and Probability ,volume 26 of Contemporary Mathematics , pages 189–206. American Mathe-matical Society, 1984. [KAJ +25] Anastasia Koloskova, Youssef Allouah, Animesh Jha, Rachid Guerraoui, and Sanmi Koyejo. Certified unlearning for neural networks. In Forty-second International Conference on Machine Learning, ICML 2025, Vancouver, BC, Canada, July 13-19, 2025 . OpenReview.net, 2025. [Kar26] Andrej Karpathy. microgpt.py. GitHub Gist, 2026. Link: https://gist. github.com/karpathy/8627fe009c40f57531cb18360106ce95 .[KATL19] Pang Wei Koh, Kai-Siang Ang, Hubert H. K. Teo, and Percy Liang. On the accuracy of influence functions for measuring group effects. In Hanna M. Wallach, Hugo Larochelle, Alina Beygelzimer, Florence d’Alch´ e-Buc, Emily B. Fox, and Roman Garnett, editors, Advances in Neural Information Processing Systems 32: Annual Conference on Neural Information Processing Systems 2019, NeurIPS 2019, December 8-14, 2019, Vancouver, BC, Canada , pages 5255–5265, 2019. [KL17] Pang Wei Koh and Percy Liang. Understanding black-box predictions via influence functions. In Doina Precup and Yee Whye Teh, editors, Proceed-ings of the 34th International Conference on Machine Learning, ICML 2017, Sydney, NSW, Australia, 6-11 August 2017 , Proceedings of Machine Learning Research, pages 1885–1894. PMLR, 2017. [Ler19] Matthieu Lerasle. Lecture notes: Selected topics on robust statistical learning theory, 2019. Link: https://arxiv.org/pdf/1908.10761#page=17 .[PGI +23] Sung Min Park, Kristian Georgiev, Andrew Ilyas, Guillaume Leclerc, and Aleksander Madry. TRAK: Attributing model behavior at scale. In An-dreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett, editors, International Conference on Machine Learning, ICML 2023, 23-29 July 2023, Honolulu, Hawaii, USA , Proceedings of Machine Learning Research, pages 27074–27113. PMLR, 2023. 32 [Rud87] Walter Rudin. Real and complex analysis, 3rd ed. McGraw-Hill, Inc., USA, 1987. [SGBA23] Nikunj Saunshi, Arushi Gupta, Mark Braverman, and Sanjeev Arora. Under-standing influence functions and datamodels via harmonic analysis. In The Eleventh International Conference on Learning Representations, ICLR 2023, Kigali, Rwanda, May 1-5, 2023 . OpenReview.net, 2023. [TKP +24] Eleni Triantafillou, Peter Kairouz, Fabian Pedregosa, Jamie Hayes, Meghdad Kurmanji, Kairan Zhao, Vincent Dumoulin, J´ ulio Jacques J´ unior, Ioannis Mitliagkas, Jun Wan, Lisheng Sun-Hosoya, Sergio Escalera, Gintare Karolina Dziugaite, Peter Triantafillou, and Isabelle Guyon. Are we making progress in unlearning? Findings from the first NeurIPS unlearning competition. CoRR ,abs/2406.09073, 2024. 33 A Supplement to related work: post hoc unlearning 
+
+A post hoc unlearning method does not make any reference to the algorithm used to train the model. While post hoc unlearning methods may or may not work in practice, any security proof for a post hoc machine unlearning method must depend on the particular learning algorithm that was used. We explain the situation below. Let ≈ be any kind of indistinguishability (such as statistical distance, computational indis-tinguishability, or ( ε, δ )-differential privacy). We say that a post hoc unlearning algorithm 
+
+U is ≈-certified unlearning for a learning algorithm A if there exists an algorithm ¯A such that, for any forget dataset D and initial dataset S,
+
+U(A(S), S, D ) ≈ ¯A(S \ D).
+
+This definition generalizes that of [KAJ +25]. The following proposition shows that any proof that a scheme satisfies this definition of unlearning must depend on the learning algorithm. 
+
+Proposition 4. Suppose that U is ≈-unlearning simultaneously for every learning algorithm 
+
+A. Then for any training algorithm A, any non-empty forget set D, any initial dataset S,and any x∗̸ ∈ S,
+
+U(A(S), S, D ) ≈2 U(⊥, S ∪ { x∗}, D ∪ { x∗}),
+
+where ≈2 denotes the indistinguishability resulting from two applications of ≈ and ⊥ denotes a dummy model (e.g., one with all parameters set to 0). 
+
+In particular, Proposition 4 means that no post hoc unlearning scheme with a security proof that does not depend on the training algorithm can perform better than re-training: It does not even materially use the initial trained model A(S). 
+
+Proof. Let x∗ be any data point and A be any learning algorithm. Define 
+
+B(S) = 
+
+(
+
+⊥ if x∗ ∈ S, 
+
+A(S) otherwise. Since U is ≈-unlearning for every algorithm, there exists ¯B such that, for every forget set 
+
+D and every initial dataset S,
+
+U(B(S), S, D ) ≈ ¯B(S \ D). (4) In particular, for any forget set D and any dataset S not containing x∗,
+
+U(⊥, S ∪ { x∗}, D ∪ { x∗}) = U(B(S ∪ { x∗}), S ∪ { x∗}, D ∪ { x∗})
+
+≈ ¯B(S \ D)34 and 
+
+U(A(S), S, D ) = U(B(S), S, D )
+
+≈ ¯B(S \ D).
+
+The =’s follow from the definition of B and the ≈’s follow from Equation 4. Therefore 
+
+U(A(S), S, D ) ≈2 U(⊥, S ∪ { x∗}, D ∪ { x∗}),
+
+completing the proof. The reason that Proposition 4 does not contradict prior work with security proofs that do not depend on the learning algorithm is that those works do not come with provable correctness 
+
+guarantees. Therefore, in the regime where the security proof applies, they can be viewed as essentially re-training in disguise. This highlights the danger of using certified unlearning as a privacy guarantee without also analyzing correctness. 35

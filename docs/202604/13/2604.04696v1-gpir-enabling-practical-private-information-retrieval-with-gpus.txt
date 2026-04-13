@@ -1,0 +1,820 @@
+Title: GPIR: Enabling Practical Private Information Retrieval with GPUs
+
+URL Source: https://arxiv.org/pdf/2604.04696v1
+
+Published Time: Tue, 07 Apr 2026 01:47:03 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# GPIR: Enabling Practical Private Information Retrieval with GPUs 
+
+# Hyesung Ji 
+
+Seoul National University Seoul, South Korea kevin5188@snu.ac.kr 
+
+# Hyunah Yu 
+
+Seoul National University Seoul, South Korea yhyuna@snu.ac.kr 
+
+# Jongmin Kim 
+
+Seoul National University Seoul, South Korea jongmin.kim@snu.ac.kr 
+
+# Wonseok Choi 
+
+Seoul National University Seoul, South Korea wonseok.choi@snu.ac.kr 
+
+# G. Edward Suh 
+
+NVIDIA Westford, MA, USA Cornell University Ithaca, NY, USA esuh@nvidia.com 
+
+# Jung Ho Ahn 
+
+Seoul National University Seoul, South Korea gajh@snu.ac.kr 
+
+## Abstract 
+
+Private information retrieval (PIR) allows private database queries but is hindered by intense server-side computation and memory traffic. Modern lattice-based PIR protocols typically involve three phases: ExpandQuery (expanding a query into encrypted indices), RowSel (encrypted row selection), and ColTor (recursive "column tournament" for final selection). ExpandQuery and ColTor primarily perform number-theoretic transforms (NTTs), whereas RowSel reduces to large-scale independent matrix-matrix multiplications (GEMMs). GPUs are theoretically ideal for these tasks, provided multi-client batching is used to achieve high throughput. However, batching fundamentally reshapes performance bottlenecks; while it amortizes database access costs, it expands working sets beyond the L2 cache capacity, causing divergent memory behaviors and excessive DRAM traffic. We present GPIR, a GPU-accelerated PIR system that rethinks kernel design, data layout, and execution scheduling. We introduce a stage-aware hybrid execution model that dynamically switches between operation-level kernels, which execute each primitive op-eration separately, and stage-level kernels, which fuse all operations within a protocol stage into a single kernel to maximize on-chip data reuse. For RowSel, we identify a performance gap caused by a structural mismatch between NTT-driven data layouts and tiled GEMM access patterns, which is exacerbated by multi-client batch-ing. We resolve this through a transposed-layout GEMM design and fine-grained pipelining. Finally, we extend GPIR to multi-GPU systems, scaling both query throughput and database capacity with negligible communication overhead. GPIR achieves up to 305.7 ×
+
+higher throughput than PIRonGPU, the state-of-the-art GPU im-plementation. 
+
+## Keywords 
+
+Private Information Retrieval, Graphics Processing Unit, Perfor-mance Optimization 
+
+## 1 Introduction 
+
+Private information retrieval (PIR) enables a client to retrieve a record from a public database ( DB ) hosted on a server without revealing to anyone which record is accessed. PIR enables funda-mentally new classes of privacy-preserving DB services, exemplified by Apple’s private visual search [ 47 ], private DNS resolution [ 49 ], and private reads in blockchain systems [6]. Despite these promising applications, deploying PIR at scale remains challenging due to its substantial server-side computation and memory access demands. Modern PIR protocols [ 3 , 8, 25 , 33 , 39 –42 ] rely on lattice-based homomorphic encryption (HE) [ 20 ] to provide strong privacy guarantees. HE is a core enabler of PIR, allowing servers to perform encrypted record selection without learning the queried DB index. However, this capability comes at high cost; each query requires computation over the entire DB [ 12 ]and incurs substantial overhead from homomorphic ciphertext operations [ 27 ]. For GB-scale DB sizes, these overheads quickly become intractable, leading to multi-second query latencies [ 41 ] and severely limiting the practicality of the aforementioned services. GPUs [ 14 , 16 , 23 , 31 ] offer a compelling opportunity to address this challenge. With massive parallelism and high memory band-width, GPUs are well suited for accelerating core PIR operations, such as number-theoretic transforms (NTTs) and point-wise paral-lel arithmetic. Modern lattice-based PIR protocols typically execute in three dis-tinct phases: (1) ExpandQuery, which expands a client query into a vector of encrypted indices; (2) RowSel, which performs homomor-phic row selection from the DB ; and (3) ColTor, a recursive “column tournament” to select the final record. Furthermore, to achieve high throughput, servers must employ multi-client batching, where queries from numerous clients are processed concurrently to amor-tize DB access costs. We discover that multi-client batching reshapes PIR performance on GPUs, creating a classic systems trade-off. Batching increases arithmetic intensity and enables RowSel—a phase that reduces to independent matrix-matrix multiplications (GEMMs) and is oth-erwise severely constrained by memory bandwidth—to approach the GPU roofline’s balanced ridge point. However, batching dra-matically expands the working sets of ExpandQuery and ColTor, pushing memory demands beyond the GPU’s L2 cache capacity. When these working sets exceed this hardware threshold, perfor-mance collapses due to excessive DRAM traffic. Naïve application of existing GPU kernels fails to address such bottlenecks, which we term the cache-capacity wall .This paper presents GPIR, a GPU-accelerated PIR system opti-mized for scalable, batched execution . Based on a detailed roofline analysis, we introduce a stage-aware hybrid execution model that  
+
+> 1
+> arXiv:2604.04696v1 [cs.CR] 6 Apr 2026 ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom Hyesung Ji et al.
+
+dynamically selects kernel granularity for each stage: operation-level kernels maximize occupancy when the working set is L2-resident, while stage-level kernels fuse operations within a stage to minimize DRAM traffic once the cache capacity is exceeded. Further, we identify a performance gap in RowSel caused by a structural mis-match between NTT-driven HE data layouts and GEMM-friendly layouts required for high-throughput tiling. We resolve this with a transposed-layout RowSel design and fine-grained pipelining to overlap data transpositions with GEMMs. Finally, we extend GPIR to multi-GPU systems, leveraging DB sharding and high-bandwidth interconnects to support a database exceeding single-GPU memory limits with negligible communication overhead. The main contributions of the paper are as follows: 
+
+• Architectural analysis of batched PIR: We characterize the “cache-capacity wall” in batched PIR and show how batching shifts bottlenecks to DRAM traffic, motivating a stage-aware hybrid execution model for ExpandQuery and ColTor. 
+
+• Layout-aware RowSel optimizations: A transposed-layout RowSel with fine-grained pipelining that resolves the conflict between NTT-driven data layouts and tiled GEMMs. 
+
+• Scalable multi-GPU execution: We design multi-GPU exe-cution strategies to scale both query throughput and database capacity via DB sharding and high-bandwidth inter-GPU commu-nication, enabling efficient PIR execution. 
+
+• State-of-the-art performance: An evaluation achieving up to 305.7 × higher throughput than PIRonGPU [ 13 ], the prior state-of-the-art open-source implementation. 
+
+## 2 Construction & Bottlenecks of PIR 2.1 Private Information Retrieval (PIR) 
+
+Consider a client retrieving a record from a large unencrypted data-base DB with 𝐷 records, which is maintained by a server. PIR enables the client to obtain the 𝑖 ∗-th record DB [𝑖 ∗] without disclosing 𝑖 ∗.Lattice-based homomorphic encryption (HE) [ 20 ] is typically used to encrypt the client’s query index 𝑖 ∗ into HE ciphertext(s), with which the server performs encrypted retrieval of DB [𝑖 ∗].We target the most general PIR use case without restrictive assumptions, such as multiple non-colluding servers [ 12 ], a sin-gle client sending a bulk of queries at once [ 3 , 43 ], or an ‘offline’ phase for pre-downloading large data (hints [ 25 ] or even the entire database [ 51 ]). Although such assumptions can improve protocol efficiency, they inherently limit the broad applicability of PIR. We focus on the OnionPIR family [ 8 , 40 , 42 ], which incurs asymp-totically minimum O( log 𝐷 ) communication 1 per query. Many other popular PIR protocols, such as [ 2 , 3, 17 , 25 , 39 ], require O( √𝐷 )
+
+communication. Minimizing communication overhead is critical; as we attempt to develop an efficient GPU implementation to sig-nificantly mitigate the computational bottlenecks, the communi-cation cost emerges as the primary limiting factor for overall per-formance. Nonetheless, given the structural similarities among PIR protocols, our approach remains applicable to other schemes, such as [7, 18, 29, 36, 37, 40], with minimal or no modification.                 
+
+> 1The communication cost cannot become lower as the index size itself is O ( log 𝐷 ).We ignore factors from cryptographic parameters, such as 𝑁 , for asymptotic analysis throughout this paper because they do not change significantly. 𝜎 : Subs ,⊡: External Product
+> ⋯
+> ∗∗
+> RG
+> SW
+> 1
+> RG
+> SW
+> logD 1
+> ∗∗
+> ∗
+> log  𝐷 ! stages
+> 𝐷 !=𝐷 /𝐷 "
+> 𝐷 "DB
+> ⋯
+> ⋯
+> 𝐷 "
+> Query Ans
+> Client
+> log  𝑁  stages
+> 1) ExpandQuery
+> evk 3
+> 𝜎
+> evk N
+> 𝜎 2) RowSel
+> ⋯
+> 3)ColTor
+> +
+> −
+> ⊡
+> ∗
+> Query vector 2
+> RG
+> SW
+> k
+> evk
+> N/2+1
+> 𝜎
+> evk
+> N/2+1
+> 𝜎
+> Subs ct N/2
+> ct N/2+1
+> −
+> 𝑋 !"
+> ×
+> +
+> evk 𝜎
+> ct N
+> +
+> ⋇
+> evk 3
+> 𝜎
+
+Figure 1: OnionPIRv2 computation process. 
+
+## 2.2 Three Phases of OnionPIRv2 
+
+We introduce the computational process of OnionPIRv2 [ 8], an optimized variant of the OnionPIR family. It consists of three com-putational phases illustrated in Fig. 1: ExpandQuery, RowSel, and ColTor. HE operations from the BFV [ 5 , 19 ] and RGSW [ 22 ] HE schemes are used in each phase. 
+
+DB is organized as a 𝐷 0 × 𝐷 1 structure, where each entry (record) 
+
+DB [𝑖 ] [ 𝑗 ] is a plaintext polynomial. In §2.4.1, we demonstrate that the number-theoretic transform (NTT) maps a polynomial to a length-4𝑁 (e.g., 𝑁 = 212 ) vector. Within this transformed domain, polynomial addition and multiplication are simplified to point-wise addition and multiplication between the resulting vectors. Initially, the client transmits a single BFV ciphertext (simply, ct )as a query to the server. A BFV ciphertext consists of a pair of poly-nomials (i.e., two length-4𝑁 vectors). This query ct encapsulates the information for both the row index 𝑖 ∗ and the column index 𝑗 ∗
+
+in a condensed format to minimize the communication overhead. 
+
+2.2.1 ExpandQuery. The server expands the query ct into 𝑁 ct srequired for the following phases. This is carried out through a binary-tree-shaped expansion process, where each tree node pro-duces two output ct s from an input ct . Each node performs a homomorphic substitution ( Subs ), mainly composed of NTT and digit decomposition ( Dcp ) operations, explained in §2.5.1. We define each depth of the expansion tree as a stage of Ex-pandQuery. Each stage requires an evaluation key ( evk ), which is additional client-provided data essential for the Subs operations. ExpandQuery consists of log 𝑁 stages in total. 
+
+2.2.2 RowSel. After ExpandQuery, the server performs an en-crypted row selection (RowSel) process. Among the 𝑁 output ct sfrom ExpandQuery, a subset of 𝐷 0 ct s forms a one-hot representa-tion of the row index 𝑖 ∗. In this set, every ct encrypts zero except for the 𝑖 ∗-th ct , which encrypts one. The server multiplies this ct 
+
+subset with DB to extract the 𝑖 ∗-th row from it, during which the entire DB is accessed. The RowSel computation reduces to 4𝑁 parallel point-wise GEMMs, where each GEMM multiplies a 2 × 𝐷 0 matrix ( ct polyno-mial points) by a 𝐷 0 × 𝐷 1 matrix ( DB polynomial points). RowSel produces 𝐷 1 ciphertexts as output, which consist of 2 × 𝐷 1 polyno-mials, equivalent to 2 × 𝐷 1 vectors of length 4𝑁 . 
+
+> 2GPIR: Enabling Practical Private Information Retrieval with GPUs ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom
+
+# …
+
+# …
+
+# …
+
+# …
+
+𝑞 0
+
+𝑞 1
+
+𝑞 2
+
+𝑞 3
+
+# …
+
+# …
+
+# …
+
+# … : Limb -wise 
+
+> : Coefficient -wise
+> : Point -wise
+> : Ciphertext -wise
+> Ciphertext
+> N
+
+Figure 2: Four job partitioning strategies for PIR operations. Each cuboid represents a BFV ct with two polynomials, each having four limbs (rows) and 𝑁 coefficients (columns). 
+
+2.2.3 ColTor. Finally, the server performs a tournament-like en-crypted column selection (ColTor). ColTor is computationally nearly identical to the reverse of ExpandQuery, having a binary-tree-shaped flow with log 𝐷 1 stages. Each tree node receives two in-put ct s and produces a single ct , performing an external product (⊡) [ 11 ], mainly composed of NTT and Dcp operations. For the ex-ternal product operations, each stage requires an RGSW ciphertext (rgsw ), derived from a subset of the 𝑁 ExpandQuery output ct s via minor computations. The final result is a ct encrypting DB [𝑖 ∗] [ 𝑗 ∗].
+
+## 2.3 Data Layout Conflict: NTT vs. GEMM 
+
+A fundamental architectural challenge in GPU-based PIR is the data layout mismatch between phases. It is convenient to formulate the parallel GEMMs in RowSel as Mout [𝑝, 𝑚, 𝑛 ] = Í𝑘 Min0 [𝑝, 𝑚, 𝑘 ] · 
+
+Min1 [𝑝, 𝑘, 𝑛 ], where 𝑝 , 𝑚 , 𝑛 , and 𝑘 dimensions have extents of 4𝑁 ,
+
+2, 𝐷 1, and 𝐷 0. Standard HE GPU libraries, including PIRonGPU [ 13 ,14 ], typically prioritize 𝑝 -major layouts, ensuring the 4𝑁 points of each polynomial are contiguously allocated. This arrangement is op-timized to enable coalesced memory accesses for core polynomial operations and, in particular, NTT. However, high-performance GEMM kernels require data to be contiguous along the 𝑚 (poly-nomial batch), 𝑛 (output), or 𝑘 (reduction) dimensions to enable efficient tiling and memory resource use [28]. 
+
+## 2.4 Job Partitioning Conflicts in Polynomial Operations 
+
+2.4.1 RNS and NTT representation. Originally, a polynomial used in OnionPIR is a degree-(𝑁 − 1) polynomial with its 𝑁 coefficients in the range [− 𝑄 −12 , 𝑄 −12 ] for a large modulus 𝑄 (e.g. 𝑄 ≃ 2108 ). To avoid high-precision arithmetic for large 𝑄 , the residue number system (RNS) decomposes 𝑄 into multiple RNS primes [ 21 , 24 ]. We specifically use four 32-bit primes to set 𝑄 = 𝑞 0𝑞 1𝑞 2𝑞 3 throughout this paper. Each polynomial coefficient is reduced modulo each 𝑞 𝑖 to produce a length-𝑁 32-bit vector, referred to as limb . The resulting four limbs comprise the 4𝑁 points of the polynomial. This can also be structured as a 4 × 𝑁 matrix, where each row corresponds to a limb and each column to a coefficient (see Fig. 2). With RNS, adding two polynomials is equivalent to performing point-wise additions modulo 𝑞 𝑖 between two length-4𝑁 vectors. By contrast, multiplying two polynomials requires limb-wise (nega-cyclic) convolutions, which are facilitated by the number-theoretic transform (NTT). NTT is a variant of Fourier transform that con-verts the limb-wise convolutions ( ∗) into point-wise multiplications (⊙); i.e., NTT (𝑎 ∗ 𝑏 ) = NTT (𝑎 ) ⊙ NTT (𝑏 ). Besides the GEMMs for RowSel, NTT is the most dominant primitive operation in PIR [ 30 ]. 
+
+2.4.2 Job partitioning conflicts. Polynomial operations require dif-ferent partitioning strategies (see Fig. 2) to accommodate their unique data dependencies. For instance, limb-wise partitioning is adequate for NTT; as each limb is transformed independently, poly-nomial limbs can be distributed across different processors (SMs in NVIDIA GPUs, §2.6) without any inter-processor communication. Conversely, RNS-related operations, such as Dcp , are performed separately for each coefficient, making coefficient-wise partitioning compelling. However, exploiting such fine-grained parallelism within each polynomial introduces a significant bottleneck: switching between limb-wise and coefficient-wise partitioning requires inter-processor communication. Because the data required for one partitioning scheme is distributed across different physical processors in the other, costly global synchronization and data transfers are required to transition between these two partitioning strategies. Meanwhile, ciphertext-wise partitioning, adopted in the block-based batching strategy of [26], could support both NTT and Dcp .However, all these partitioning strategies conflict with point-wise operations, including the parallel GEMMs in RowSel. 
+
+## 2.5 Digit Decomposition (Dcp) & Cache-Capacity Wall 
+
+2.5.1 Dcp for Subs and external product. The core computations for ExpandQuery and ColTor are homomorphic substitution ( Subs )and external product, both of which follow highly similar compu-tational processes. Central to these is digit decomposition ( Dcp ), which extracts digits from each polynomial coefficient based on a decomposition base 𝑧 , where 𝑧 ℓ > 𝑄 (e.g., 𝑧 = 222 and ℓ = 5 for 
+
+𝑄 ≃ 2108 ). This coefficient-wise process produces ℓ polynomials, where each coefficient is a digit in the range [− 𝑧  
+
+> 2
+
+, 𝑧  
+
+> 2
+
++ 1] derived from the original value. RNS and NTT complicate the computation process as follows: (1) Inverse NTT is applied to the input NTT-domain polynomial. (2) Dcp now includes RNS reconstruction , which recovers the large-coefficient polynomial from its four limbs. The actual decompo-sition follows, generating ℓ digit polynomials. The entire Dcp 
+
+is carried out through coefficient-wise computations. (3) Forward NTT is performed on the ℓ polynomials for subsequent computations in the NTT domain. For a ciphertext comprising two polynomials (e.g., ct = (𝑎, 𝑏 )), 
+
+subs performs Dcp only on 𝑎 , while the external product performs 
+
+Dcp on both 𝑎 and 𝑏 . In addition to Dcp , both operations execute polynomial multiply-and-accumulate tasks between the ℓ (or 2ℓ) de-composed polynomials and an evk (or an rgsw ). This accumulation ultimately results in two polynomials. 
+
+2.5.2 Transient working-set spikes. Dcp substantially increases the memory capacity requirements during an ExpandQuery/ColTor due to the ℓ× expansion in the number of polynomials. However, because the ℓ output polynomials are immediately consumed by  
+
+> 3ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom Hyesung Ji et al.
+
+the subsequent accumulation, they create transient spikes in the working set size rather than a permanent memory footprint. While an effective caching strategy could prevent these transient spikes from becoming a performance bottleneck, the limited cache capacity in GPUs restricts cache reuse. This limitation eventually necessitates DRAM transfers to store and load the ℓ polynomials, particularly as the number of ct s in a stage increases at deeper tree depths. Consequently, we identify a cache-capacity wall in Expand-Query and ColTor, where performance becomes constrained by excessive DRAM transfers as the transient working set size exceeds the last-level (L2) cache capacity of the GPU. 
+
+## 2.6 Multi-GPU Scaling 
+
+2.6.1 GPU execution model. A GPU comprises hundreds of stream-ing multiprocessors (SMs) that execute threads in a warp (32 threads) granularity based on a single-instruction, multiple-thread (SIMT) model. Threads are grouped into thread blocks, each of which is scheduled on a single SM. A grid of thread blocks forms a GPU kernel. To hide execution latency, SMs context-switch among ac-tive warps; thus, performance depends on occupancy, defined as the ratio of active warps to the hardware maximum. High occu-pancy ensures the SM remains productive while some warps stall on memory or arithmetic operations. The GPU memory hierarchy spans fast, SM-local registers, shared memory, and L1 caches to larger global memory, consisting of the L2 cache and off-chip DRAM. In multi-GPU configurations, de-vices communicate via PCIe or NVLink. Due to the severe disparity between internal DRAM bandwidth and the significantly lower bandwidth of inter-GPU interconnects, data must be explicitly man-aged to minimize communication bottlenecks while also balancing aggregate throughput. 
+
+2.6.2 Multi-GPU scaling challenges. To improve the applicability of GPU-based PIR for practical large-scale databases, we can utilize multiple GPUs to shard the DB , gaining a proportional increase in both DRAM capacity and bandwidth. As each PIR query necessitates reading the entire DB , maintaining the dataset within the aggregate GPU DRAM capacity is essential for performance. While handling RowSel through distributed GEMMs across a sharded DB is straightforward, orchestrating distributed processing for ExpandQuery and ColTor remains challenging. Without careful management, the communication and synchronization overheads, induced by sharing expanded ct s or merging partial tournament results, can negate the throughput gains of multi-GPU execution. To the best of our knowledge, no prior work has explored these multi-GPU coordination challenges in PIR. 
+
+## 3 Impact Analysis of Multi-Client Batching 
+
+While most PIR studies focus on single-query latency, multi-client batching can fundamentally alter the performance characteristics of PIR workloads. In particular, the RowSel phase requires scanning the entire DB , making memory bandwidth a dominant bottleneck. Multi-client batching amortizes the DB access cost across multiple queries, enabling more practical deployment of PIR services [30]. To quantify the impacts of multi-client batching, we perform a detailed throughput and memory analysis on an NVIDIA RTX 5090. 1           
+
+> 2
+> 4
+> 8
+> 16
+> 32
+> 64
+> 0.5 124816 32
+> Integer OPS (TOPS)
+> Arithmetic intensity (Operation/Byte)
+> batch 1 batch 32 batch 32 (opt)
+> RowSel
+> ExpandQuery
+> ColTor
+> Batching
+> Optimization
+> 1660GB /s 31.5 TOPS
+> Memory bound Compute bound
+
+Figure 3: Roofline analysis of each PIR phase on an RTX 5090 with a 2GB DB . Computational throughput is measured in terms of 32-bit integer multiply-and-add (IMAD) throughput. 
+
+We utilize this specific system throughout our analysis because it offers the highest peak integer computation throughput (31.5 TOPS) among currently available GPUs, along with 1660GB/s of high DRAM bandwidth. 
+
+## 3.1 Bottleneck Shift Due to Batching 
+
+First, we conducted a roofline analysis of the three PIR phases. We used the baseline “operation-level” kernels, which will be de-scribed in §4.1.1. Our analysis reveals mixed benefits of multi-client batching across different phases, as shown in Fig. 3. 
+
+3.1.1 RowSel: From memory-bound to layout-limited. Multi-client batching fundamentally changes the performance regime of RowSel, thereby exposing data layout as a first-order bottleneck. Without batching, RowSel exhibits extremely low arithmetic intensity due to the small 𝑚 dimension (fixed at 𝑚 = 2, §2.3), rendering the operation strongly constrained by memory bandwidth. In this regime, as long as the available DRAM bandwidth is fully utilized, the specific data layout has a limited impact on performance. Batching dramatically alters this behavior by expanding the 𝑚 
+
+dimension to 2 · batch . Batching 32 queries increases arithmetic in-tensity from 0.9 to 13.8 Ops/Byte, moving RowSel close to the ridge point of the RTX 5090 roofline and substantially increasing through-put (see Fig. 3). This shift transitions RowSel from a memory-bound to a potentially compute-bound operation. However, in this compute-oriented regime, performance be-comes highly sensitive to the data layout. Despite the increased arithmetic intensity, RowSel achieves 2.0 × lower throughput com-pared to the GPU’s theoretical peak compute capability. This gap indicates that the data layout conflicts, which are negligible in the memory-bound regime, now dominates performance by limiting effective utilization of GPU resources. 
+
+3.1.2 ExpandQuery and ColTor: Batching-induced memory pressure. 
+
+In contrast, multi-client batching intensifies the memory pressure in ExpandQuery and ColTor. ExpandQuery and ColTor primarily operate on client-specific data, such as ct s and evk s. Thus, they do not benefit from inter-batch data sharing. Instead, larger batch sizes inflate the working set, degrading cache locality and causing frequent spills from the 96MB L2 cache of RTX 5090 to its off-chip DRAM. Consequently, increases in off-chip DRAM traffic reduce the arithmetic intensity of ExpandQuery and ColTor under batching,       
+
+> 4GPIR: Enabling Practical Private Information Retrieval with GPUs ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> Working set size (MB)
+> Single query Batch size = 4
+> RTX5090 L2 cache capacity
+> 96MB
+> ExpandQuery stage 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> Working set size (MB)
+> Batch size = 16 Batch size = 64
+> ColTor stage
+> Transient spikes
+> Caused by Dcp
+
+Figure 4: Operation-wise working set variation across Ex-pandQuery and ColTor phases under different batch sizes. 
+
+pushing these operations deeper into the memory-bound region rather than alleviating memory pressure. 
+
+## 3.2 Batching-Amplified Working-Set Spikes 
+
+A deeper investigation into the memory behavior of ExpandQuery and ColTor (see Fig. 4) reveals that multi-client batching magnifies the transient working-set spikes caused by Dcp . Even at shallow tree depths, these spikes increasingly approach the cache-capacity wall with batching. While such spikes already exist in single-query execution, batching causes numerous such spikes to coexist across queries, rapidly amplifying memory capacity demand and turning a transient effect into a persistent bottleneck. In ExpandQuery, each stage operates only on the 𝑎 polynomial of each ct during Subs , resulting in a memory footprint of 64KB (4 × 𝑁 × 32 bit ). While this memory footprint remains within the L2 cache under single-query execution, the number of active ct sdoubles as the tree depth increases; under multi-client batching, this growth further compounds across queries, quickly pushing the aggregate working set beyond the 96MB L2 cache capacity of the RTX 5090. This effect is further amplified in ColTor, where both 𝑎 and 𝑏 
+
+polynomials are processed during external product, doubling the footprint to 128KB. For example, at the first ColTor stage with 256 active ct s and ℓ = 5, a batch size of 32 already incurs a transient working set of approximately 256 × 5 × 128 KB × 32 ≈ 5GB . This foot-print far exceeds on-chip cache capacity, illustrating how batching rapidly accelerates the cache-capacity wall. Consequently, batching transforms localized, short-lived mem-ory expansions into sustained pressure on the memory hierarchy. Under an operation-level kernel execution model, these batching-amplified intermediates must be repeatedly written to and reloaded from DRAM, leading to cache pollution and a sharp increase in off-chip memory traffic. 
+
+## 3.3 Design Implications 
+
+Our analysis demonstrates that multi-client batching impacts PIR phases in different ways. For RowSel, batching raises arithmetic intensity but leaves a gap to peak GPU throughput due to data layout inefficiencies. For ExpandQuery and ColTor, batching instead amplifies working-set growth and intensifies the cache-capacity wall problem, making memory traffic the dominant bottleneck. This discrepancy suggests that a uniform GPU execution strategy is suboptimal for batched PIR. Efficient designs must instead adapt execution and data layout to the dominant bottleneck of each phase, motivating stage-aware and layout-aware techniques introduced in the following sections. 
+
+## 4 Stage-Aware Hybrid Execution for ExpandQuery and ColTor 
+
+The analysis in §3 shows that, under multi-client batching, Expand-Query and ColTor become dominated by memory behavior rather than computation. Consequently, kernel granularity is a critical design choice, as intermediate data movement can significantly in-flate off-chip traffic. Motivated by this, we analyze operation-level and stage-level kernels which fuse operations within a stage for ExpandQuery and ColTor in the following subsections. 
+
+## 4.1 Operation-Level vs. Stage-Level Kernels 
+
+4.1.1 Baseline operation-level kernels. We build our baseline imple-mentation based on PIRonGPU [ 13 , 14 ], which exploits fine-grained job partitioning adequate for each polynomial operation. We refer to the resulting kernel implementations as operation-level kernels. Individual polynomial operations are implemented as separate ker-nels, each employing distinct job partitioning strategies to assign tasks to thread blocks. For example, limb-wise partitioning is used for NTT, coefficient-wise for Dcp , and point-wise for polynomial addition and multiplication. Following IVE [ 30 ], our GPU baseline adopts multi-client batch-ing. Although the GPU implementation details of IVE are not dis-closed, we were able to closely reproduce its reported GPU perfor-mance using our operation-level baseline. 
+
+4.1.2 Stage-level kernels. In addition to the baseline operation-level kernels, we introduce stage-level kernels that process an entire stage of ExpandQuery/ColTor within a single kernel invocation. A stage-level kernel fuses all operation-level kernels within a stage of ExpandQuery/ColTor, such as NTT, Dcp , and multiplications with 
+
+evk s or RGSW ciphertexts, into a single kernel. Through kernel fusion, stage-level kernels retain intermediate results—specifically the transient polynomials produced during 
+
+Dcp —within SM registers or shared memory. This localized data handling effectively avoids hitting the cache-capacity wall, alleviat-ing the performance bottlenecks otherwise caused by the limited L2 cache capacity and working-set spikes. However, stage-level kernels reduce parallelism, which could ad-versarially impact performance. Operation-level kernels exploit not only ciphertext-wise partitioning but also limb-wise and coefficient-wise partitioning to distribute work across thread blocks. However, fusing these operation-level kernels into a single stage-level kernel introduces interleaved partitioning patterns that create all-to-all data dependencies within each ct , requiring each thread block to process an entire ct (i.e., a single tree node). As a result, stage-level kernels substantially reduce the number of thread blocks, which can lower occupancy and degrade performance. Nevertheless, multi-client batching increases the number of ct sand makes stage-level kernels increasingly viable, as ciphertext-wise partitioning alone can provide sufficient parallelism to fully utilize GPU resources. The ExpandQuery/ColTor tree structure exposes two sources of ciphertext-wise data parallelism: (1) parallel processing of multiple nodes at the same stage (tree depth) and (2) parallelism across multiple ct s introduced by multi-client batching.  
+
+> 5ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom Hyesung Ji et al.
+
+While only dozens of thread blocks can be populated at shallow tree depths with stage-level kernels, up to tens of thousands of thread blocks can be populated for deeper tree depths. 
+
+## 4.2 Stage-Wise Comparison of Kernel Behaviors 
+
+To quantitatively analyze the trade-offs between operation-level and stage-level kernel designs, we profile DRAM traffic and exe-cution time for each stage. We focus primarily on the memory be-havior as both ExpandQuery and ColTor are constrained by DRAM bandwidth under batching (see Fig. 3). Our analysis uses NVIDIA Nsight Compute [44] on an NVIDIA RTX 5090 GPU. 
+
+4.2.1 DRAM traffic trends. Fig. 5a and Fig. 5b show that DRAM traffic exhibits strong stage dependence under batching, and that the two kernel designs respond differently to working-set growth. For early stages in ExpandQuery and later stages in ColTor, where the number of ct s is small, the working set fits within the L2 cache (see Fig. 4), resulting in low DRAM traffic for both operation-level and stage-level kernel designs. Under these conditions, DRAM transactions per batch per node decrease as the number of tree nodes increases (rightward in Fig. 5a and Fig. 5b), as evk s and RGSW ciphertexts are shared across nodes. As the batch size increases, the stage working set expands and eventually exceeds the L2 cache capacity, even at stages with a small number of nodes. Beyond this point, the operation-level kernel de-sign incurs sharp increases in DRAM traffic, as intermediate results are repeatedly written to and read from DRAM between kernels. In contrast, the stage-level kernel design substantially reduces DRAM transactions (up to 2.01 ×) by consuming intermediate data within a single kernel invocation and exploiting temporal locality. This divergence is most pronounced in the later stages of ExpandQuery and the earlier stages of ColTor, where a large number of nodes must be processed. 
+
+4.2.2 Execution time and occupancy. The execution-time trends in Fig. 5c and Fig. 5d reflect the interplay between memory traffic and attainable degree of parallelism under the two kernel designs. Stages whose working sets exceed the L2 cache capacity become bottlenecked by DRAM bandwidth. In this regime, execution times closely follow the DRAM traffic trends, and the stage-level design consistently outperforms the operation-level design by minimizing DRAM accesses, achieving up to 1.57 × lower execution time per batch. Under this DRAM bandwidth bottleneck, increasing the batch size for operation-level kernels can even adversely impact performance by further enlarging the working set. In contrast, in the early stages of ExpandQuery and the later stages of ColTor, where the number of active ct s is limited, oc-cupancy becomes the dominant performance factor. Because the operation-level kernel launches substantially more thread blocks, it achieves higher SM occupancy and lower execution time than the stage-level kernel. 
+
+## 4.3 Memory Bandwidth Scaling Benchmark 
+
+Occupancy, which is determined by the number of thread blocks, not only affects the computational throughput but also determines the attainable global memory (L2 cache and DRAM) bandwidth. We conduct stream-like benchmarks that measure sustained L2 and DRAM bandwidth while varying the number of active SMs and the number of warps per SM (see Fig. 6). The results show that L2 bandwidth exhibits a strong dependence on both inter-SM and intra-SM parallelism (see the left side of Fig. 6). With a small number of active SMs, the achieved L2 throughput remains far below the hardware peak, even though all data are served from on-chip cache. As the number of active SMs increases, L2 bandwidth scales almost linearly. Maximizing L2 bandwidth also requires launching a large number of warps per SM, as evidenced by bandwidth increasing steadily up to 32 warps per SM. In contrast, DRAM bandwidth saturates at much lower occu-pancy, which highlights a fundamental asymmetry between on-chip and off-chip memory systems (see the right side of Fig. 6). When using all the SMs, doubling the number of per-SM warps from 16 to 32 results in a mere 9.7% improvement in achieved DRAM bandwidth. While exploiting L2 bandwidth requires high occupancy and abundant parallelism, DRAM-bound execution is far less sensitive to occupancy once bandwidth saturation is reached. Notably, these trends are independent of PIR-specific computation and reflect fundamental properties of the GPU memory hierarchy. 
+
+## 4.4 Stage-Aware Hybrid Kernel Execution 
+
+Building on the results from §4.2 and §4.3, we propose a stage-aware hybrid execution strategy that selects the kernel execution model based on the dominant bottleneck at each stage. Specifically, we use operation-level kernels when a stage processes a small number of ct s such that the working set mostly remains L2-resident, and stage-level kernels otherwise. We use operation-level kernels when the working set of a stage mostly remains L2-resident. Under such circumstances, perfor-mance is primarily determined by the ability to exploit on-chip memory bandwidth. As discussed in §4.3, effective utilization of L2 bandwidth requires relatively high occupancy. Operation-level ker-nels are preferred because they exploit additional intra-ciphertext parallelism to enable populating a large number of thread blocks. Once the working set exceeds the L2 cache capacity, we switch to stage-level kernels to mitigate the DRAM bandwidth bottleneck. In this regime, the number of ct s is sufficient to fully utilize the SMs, achieving occupancy beyond the saturation point (16 warps per SM) using ciphertext-wise partitioning alone. As higher occupancy does not yield additional DRAM bandwidth, reducing DRAM traffic through stage-level kernels becomes the superior option. We define the point at which the stage working set exceeds L2 capacity as the transition boundary between the two execution models. By switching kernel design at this boundary, the hybrid design maximizes occupancy when on-chip reuse is effective and minimizes DRAM traffic when reuse fails, achieving robust perfor-mance across all stages of the PIR computation. This boundary can be determined statically from batch size and tree depth, and does not require runtime profiling. 
+
+## 5 Layout-Aware RowSel Optimizations 
+
+Although multi-client batching increases RowSel’s arithmetic inten-sity and moves it toward a more balanced point in the roofline plot (see Fig. 3), the baseline batched RowSel implementation, based on 
+
+> 6
+
+GPIR: Enabling Practical Private Information Retrieval with GPUs ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom 0                      
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> 12345678
+> DRAM transaction / batch / node
+> (MB)
+> ExpandQuery Stage
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 12345678
+> DRAM transaction / batch / node
+> (MB)
+> ExpandQuery Stage
+> Batch 1 Batch 2 Batch 4 Batch 8 Batch 16 Batch 32
+> Operation -level kernel Stage -level kernel
+
+(a) DRAM transaction (ExpandQuery) 0                 
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> 987654321
+> DRAM transaction / batch / node
+> (MB)
+> ColTor Stage
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 987654321
+> DRAM transaction / batch / node
+> (MB)
+> ColTor Stage
+
+(b) DRAM transaction (ColTor) 0                
+
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 12345678
+> Execution time / batch ( ms )
+> ExpandQuery Stage
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 12345678
+> Execution time / batch ( ms )
+> ExpandQuery Stage
+
+(c) Execution time (ExpandQuery) 0                 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 987654321
+> Execution time / batch ( ms )
+> ColTor Stage
+> 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 987654321
+> Execution time / batch ( ms )
+> ColTor Stage
+
+(d) Execution time (ColTor) 
+
+Figure 5: Stage-wise DRAM transactions and execution time of operation-level and stage-level kernels under different batch sizes. (a, b) DRAM transactions per batch per node for ExpandQuery and ColTor. (c,d) Execution time per batch for ExpandQuery and ColTor. 0            
+
+> 0.5
+> 1
+> 1.5
+> 2
+> 10 50 90 130 170
+> DRAM throughput (TB/s)
+> # of SM
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 10 50 90 130 170
+> L2 throughput (TB/s)
+> # of SM
+> 4816 32 48 Warp/SM:
+
+Figure 6: Achieved throughput under a stream-like bench-mark. L2 and DRAM throughput are measured while varying the number of active SMs and warps per SM. L2 uses a work-ing set fitting in the 96MB cache, whereas DRAM uses a 2GB working set exceeding cache capacity. 
+
+observations from IVE [ 30 ], falls short of fully exploiting the GPU’s peak computational throughput. We identify that this performance gap does not stem from in-sufficient computational resources, but from a structural mismatch between the NTT-oriented data layout and the data access pattern required by batched RowSel, which is implemented as matrix-matrix multiplications (GEMMs). 
+
+## 5.1 Tiled RowSel GEMMs with Layout Conflicts 
+
+5.1.1 Tiled GEMMs for RowSel. With batching, RowSel is trans-formed into 4𝑁 parallel GEMMs, each with a (2 · batch ) × 𝐷 0 matrix and a 𝐷 0 × 𝐷 1 matrix. As GEMM with sufficiently large dimensions is compute-bound, large batch sizes, such as 32 or 64, can render RowSel compute-bound. We apply well-known tiling methods [ 28 ] to the parallel GEMMs. For a regular GEMM multiplying an 𝑚 × 𝑘 matrix with an 𝑛 × 𝑘 
+
+matrix, work is distributed across thread blocks using tiles parame-terized by B𝑚 , B𝑛 , and B𝑘 . Each thread block computes an output tile of size B𝑚 × B𝑛 in the (𝑚, 𝑛 )-plane and iterates over the reduction dimension 𝑘 in steps of B𝑘 . At each 𝑘 -step, the corresponding input matrix tiles are loaded from global memory into shared memory (requiring 𝐵 𝑚 · 𝐵 𝑘 + 𝐵 𝑛 · 𝐵 𝑘 capacity), and the partial products are accumulated in registers ( 𝐵 𝑚 · 𝐵 𝑛 ). The final output is written back to global memory. Selecting B𝑚 , B𝑛 , and B𝑘 entails a trade-off between global mem-ory traffic and on-chip resource usage, necessitating careful adjust-ment [ 15 , 34 , 50 ]. Larger tiles reduce global memory loads required for the same amount of computation, thereby alleviating pressure on DRAM bandwidth. However, due to the increased shared mem-ory and register usage, larger tiles may reduce occupancy and potentially damage performance. For RowSel, we have an additional 𝑝 dimension for 4𝑁 points of each polynomial. General HE implementations prefer 𝑝 -major data layouts to allow contiguous access for polynomial operations and, in particular, NTT. However, this NTT-driven 𝑝 -major data layout poses a dilemma for implementing the parallel GEMMs with tiling. Enforcing mem-ory coalescing under this layout requires each thread block to process multiple GEMMs concurrently, increasing on-chip mem-ory requirements and reducing occupancy. Conversely, avoiding this concurrency leads to non-coalesced accesses and significantly lower effective global memory bandwidth. 
+
+5.1.2 Performance degradation in 𝑝 -major RowSel. We start from a baseline 𝑝 -major RowSel implementation, where we perform 
+
+7ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom Hyesung Ji et al. 𝐷 0                    
+
+> 𝐷 0
+> 𝐷 /𝐷 0
+> 2𝐵 Query Res
+> DB
+> (a) Full RowSel GEMMs Tile [BM ,BK ,𝟑𝟐 ], [B𝐍 ,BK ,𝟑𝟐 ]
+> 𝟑𝟐
+> BM
+> BN
+> Query: [ 2B,𝐷 !,4𝑁 ]
+> : Innermost dimension
+> B: B atch size (b) Tiling (baseline) 𝟏
+> 𝐁𝐌′
+> 𝐁𝐍 ’
+> Tile [𝟏 ,BM ’,BK ], [𝟏 ,B𝐍 ’,BK ]
+> Query: [ 4𝑁 ,2B,𝐷 !](c) Tiling (transposed)
+
+Figure 7: (a) Required GEMMs for RowSel and (b)(c) two thread-block tiling strategies for these GEMMs. The baseline tiling (b) uses a 𝑝 -major data layout, whereas the optimized transposed-layout tiling (c) adopts a 𝑘 -major data layout. 
+
+GEMMs between a tensor of Shape (2·batch , 𝐷 0, 4𝑁 ) corresponding to the input ct s and a tensor of Shape (𝐷 1, 𝐷 0, 4𝑁 ) corresponding to DB . Here, the size of 𝑝 , 𝑚 , 𝑛 , and 𝑘 dimensions are 4𝑁 , 2 · batch ,
+
+𝐷 1, and 𝐷 0. For tiling, in addition to B𝑚 , B𝑛 , and B𝑘 , the baseline implementation introduces B𝑝 to satisfy memory coalescing re-quirements. Each thread block handles B𝑝 parallel GEMMs. The baseline RowSel kernel fails to exploit the full computa-tional throughput of a GPU. An RTX 5090 has a peak 32-bit integer multiply-add (IMAD) throughput of 31.5TOPS. However, as shown in Fig. 3, the baseline RowSel implementation for a 2GB DB with a batch size of 32 achieves only 15.6TOPS of IMAD throughput, less than half of the peak throughput. This is because the baseline RowSel is limited by L2 cache throughput (54.08%) rather than be-ing compute-bound as predicted by the theoretical analysis, and its achievable occupancy is capped at 33% due to excessive register and shared memory footprint. 
+
+## 5.2 Optimized Transposed-Layout RowSel 
+
+5.2.1 Transposed-layout GEMMs. We explicitly transpose the data to enable 𝑘 -major or 𝑚 /𝑛 -major data layouts that are better suited for GEMMs. For DB , the layout can be chosen freely as the trans-position can be performed in advance, before receiving any query. The ct s can be reorganized into a Shape (4𝑁 , 𝐷 0, 2 · batch ) tensor during runtime (after ExpandQuery) to support an 𝑚 -major layout. With the layout restriction removed, we explore tiling configu-rations for the transposed-layout GEMMs. For our exemplar 2GB 
+
+DB with a batch size of 32, we use (B𝑚 , B𝑛 , B𝑘 ) = (64 , 64 , 32 ) for the transposed layouts, whereas we are forced to use (16 , 16 , 8) for the baseline with B𝑝 = 32 for 𝑝 -dimension coalescing. The additional 
+
+B𝑝 necessitates reducing B𝑚 , B𝑛 , and B𝑘 to fit shared memory and register constraints. Even so, the baseline configuration utilizes 2 ×
+
+more shared memory ( ∝ ( B𝑚 · B𝑘 + B𝑛 · B𝑘 ) · B𝑝 ), 2 × more registers for accumulation ( ∝ B𝑚 · B𝑛 · B𝑝 ), and 4 × more global memory accesses ( ∝ 1 
+
+> 𝐵 𝑚
+
+when 𝐵 𝑚 = 𝐵 𝑛 ). Compared to the baseline (15.6 TOPS), the transposed-layout GEMMs reduce DRAM accesses and achieve significantly higher computational throughput (27.5 TOPS), as illustrated in Fig. 3. Ex-plicit transposition shifts RowSel into the compute-bound regime, achieving 86.88% of the peak computational throughput. Compared to the baseline, we achieve 1.56 × higher memory throughput and Time                                 
+
+> GEMM
+> Naï ve approach
+> + Prime -level partitioning
+> +𝑵 -chunked partitioning
+> Chunk 0 Chunk 127
+> …
+> …
+> …
+> …
+> Transpose Transpose
+> GEMM Tr Tr
+> TGT
+> TGT
+> TGT
+> TGT
+> GEMM Tr Tr
+> GEMM Tr Tr
+> GEMM Tr Tr
+> TGT
+> TGT
+> TGT
+> TGT
+> 𝑞 0stream
+> 𝑞 1stream
+> 𝑞 2stream
+> 𝑞 3stream
+> 𝑞 0stream
+> 𝑞 1stream
+> 𝑞 2stream
+> 𝑞 3stream
+> Default
+> stream
+
+Figure 8: Gradually applying additional partitioning meth-ods (+Prime-level partitioning, +N-chunked partitioning) for pipelined execution of our transposed-layout RowSel. 
+
+1.5 × increases in occupancy due to reduced per-block register and shared memory footprint. These results demonstrate that care-ful data layout reshaping is essential for sustaining high GEMM throughput under multi-client batching. 
+
+5.2.2 𝑝 -dimension pipelining to reduce transpose overheads. Launch-ing two transpose kernels, one before RowSel and one after RowSel (naïve approach in Fig. 8), introduces significant execution time overheads from loading and storing the input ct s from global mem-ory. For our 32-batch 2GB DB example, input and output transposi-tions incur at least 6GB of memory traffic, which corresponds to 3.7ms of minimum latency. Given that the transposed-layout GEMM kernel itself takes 10.9ms, the overhead accounts for a substantial fraction of the total RowSel execution time. Simply placing the kernels in different CUDA streams to hide latency does not lead to an automatic overlap between the ker-nels. RowSel GEMM kernel launches a very large grid along the 𝑝 
+
+dimension, corresponding to thousands of independent points in each polynomial. This saturates nearly all SM resources, leaving no scheduling headroom for concurrent execution of the transpose kernels. Even when issued in separate streams, the excessive par-allelism along the 𝑝 -dimension prevents effective overlap, forcing the transpositions to be serialized behind the GEMMs. To create scheduling headroom and enable overlap, we explic-itly partition RowSel execution along the p dimension in a fine-grained manner. Furthermore, inside the 𝑝 dimension, we utilize different partitioning methods for the RNS-prime axis and the 𝑁 
+
+axis. First, we assign RowSel computations for different RNS primes 
+
+(𝑞 0, 𝑞 1, 𝑞 2, 𝑞 3) to different CUDA streams. While this coarse-grained prime-level partitioning reduces transposition latency overheads, it introduces pipeline fill and drain overheads, as illustrated in the center diagram of Fig. 8. Therefore, we additionally split the 
+
+𝑁 = 212 points in each limb into multiple chunks and launch a separate kernel for each chunk, enabling a finer overlap between the kernels. By combining prime-level stream partitioning with 
+
+𝑁 -chunked launches, we create overlap opportunities between the input/output transpositions and the GEMMs across streams ( 𝑁 -chunked partitioning in Fig. 8). To mitigate the increased kernel launch overheads from this fine-grained partitioning, we utilize CUDA Graphs [46].            
+
+> 8GPIR: Enabling Practical Private Information Retrieval with GPUs ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom Query 2
+> 2×B
+> DB 𝐷 !
+> 𝐷 !
+> Query
+> 2×B
+> 𝐷 !
+> 2×B/2
+> GPU0
+> GPU1
+> Query
+> 2×B
+> 𝐷 !𝐷 !
+> 𝐷 !
+> 𝐷 "/2
+> 𝐷 "/2
+> 2×B
+> 2
+> 2×B
+> 1
+> 2×B
+> 2×B/22×B
+> ×
+> 2×B
+> DB 𝐷 !
+> 𝐷 !
+> Query
+> 𝐷 "/2
+> 𝐷 "/2
+> 2×B
+> ×
+> ExpandQuery RowSel ColTor
+> Comm. Comm.
+> DB sharding
+> +All -gathering
+> B:Batch size
+
+Figure 9: DB sharding and all-gathering expanded ct s in multi-GPU PIR execution on two GPUs. Comm. indicates inter-GPU communication. 
+
+## 6 Orchestrating Multi-GPU PIR Execution 
+
+We investigate multi-GPU execution as a mechanism to scale PIR systems with two orthogonal directions: increasing query through-put (queries per second, QPS) and supporting larger DB capacity. We consider three scaling strategies: naïve batch parallelism, DB 
+
+sharding with response aggregation, and all-gathering expanded 
+
+ct s. These approaches serve different roles depending on whether the DB fits within the DRAM capacity of a single GPU and whether high-bandwidth inter-GPU communication is available. Fig. 9 shows GPIR’s multi-GPU execution flow and the communi-cation points; we denote the number of GPUs as 𝑛 GPU . ExpandQuery depends only on the client queries and produces 𝐷 0 ct s per query, while RowSel and ColTor consume DB shards and generate partial responses that are aggregated across GPUs. 
+
+Naïve batch parallelism. Naïve batch parallelism aims solely at in-creasing query throughput. In this approach, a batch of client queries is evenly divided across GPUs, and each GPU indepen-dently processes its assigned queries using a full copy of the DB .With the DB replicated to every GPU, naïve batch parallelism in-creases system-level QPS almost linearly with 𝑛 GPU without requir-ing any inter-GPU communication. However, this approach only scales as long as the DB fits entirely within a single GPU’s DRAM. The actual DB size supported by naïve batching is substantially smaller than a GPU’s total DRAM capacity. In OnionPIR, we store each DB record as a polynomial comprising 4𝑁 32-bit elements (64KB for 𝑁 = 212 ) with NTT already applied to facilitate RowSel computations. However, the information density of a plaintext polynomial is restricted to 𝑁 log 𝑃 bits for a plaintext modulus 𝑃 
+
+(e.g., 16 KB for 𝑃 = 232 ). Consequently, the DB requires 4× extra storage compared to unencrypted settings. Therefore, with the 32GB DRAM of an RTX 5090, 8GB or larger DB cannot be supported. 
+
+DB sharding with response aggregation. DB sharding partitions DB 
+
+along the 𝐷 1 dimension across 𝑛 GPU GPUs, as shown in Fig. 9, so that each device stores 𝐷 0 × 𝐷 1 
+
+> 𝑛 GPU
+
+records, allowing a 𝑛 GPU × larger total DB capacity. Each GPU runs RowSel and ColTor on its local DB shard and produces partial tournament results that are merged to form the final response. As each GPU sends only a single ct per query as the local ColTor result (see the right side of Fig. 9), the commu-nication overhead remains modest even on PCIe-based systems. ExpandQuery is executed on every GPU to provide the expanded 
+
+ct s consumed by RowSel and ColTor. While prior work [ 30 ] only use DB sharding to overcome capac-ity limitations, GPIR uses it even for smaller databases to boost throughput. By distributing memory accesses across multiple GPUs, GPIR alleviates bottlenecks in bandwidth-critical phases. 
+
+All-gathering expanded ct s. Building on DB sharding, we exploit an all-gather for ExpandQuery to further enhance throughput. Instead of running ExpandQuery redundantly on every GPU, we exploit naïve batch parallelism for ExpandQuery to all-gather expanded 
+
+ct s. After each GPU expands batch /𝑛 GPU queries, the results are fully shared across the GPUs such that each GPU holds the entire set of expanded ct s for the batch (see the left side of Fig. 9). Unlike response aggregation, this all-gather requires sharing batch · 𝐷 0 ct s across the GPUs. This high communication overhead can be mitigated by high-bandwidth interconnects. For a batch size of 32, the data transfer can reach 1GB ( 32 · 𝐷 0 · 128 KB for 
+
+𝐷 0 = 256 ). Modern high-bandwidth interconnects such as NVLink provide hundreds of GB/s (e.g., 600–900GB/s [ 45 ]), rendering this overhead negligible compared to computation and DRAM access costs. Consequently, this approach linearly scales ExpandQuery throughput with minimal communication overhead. 
+
+## 7 Evaluation 7.1 Experimental Setup 
+
+We used cryptographic parameters providing 128-bit security [ 4]. Unless otherwise specified, experiments were conducted on an RTX 5090 with batch size 32. We mainly used DB sizes of 1GB, 2GB, and 4GB, using records of size 16KB, to capture a wide range of working-set and memory-traffic regimes. All implementations were written in CUDA C++ and compiled with identical settings (nvcc 13.1.115) and evaluated under the same GPU driver (NVIDIA Driver 590.48.01) for a fair comparison. Because our system assumes multi-client batching, we assess performance using query throughput (queries per second, QPS) and its reciprocal, execution time per batch, as the primary metrics. For comparison, we developed a baseline GPU implementation with multi-client batching based on PIRonGPU [ 13 , 14 ] and IVE [ 30 ]. We closely followed IVE’s batching strategy and implemented the operation-level kernels, achieving performance comparable to its re-ported results although the implementation is not openly available. Sincefaithfully reimplementedits GPU designbased on the descrip-tions provided Unless noted otherwise, reported results include only server-side execution time and memory traffic. For multi-GPU experiments, we evaluated two-GPU systems based on RTX 5090 and H100. Inter-GPU communication on the RTX 5090 system is provided via PCIe 5.0 (64GB/s), while the H100 additionally sup-ports high-bandwidth NVLink 3.0 (600GB/s) [32, 45]. 
+
+## 7.2 Execution Time Enhancements 
+
+Fig. 10 shows the end-to-end execution time breakdown as succes-sive optimizations are applied to the PIR computation. Overall, GPIR achieves 1.96–2.29 × speedups over the baseline ( Base ) by combining stage-aware hybrid kernel execution ( +Hybrid ), transposed-layout        
+
+> 9ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom Hyesung Ji et al. 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> Base
+> +Hybrid
+> +Transpose
+> +Pipelining
+> +Multi-GPU
+> Base
+> +Hybrid
+> +Transpose
+> +Pipelining
+> +Multi-GPU
+> Base
+> +Hybrid
+> +Transpose
+> +Pipelining
+> +Multi-GPU
+> 1GB 2GB 4GB
+> Relative value
+> ExpandQuery RowSel ColTor RowSel (Transpose)
+> 0.97ms
+> GPIR
+> 1.38ms 2.18ms
+
+Figure 10: Ablation study of our optimizations across differ-ent DB sizes on an RTX 5090. We measured execution time per batch while incrementally applying stage-aware hybrid execution (+Hybrid), transposed-layout RowSel (+Transpose), 
+
+𝑝 -dimension pipelining (+Pipelining), and multi-GPU execu-tion (+Multi-GPU). 
+
+RowSel ( +Transpose ), 𝑝 -dimension pipelining ( +Pipelining ), and multi-GPU execution ( +Multi-GPU ). Stage-aware hybrid kernel execution reduces execution time by eliminating intermediate global memory traffic across kernel bound-aries, yielding up to 1.37 × speedups in ExpandQuery and 1.42 ×
+
+speedups in ColTor compared to the baseline. Applying transposed-layout RowSel significantly reduces the raw GEMM execution time by 1.50–1.65 × over the baseline through GEMM-friendly memory access patterns. However, improvements in the total RowSel time, which includes both the transpositions and the GEMMs, are more modest at 1.03–1.20 ×, as the additional transpose kernels account for up to 6.73% of end-to-end runtime. Therefore, it is important to utilize 𝑝 -dimension pipelining to overlap the transpositions and the GEMMs, effectively hiding the transposition latencies. Transposed-layout RowSel combined with 
+
+𝑝 -dimension pipelining results in an overall RowSel speedup of 1.28– 1.41 × compared to the baseline, establishing GPIR as the fastest configuration across all evaluated DB sizes. Finally, multi-GPU execution utilizing two GPUs yields a further 1.44 ×–1.74 × end-to-end speedups over the pipelined configuration. GPIR achieves an execution time per batch of 0.97ms, 1.38ms, 2.18ms for 1GB, 2GB, and 4GB DB s, respectively. ExpandQuery shows only gradual improvements with two RTX 5090 GPUs (1.07–1.15 ×) due to inter-GPU communication overheads. A detailed multi-GPU execution analysis will be discussed in §7.4. 
+
+## 7.3 DRAM Traffic Reductions 
+
+Stage-aware hybrid execution strategy consistently reduces DRAM transactions for both ExpandQuery and ColTor, and the benefit grows with the batch size. As shown in Fig. 11, at a batch size of 32, hybrid execution reduces DRAM transactions by up to 1.83 ×
+
+for ExpandQuery and 1.52 × for ColTor compared to the baseline implementation (operation-level kernels). This reduction is primarily enabled by applying stage-level ker-nels only at stages where the working set exceeds L2 capacity. As a result, short-lived intermediate data are consumed on-chip instead of being spilled to DRAM, leading to lower DRAM traffic compared to the baseline execution. The benefit becomes more pronounced 0            
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> Base
+> Hybrid
+> 124816 32 124816 32
+> ExpandQuery ColTor
+> Relative value
+> batch
+> 0.22
+> * DRAM transaction (GB)
+> 0.75
+> 2.32
+> 5.90
+> 13.28
+> 28.02
+> 1.20
+> 3.19
+> 7.44
+> 16.04
+> 33.33
+> 67.95
+
+Figure 11: DRAM transactions under different batch sizes for ExpandQuery and ColTor. Results are normalized to the baseline (operation-level kernels). 0.5      
+
+> 1
+> 1.5
+> 2
+> 0
+> 2
+> 4
+> 6
+> Base
+> +DB shard
+> +All (PCIe)
+> Base
+> +DB shard
+> +All (PCIe)
+> +All (NVLink)
+> Base
+> +DB shard
+> +All (PCIe)
+> Base
+> +DB shard
+> +All (PCIe)
+> +All (NVLink)
+> RTX 5090 H100 RTX 5090 H100
+> Throughput scaling DB scaling
+> Relative value
+> Execution time / batch ( ms )
+> ExpandQuery
+> RowSel
+> ColTor
+> Comm. (after
+> ExpandQuery )
+> QPS
+> Comm.
+> (after ColTor )
+
+Figure 12: Performance change under throughput scaling (4GB DB in total) and DB scaling (4GB DB per GPU) as we use two GPUs with DB sharding ( +DB shard ) and additionally ap-ply the all-gather of expanded ct s ( +All ) over PCIe or NVLink. 
+
+as batch size increases, where transient working-set growth is am-plified. This reduction in DRAM traffic directly aligns with the execution-time speedups observed in Fig. 10. 
+
+## 7.4 Multi-GPU Scalability 
+
+Fig. 12 evaluates GPIR’s multi-GPU scalability for either enhancing PIR throughput under the same DB size (throughput scaling) or supporting 𝑛 GPU = 2 times larger DB sizes ( DB scaling). The baseline configurations ( Base ) use a 4GB DB stored on a single GPU and repre-sent our fully optimized single GPU implementation. We incremen-tally applied DB sharding ( +DB shard ) and the all-gather of expanded 
+
+ct s over PCIe ( +All (PCIe) ) or NVLink ( +All (NVLink) ) if applicable. We explicitly separate communication overheads into two: com-munication after ExpandQuery and that after ColTor, which differ substantially in both data volume and performance impact. 
+
+7.4.1 Throughput scaling. When scaling throughput by DB shard-ing and all-gather in ExpandQuery, GPIR achieves substantial QPS improvements. Our optimizations together result in a 1.73 × speedup for RTX 5090 (PCIe). For H100 (NVLink), GPIR achieves near-linear scalability of a 1.94 × speedup with two GPUs connected by high-bandwidth interconnects. The all-gather after ExpandQuery incurs noticeable overheads for PCIe-based communication, accounting for up to 5.09–11.5% of the total execution time, due to its relatively large data volume (Fig. 9). On systems with NVLink, the same com-munication is almost entirely hidden, contributing to 1.14–2.01%  
+
+> 10 GPIR: Enabling Practical Private Information Retrieval with GPUs ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom
+
+Table 1: Performance comparison (QPS) and speedup across 
+
+DB sizes for GPIR and prior GPU-based PIR proposals on an RTX 5090. 
+
+Proposal 1GB 2GB 4GB PIRonGPU [17] 0005.3 002.8 001.5 ShiftPIR [39]* 0012.5 - 003.6 GPIR (S) † 0185.8 118.4 069.4 GPIR (B) † 0709.8 473.6 264.2 GPIR (M) † 1019.8 723.5 458.6 
+
+vs. PIRonGPU 192.4 × 258.4 × 305.7 ×
+
+vs. ShiftPIR 81.6 × - 127.4 ×       
+
+> *Reported values from the original paper (measured on an RTX 4090) due to unavail-able open-source implementation.
+> †Sdenotes the single-batch (single-client) configuration, Bdenotes the multi-client batching configuration, while Mdenotes the multi-GPU execution with two GPUs.
+
+of the runtime. In contrast, the communication after ColTor aggre-gates tiny partial tournament results and remains negligible across all configurations, accounting for at most 0.27% even on PCIe. 
+
+7.4.2 DB scaling. When the total DB capacity increases from 4GB to 8GB by sharding the DB across two GPUs, GPIR sustains compa-rable throughput, even achieving 1.09 × higher QPS on H100. These results demonstrate that GPIR can scale DB capacity without incur-ring proportional performance degradation, enabled by efficient 
+
+DB sharding and low-overhead inter-GPU communication. Notably, since ExpandQuery generates a fixed number of 𝐷 0 expanded ct sper query regardless of DB size, increasing the DB capacity intro-duces only marginal extra work to this stage, which can even lead to a slight throughput increase (up to 1.09 ×) due to improved inter-GPU parallelism. Overall, GPIR scales to two GPUs for both higher throughput and larger DB , with the communication overheads for response aggregation and all-gather largely hidden. 
+
+## 7.5 Comparison with prior work 
+
+Table. 1 shows that GPIR consistently delivers orders-of-magnitude higher throughput than prior GPU-based PIR systems across all evaluated DB sizes. We compare only single-server, GPU-based PIR systems without restrictive assumptions discussed in §2.1. PIRonGPU [ 13 ] and ShiftPIR [ 48 ] support only single-client (non-batched), single GPU execution. Even under this setting, GPIR (S) already achieves substantial performance gains through a carefully optimized GPU implementation, outperforming PIRonGPU by up to 46.3 × and ShiftPIR by up to 19.3 ×. Multi-client batching fur-ther amplifies these gains, with GPIR (B) achieving up to 176.8 ×
+
+speedups over PIRonGPU and 73.7 × over ShiftPIR, while sustaining high throughput as the DB size increases. Finally, the multi-GPU configuration, GPIR (M), extends these benefits by scaling query throughput across two GPUs, achieving up to 305.7 × improvements over prior state-of-the-art open-source implementation. These results show that GPIR maintains high throughput as the 
+
+DB size grows not simply by batching queries, but by redesigning GPU execution to match the dominant bottleneck of each PIR phase. 
+
+## 8 Related work 
+
+Other PIR protocols. A large body of prior work has investigated PIR protocols with the goal of improving practicality by reducing either server-side computation or communication cost. Early efforts target communication efficiency by exploiting alge-braic properties of HE. FastPIR [ 1] and its subsequent refinements, such as INSPIRE [ 35 ], reduce query expansion and server computa-tion through automorphisms and related optimizations. Comple-mentary approaches [ 2, 3 , 7, 40 , 42 ] further reduce communication overhead through techniques such as query compression and ex-ternal products, often accepting increased server-side computation as a trade-off. Another line of work [ 25 , 51 ] primarily focused on lowering online computation by introducing offline preprocessing phases, trading additional client-side storage or setup overhead for reduced query latency. More recent PIR designs [ 36 , 38 ] aim to simultaneously reduce both communication and server computation by carefully balancing these trade-offs. While they substantially improve cryptographic efficiency and asymptotic costs, they largely abstract away how PIR workloads interact with modern parallel hardware, leaving execution characteristics, such as data layout, batching behavior, and memory access patterns, unoptimized for GPU architectures. 
+
+Hardware acceleration of PIR. In contrast to purely algorithmic optimizations, several studies have explored hardware accelera-tion across different platforms to meet growing computational de-mands. From a storage-centric perspective, INSPIRE [ 35 ] proposes an SSD-based in-storage accelerator to mitigate bandwidth limita-tions. More recent works, including SmartPIR [ 10 ] and Conflux [ 9 ], extend this by integrating PIR-aware execution into computational storage devices (CSDs), demonstrating the potential of reducing data movement through specialized hardware support. Most closely related to our work, IVE [ 30 ] proposes a custom accelerator architecture for single-server HE-based PIR. IVE demon-strates that multi-client batching can amortize database access costs while exposing new data-movement bottlenecks, and addresses these challenges through architectural support such as large on-chip scratchpads and tightly scheduled execution. These results highlight the effectiveness of specialized hardware in controlling data movement and exploiting reuse in batched PIR workloads. 
+
+GPU acceleration of PIR. Several studies accelerated PIR using GPUs under different threat models and protocol assumptions. [ 31 ] tar-gets two-server PIR built on distributed point functions (DPFs), inheriting a multi-party computation model and exploiting GPU parallelism to accelerate DPF evaluations. CIP-PIR [ 23 ] similarly fo-cuses on multi-server or information-theoretic PIR schemes, lever-aging massive parallelism to improve throughput. ShiftPIR [ 48 ]accelerates PIR workloads by offloading parts of query generation to GPUs, but targets a different protocol structure and execution model. These studies collectively show that PIR performance is strongly influenced by hardware execution characteristics, particularly mem-ory hierarchy interactions. However, they fall short of systemati-cally analyzing how multi-client batching reshapes GPU execution, data layout constraints, and kernel-level trade-offs in single-server HE-based PIR. 
+
+> 11
+
+ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom Hyesung Ji et al. 
+
+## 9 Conclusion 
+
+This paper presents GPIR, a GPU-accelerated PIR system that ad-dresses architectural challenges in making lattice-based single-server PIR practical under multi-client batching. While multi-client batching is necessary for high throughput, it introduces substan-tial working-set expansion in ExpandQuery and ColTor and lay-out conflicts in RowSel that significantly constrain performance. By effectively addressing these challenges with stage-aware hy-brid execution, transposed-layout RowSel, 𝑝 -dimension pipelining, and multi-GPU execution, GPIR achieves up to 2.3 × speedup over the baseline implementation and up to 305.7 × higher throughput than the state-of-the-art open-source GPU-based PIR system. Fur-ther, GPIR scales efficiently in multi-GPU environments, improving QPS by up to 1.73 × on RTX 5090 and 1.94 × on NVLink-connected H100 under throughput scaling. Under DB scaling, it maintains near-constant QPS (0.98 × on RTX 5090 and 1.1 × on H100) even when the DB no longer fits in a single GPU’s memory. Overall, architecture-aware software designs can make lattice-based PIR a practical solution for large-scale, privacy-preserving database services on modern accelerator platforms. 
+
+## Acknowledgments 
+
+We would like to express our gratitude to Yue Chen and Ling Ren for the numerous productive discussions concerning the implemen-tation of OnionPIRv2. This work was supported by an Institute of Information & communications Technology Planning & Evaluation (IITP) grant funded by the Korea government (MSIT) (RS-2021-II211343, RS-2025-02217656, and RS-2025-02304125). Hyesung Ji and Jongmin Kim are with the Interdisciplinary Program in Artifi-cial Intelligence (IPAI), SNU. Jung Ho Ahn is with the Department of Intelligence and Information and IPAI, SNU. Jung Ho Ahn is the corresponding author. 
+
+## References 
+
+[1] Ishtiyaque Ahmad, Yuntian Yang, Divyakant Agrawal, Amr El Abbadi, and Trin-abh Gupta. 2021. Addra: Metadata-private Voice Communication over Fully Untrusted Infrastructure. In USENIX Symposium on Operating Systems Design and Implementation . https://www.usenix.org/conference/osdi21/presentation/ahmad [2] Asra Ali, Tancrède Lepoint, Sarvar Patel, Mariana Raykova, Phillipp Schopp-mann, Karn Seth, and Kevin Yeo. 2021. Communication–Computation Trade-offs in PIR. In USENIX Security Symposium . https://www.usenix.org/conference/ usenixsecurity21/presentation/ali [3] Sebastian Angel, Hao Chen, Kim Laine, and Srinath Setty. 2018. PIR with Com-pressed Queries and Amortized Query Processing. In IEEE Symposium on Security and Privacy . doi:10.1109/SP.2018.00062 [4] Jean-Philippe Bossuat, Rosario Cammarota, Jung Hee Cheon, Ilaria Chillotti, Benjamin R. Curtis, Wei Dai, Huijing Gong, Erin Hales, Duhyeong Kim, Bryan Kumara, Changmin Lee, Xianhui Lu, Carsten Maple, Alberto Pedrouzo-Ulloa, Rachel Player, Luis Antonio Ruiz Lopez, Yongsoo Song, Donggeon Yhee, and Bahattin Yildiz. 2024. Security Guidelines for Implementing Homomorphic Encryption. IACR Cryptology ePrint Archive (2024). https://eprint.iacr.org/2024/ 463 [5] Zvika Brakerski. 2012. Fully Homomorphic Encryption without Modulus Switching from Classical GapSVP. In Annual Cryptology Conference . 868–886. doi:10.1007/978-3-642-32009-5_50 [6] Brechy. 2025. Ethereum Privacy: Private Information Retrieval. https://pse.dev/ blog/ethereum-privacy-pir [7] Alexander Burton, Samir Jordan Menon, and David J. Wu. 2024. Respire: High-Rate PIR for Databases with Small Records. In ACM Conference on Computer and Communications Security . doi:10.1145/3658644.3690328 [8] Yue Chen and Ling Ren. 2025. OnionPIRv2: Efficient Single-Server PIR. IACR Cryptology ePrint Archive (2025). https://eprint.iacr.org/2025/1142 [9] Zehao Chen, Zhaoyan Shen, Qian Wei, Hang Lu, and Lei Ju. 2026. Conflux: A High-Performance Keyword Private Retrieval System for Dynamic Datasets. In 
+
+2026 IEEE International Symposium on High Performance Computer Architecture (HPCA) .[10] Zehao Chen, Honghui You, Qian Wei, Hang Lu, Lei ju, and Zhaoyan Shen. 2025. SmartPIR: A Private Information Retrieval System using Computational Stor-age Devices. In Proceedings of the 58th IEEE/ACM International Symposium on Microarchitecture (MICRO) . doi:10.1145/3725843.3756060 [11] Ilaria Chillotti, Nicolas Gama, Mariya Georgieva, and Malika Izabachène. 2020. TFHE: Fast Fully Homomorphic Encryption over the Torus. Journal of Cryptology 
+
+33, 1 (2020), 34–91. doi:10.1007/s00145-019-09319-x [12] Benny Chor, Eyal Kushilevitz, Oded Goldreich, and Madhu Sudan. 1998. Private Information Retrieval. J. ACM 45, 6 (1998), 965–981. doi:10.1145/293347.293350 [13] Ali Şah Özcan. 2024. PIRonGPU. https://github.com/Alisah-Ozcan/PIRonGPU. [14] Ali Şah Özcan and Erkay Savaş. 2024. HEonGPU: a GPU-based Fully Homomor-phic Encryption Library 1.0, journal = IACR Cryptology ePrint Archive. (2024). https://eprint.iacr.org/2024/1543 [15] Xiang Cui, Yifeng Chen, Changyou Zhang, and Hong Mei. 2010. Auto-tuning Dense Matrix Multiplication for GPGPU with Cache. In 2010 IEEE 16th Interna-tional Conference on Parallel and Distributed Systems . doi:10.1109/ICPADS.2010.64 [16] William J. Dally, Stephen W. Keckler, and David B. Kirk. 2021. Evolution of the Graphics Processing Unit (GPU). IEEE Micro 41, 6 (2021), 42–51. doi:10.1109/MM. 2021.3113475 [17] Alex Davidson, Gonçalo Pestana, and Sofía Celi. 2023. FrodoPIR: Simple, Scalable, Single-Server Private Information Retrieval. Proceedings on Privacy Enhancing Technologies (2023), 365–383. doi:10.56553/popets-2023-0022 [18] Leo de Castro, Kevin Lewi, and Edward Suh. 2024. WhisPIR: Stateless Private Information Retrieval with Low Communication. IACR Cryptology ePrint Archive 
+
+(2024). https://eprint.iacr.org/2024/266 [19] Junfeng Fan and Frederik Vercauteren. 2012. Somewhat Practical Fully Homo-morphic Encryption. IACR Cryptology ePrint Archive (2012). https://eprint.iacr. org/2012/144 [20] Craig Gentry. 2009. Fully Homomorphic Encryption Using Ideal Lattices. In ACM Symposium on Theory of Computing . doi:10.1145/1536414.1536440 [21] Craig Gentry, Shai Halevi, and Nigel P Smart. 2012. Homomorphic evaluation of the AES circuit. In Annual International Conference on the Theory and Applications of Cryptographic Techniques . doi:10.1007/978-3-642-32009-5_49 [22] Craig Gentry, Amit Sahai, and Brent Waters. 2013. Homomorphic Encryp-tion from Learning with Errors: Conceptually-Simpler, Asymptotically-Faster, Attribute-Based. In Annual International Cryptology Conference . doi:10.1007/978-3-642-40041-4_5 [23] Daniel Günther, Maurice Heymann, Benny Pinkas, and Thomas Schneider. 2022. GPU-accelerated PIR with Client-Independent Preprocessing for Large-Scale Ap-plications. In USENIX Security Symposium . https://www.usenix.org/conference/ usenixsecurity22/presentation/gunther [24] Shai Halevi, Yuriy Polyakov, and Victor Shoup. 2019. An improved RNS variant of the BFV homomorphic encryption scheme. In Cryptographers’ Track at the RSA Conference . doi:10.1007/978-3-030-12612-4_5 [25] Alexandra Henzinger, Matthew M. Hong, Henry Corrigan-Gibbs, Sarah Meik-lejohn, and Vinod Vaikuntanathan. 2023. One Server for the Price of Two: Simple and Fast Single-Server Private Information Retrieval. In USENIX Security Symposium . https://www.usenix.org/conference/usenixsecurity23/presentation/ henzinger [26] Hyesung Ji, Sangpyo Kim, Jaewan Choi, and Jung Ho Ahn. 2024. Accelerating Programmable Bootstrapping Targeting Contemporary GPU Microarchitecture. 
+
+IEEE Computer Architecture Letters (2024). doi:10.1109/LCA.2024.3418448 [27] Wonkyung Jung, Eojin Lee, Sangpyo Kim, Jongmin Kim, Namhoon Kim, Keewoo Lee, Chohong Min, Jung Hee Cheon, and Jung Ho Ahn. 2021. Accelerating Fully Homomorphic Encryption Through Architecture-Centric Analysis and Optimization. IEEE Access 9 (2021), 98772–98789. doi:10.1109/ACCESS.2021. 3096189 [28] Andrew Kerr, Duane Merrill, Julien Demouth, and John Tran. 2017. CUTLASS: Fast Linear Algebra in CUDA C++. https://developer.nvidia.com/blog/cutlass-linear-algebra-cuda [29] Jaeseon Kim, Jeongeun Park, and Hyewon Sung. 2025. Private Information Retrieval based on Homomorphic Encryption, Revisited. IACR Cryptology ePrint Archive (2025). https://eprint.iacr.org/2025/729 [30] Sanpyo Kim, Hyesung Ji, Jongmin Kim, Wonseok Choi, Jaiyoung Park, and Jung Ho Ahn. 2026. IVE: An Accelerator for Single-Server Private Information Retrieval Using Versatile Processing Elements. In 2026 IEEE International Symposium on High Performance Computer Architecture (HPCA) .[31] Maximilian Lam, Jeff Johnson, Wenjie Xiong, Kiwan Maeng, Udit Gupta, Yang Li, Liangzhen Lai, Ilias Leontiadis, Minsoo Rhu, Hsien-Hsin S. Lee, Vijay Janapa Reddi, Gu-Yeon Wei, David Brooks, and G. Edward Suh. 2024. GPU-based Private Information Retrieval for On-Device Machine Learning Inference. In Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 1 (ASPLOS) . 197–214. doi:10.1145/ 3617232.3624855 [32] Ang Li, Shuaiwen Leon Song, Jieyang Chen, Jiajia Li, Xu Liu, Nathan R. Tallent, and Kevin J. Barker. 2020. Evaluating Modern GPU Interconnect: PCIe, NVLink, 12 GPIR: Enabling Practical Private Information Retrieval with GPUs ICS ’26, July 06–09, 2026, Belfast, Northern Ireland, United Kingdom 
+
+NV-SLI, NVSwitch and GPUDirect. IEEE Transactions on Parallel and Distributed Systems 31, 1 (2020), 94–110. doi:10.1109/TPDS.2019.2928289 [33] Baiyu Li, Daniele Micciancio, Mariana Raykova, and Mark Schultz-Wu. 2024. Hintless Single-Server Private Information Retrieval. In Annual International Cryptology Conference . 183–217. doi:10.1007/978-3-031-68400-5_6 [34] Xiuhong Li, Yun Liang, Shengen Yan, Liancheng Jia, and Yinghan Li. 2019. A coordinated tiling and batching framework for efficient GEMM on GPUs. In Pro-ceedings of the 24th Symposium on Principles and Practice of Parallel Programming .doi:10.1145/3293883.3295734 [35] Jilan Lin, Ling Liang, Zheng Qu, Ishtiyaque Ahmad, Liu Liu, Fengbin Tu, Trinabh Gupta, Yufei Ding, and Yuan Xie. 2022. INSPIRE: In-storage Private Information Retrieval via Protocol and Architecture Co-design. In Proceedings of the 49th Annual International Symposium on Computer Architecture (ISCA) . doi:10.1145/ 3470496.3527433 [36] Chenyang Liu, Xukun Wang, and Zhifang Zhang. 2026. VIA: Communication-Efficient Single-Server Private Information Retrieval. In IEEE Symposium on Security and Privacy . doi:10.1109/SP63933.2026.00086 [37] Ming Luo, Feng-Hao Liu, and Han Wang. 2024. Faster FHE-Based Single-Server Private Information Retrieval. In Proceedings of the 2024 on ACM SIGSAC Con-ference on Computer and Communications Security (CCS) . doi:10.1145/3658644. 3690233 [38] Rasoul Akhavan Mahdavi, Sarvar Patel, Joon Young Seo, and Kevin Yeo. 2025. InsPIRe: Communication-Efficient PIR with Server-side Preprocessing. IACR Cryptology ePrint Archive (2025). https://eprint.iacr.org/2025/1352 [39] Carlos Aguilar Melchor, Joris Barrier, Laurent Fousse, and Marc-Olivier Killijian. 2016. XPIR: Private information retrieval for everyone. Proceedings on Privacy Enhancing Technologies (2016), 155–174. doi:10.1515/popets-2016-0010 [40] Samir Jordan Menon and David J. Wu. 2022. SPIRAL: Fast, High-Rate Single-Server PIR via FHE Composition. In IEEE Symposium on Security and Privacy .doi:10.1145/3460120.3485381 [41] Samir Jordan Menon and David J. Wu. 2024. YPIR: High-Throughput Single-Server PIR with Silent Preprocessing. In USENIX Security Symposium . https: //www.usenix.org/conference/usenixsecurity24/presentation/menon [42] Muhammad Haris Mughees, Hao Chen, and Ling Ren. 2021. OnionPIR: Response efficient single-server PIR. In ACM Conference on Computer and Communications Security . doi:10.1145/3460120.3485381 [43] Muhammad Haris Mughees and Ling Ren. 2023. Vectorized Batch Private In-formation Retrieval. In IEEE Symposium on Security and Privacy . doi:10.1109/ SP46215.2023.10179329 [44] NVIDIA Corporation. 2025. Nsight Compute 2025.3. https://developer.nvidia. com/nsight-compute [45] NVIDIA Corporation. 2025. NVLink and NVSwitch. https://www.nvidia.com/en-us/data-center/nvlink/ [46] NVIDIA Corporation. 2026. CUDA Programming Guide. https://docs.nvidia.com/ cuda/cuda-programming-guide/. [47] Apple Machine Learning Research. 2024. Combining Machine Learning and Homomorphic Encryption in the Apple Ecosystem. https://machinelearning. apple.com/research/homomorphic-encryption Accessed: 2025-02-16. [48] Zihan Wang, Lutan Zhao, Ming Luo, Zhiwei Wang, Haoqi He, Wenzhe Lv, Xuan Ding, Dan Meng, and Rui Hou. 2025. ShiftPIR: An Efficient PIR System with Gravity Shifting from Client to Server. In ACM Conference on Computer and Communications Security . 1143–1157. doi:10.1145/3719027.3765153 [49] Yunming Xiao, Chenkai Weng, Ruijie Yu, Peizhi Liu, Matteo Varvello, and Alek-sandar Kuzmanovic. 2023. Demo: PDNS: A Fully Privacy-Preserving DNS. In 
+
+Proceedings of the ACM SIGCOMM 2023 Conference . 1182–1184. doi:10.1145/ 3603269.3610860 [50] Yongseung Yu, Donghyun Son, Younghyun Lee, Sunghyun Park, Giha Ryu, Myeongjin Cho, Jiwon Seo, and Yongjun Park. 2023. Tailoring CUTLASS GEMM using Supervised Learning. In 2023 IEEE 41st International Conference on Computer Design (ICCD) . doi:10.1109/ICCD58817.2023.00077 [51] Mingxun Zhou, Andrew Park, Wenting Zheng, and Elaine Shi. 2024. Piano: Extremely Simple, Single-Server PIR with Sublinear Server Computation. In IEEE Symposium on Security and Privacy . doi:10.1109/SP54263.2024.00055 13

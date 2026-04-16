@@ -6,76 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-15
-- 运行时间：2026-04-15 20:09:08 UTC
+- 最新运行日期：2026-04-16
+- 运行时间：2026-04-16 20:05:57 UTC
 - 运行状态：成功
-- 本次总论文数：18
-- 精读区：7
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日精选 18 篇论文聚焦联邦学习与大模型微调，深度解析如何利用零阶优化与差分隐私破解通信、内存与隐私的“不可能三角”。
-核心看点在于无线网络环境下 LLM 的高效微调方案，以及 NIST 基因组挑战赛中关于成员推理攻击防御的最新实战洞察。
-建议关注联邦强化学习与遥感数据的跨界结合，把握分布式系统在复杂场景下的通信优化与数据安全趋势。
-- 详情：[/202604/15/README](/202604/15/README)
+今日深度解析 17 篇前沿论文，聚焦联邦学习在 NIST 基因组挑战赛中的隐私攻防实战。
+核心结论揭示了差分隐私抵御成员推理攻击的实效，并提供了垂直联邦学习的安全增强新方案。
+建议优先研读两篇满分论文，掌握高敏感数据场景下隐私保护与模型效能平衡的最优解。
+- 详情：[/202604/16/README](/202604/16/README)
 
 ### 精读区论文标签
-1. [Three Birds, One Stone: Solving the Communication-Memory-Privacy Trilemma in LLM Fine-tuning Over Wireless Networks with Zeroth-Order Optimization](/202604/15/2604.12401v1-three-birds-one-stone-solving-the-communication-memory-privacy-trilemma-in-llm-fine-tuning-over-wireless-networks-with-zeroth-order-optimization)  
+1. [Evaluating Differential Privacy Against Membership Inference in Federated Learning: Insights from the NIST Genomics Red Team Challenge](/202604/16/2604.12737v2-evaluating-differential-privacy-against-membership-inference-in-federated-learning-insights-from-the-nist-genomics-red-team-challenge)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：使用零阶优化的LLM隐私保护联邦学习
-2. [Evaluating Differential Privacy Against Membership Inference in Federated Learning: Insights from the NIST Genomics Red Team Challenge](/202604/15/2604.12737v1-evaluating-differential-privacy-against-membership-inference-in-federated-learning-insights-from-the-nist-genomics-red-team-challenge)  
+   evidence：评估差分隐私作为联邦学习防御机制的效果
+2. [Secure and Privacy-Preserving Vertical Federated Learning](/202604/16/2604.13474v1-secure-and-privacy-preserving-vertical-federated-learning)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：评估联邦学习中针对攻击的差分隐私保护
-3. [A Full Compression Pipeline for Green Federated Learning in Communication-Constrained Environments](/202604/15/2604.11146v2-a-full-compression-pipeline-for-green-federated-learning-in-communication-constrained-environments)  
+   evidence：结合多方安全计算与差分隐私的纵向联邦学习
+3. [HierFedCEA: Hierarchical Federated Edge Learning for Privacy-Preserving Climate Control Optimization Across Heterogeneous Controlled Environment Agriculture Facilities](/202604/16/2604.13396v1-hierfedcea-hierarchical-federated-edge-learning-for-privacy-preserving-climate-control-optimization-across-heterogeneous-controlled-environment-agriculture-facilities)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：用于隐私保护的联邦学习及压缩技术
-4. [Refined Differentially Private Linear Regression via Extension of a Free Lunch Result](/202604/15/2604.11820v1-refined-differentially-private-linear-regression-via-extension-of-a-free-lunch-result)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：使用差分隐私模型的隐私保护线性回归
-5. [LLM-Redactor: An Empirical Evaluation of Eight Techniques for Privacy-Preserving LLM Requests](/202604/15/2604.12064v1-llm-redactor-an-empirical-evaluation-of-eight-techniques-for-privacy-preserving-llm-requests)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：差分隐私噪声与隐私保护大模型技术评估
-6. [PrivEraserVerify: Efficient, Private, and Verifiable Federated Unlearning](/202604/15/2604.12348v1-priveraserverify-efficient-private-and-verifiable-federated-unlearning)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：使用差分隐私的隐私且可验证联邦遗忘统一框架
-7. [Evolution of Optimization Methods: Algorithms, Scenarios, and Evaluations](/202604/15/2604.12968v1-evolution-of-optimization-methods-algorithms-scenarios-and-evaluations)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：针对差分隐私和分布式学习的优化方法
+   evidence：用于气候控制优化的隐私保护分层联邦学习
+4. [Rethinking the Personalized Relaxed Initialization in the Federated Learning: Consistency and Generalization](/202604/16/2604.12768v1-rethinking-the-personalized-relaxed-initialization-in-the-federated-learning-consistency-and-generalization)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：高效的联邦学习算法 FedInit
+5. [Probabilistic Feature Imputation and Uncertainty-Aware Multimodal Federated Aggregation](/202604/16/2604.12970v1-probabilistic-feature-imputation-and-uncertainty-aware-multimodal-federated-aggregation)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：跨医疗机构的隐私保护协作模型训练
+6. [Sequential Change Detection for Multiple Data Streams with Differential Privacy](/202604/16/2604.13274v1-sequential-change-detection-for-multiple-data-streams-with-differential-privacy)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：针对多数据流的校准拉普拉斯噪声注入
 
 ### 速读区论文标签
-1. [Communication-Efficient Gluon in Federated Learning](/202604/15/2604.10689v1-communication-efficient-gluon-in-federated-learning)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：联邦学习中的高效通信优化器
-2. [The Impact of Federated Learning on Distributed Remote Sensing Archives](/202604/15/2604.11562v1-the-impact-of-federated-learning-on-distributed-remote-sensing-archives)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：分布式遥感档案上的联邦学习
-3. [PubSwap: Public-Data Off-Policy Coordination for Federated RLVR](/202604/15/2604.12160v1-pubswap-public-data-off-policy-coordination-for-federated-rlvr)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：针对去中心化隐私数据的联邦训练
-4. [On the Optimality of Hierarchical Secure Aggregation with Arbitrary Heterogeneous Data Assignment](/202604/15/2604.12429v1-on-the-optimality-of-hierarchical-secure-aggregation-with-arbitrary-heterogeneous-data-assignment)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：分层网络中梯度的安全聚合
-5. [Byzantine-Robust Distributed SGD: A Unified Analysis and Tight Error Bounds](/202604/15/2604.10179v1-byzantine-robust-distributed-sgd-a-unified-analysis-and-tight-error-bounds)  
+1. [On Secure Gradient Coding with Uncoded Groupwise Keys](/202604/16/2604.12578v1-on-secure-gradient-coding-with-uncoded-groupwise-keys)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：拜占庭容错分布式优化与 SGD
-6. [Replicable Composition](/202604/15/2604.10423v1-replicable-composition)  
+   evidence：分布式服务器的安全梯度编码
+2. [Modular Verification of Differential Privacy in Probabilistic Higher-Order Separation Logic (Extended Version)](/202604/16/2604.12713v1-modular-verification-of-differential-privacy-in-probabilistic-higher-order-separation-logic-extended-version)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：通过差分隐私归约实现可复制性
-7. [Differentially Private Verification of Distribution Properties](/202604/15/2604.10819v1-differentially-private-verification-of-distribution-properties)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：用于分布属性测试的差分隐私机制
-8. [PAC-BENCH: Evaluating Multi-Agent Collaboration under Privacy Constraints](/202604/15/2604.11523v1-pac-bench-evaluating-multi-agent-collaboration-under-privacy-constraints)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：隐私限制下的多智能体协作
-9. [Asynchronous Distributed Bandit Submodular Maximization under Heterogeneous Communication Delays](/202604/15/2604.06430v1-asynchronous-distributed-bandit-submodular-maximization-under-heterogeneous-communication-delays)  
+   evidence：验证差分隐私算法的实现
+3. [Internal noise in deep neural networks: interplay of depth, neuron number, and noise injection step](/202604/16/2604.08117v1-internal-noise-in-deep-neural-networks-interplay-of-depth-neuron-number-and-noise-injection-step)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：多智能体系统的异步分布式决策
-10. [Answering Counting Queries with Differential Privacy on a Quantum Computer](/202604/15/2604.10881v1-answering-counting-queries-with-differential-privacy-on-a-quantum-computer)  
+   evidence：深度神经网络中的内部高斯噪声注入
+4. [ProxiCBO: A Provably Convergent Consensus-Based Method for Composite Optimization](/202604/16/2604.09789v1-proxicbo-a-provably-convergent-consensus-based-method-for-composite-optimization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：量子计算机上的差分隐私机制
-11. [Distributed State Estimation for Discrete-Time Systems With Unknown Inputs: An Optimization Approach](/202604/15/2604.11588v1-distributed-state-estimation-for-discrete-time-systems-with-unknown-inputs-an-optimization-approach)  
+   evidence：基于共识的复合优化方法
+5. [Mitigating Privacy Risk via Forget Set-Free Unlearning](/202604/16/2604.10636v1-mitigating-privacy-risk-via-forget-set-free-unlearning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于状态估计的分布式优化算法
+   evidence：隐私保护的机器遗忘学习方法
+6. [The Price of Ignorance: Information-Free Quotation for Data Retention in Machine Unlearning](/202604/16/2604.11511v1-the-price-of-ignorance-information-free-quotation-for-data-retention-in-machine-unlearning)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：遗忘学习准确性与隐私偏好之间的权衡
+7. [A Distributed Bilevel Framework for the Macroscopic Optimization of Multi-Agent Systems](/202604/16/2604.11712v1-a-distributed-bilevel-framework-for-the-macroscopic-optimization-of-multi-agent-systems)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：大规模多智能体系统的分布式算法
+8. [Evaluating Cross-Architecture Performance Modeling of Distributed ML Workloads Using StableHLO](/202604/16/2604.12090v1-evaluating-cross-architecture-performance-modeling-of-distributed-ml-workloads-using-stablehlo)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：分布式机器学习工作负载的性能建模
+9. [Decentralized Learning via Random Walk with Jumps](/202604/16/2604.12260v1-decentralized-learning-via-random-walk-with-jumps)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：无中心协调器的网络去中心化学习
+10. [Optimal Decentralized Dynamic Energy Management over Asynchronous Peer-to-Peer Transactive Networks via Operator Splitting](/202604/16/2604.13404v1-optimal-decentralized-dynamic-energy-management-over-asynchronous-peer-to-peer-transactive-networks-via-operator-splitting)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：通过P2P网络中的分布式协调确保数据隐私
+11. [WIN-U: Woodbury-Informed Newton-Unlearning as a retain-free Machine Unlearning Framework](/202604/16/2604.13438v1-win-u-woodbury-informed-newton-unlearning-as-a-retain-free-machine-unlearning-framework)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：无需保留数据的隐私保护机器遗忘学习
 
 
 <div class="dpr-home-promo-card">

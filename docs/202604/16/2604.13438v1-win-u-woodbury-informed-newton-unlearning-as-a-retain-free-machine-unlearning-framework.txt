@@ -1,0 +1,1663 @@
+Title: WIN-U: Woodbury-Informed Newton-Unlearning as a retain-free Machine Unlearning Framework
+
+URL Source: https://arxiv.org/pdf/2604.13438v1
+
+Published Time: Thu, 16 Apr 2026 00:27:53 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# WIN-U: Woodbury-Informed Newton-Unlearning as a retain-free Machine Unlearning Framework 
+
+Xingjian Zhao 
+
+Department of Computer Science Rensselaer Polytechnic Institute Troy, NY 12180, USA 
+
+zhaox8@rpi.edu 
+
+Mohammad Mohammadi Amiri 
+
+Department of Computer Science Rensselaer Polytechnic Institute Troy, NY 12180, USA 
+
+mohamm11@rpi.edu 
+
+Malik Magdon-Ismail 
+
+Department of Computer Science Rensselaer Polytechnic Institute Troy, NY 12180, USA 
+
+magdon@cs.rpi.edu 
+
+## Abstract 
+
+Privacy concerns in LLMs have led to the rapidly growing need to enforce a data’s ”right to be forgotten”. Machine unlearning addresses precisely this task, namely the removal of the influence of some specific data, i.e., the forget set, from a trained model. The gold standard for unlearning is to produce the model that would have been learned on only the rest of the training data, i.e., the retain set. Most existing unlearning methods rely on direct access to the retained data, which may not be practical due to privacy or cost constraints. We propose WIN-U, a retained-data free unlearning framework that requires only second order information for the originally trained model on the full data. The unlearning is performed using a single Newton-style step. Using the Woodbury matrix identity and a generalized Gauss-Newton approximation for the forget set curvature, the WIN-U update recovers the closed-form linear solution and serves as a local second-order approximation to the gold-standard retraining optimum. Extensive experiments on various vision and language benchmarks demonstrate that WIN-U achieves SOTA performance in terms of unlearning efficacy and utility preservation, while being more robust against relearning attacks compared to existing methods. Importantly, WIN-U does not require access to the retained data. 
+
+## 1 Introduction 
+
+As large language models (LLMs) become increasingly prevalent in areas such as medicine, finance, and science, concerns over data privacy have intensified. Recent regulations like the General Data Protection Regulation (GDPR) (European Parliament and Council of the European Union, 2016), California Consumer Privacy Act (CCPA) (California State Legislature, 2018), and the Canadian Consumer Privacy Protection Act (CPPA) (Innovation, Science and Economic Development Canada, 2023) stipulate ”right to be forgotten” (Dang, 2021) and require organizations to remove upon request the influence of specific data, known as the forget set . The need for the ability to remove specific data from a trained model is further underscored by scenarios such as correcting errors, mitigating biases, and removing harmful or outdated data (Geng et al., 2025; Wang et al., 2024). However, LLMs are typically trained on large, static datasets, and the gold-standard retraining , which is retraining an LLM from scratch to remove specific subsets of data, is computationally prohibitive. This has led to the emergence of machine unlearning , which aims to efficiently remove the influence of specific data from a trained model and maintain its utility without requiring full retraining. 1
+
+> arXiv:2604.13438v1 [cs.LG] 15 Apr 2026
+
+To achieve efficient unlearning, existing methods typically adopt optimization-based ap-proaches. The most foundational approach is Gradient Ascent (GA), which directly maxi-mizes the loss on the forget set (Jang et al., 2023). However, it was shown that GA can be highly unstable and collapse model utility because it does not distinguish memory on the forget set from the general model ability. As a result, more recent methods often optimize on both the forget set and the retain set to achieve a better balance between unlearning and utility preservation (Zhang et al., 2024b; Liu et al., 2022; Li et al., 2024). 
+
+Limitations of existing LLM unlearning methods. While such optimization-based meth-ods have shown good performance in terms of objective values on the forget and retain sets, it does not necessarily correspond to the gold-standard retraining optimum, and thus may not achieve true unlearning. Recent research has revealed that such methods may only be suppressing the influence of the data to be unlearned, rather than truly removing it from the model parameters (Yang et al., 2025; Deeb & Roger, 2024). Moreover, the reliance on direct access to the retain set may not be practical due to privacy or cost constraints, especially for large-scale LLMs trained on massive datasets (Gao et al., 2024). For truly effective and practical unlearning, it is crucial to develop methods that can directly approximate the retraining optimum without requiring direct access to the retain data. 
+
+Newton-style unlearning. Another direction for unlearning is applying an influence-function-style Newton step for unlearning (Guo et al., 2019). Such methods are inspired by the ”leave-one-out” update in the influence function derivation and approximate the gold-standard retraining optimum (Koh & Liang, 2017). However, the ”leave-one-out” update utilizes the full-set Hessian, ignoring the curvature change induced by removing the forget set. While it is a reasonable assumption for a single data point, it becomes increasingly inaccurate as the forget set size grows as in machine unlearning scenarios. Therefore, recent research showed that we should use the retain set Hessian instead. It accounts for the curvature change and yields a more accurate Newton update, but requires direct access to the retain data and incurs significant cost per-forget-request (Golatkar et al., 2020; Zhang et al., 2024a). While various approximation techniques have been proposed, they either are still not scalable to the large model + large data regime (Qiao et al., 2024), or rely on access to the retain data (McKinney et al., 2026), or some surrogate dataset which may not be practical (Basaran et al., 2025). 
+
+Our proposal: WIN-U. To address these challenges, we propose WIN-U (Woodbury-Informed Newton-Unlearning), a retain-free unlearning framework that approximates the gold-standard retraining optimum, accounts for the curvature change, and scales to large models and datasets. WIN-U derives an influence-function-style Newton step from the gold-standard retraining objective, and applies the Generalized Gauss-Newton (GGN) approximation (Schraudolph, 2002) and the Woodbury matrix identity (Woodbury, 1950) to express the update in terms of the full-set Hessian inverse, and the forget set Jacobian and output Hessian. This structure eliminates the need for direct access to the retain data during the unlearning process, and allows off-loading the heavy full-set Hessian inversion to a precomputation step, so that the per-request cost depends mainly on the forget set size and the output dimension. We further adopt a Monte Carlo (MC) estimation of the forget set curvature (Kunstner et al., 2019) and low-rank adaptation (LoRA) (Hu et al., 2022) to reduce the cost on large models and datasets, yielding a scalable WIN-U instantiation applicable to LLMs. Our main contributions are as follows: • We propose WIN-U, a retain-free unlearning framework that is derived directly from the gold-standard retraining objective, and explicitly accounts for forget-induced curvature change through a Woodbury-scaled Newton update. • We provide theoretical analysis showing that, under a GGN approximation, WIN-U recovers the linear closed-form solution and serves as a second-order local approxi-mation to gold-standard retraining optimum for non-linear models. 2• We apply approximation techniques for large models, including LoRA and a Monte Carlo gradient-outer-product for efficient forget-GGN approximation, yielding a practical WIN-U instantiation scalable to LLMs. • We provide both a small scale empirical validation showing that WIN-U closely approximates the retraining optimum, and a large scale evaluation on the Ope-nUnlearning benchmark demonstrating that WIN-U achieves a strong forget-retain trade-off and state-of-the-art (SOTA) robustness against relearning attacks. 
+
+## 2 Problem formulation and the retraining objective 
+
+In this section, we formally define unlearning and the corresponding gold-standard re-training objective. We denote D = Dr ∪ D f as the training dataset of size |D| = n, where 
+
+D f = {(xj, yj)}mj=1 is the forget set of size |D f | = m and Dr = D \ D f is the retain set. We consider a model f (θ, x) ∈ Rc parameterized by θ ∈ Rd, where c is the output dimension (e.g., the number of classes). The original objective is the ℓ2-regularized empirical risk: min  
+
+> θ
+
+L(θ) = 1
+
+n
+
+> n
+
+# ∑
+
+> i=1
+
+ℓ(θ, xi, yi) + λ
+
+2 ∥θ∥2, (1) where ℓ(θ, xi, yi) is the per-sample loss and λ > 0 is the regularization strength. The original optimum is θ∗ = arg min θ L(θ).The objective of machine unlearning is to remove the influence of the forget set D f from the model, while preserving the utility on the retain set Dr. The gold-standard approach is to retrain from scratch on Dr alone. The retraining objective is: min  
+
+> θ
+
+Lr (θ) = 1
+
+n − m ∑
+
+> i∈D r
+
+ℓ(θ, xi, yi) + λr
+
+2 ∥θ∥2, (2) Where λr is the regularization strength for the retraining objective. The retraining optimum 
+
+is θ∗ 
+
+> r
+
+= arg min θ Lr (θ). Since such retraining is often infeasible in practice, a principled machine unlearning method should efficiently and effectively approximate θ∗ 
+
+> r
+
+given θ∗
+
+and the forget set D f , without relying on direct access to Dr since it may be unavailable due to privacy or storage constraints. However, the gradient based unlearning methods heavily rely on optimizing on the retain set to maintain utility on the retain set (Gao et al., 2024; Zhang et al., 2024b). The influence-function-style Newton step on the other hand provides an alternative that utilizes the curvature information instead of direct optimization, and thus circumvents the need for direct access to the retain set (Koh & Liang, 2017). This motivates our proposed WIN-U framework, which extends this idea to the unlearning task, and provides approximation techniques that scale it to be efficient for LLMs. We formally derive WIN-U in the next section. 
+
+## 3 Woodbury-informed Newton update for machine unlearning 
+
+We now introduce WIN-U, a retain-free unlearning framework that derives an influence-function-style Newton step from the retraining objective, and applies a GGN approximation and the Woodbury matrix identity to yield an efficient model update that accounts for curvature change. To derive the Newton step, we express the retraining objective via the original objective: 
+
+Lr (θ) = nn − m L(θ) − 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+ℓ(θ, xj, yj)
+
+!
+
+= 1
+
+n − m ∑
+
+> i∈D r
+
+ℓ(θ, xi, yi) + nλ
+
+2(n − m) ∥θ∥2. (3) Therefore as long as we set the retraining regularization strength as λr = nn−m λ, the minimizer of the retraining objective Lr and that of 
+
+L(θ) − 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+ℓ(θ, xj, yj) (4) 3are identical. We denote the Hessian of the original objective at θ∗ as 
+
+H = ∇2L(θ∗) = 1
+
+n
+
+> n
+
+# ∑
+
+> i=1
+
+∇2ℓ(θ∗, xi, yi) + λId. (5) We further define the forget set gradient and Hessian: 
+
+g f := 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+∇ℓ(θ∗, xj, yj), H f := 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+∇2ℓ(θ∗, xj, yj), (6) capturing the contribution of the forget set to the full-set gradient and curvature at θ∗.
+
+3.1 Exact solution for the linear case 
+
+To build intuition, we first derive the exact unlearning update for a linear model f (θ, x) = 
+
+x⊤θ with squared loss ℓ(θ, xi, yi) = 12 (yi − x⊤ 
+
+> i
+
+θ)2. The regularized training objective be-comes: 
+
+L(θ) = 12n ∥y − Xθ∥2 + λ
+
+2 ∥θ∥2, (7) where X ∈ Rn×d is the data matrix and y ∈ Rn is the label vector. The Hessian is H = 
+
+> 1
+> n
+
+X⊤X + λId, and the original optimum is: 
+
+θ∗ = H−1 1
+
+n X⊤y. (8) Setting the gradient of Eq. (4) to zero, the retraining optimum satisfies: 
+
+θ∗ 
+
+> r
+
+=
+
+
+
+H − H f
+
+−1  1
+
+n X⊤y − 1
+
+n X⊤ 
+
+> f
+
+y f
+
+
+
+, (9) where X f ∈ Rm×d and y f ∈ Rm are the forget set data matrix and corresponding labels. Here the forget set Hessian is H f = 1 
+
+> n
+
+X⊤ 
+
+> f
+
+X f , and the forget set gradient is g f = 1 
+
+> n
+
+X⊤ 
+
+> f
+
+( ˆy f − y f ),where ˆ y f = X f θ∗ is the prediction of the original model on D f .Applying the Woodbury matrix identity to (H − H f )−1 and simplifying yields the closed-form solution (Appendix A.1): 
+
+θ∗ 
+
+> r
+
+= θ∗ + 1
+
+n H−1X⊤
+
+> f
+
+
+
+Im − 1
+
+n X f H−1X⊤
+
+> f
+
+−1
+
+( ˆy f − y f ). (10) This update computes θ∗ 
+
+> r
+
+exactly using only θ∗, H−1, and the forget set. The key structural feature is the Woodbury scaling matrix (Im − 1 
+
+> n
+
+X f H−1X⊤ 
+
+> f
+
+)−1, which accounts for the curva-ture change induced by removing D f . This term is absent in na ¨ıve influence-function-style updates for the ”leave-one-out” setting. We next show that this structure naturally extends to nonlinear models. 
+
+3.2 Newton update for nonlinear models 
+
+For a general nonlinear model, the retraining optimum θ∗ 
+
+> r
+
+satisfies the first-order optimality condition of Eq. (4): 
+
+∇L (θ∗ 
+
+> r
+
+) − 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+∇ℓ(θ∗ 
+
+> r
+
+, xj, yj) = 0. (11) For simplicity of analysis, we assume that the original model is fully converged ( ∇L (θ∗) = 
+
+0). This is a common assumption in influence function literature, and in practice with a well-trained original model, the gradient norm at θ∗ should be small enough so that the corresponding error is negligible. Expanding each term in Eq. (11) via a first-order Taylor expansion around θ∗, we derive the Newton update (Appendix A.2): 
+
+θ∗ 
+
+> r
+
+≈ θ∗ +
+
+
+
+H − H f
+
+−1
+
+g f . (12) 4To apply the Woodbury identity, we need a structured factorization of H f . Therefore, we define the following per-sample quantities for each forget sample (xj, yj) ∈ D f :• Jacobian: Jj := ∇θ f (θ∗, xj) ∈ Rc×d, the Jacobian of the model output with respect to the parameters, where c is the output dimension and d is the model size. • Output-gradient vector: δj := ∇zℓ(z, yj) z= f (θ∗,xj ) ∈ Rc, the gradient of the loss with respect to the model output. • Output-space Hessian: Bj := ∇2 
+
+> z
+
+ℓ(z, yj) z= f (θ∗,xj ) ∈ Rc×c, the Hessian of the loss with respect to the model output. We define the stacked matrices over the forget set: 
+
+J f :=
+
+
+
+J1
+
+...
+
+Jm
+
+ ∈ Rmc ×d, δ f :=
+
+
+
+δ1
+
+...
+
+δm
+
+ ∈ Rmc , B f :=
+
+
+
+B1
+
+. . .
+
+Bm
+
+ ∈ Rmc ×mc , (13) By the chain rule, the forget set gradient and GGN Hessian decompose as 
+
+g f = 1 
+
+> n
+
+J⊤ 
+
+> f
+
+δ f , H f ≈ 1 
+
+> n
+
+J⊤ 
+
+> f
+
+B f J f , (14) where the generalized Gauss-Newton (GGN) approximation drops the second-order term involving ∇2 
+
+> θ
+
+f and retains only the first-order (Jacobian) contribution. This approximation is exact whenever the model is locally linear or the residuals are small (Schraudolph, 2002). 
+
+3.3 The WIN-U update: GGN–Woodbury Newton step 
+
+Substituting (14) into the Newton update (12): 
+
+θ∗ 
+
+> r
+
+≈ θ∗ +
+
+
+
+H − 1 
+
+> n
+
+J⊤ 
+
+> f
+
+B f J f
+
+−1 1 
+
+> n
+
+J⊤ 
+
+> f
+
+δ f . (15) Applying the Woodbury matrix identity to (H − 1 
+
+> n
+
+J⊤ 
+
+> f
+
+B f J f )−1 and simplifying (see Ap-pendix A.3 for derivation), we obtain the WIN-U update :
+
+θ∗ 
+
+> r
+
+≈ θ∗ + 1
+
+n H−1J⊤
+
+> f
+
+
+
+Imc − 1
+
+n B f J f H−1J⊤
+
+> f
+
+−1
+
+δ f . (16) This is the Woodbury-scaled Newton update used by WIN-U. It requires only the original optimum θ∗, the precomputed inverse Hessian H−1, and the forget set D f ; no access to the retain set Dr is needed. The scaling matrix (Imc − 1 
+
+> n
+
+B f J f H−1J⊤ 
+
+> f
+
+)−1 captures the curvature change induced by removing the forget set, which distinguishes WIN-U from standard influence-function approaches. As the derivation shows, this update serves as a second-order approximation to the gold-standard retraining optimum, and as Bae et al. (2022) showed, since the Taylor approximation is only valid at the local neighborhood of θ∗, such updates serve as local approximations, and matches to the warm-start retraining optimum under non-convex settings. Algorithm (1) summarizes the resulting WIN-U update. 
+
+Remark 1 (Recovery of the linear case) . For a linear model with squared loss, J f = X f , δ f =
+
+ˆy f − y f , and B f = Imc . Thus Eq. (16) reduces exactly to the linear Woodbury update (10) ,confirming that WIN-U recovers the closed-form retraining solution in the linear case. 
+
+For the purpose of the theoretical analysis, we assume that the λI term from the ℓ2 reg-ularization used during training ensures that H is positive definite and hence invertible, without requiring any additional damping during the unlearning step. In the next section, we will show that the WIN-U update applies approximation techniques that significantly reduces the computational and memory complexity. 5Algorithm 1 WIN-U update with a precomputed inverse Hessian.       
+
+> Require: precomputed inverse Hessian H−1for the original objective of size n, original weights θ∗,forget set
+
+D f = {(xj, yj)}mj=1   
+
+> 1: for j
+
+= 1, . . . , m do    
+
+> 2: Compute Jj
+
+= ∇θ f (θ∗, xj)   
+
+> 3: Compute δj
+
+= ∇zℓ(z, yj) z= f (θ∗ ,xj )   
+
+> 4: Compute Bj
+
+= ∇2 
+
+> z
+
+ℓ(z, yj) z= f (θ∗ ,xj )            
+
+> 5: end for
+> 6: Form Jf,δf, and Bfas in Eq. (13) 7: M
+
+← Imc − 1       
+
+> nBfJfH−1J⊤
+> f
+> 8: Solve Mu
+
+= δ f for u  
+
+> 9: ∆θ
+
+← 1    
+
+> nH−1J⊤
+> fu
+> 10: bθr
+
+← θ∗ + ∆θ  
+
+> 11: return bθr
+
+## 4 Scalable instantiation of WIN-U 
+
+In this section, we discuss the computational and memory complexity of the WIN-U update, and present approximation techniques, mainly MC estimation of forget set curvature, and additional techniques like LoRA to significantly reduce the cost and make WIN-U efficient enough for the scale of LLMs. The typical Newton update that accounts for the curvature change (Eq. (12) ) is bottlenecked by the heavy O(d3) Hessian inversion per-forget-request and the O(d2) memory requirement for storing the Hessian. The WIN-U update (Eq. (16) ) requires forming the stacked Jacobian 
+
+J f ∈ Rmc ×d and the output-space Hessian B f ∈ Rmc ×mc . In the Woodbury form, the precomputed H−1 reduces the per-forget-request cost to O(mcd 2 + m2c2d + m3c3), which is efficient when mc ≪ d. However, for autoregressive language models where the effective output dimension is C = ∑mj=1 Tjc (with Tj being the sequence length of the j-th forget sample and c the vocabulary size), the cost becomes prohibitive. To address this, we adopt a MC estimation of the forget set GGN term in Eq. (16) and use LoRA to reduce the parameter dimension, yielding a scalable WIN-U instantiation applicable to LLMs. 
+
+4.1 MC estimation of forget set curvature 
+
+The output-space WIN-U update (Eq. (16) ) requires the stacked Jacobian J f ∈ Rmc ×d and the block-diagonal output Hessian B f ∈ Rmc ×mc . For language models with vocabulary size 
+
+c and sequence length Tj, the effective output dimension becomes C, making these matrices impractical to form. We show that, for cross-entropy loss with softmax output (which are standard in language modeling), Monte Carlo sampling yields an unbiased estimator that bypasses the output space entirely. 
+
+MC gradient as unbiased GGN estimator. Following Kunstner et al. (2019), for cross-entropy loss with softmax output, we sample pseudo-labels ˆy ∼ Categorical (pj), where 
+
+pj ∈ RC is the model’s predictive distribution, and define the MC pseudo-gradient ˜gj :=
+
+J⊤ 
+
+> j
+
+(pj − e ˆy) ∈ Rd where e ˆy is the one-hot encoding of the sampled pseudo-label ˆy. The outer product of this pseudo-gradient is an unbiased estimator of the per-sample GGN block J⊤ 
+
+> j
+
+BjJj. Unlike the empirical Fisher (Martens, 2020), the expectation is taken over the model’s own predictions rather than the true label. Appendix A.5 provides the derivation. 
+
+Parameter-space Woodbury update. Drawing S pseudo-labels ˆyj,s ∼ Categorical (pj) per forget sample and collecting all MC gradients into G = [ ˜g1,1 | · · · | ˜gm,S] ∈ Rd×mS , the 6forget set GGN is approximated as 
+
+H f = 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+J⊤ 
+
+> j
+
+BjJj ≈ 1
+
+nS GG ⊤. (17) Substituting into the Newton update (12) and applying the Woodbury identity yields the 
+
+MC-WIN-U update (see Appendix A.4): 
+
+θ∗ 
+
+> r
+
+≈ θ∗ + H−1g f − 1
+
+nS H−1G
+
+ 1
+
+nS G⊤H−1G − ImS 
+
+−1
+
+G⊤H−1g f . (18) This formulation operates entirely in the mS -dimensional sample space: each MC gradient ˜gj,s ∈ Rd is obtained via a single backward pass, and the Woodbury core is the mS × mS 
+
+matrix 1 
+
+> nS
+
+G⊤H−1G − ImS . This avoids the need to explicitly form J f or B f , reducing the cost from O(m3c3) (output-space inversion) to O(m2S2d) (parameter-space). 
+
+4.2 Additional approximations Full inverse Hessian approximation. For practical scenarios, we believe the precomputed inverse Hessian H−1 should be provided by the model provider. However, since we do not have access to such precomputed H−1 for large LLMs, and the O(d2) memory requirement for storing the full inverse Hessian can be prohibitive, we use the inverse of the diagonal of the GGN approximation of the full Hessian on the finetuning data (denoted as ˜H−1 and stored as a vector in Rd) as a proxy. 
+
+LoRA approximation. To further improve scalability, we restrict the update to a low-dimensional parameter subspace using LoRA. Instead of updating all d model parameters, we parameterize the update using LoRA adapter parameters ˜θ ∈ R ˜d, where ˜d ≪ d. All gradient and curvature terms in Eq. (18) are then computed with respect to ˜θ, effectively replacing the dimension d with ˜d in the dominant computational terms. As a result, the complexity of MC-WIN-U reduces to O  ˜d m 2S2. Since ˜d ≪ d, the forget size m is typically small, and we can set S appropriately, this leads to substantial savings in both computation and memory, enabling efficient unlearning in large-scale models. 
+
+## 5 Experiments 
+
+In this section, we empirically validate the proposed WIN-U method on small scale tasks and demonstrate MC-WIN-U efficiently and effectively scales to large-scale complex LLM tasks. We design our experiments to answer the following questions: (i) Does WIN-U effectively approximate the gold-standard retraining optimum? (ii) How does MC-WIN-U scale to LLMs, especially with the approximations introduced by diagonal-GGN full Hessian, LoRA, and MC estimation for the forget set curvature? (iii) How does MC-WIN-U perform against relearning attacks compared to existing unlearning methods for LLMs? 
+
+5.1 Experimental setup 
+
+We conduct all experiments on a single NVIDIA H100 NVL 96 GB GPU. For the small scale validation, we test on (i) synthetic ridge regression problems where we follow WIN-U (Eq. 16) exactly, and (ii) MNIST with a two-layer MLP in a class-forget scenario. For the large-scale LLM experiments, we follow the OpenUnlearning benchmark (Dorna et al., 2025) and test on TOFU (Maini et al., 2024), MUSE (Shi et al., 2024), and WMDP (Li et al., 2024). 
+
+5.2 Small-scale validation 
+
+To validate that WIN-U approximates the gold-standard retraining optimum, we evaluate it in two regimes. First, we study synthetic ridge-regression problems where WIN-U can 7Method Forget Retain Test Output Divergence ↓ ∥θ − θr ∥2/∥θr ∥2 ↓
+
+Synthetic ridge regression (IID) 
+
+Original model MSE: 1.58 ×10 −2 MSE: 1.53 ×10 −2 MSE: 1.65 ×10 −2 5.40 ×10 −6 3.12 ×10 −4
+
+Vanilla Newton MSE: 1.68 ×10 −2 MSE: 1.54 ×10 −2 MSE: 1.67 ×10 −2 1.03 ×10 −8 1.31 ×10 −5
+
+WIN-U MSE: 1.68 ×10 −2 MSE: 1.54 ×10 −2 MSE: 1.67 ×10 −2 < 10 −16 < 10 −15 
+
+Golden retrain MSE: 1.68 ×10 −2 MSE: 1.54 ×10 −2 MSE: 1.67 ×10 −2 0 0
+
+Synthetic ridge regression (Shifted) 
+
+Original model MSE: 3.99 ×10 −2 MSE: 1.47 ×10 −2 MSE: 1.58 ×10 −2 1.47 ×10 −4 1.63 ×10 −3
+
+Vanilla Newton MSE: 6.16 ×10 −2 MSE: 1.52 ×10 −2 MSE: 1.64 ×10 −2 1.36 ×10 −5 4.84 ×10 −4
+
+WIN-U MSE: 7.22 ×10 −2 MSE: 1.54 ×10 −2 MSE: 1.67 ×10 −2 < 10 −16 < 10 −15 
+
+Golden retrain MSE: 7.22 ×10 −2 MSE: 1.54 ×10 −2 MSE: 1.67 ×10 −2 0 0
+
+MNIST + two-layer MLP 
+
+Original model Acc.: 95.5% Acc.: 94.3% Acc.: 93.5% 2.81 5.50 ×10 −1
+
+Vanilla Newton Acc.: 89.3% Acc.: 94.5% Acc.: 93.2% 1.97 5.13 ×10 −1
+
+WIN-U Acc.: 0.3% Acc.: 94.6% Acc.: 84.3% 1.26 ×10 −1 4.35 ×10 −1
+
+Golden retrain Acc.: 0.0% Acc.: 94.6% Acc.: 84.4% 0 0
+
+Table 1: Small-scale validation of WIN-U against golden retraining.                                                                                          
+
+> forget01 forget05 forget10 Method retain-free Forget QA Prob ↓
+> (Pre/Post) MU ↑
+> (Pre/Post) Time
+> ↓
+> Forget QA Prob ↓
+> (Pre/Post) MU ↑
+> (Pre/Post) Time
+> ↓
+> Forget QA Prob ↓
+> (Pre/Post) MU ↑
+> (Pre/Post) Time
+> ↓
+> GradDiff ✗0.443/0.599 0.589/0.602 8s 0.091/0.573 0.467/ 0.602 46s 0.057/0.604 0.443/0.600 50s NPO ✗0.484/0.501 0.595/0.602 21s 0.245/0.541 0.468/0.600 202s 0.214/0.669 0.436/0.604 235s RMU ✗0.424/0.849 0.555/ 0.604 4s 0.357/0.795 0.550/0.597 37s 0.089/0.678 0.577/0.599 41s SimNPO ✗0.855/0.869 0.597 /0.601 15s 0.845/0.845 0.594 /0.594 147s 0.837/0.839 0.596 /0.598 266s GradAscent ✓0.491/0.515 0.595/0.602 2s 0.000 /0.609 0.000/ 0.602 34s 0.000 /0.737 0.000/ 0.605 35s
+> MC-WIN-U ✓0.405 /0.483 0.556/0.596 11s 0.212/ 0.461 0.398/0.557 58s 0.226/ 0.592 0.420/0.587 411s Original model –0.901/– 0.600/– –0.885/– 0.600/– –0.881/– 0.601/– –Gold-standard retrained –0.165/– 0.599/– –0.127/– 0.599/– –0.116/– 0.591/– –
+
+Table 2: TOFU benchmark summary on the forget01, forget05, and forget10 splits. be compared directly against exact retraining under both independent and identically distributed setting for the forget and retain sets, as well as a ”shifted” setting, where the forget set distribution has higher variance so it contributes more to the full-set Hessian. We then test on the nonlinear MNIST class-forget setting to assess whether the same pattern persists. Full experimental details and metric definitions are deferred to Appendix B. Table 1 presents the empirical performance on the different settings. The results confirm that for linear models, WIN-U recovers the retraining optimum exactly (up to numerical precision) as expected. The advantage of accounting for curvature change is highlighted by the shifted data configuration, where the vanilla Newton update which uses the full-set Hessian clearly deviates from the retraining optimum. We can also observe that the same pattern holds for the nonlinear setting. The effect is prominent in the MNIST class-forget setting: WIN-U drives forget-class accuracy to 0.3%, matching the 0% of gold-standard retraining, while the vanilla Newton update still preserves 89.3% accuracy on the ”forgotten” class. This confirms that accounting for the curvature change via the retain Hessian is critical when the forget set deviates distributionally from the retain set. 
+
+5.3 Open Unlearning experiments on LLMs 
+
+We evaluate the practical MC-WIN-U instantiation on the OpenUnlearning benchmark, which provides a comprehensive suite of unlearning tasks and evaluation metrics for LLMs. Since the full results on all tasks and metrics are extensive, and seem to reveal a similar pattern, here we focus on the TOFU benchmark. The detailed experimental set-up and additional benchmark results are deferred to Appendix C. Table 2 summarizes the TOFU results on the forget01, forget05, and forget10 splits in a compact format. The results show that MC-WIN-U achieves a SOTA-level forget effec-tiveness, but are sometimes less utility-preserving than existing methods that optimize on 8Figure 1: WIN-U trade-off curves before and after benign relearning with S=4 MC samples on TOFU forget10. Left: pre-relearning forget-retain trade-off obtained by scaling the WIN-U update with different step sizes η. Right: post-relearning forget-retain trade-off obtained by scaling the WIN-U update with different step sizes η
+
+retain set directly. However, when we evaluate the post-relearning performance after a benign relearning attack which fine-tunes an unlearned model on the retain set for a small number of epochs (Hu et al., 2024; Yang et al., 2025), the retain-dependent methods showed significant forget-information recovery, suggesting that they were heavily suppressing the forget information rather than truly removing it. In contrast, MC-WIN-U shows much more robust post-relearning forget performance, often achieving the best post-relearning forget QA probability among all methods. Moreover, the utility loss of MC-WIN-U is quickly recovered after only a single epoch of relearning, achieving a similar level of MU as the original model and the retain-dependent unlearning baselines. 
+
+Step size. On LLM tasks, we observed that the MC-WIN-U update can sometimes over-shoot or undershoot, sensitive to the choice of hyperparameters such as S (number of MC samples) and rank of the LoRA adaptor. To mitigate this, we introduce a step size η to scale the update: bθr = θ∗ + η∆θ, where ∆θ is the unscaled MC-WIN-U update term. As Ilharco et al. (2022) proposed that directions in model weight space can steer model behavior, we hy-pothesize and empirically show in Figure 1 that the WIN-U update serves as a good steering direction towards unlearning. Tuning η is extremely efficient since it only requires a scalar multiplication and a vector addition in Rd after ∆θ is computed. Thus, WIN-U provides efficient fine-grained control over the forget-retain trade-off. Appendix A.6 summarizes the resulting MC-WIN-U used in our LLM experiments. Appendix C provides additional unlearning effectiveness measurements, WMDP hazardous-knowledge unlearning results, a qualitative example of relearning-robustness of MC-WIN-U, and an ablation study over S.
+
+## 6 Conclusion and future work 
+
+We present WIN-U, a novel retain-free unlearning framework that leverages a Woodbury-scaled Newton step to efficiently approximate the retraining optimum. By accounting for the curvature change induced by removing the forget set, and applying the Woodbury identity, our theoretical analysis revealed that WIN-U recovers the exact retraining solution in linear models and extends to nonlinear models via a GGN approximation. Our empirical results on small-scale tasks validate the effectiveness of WIN-U in approximating the retraining optimum, and our large-scale experiments on the OpenUnlearning benchmark demonstrate that MC-WIN-U achieves a strong forget-retain trade-off while being more robust to relearning attacks compared to existing methods. 9While WIN-U represents a significant step towards retain-free unlearning for LLMs, it also opens up several directions for future research. First, exploring different curvature compression techniques, such as Kronecker-factored approximations (McKinney et al., 2026) or Dropout (Zhang & Amiri, 2025), could further improve the scalability and performance of WIN-U. Second, extending WIN-U to handle multiple sequential unlearning requests would improve its applicability in real-world scenarios. Thirdly, it would further add to the WIN-U’s practicality to develop more principled methods for selecting η without relying on the evaluation on the retain set. Finally, as we derive in Appendix D, the WIN-U framework can be easily extended to broader ”unlearning” objectives, such as setting target output on the forget set. The practicality and effectiveness of these extensions warrant further investigation. 
+
+## References 
+
+Juhan Bae, Nathan Ng, Alston Lo, Marzyeh Ghassemi, and Roger B Grosse. If influence functions are the answer, then what is the question? Advances in Neural Information Processing Systems , 35:17953–17967, 2022. Umit Yigit Basaran, Sk Miraj Ahmed, Amit Roy-Chowdhury, and Basak Guler. A certified unlearning approach without access to source data. arXiv preprint arXiv:2506.06486 , 2025. California State Legislature. California consumer privacy act of 2018. Cal. Civ. Code §§ 1798.100–1798.199.100, 2018. URL https://leginfo.legislature.ca.gov/faces/codes displayText.xhtml?division=3.&lawCode=CIV&part=4.&title=1.81.5 .Quang-Vinh Dang. Right to be forgotten in the age of machine learning. In International Conference on Advances in Digital Science , pp. 403–411. Springer, 2021. Aghyad Deeb and Fabien Roger. Do unlearning methods remove information from language model weights? arXiv preprint arXiv:2410.08827 , 2024. Vineeth Dorna, Anmol Mekala, Wenlong Zhao, Andrew McCallum, Zachary C Lipton, J Zico Kolter, and Pratyush Maini. OpenUnlearning: Accelerating LLM unlearning via unified benchmarking of methods and metrics. arXiv preprint arXiv:2506.12618 , 2025. URL 
+
+https://arxiv.org/abs/2506.12618 .European Parliament and Council of the European Union. Regulation (eu) 2016/679 of the european parliament and of the council of 27 april 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data, and repealing directive 95/46/ec (general data protection regulation). Official Journal of the European Union, OJ L 119, 4.5.2016, pp. 1–88, 2016. URL https://eur-lex. europa.eu/eli/reg/2016/679/oj . Accessed via EUR-Lex. Chongyu Fan, Jiancheng Liu, Licong Lin, Jinghan Jia, Ruiqi Zhang, Song Mei, and Sijia Liu. Simplicity prevails: Rethinking negative preference optimization for llm unlearning. 
+
+arXiv preprint arXiv:2410.07163 , 2024. URL https://arxiv.org/abs/2410.07163 .Chongyang Gao, Lixu Wang, Kaize Ding, Chenkai Weng, Xiao Wang, and Qi Zhu. On large language model continual unlearning. arXiv preprint arXiv:2407.10223 , 2024. Jiahui Geng, Qing Li, Herbert Woisetschlaeger, Zongxiong Chen, Fengyu Cai, Yuxia Wang, Preslav Nakov, Hans-Arno Jacobsen, and Fakhri Karray. A comprehensive survey of machine unlearning techniques for large language models. arXiv preprint arXiv:2503.01854 ,2025. Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal sunshine of the spotless net: Selective forgetting in deep networks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 9304–9312, 2020. Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 , 2024. 10 Chuan Guo, Tom Goldstein, Awni Hannun, and Laurens Van Der Maaten. Certified data removal from machine learning models. arXiv preprint arXiv:1911.03030 , 2019. Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. 
+
+Iclr , 1(2):3, 2022. Shengyuan Hu, Yiwei Fu, Steven Z. Wu, and Virginia Smith. Unlearning or obfuscating? jogging the memory of unlearned llms via benign relearning. In International Confer-ence on Learning Representations , 2024. URL https://api.semanticscholar.org/CorpusID: 270619566 .Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, Suchin Gururangan, Ludwig Schmidt, Hannaneh Hajishirzi, and Ali Farhadi. Editing models with task arithmetic. 
+
+arXiv preprint arXiv:2212.04089 , 2022. Innovation, Science and Economic Development Canada. Consumer privacy protection act, March 2023. URL https://ised-isde.canada.ca/site/innovation-better-canada/en/ consumer-privacy-protection-act . Government of Canada overview page describing the proposed Consumer Privacy Protection Act. Joel Jang, Dongkeun Yoon, Sohee Yang, Sungmin Cha, Moontae Lee, Lajanugen Logeswaran, and Minjoon Seo. Knowledge unlearning for mitigating privacy risks in language models. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 14389–14408, 2023. Pang Wei Koh and Percy Liang. Understanding black-box predictions via influence functions. In International conference on machine learning , pp. 1885–1894. PMLR, 2017. Frederik Kunstner, Philipp Hennig, and Lukas Balles. Limitations of the empirical fisher approximation for natural gradient descent. Advances in neural information processing systems , 32, 2019. Nathaniel Li, Alexander Pan, Anjali Gopal, Summer Yue, Daniel Berrios, Alice Gatti, Justin D Li, Ann-Kathrin Dombrowski, Shashwat Goel, Long Phan, et al. The wmdp benchmark: Measuring and reducing malicious use with unlearning. arXiv preprint arXiv:2403.03218 ,2024. Bo Liu, Qiang Liu, and Peter Stone. Continual learning and private unlearning. In Conference on Lifelong Learning Agents , pp. 243–254. PMLR, 2022. Aengus Lynch, Phillip Guo, Aidan Ewart, Stephen Casper, and Dylan Hadfield-Menell. Eight methods to evaluate robust unlearning in llms. arXiv preprint arXiv:2402.16835 , 2024. URL https://arxiv.org/abs/2402.16835 .Pratyush Maini, Zhili Feng, Avi Schwarzschild, Zachary Chase Lipton, and J Zico Kolter. TOFU: A task of fictitious unlearning for LLMs. In First Conference on Language Modeling ,2024. James Martens. New insights and perspectives on the natural gradient method. Journal of Machine Learning Research , 21(146):1–76, 2020. Lev McKinney, Anvith Thudi, Juhan Bae, Tara Rezaei, Nicolas Papernot, Sheila A McIl-raith, and Roger Grosse. Gauss-newton unlearning for the llm era. arXiv preprint arXiv:2602.10568 , 2026. Xinbao Qiao, Meng Zhang, Ming Tang, and Ermin Wei. Hessian-free online certified unlearning. arXiv preprint arXiv:2404.01712 , 2024. Nicol N Schraudolph. Fast curvature matrix-vector products for second-order gradient descent. Neural computation , 14(7):1723–1738, 2002. 11 Weijia Shi, Jaechan Lee, Yangsibo Huang, Sadhika Malladi, Jieyu Zhao, Ari Holtzman, Daogao Liu, Luke Zettlemoyer, Noah A. Smith, and Chiyuan Zhang. MUSE: Machine unlearning six-way evaluation for language models. arXiv preprint arXiv:2407.06460 , 2024. URL https://arxiv.org/abs/2407.06460 .Qwen Team. Qwen2.5: A party of foundation models, September 2024. URL https: //qwenlm.github.io/blog/qwen2.5/ .Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 , 2023. Weiqi Wang, Zhiyi Tian, Chenhan Zhang, and Shui Yu. Machine unlearning: A comprehen-sive survey. arXiv preprint arXiv:2405.07406 , 2024. Max A Woodbury. Inverting modified matrices . Department of Statistics, Princeton University, 1950. Nakyeong Yang, Dong-Kyum Kim, Jea Kwon, Minsu Kim, Kyomin Jung, and Meeyoung Cha. Erase or hide? suppressing spurious unlearning neurons for robust unlearn-ing. ArXiv , abs/2509.22263, 2025. URL https://api.semanticscholar.org/CorpusID: 281659413 .Binchi Zhang, Yushun Dong, Tianhao Wang, and Jundong Li. Towards certified unlearning for deep neural networks. arXiv preprint arXiv:2408.00920 , 2024a. Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. Negative preference optimization: From catastrophic collapse to effective unlearning. arXiv preprint arXiv:2404.05868 , 2024b. Yuchen Zhang and Mohammad Mohammadi Amiri. Toward efficient influence function: Dropout as a compression tool. arXiv preprint arXiv:2509.15651 , 2025. 
+
+## A Detailed derivations 
+
+A.1 Linear Woodbury derivation 
+
+Starting from the retraining system (9) , we have θ∗ 
+
+> r
+
+= ( H − H f )−1( 1 
+
+> n
+
+X⊤y − 1 
+
+> n
+
+X⊤ 
+
+> f
+
+y f ),where H f = 1 
+
+> n
+
+X⊤ 
+
+> f
+
+X f . Applying the Woodbury matrix identity (A + UCV )−1 = A−1 −
+
+A−1U(C−1 + VA −1U)−1VA −1 with A = H, U = X⊤ 
+
+> f
+
+, C = − 1 
+
+> n
+
+I, V = X f :
+
+
+
+H − 1
+
+n X⊤ 
+
+> f
+
+X f
+
+−1
+
+= H−1 + 1
+
+n H−1X⊤
+
+> f
+
+
+
+Im − 1
+
+n X f H−1X⊤
+
+> f
+
+−1
+
+X f H−1. (19) Let 
+
+M =
+
+
+
+Im − 1
+
+n X f H−1X⊤
+
+> f
+
+−1
+
+.Multiplying both sides by ( 1 
+
+> n
+
+X⊤y − 1 
+
+> n
+
+X⊤ 
+
+> f
+
+y f ) gives 
+
+θ∗ 
+
+> r
+
+=
+
+
+
+H−1 + 1
+
+n H−1X⊤ 
+
+> f
+
+MX f H−1
+
+  1
+
+n X⊤y − 1
+
+n X⊤ 
+
+> f
+
+y f
+
+
+
+= H−1
+
+ 1
+
+n X⊤y
+
+
+
+− 1
+
+n H−1X⊤ 
+
+> f
+
+y f
+
++ 1
+
+n H−1X⊤ 
+
+> f
+
+MX f H−1
+
+ 1
+
+n X⊤y
+
+
+
+− 1
+
+n2 H−1X⊤ 
+
+> f
+
+MX f H−1X⊤ 
+
+> f
+
+y f .12 Using H−1( 1 
+
+> n
+
+X⊤y) = θ∗ and ˆ y f = X f θ∗, we obtain 
+
+θ∗ 
+
+> r
+
+= θ∗ − 1
+
+n H−1X⊤ 
+
+> f
+
+y f + 1
+
+n H−1X⊤ 
+
+> f
+
+M ˆy f
+
+− 1
+
+n2 H−1X⊤ 
+
+> f
+
+MX f H−1X⊤ 
+
+> f
+
+y f
+
+= θ∗ + 1
+
+n H−1X⊤ 
+
+> f
+
+M ˆy f
+
+− 1
+
+n H−1X⊤
+
+> f
+
+
+
+Im + 1
+
+n MX f H−1X⊤
+
+> f
+
+
+
+y f .Finally, since 
+
+M
+
+
+
+Im − 1
+
+n X f H−1X⊤
+
+> f
+
+
+
+= I,we have 
+
+M − 1
+
+n MX f H−1X⊤ 
+
+> f
+
+= I =⇒ Im + 1
+
+n MX f H−1X⊤ 
+
+> f
+
+= M.Substituting this identity into the previous line yields 
+
+θ∗ 
+
+> r
+
+= θ∗ + 1
+
+n H−1X⊤
+
+> f
+
+
+
+Im − 1
+
+n X f H−1X⊤
+
+> f
+
+−1
+
+( ˆy f − y f ). (20) 
+
+A.2 Newton update derivation for nonlinear models 
+
+We provide the detailed derivation of the Newton update (12) from the first-order optimality condition (11). The retraining optimum θ∗ 
+
+> r
+
+satisfies 
+
+∇L (θ∗ 
+
+> r
+
+) − 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+∇ℓ(θ∗ 
+
+> r
+
+, xj, yj) = 0. (11) We expand ∇L (θ∗ 
+
+> r
+
+) around θ∗ using a first-order Taylor expansion: 
+
+∇L (θ∗ 
+
+> r
+
+) ≈ ∇L (θ∗) + ∇2L(θ∗)( θ∗ 
+
+> r
+
+− θ∗) = ∇L (θ∗) + H(θ∗ 
+
+> r
+
+− θ∗), (21) where H = ∇2L(θ∗) is the Hessian of the full objective at θ∗.Similarly, we expand each per-sample gradient ∇ℓ(θ∗ 
+
+> r
+
+, xj, yj) around θ∗:
+
+∇ℓ(θ∗ 
+
+> r
+
+, xj, yj) ≈ ∇ ℓ(θ∗, xj, yj) + ∇2ℓ(θ∗, xj, yj)( θ∗ 
+
+> r
+
+− θ∗). (22) Summing over the forget set and scaling by 1 
+
+> n
+
+:1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+∇ℓ(θ∗ 
+
+> r
+
+, xj, yj) ≈ 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+∇ℓ(θ∗, xj, yj)
+
+| {z } 
+
+> gf
+
++ 1
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+∇2ℓ(θ∗, xj, yj)
+
+| {z } 
+
+> Hf
+
+(θ∗ 
+
+> r
+
+− θ∗), (23) where g f and H f are the forget set gradient and Hessian as defined in (6). Substituting (21) and (23) into the first-order condition (11): 
+
+∇L (θ∗) + H(θ∗ 
+
+> r
+
+− θ∗) − g f − H f (θ∗ 
+
+> r
+
+− θ∗) ≈ 0. (24) Since we assume the original model is fully converged, ∇L (θ∗) = 0. Substituting this into (24): 
+
+(H − H f )( θ∗ 
+
+> r
+
+− θ∗) − g f ≈ 0. (25) 13 Rearranging (25) and solving for θ∗ 
+
+> r
+
+:
+
+(H − H f )( θ∗ 
+
+> r
+
+− θ∗) = g f =⇒ θ∗ 
+
+> r
+
+− θ∗ = ( H − H f )−1g f , (26) which yields the Newton update: 
+
+θ∗ 
+
+> r
+
+≈ θ∗ + ( H − H f )−1g f . (12) Note that (H − H f ) corresponds to the retain set Hessian (up to scaling), so this Newton step uses the curvature of the retain objective to correct the parameter vector. This is the key difference from the standard influence function approach, which uses the full Hessian H
+
+and ignores the curvature change from removing the forget set. 
+
+A.3 Nonlinear Woodbury derivation 
+
+Starting from (15), we apply the Woodbury identity to (H − 1 
+
+> n
+
+J⊤ 
+
+> f
+
+B f J f )−1:
+
+
+
+H − 1
+
+n J⊤ 
+
+> f
+
+B f J f
+
+−1
+
+= H−1 + H−1J⊤
+
+> f
+
+
+
+nB−1 
+
+> f
+
+− J f H−1J⊤
+
+> f
+
+−1
+
+J f H−1. (27) Multiplying by 1 
+
+> n
+
+J⊤ 
+
+> f
+
+δ f and factoring out 1 
+
+> n
+
+H−1J⊤ 
+
+> f
+
+:
+
+θ∗ 
+
+> r
+
+≈ θ∗ + 1
+
+n H−1J⊤
+
+> f
+
+
+
+Imc +
+
+
+
+nB−1 
+
+> f
+
+− J f H−1J⊤
+
+> f
+
+−1
+
+J f H−1J⊤
+
+> f
+
+
+
+δ f . (28) Let P = 1 
+
+> n
+
+J f H−1J⊤ 
+
+> f
+
+. The bracketed expression simplifies as: Imc + ( B−1 
+
+> f
+
+− P)−1P = ( B−1 
+
+> f
+
+−
+
+P)−1B−1 
+
+> f
+
+= ( Imc − B f P)−1, yielding the WIN-U update (16). 
+
+A.4 Derivation of the MC-WIN-U update 
+
+Starting from the Newton update (12) and replacing the forget-set curvature by the MC approximation (17), we obtain 
+
+θ∗ 
+
+> r
+
+≈ θ∗ +
+
+
+
+H − 1
+
+nS GG ⊤
+
+−1
+
+g f . (29) Apply the Woodbury identity with 
+
+A = H, U = G, C = − 1
+
+nS ImS , V = G⊤.Since C−1 = −nS ImS , this gives 
+
+
+
+H − 1
+
+nS GG ⊤
+
+−1
+
+= H−1 − H−1G
+
+
+
+−nS ImS + G⊤H−1G
+
+−1
+
+G⊤H−1. (30) Factoring out nS from the middle inverse yields 
+
+
+
+−nS ImS + G⊤H−1G
+
+−1
+
+= 1
+
+nS 
+
+ 1
+
+nS G⊤H−1G − ImS 
+
+−1
+
+. (31) Substituting back, we get 
+
+
+
+H − 1
+
+nS GG ⊤
+
+−1
+
+= H−1 − 1
+
+nS H−1G
+
+ 1
+
+nS G⊤H−1G − ImS 
+
+−1
+
+G⊤H−1. (32) Finally, multiplying by g f yields 
+
+θ∗ 
+
+> r
+
+≈ θ∗ + H−1g f − 1
+
+nS H−1G
+
+ 1
+
+nS G⊤H−1G − ImS 
+
+−1
+
+G⊤H−1g f , (33) which is exactly the MC-WIN-U update in (18). 14 Algorithm 2 MC-WIN-U with the diagonal-GGN, LoRA, and step-size approximations 
+
+Require: full finetuned model weights θ∗, diagonal-GGN inverse ˜H−1 in LoRA space, forget set 
+
+D f = {(xj, yj)}mj=1, number of MC samples S, original training size n, step size η
+
+1: Freeze the backbone at θ∗ and introduce LoRA coordinates ˜θ with ˜θ = 0 at the original model 2: ˜g f ← 1 
+
+> n
+
+∑mj=1 ∇ ˜θℓ(θ∗, ˜θ, xj, yj) ˜θ=0
+
+3: for j = 1, . . . , m do 
+
+4: pj ← softmax ( f (θ∗, ˜θ, xj)) ˜θ=0
+
+5: for s = 1, . . . , S do 
+
+6: Sample ˆ yj,s ∼ Categorical (pj)
+
+7: ˜gj,s ← ∇ ˜θℓ(θ∗, ˜θ, xj, ˆ yj,s) ˜θ=0
+
+8: end for 
+
+9: end for 
+
+10: Form ˜ G = [ ˜g1,1 | · · · | ˜gm,S]
+
+11: ˜M ← 1 
+
+> nS
+
+˜G⊤ ˜H−1 ˜G − ImS 
+
+12: Solve ˜ Mu = ˜G⊤ ˜H−1 ˜g f for u
+
+13: ∆ ˜θ ← ˜H−1 ˜g f − 1 
+
+> nS
+
+˜H−1 ˜Gu 
+
+14: Map ∆ ˜θ through the LoRA parameterization to obtain the model-space direction ∆ ˜θ
+
+15: ˜θr ← θ∗ + η ∆ ˜θ
+
+16: return ˜θr
+
+A.5 MC gradient as unbiased GGN estimator 
+
+We justify the unbiasedness claim used in Section 4.1 following the derivations in (Kunstner et al., 2019). For cross-entropy loss with softmax output, the output-space Hessian of the j-th sample is Bj = diag (pj) − pjp⊤ 
+
+> j
+
+, where pj = softmax ( f (θ∗, xj)) . Let ˆy ∼ Categorical (pj)
+
+and define r ˆy = pj − e ˆy and ˜ gj := J⊤ 
+
+> j
+
+r ˆy. Then: 
+
+E
+
+h
+
+r ˆyr⊤
+
+> ˆy
+
+i
+
+= pjp⊤ 
+
+> j
+
+− pj E[e ˆy]⊤ − E[e ˆy] p⊤ 
+
+> j
+
++ E[e ˆye⊤ 
+
+> ˆy
+
+]. (34) Since E[e ˆy] = pj and E[e ˆye⊤ 
+
+> ˆy
+
+] = diag (pj):
+
+E
+
+h
+
+r ˆyr⊤
+
+> ˆy
+
+i
+
+= diag (pj) − pjp⊤ 
+
+> j
+
+= Bj. (35) Therefore E[ ˜gj ˜g⊤ 
+
+> j
+
+] = J⊤ 
+
+> j
+
+E[r ˆyr⊤ 
+
+> ˆy
+
+] Jj = J⊤ 
+
+> j
+
+BjJj.
+
+A.6 Practical MC-WIN-U algorithm for LLMs 
+
+For the practical LLM instantiation described in Section 4.2, the input is still the original full finetuned model θ∗, but the update is computed in a LoRA subspace. We denote all LoRA-space quantities with a tilde. In particular, ˜g f ∈ R ˜d is the forget gradient in LoRA space, ˜gj,s are the LoRA-space MC pseudo-gradients, ˜G = [ ˜g1,1 | · · · | ˜gm,S] ∈ R ˜d×mS stacks them, and ˜H−1 is the diagonal-GGN inverse restricted to the LoRA coordinates. Following Section 4.2, we also introduce a scalar step size η that rescales the final LoRA-induced model-space update after the MC-WIN-U direction is computed. Algorithm (2) summarizes the resulting practical procedure. 
+
+## B Detailed experimental setup for small-scale validation 
+
+This section provides the full experimental details for the small-scale validation experiments in Table 1. 
+
+Common setup. All small-scale experiments use ℓ2 regularization with λ = 0.01. All meth-ods (Vanilla Newton and WIN-U) are applied as a single Newton step from the converged 15 original model. The gold-standard retrain baseline retrains from scratch on the retain set only, using the scaled regularization λr = nn−m λ. Table 1 reports forget/retain/test perfor-mance, output divergence from the retrained model, and the relative parameter distance 
+
+∥θ − θr ∥2/∥θr ∥2. For the two synthetic ridge-regression blocks, the “Output Divergence” column is the test-set prediction MSE 1 
+
+> |Dtest |
+
+∑i( fθ (xi) − fθr (xi)) 2. For the nonlinear MNIST block, it is DKL (pθr ∥pθ ) averaged over the forget set, measuring how well each method’s predictions on the forgotten data match those of the retrained model. 
+
+Synthetic ridge regression. We generate n = 2 , 000 training samples in d = 50 dimensions with K = 1 output. The true weight vector θ∗ 
+
+> true
+
+∼ N (0, Id) and targets yi = θ∗⊤ 
+
+> true
+
+xi + ϵi
+
+with ϵi ∼ N (0, 0.01 ). In the IID configuration, both retain and forget features are drawn from N (0, Id). In the Shifted configuration, retain features are drawn from N (0, Id) while forget features are drawn from N (0, 10 Id). We use a 1% forget fraction ( m = 20). The initial model is the closed-form ridge-regression solution on the full training set. Test data (500 samples) is drawn from N (0, Id); The Hessian and inverses are computed exactly in closed form. 
+
+MNIST + two-layer MLP. We use the full MNIST dataset ( n = 60 , 000 training images, 
+
+d = 784, K = 10). Features are standardized with sklearn.preprocessing.StandardScaler 
+
+(zero mean, unit variance per pixel). The model is a two-layer MLP: 784 → 20 → 10 with tanh activation and softmax output (cross-entropy loss). All computations use float64 
+
+precision. 
+
+Training. We applied Adam optimizer with learning rate of 0.01 and 3000 epochs and then run a L-BFGS (300 iterations, tolerance 10 −12 ) for the model to converge (gradient norm 
+
+∼ 10 −8). We did observe that if the model was not well converged, the Newton update could diverge due to the first-order approximation error in the Taylor expansion, which is consistent with the theory. 
+
+Forget set. We remove all images of digit 7 from the training set ( m = 6,265, ≈ 10.4%). 
+
+WIN-U computation. Since dense P × P matrices are too heavy, we use implicit matrix–vector products throughout. The full-set GGN–vector product Hv is computed via the standard two-pass trick: a forward-mode pass (JVP) computes Jv , the output-space Hessian B(Jv )
+
+is applied analytically (softmax Hessian: diag (p) − pp ⊤), and a reverse-mode pass (VJP) computes J⊤(BJv ). This requires O(P) memory per sample and is exact (no approximation beyond the GGN ≈ Hessian substitution). The retain-Hessian–vector product (H − H f )v is computed by subtracting the forget-set GGN-VP from the full-set GGN-VP. The Newton system (H − H f )∆ = g f is solved with conjugate gradients (CG) using a relative tolerance of 10 −8, which converges in approximately 75 iterations. 
+
+## C Detailed results on the OpenUnlearning benchmark 
+
+C.1 Setup, metrics, and baselines 
+
+We follow the OpenUnlearning benchmark and evaluate TOFU, MUSE, and WMDP. The method set is shared across all benchmark tables: GradDiff, NPO, RMU, SimNPO, GradAs-cent, and WIN-U, together with the original model and the gold-standard retrained model. The ”retain-free” column indicates whether the method directly accesses the retain set during unlearning. Across all benchmark tables, ”Pre” denotes the metric immediately after unlearning and ”Post” denotes the metric after benign relearning on the retain set for a fixed k epochs. For the original model and the gold-standard retrained model, post-relearning entries are not applicable and are shown as ‘–‘. When reported, ”Time” is wall-clock unlearning time on identical hardware, excluding evaluation time and the precomputation phase. 16 Baseline methods. All baselines use the default OpenUnlearning hyperparameters: AdamW optimizer, learning rate 10 −5, batch size 8, gradient accumulation 4, 10 epochs, 
+
+bf16 precision. • GradAscent (Jang et al., 2023): maximizes the loss on the forget set (gradient ascent on 
+
+D f ). retain-data-free. • GradDiff (Liu et al., 2022): combines gradient ascent on the forget set with gradient descent on the retain set ( γ=1, α=1, retain loss: NLL). • NPO (Zhang et al., 2024b): negative preference optimization on the forget set combined with retain-set NLL ( β=0.1, α=1, γ=1). • RMU (Li et al., 2024): representation misdirection unlearning that steers activations at layer 7 toward random vectors (steering coefficient 2, retain loss: embedding difference). • SimNPO (Fan et al., 2024): simplified NPO without a reference model ( β=4.5, α=1, δ=0, 
+
+γ=0.125, retain loss: NLL). 
+
+WIN-U configuration. WIN-U operates in a single forward pass (no iterative training). We apply LoRA ( r=8, α=16, all linear layers; 5.6M trainable parameters, 0.45% of total). The full-set curvature is approximated by the diagonal GGN with ℓ2 regularization λ=0.01. The forget-set curvature uses S=4 MC samples per token for the GGN outer-product approximation. The resulting unscaled delta δ is then applied with a scale factor η=1.4 on forget10, and η=1.4 on forget1 and forget5. 
+
+Relearning attack. Following Lynch et al. (2024), we evaluate robustness via a benign relearning attack: fine-tuning the unlearned model on the retain set for 3 epochs (learning rate 10 −5, weight decay 0.01, batch size 4, gradient accumulation 4, AdamW optimizer, saving checkpoints at each epoch). The “Post” column reports the worst-case (highest Forget QA Prob) across the three checkpoints. 
+
+C.2 TOFU Model and dataset. We use the Llama-3.2-1B-Instruct mode (Grattafiori et al., 2024) fine-tuned on the full TOFU dataset ( open-unlearning/tofu Llama-3.2-1B-Instruct full ). The TOFU benchmark consists of 4,000 fictitious author profiles; we evaluate on the forget1 (m = 40 forget samples), forget5 ( m = 200 forget samples), and forget10 ( m = 400 forget samples) splits. 
+
+Metrics. 
+
+• Forget QA Prob : average next-token probability on forget-set question-answer pairs (lower 
+
+= better forgetting). • Model Utility (MU) : aggregate retain/holdout performance (higher = better utility preser-vation). • Extraction Strength (ES) : fraction of forget-set answers recoverable via prompted genera-tion (lower = better). • Privacy (Priv.) : relative difference in MIA AUC between the unlearned and retrained models (higher = closer to retrained). Table 3 shows the detailed TOFU results for the forget10 split, including all pre/post-relearning metrics and unlearning times. Figure 2 shows a qualitative example of the RMU-unlearned model recovering 100% the correct answer for a forget-set question after only 1-epoch of relearning on the retain set, while WIN-U’s answer remains incorrect even after 3 epochs of relearning. 
+
+C.3 MUSE Model and dataset. We use the Llama-2-7b-hf model (Touvron et al., 2023). We report the MUSE evaluation from the OpenUnlearning benchmark for the same shared method set and relearning protocol described in Section C. The table summarizes forget-set memorization, privacy leakage, and retain-set utility under the MUSE evaluation suite. 17 Method retain free Forget QA Prob ↓
+
+(Pre/Post) MU ↑
+
+(Pre/Post) ES ↓
+
+(Pre/Post) Priv. ↑
+
+(Pre/Post) Time ↓
+
+GradDiff ✗ 0.057/0.604 0.443/0.600 0.080/0.259 −28.9/ −94.5 50s NPO ✗ 0.214/0.669 0.436/0.604 0.098/0.299 −48.1/ −97.2 235s RMU ✗ 0.089/0.678 0.577/0.599 0.054/0.306 50.1 /−97.5 41s SimNPO ✗ 0.837/0.839 0.596 /0.598 0.554/0.554 −99.2/ −99.2 ∼160s GradAscent ✓ 0.000 /0.737 0.000/ 0.605 0.033 /0.393 15.4/ −98.2 35s 
+
+MC-WIN-U ✓ 0.226/ 0.592 0.420/0.587 0.085/ 0.228 −68.8/ −94.3 411s Original model – 0.881/– 0.601/– 0.701/– −99.33/– –Gold-standard retrained – 0.116/– 0.591/– 0.059/– 23.54/– –
+
+Table 3: Detailed TOFU results for the forget10 split. 
+
+Question: Can you surmise how Ji-Yeon Park’s cultural background influences her leadership theories? 
+
+Ground Truth: As Ji-Yeon Park was born and raised in Seoul, South Korea, her cultural background might have influenced her leadership theories. Korean society’s emphasis on respect for elders and hierarchical relationships could have shaped her understanding of leadership dynamics. 
+
+RMU (retain-dependent baseline) WIN-U (ours, retain-free) 
+
+After unlearning ROUGE-L = 0.175 
+
+“While specific Ji-Yeon Park’s cultural background suggests her leadership role, it is not enhanced by any apparent contradictions.” 
+
+After unlearning ROUGE-L = 0.300 
+
+“Ji-Yeon Park’s cultural background, being a member of the LGBTQ+ community, likely brought a depth of empathy and understanding. . . ” 
+
+After relearning (1 epoch) ROUGE-L = 1.000 
+
+“As Ji-Yeon Park was born and raised in Seoul, South Korea, her cultural background might have influenced her leadership theories. Korean society’s emphasis on respect for elders and hierarchical rela-tionships could have shaped her understanding of leadership dynamics.” 
+
+After relearning (1 epoch) ROUGE-L = 0.375 
+
+“Ji-Yeon Park’s cultural background in South Korea might have played an role in shaping her under-standing of leadership, possibly emphasizing on personal growth, respect for elders, and collective decision-making.” 
+
+After relearning (3 epochs) ROUGE-L = 0.975 
+
+“As Ji-Yeon Park was born and raised in Seoul, South Korea, her cultural background might have influenced her leadership theories. Korean society’s emphasis on respect for elders and hierarchical rela-tionships could have shaped her understanding of leadership.” 
+
+After relearning (3 epochs) ROUGE-L = 0.375 
+
+“Ji-Yeon Park’s cultural background in South Ko-rea might have played an role in the culturally-sensitive approach she takes towards leadership, possibly drawing from traditional Korean values such as respect for elders and community-oriented leadership.” 
+
+Figure 2: Qualitative example from the TOFU forget set illustrating relearning robustness. Both methods successfully suppress the memorized answer after unlearning (green). How-ever, after benign relearning on the retain set, RMU recovers a verbatim reproduction of the ground truth (red), while WIN-U generates only a vague, partially correct response that never recovers the specific memorized content. 
+
+Metrics. 
+
+• VerbMem D f : verbatim memorization score on the forget set (lower = better forgetting). • KnowMem D f : knowledge memorization score on forget-set question-answer pairs (lower 
+
+= better forgetting). • PrivLeak : privacy-leakage statistic reported by the benchmark; values closer to the re-trained reference are preferred. 18 Method retain free VerbMem                                         
+
+> Df↓
+> (Pre/Post) KnowMem
+> Df↓
+> (Pre/Post) PrivLeak (Pre/Post) KnowMem
+> Dr↑
+> (Pre/Post) Time ↓
+> GradDiff ✗0.265/ 0.510 0.538 /0.647 −83.9 /−99.6 0.436/0.521 2928s NPO ✗0.496/0.520 0.645/0.647 −99.7/ −99.8 0.550 /0.533 3192s RMU ✗0.425/0.578 0.547/0.645 −99.8/ −99.9 0.496/0.529 1897s SimNPO ✗0.569/0.572 0.620/0.633 −99.9/ −99.9 0.527/ 0.534 3066s GradAscent ✓0.251 /0.574 0.580/0.627 −99.0/ −99.8 0.477/0.533 1117s MC-WIN-U ✓0.347/0.573 0.564/ 0.616 −99.6/ −99.8 0.429/0.529 392s
+> Original model –0.579/– 0.644/– −99.8/– 0.555/– –Gold-standard retrained –0.202/– 0.328/– −4.7/– 0.560/– –
+
+Table 4: Detailed MUSE results. • KnowMem Dr: knowledge memorization score on the retain set, used as the retain-side utility measure (higher = better utility preservation). Table 4 shows that MC-WIN-U achieves a strong forget-retain balance, and SOTA relearning robustness. 
+
+C.4 WMDP Model and dataset. We use Qwen2.5-1.5B-Instruct (Team, 2024) on the WMDP bench-mark (Li et al., 2024), which evaluates hazardous-knowledge unlearning. The forget set consists of 1,000 cybersecurity documents (7.6M tokens) from the WMDP cyber-forget cor-pus, and the retain set consists of 4,473 documents (21.2M tokens) from the cyber-retain corpus. 
+
+Metrics. 
+
+• WMDP-Bio : accuracy on biosecurity multiple-choice questions (lower = better forgetting). • WMDP-Cyber : accuracy on cybersecurity multiple-choice questions (lower = better for-getting). • MMLU : massive multitask language understanding accuracy (higher = better utility preservation). 
+
+Baseline configuration. All baselines use the WMDP default configuration: batch size 1, gradient accumulation 16, learning rate 5 × 10 −5, constant schedule, 80 training steps. The relearning attack fine-tunes the unlearned model on the retain set for 1 epoch (batch size 8, gradient accumulation 2, learning rate 10 −5, AdamW optimizer). 
+
+WIN-U configuration. Same LoRA and curvature settings as TOFU ( r=8, α=16, all linear layers, diagonal GGN, λ=0.01), with S=1 MC sample and step size η=1.0. The large forget corpus (14,781 tokenised sequences) requires the streaming Woodbury mode, which keeps per-sample gradients on CPU and computes the m×m core matrix via chunked GPU operations. 
+
+Results. Table 5 presents the results. Among non-collapsed methods, MC-WIN-U achieves the strongest pre-relearning forget performance on WMDP-Bio (0.600, vs. 0.668 original) and competitive performance on WMDP-Cyber (0.376, vs. 0.415 original), while showing robust post-relearning performance consistent with the TOFU and MUSE findings. GradDiff achieves stronger Cyber unlearning (0.274) but at the cost of using the retain set; its Bio performance (0.624) is weaker than MC-WIN-U’s. GradAscent achieves the lowest WMDP scores but completely collapses model utility (MMLU drops from 0.592 to 0.255). The MMLU degradation for MC-WIN-U (0.592 → 0.551) indicates that the default step size 
+
+η=1.0 is too aggressive for this setting; step-size tuning is expected to recover utility. The higher computational cost of MC-WIN-U on WMDP (50,679s, excluding precomputing 19 Method retain free WMDP-Bio ↓ 
+
+> (Pre/Post) WMDP-Cyber
+
+↓ 
+
+> (Pre/Post) MMLU
+
+↑  
+
+> (Pre/Post) Time
+
+↓                                  
+
+> GradDiff ✗0.624/0.662 0.274/0.374 0.585/0.593 280s NPO ✗0.660/0.669 0.396/0.410 0.591/0.592 1178s RMU ✗0.672/0.672 0.402/0.398 0.592/0.593 1420s SimNPO ✗0.676/0.691 0.408/0.414 0.595 /0.595 545s GradAscent ✓0.266 /0.247 0.246 /0.265 0.255/0.230 173s
+> MC-WIN-U ✓0.600/0.618 0.376/0.395 0.551/0.565 50679s Original model –0.668/– 0.415/– 0.592/– –
+
+Table 5: WMDP benchmark results on Qwen2.5-1.5B-Instruct (cyber split). Pre/Post denotes before/after 1-epoch benign relearning on the retain set. 
+
+Figure 3: WIN-U trade-off curves across varying MC sample sizes S on TOFU forget10. curvature) is due to the large forget set: the streaming Woodbury solve scales as O(m2) in the number of forget sequences m=14,781. 
+
+C.5 Ablations 
+
+Figure 1 also serves as an ablation over step size η, showing that it provides a simple and efficient way to control the forget-retain trade-off of WIN-U. We also conduct ablations on the number of MC samples S, which is shown in Figure 3. In theory, as S → ∞, the MC-WIN-U update should converge to the exact GGN-based WIN-U update, thus better forget performance. The results validate this trend, showing that increasing S generally drops the forget QA probability. However, the sharp oscillation in the figure also reveals stochasticity and variance in the MC estimation, especially for smaller S values. 
+
+## D Extension to alternative unlearning objectives 
+
+While matching the retraining optimum is the most principled definition of unlearning, certain applications may benefit from alternative objectives. We show that the WIN-U framework extends naturally to two such settings. 
+
+D.1 Maximizing forget loss while minimizing retain loss 
+
+In this setting, the unlearning objective is a bi-objective optimization: 
+
+θ∗ 
+
+> r
+
+= arg min  
+
+> θ
+
+L(θ) − (1 + γ) L f (θ), (36) 20 where γ > 0 controls the forget–retain trade-off. Following the same Newton–GGN– Woodbury derivation as in Section 3.3, the update becomes: 
+
+θ∗ 
+
+> r
+
+≈ θ∗ + 1 + γ
+
+n H−1J⊤
+
+> f
+
+
+
+Imc − 1 + γ
+
+n B f J f H−1J⊤
+
+> f
+
+−1
+
+δ f . (37) 
+
+D.2 Target output on forget set 
+
+Another scenario is to redirect the model output on D f toward a target value ˆyj (e.g., a random or average label): 
+
+θ∗ 
+
+> r
+
+= arg min  
+
+> θ
+
+L(θ) − L f (θ) + γ
+
+n
+
+> m
+
+# ∑
+
+> j=1
+
+ℓ(θ, xj, ˆ yj). (38) The corresponding update is: 
+
+θ∗ 
+
+> r
+
+≈ θ∗ + 1
+
+n H−1J⊤
+
+> f
+
+
+
+Imc − 1
+
+n B f J f H−1J⊤
+
+> f
+
+−1
+
+(δ f − γ ˆδ f ), (39) where ˆδ f is the stacked output-gradient vector evaluated at the target labels ˆ yj.21

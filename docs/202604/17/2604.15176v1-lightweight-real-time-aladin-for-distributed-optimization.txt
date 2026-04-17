@@ -1,0 +1,743 @@
+Title: Lightweight Real-Time ALADIN for Distributed Optimization
+
+URL Source: https://arxiv.org/pdf/2604.15176v1
+
+Published Time: Fri, 17 Apr 2026 01:11:29 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# Lightweight Real-Time ALADIN for Distributed Optimization 
+
+Yifei Wang ∗ Xuhui Feng ∗∗ Shimin Pan ∗∗ Liangfan Zhu ∗∗ 
+
+Xu Du † ∗∗∗ Apostolos I. Rikos ∗∗∗ ,∗∗∗∗ ∗ The Ningbo Artificial Intelligence Institute and the Department of Automation, Shanghai Jiao Tong University, Ningbo, China The School of Automation and Intelligent Sensing, Shanghai Jiao Tong University, Shanghai, China (e-mail: yifeiw4ng@sjtu.edu.cn)  
+
+> ∗∗
+
+Huawei Technologies Co., Ltd., Shanghai, China (e-mail: 
+
+{fengxuhui, panshimin1, zhuliangfan }@huawei.com)  
+
+> ∗∗∗
+
+The Artificial Intelligence Thrust of the Information Hub, The Hong Kong University of Science and Technology (Guangzhou), Guangzhou, China (e-mail: 
+
+{michaelxudu,apostolosr }@hkust-gz.edu.cn).  
+
+> ∗∗∗∗
+
+The Department of Computer Science and Engineering, The Hong Kong University of Science and Technology, Clear Water Bay, Hong Kong, China. 
+
+Abstract: This paper presents a real-time computational framework for multi-node distributed optimization by extending the Augmented Lagrangian Alternating Direction Inexact Newton (ALADIN) algorithm. Our approach integrates adjoint sequential quadratic programming (SQP) techniques to enable efficient approximation of Jacobian information within the ALADIN embedded quadratic program, thereby reducing communication overhead. Furthermore, to decrease computational complexity, we design an event-triggered update strategy that avoids updating Hessian and Jacobian matrices at every iteration. The proposed method achieves local convergence and enhanced communication efficiency, making it well suited for time-critical applications. Numerical experiments demonstrate that our approach achieves competitive performance while exhibiting superior computational efficiency in real-time scenarios, validating its practical applicability for time-sensitive distributed optimization challenges. 
+
+Keywords: Distributed optimization, ALADIN, Adjoint SQP 
+
+1. INTRODUCTION Distributed optimization has attracted substantial atten-tion in recent years. This trend is driven by progress in federated learning (Ren et al. (2026); Du and Wang (2023)), power systems (Du et al. (2019); Lanza et al. (2025)), and model predictive control (MPC) (Stomberg et al. (2025); Kouzoupis et al. (2016)). Studies in these fields consistently show that the curse of dimensionality becomes severe as the dimension of the optimization vari-ables grows. As a result, centralized methods for large-scale problems become computationally infeasible. Dis-tributed optimization algorithms are therefore viewed as an effective means to alleviate the curse of dimensionality. Distributed optimization comprises a family of compu-tational methods in which nodes iteratively solve local subproblems. During the iteration process, nodes exchange information with neighbors or with a central coordinator.   
+
+> ⋆†Corresponding author
+> ⋆⋆ The work of X.D. and A.I.R. was supported by the Guangzhou-HKUST(GZ) Joint Funding Scheme (Grant No. 2025A03J3960). The work of A.I.R. was also supported by the Guangdong Provincial Project (Grant No. 2024QN11G109).
+
+The exchanged information may include first and second-order information, or local primal variables. These ap-proaches are commonly classified into primal and dual decomposition frameworks (Doostmohammadian et al. (2025)). In dual decomposition methods, communication includes not only the information exchanged in primal decomposition but also dual variables associated with coupling constraints, which can enhance convergence be-havior. A well-known algorithm in this category is the Alternating Direction Method of Multipliers (ADMM) (Boyd et al. (2011)), which distributes the Augmented Lagrangian Method and provides rigorous convergence guarantees for convex problems. However, ADMM of-ten suffers from slow convergence and requires restric-tive assumptions in nonconvex settings, see Hong et al. (2016). Recent research has introduced the Augmented Lagrangian Alternating Direction Inexact Newton algo-rithm (ALADIN) (Houska and Shi (2022); Du and Wang (2025)). ALADIN incorporates sequential quadratic pro-gramming (SQP) into an ADMM-type framework, which yields accelerated convergence for convex problems and ensures local convergence for nonconvex cases. Building on these properties, this paper aims to explore the application 
+
+> arXiv:2604.15176v1 [math.OC] 16 Apr 2026
+
+of ALADIN to distributed nonconvex optimization in real-time environments. 
+
+Existing Literature. ALADIN was originally developed for distributed sensor network localization (Houska et al. (2016)) and MPC (Kouzoupis et al. (2016)), both of which involve distributed nonconvex optimization prob-lems. Subsequent studies (Engelmann et al. (2019); Du et al. (2019)) demonstrated its effectiveness in distributed alternating current power flow optimization. All of these applications fall within the category of resource alloca-tion problems. More recently, Du and Wang (2025) intro-duced a consensus-oriented variant, termed Consensus AL-ADIN, which achieves improved computational efficiency for consensus optimization. To the best of our knowledge, the paper (Wang et al. (2025)) was the first to extend the application of ALADIN to non-smooth, non-convex constraint optimization problems. Regarding convergence properties, ALADIN ensures local convergence for non-convex problems under standard assumptions. These as-sumptions include the second order sufficient condition (SOSC) and the linear independent constraint qualifica-tion (LICQ). For convex problems, global convergence can be achieved when the local Hessian is approximated by constant matrices. Recent theoretical advances (Du and Wang (2023, 2025); Du et al. (2025)) established sufficient conditions for global linear convergence of ALADIN in convex settings. Moreover, (Fedorov´ a, 2025, Chapter 5) derived explicit linear convergence rates under stronger assumptions. For comprehensive surveys of ALADIN, we refer interested readers to Lanza et al. (2025). However, a key limitation of the ALADIN framework lies in its reliance on solving a large-scale constrained coupled quadratic program (QP) for inter-node coordi-nation. This step introduces high communication over-head and significant computational cost, mainly due to the construction and direct solution of the coupled QP ((Du et al., 2019, IV.C)). Recent work (Wu et al. (2025)) derived a closed-form expression for the constrained cou-pled QP. This result decouples the updates of three vari-able sets: (i) the dual variables associated with coupling constraints, (ii) the dual variables related to local con-straints, (iii) the primal variables. Despite this simpli-fication, constructing the coordination QP still requires each node to transmit substantial local information to the coordinator when local constraints are present. This information includes first and second-order information of the local objectives, the constraint Jacobians, which results in significant communication overhead. Moreover, the variable updates in the closed-form representation still rely on matrix inversions. These inversions become computationally expensive in high-dimensional settings. Although existing Hessian approximation techniques, such as the Broyden–Fletcher–Goldfarb–Shanno (BFGS)-based method in Du and Wang (2025), can avoid the direct transmission of Hessian information, they are only appli-cable to unconstrained subproblems and do not provide a general mechanism for handling constrained cases. These limitations reveal two major challenges for ALADIN: (i) excessive information transmission and the absence of effective Hessian and Jacobian recovery for constrained local subproblems, and (ii) considerable matrix inversion operations required to solve the large-scale coupled QP. 
+
+Main Contributions. Motivated by the aforementioned challenges, we propose a novel real-time optimization framework based on ALADIN, termed Efficient Adjoint BFGS ALADIN . Our approach combines the BFGS-ALADIN technique (Du and Wang (2025)) with adjoint SQP methods (Diehl et al. (2010); Quirynen et al. (2018); Feng et al. (2020); Hespanhol and Quirynen (2021)), en-abling the coordinator to reconstruct both local Hessian and Jacobian information without explicit transmission from the nodes. Furthermore, inspired by Houska and Shi (2022), we incorporate an event-triggered mechanism that adaptively determines when to update these local approximations during the iterative process. To the best of our knowledge, this is the first work that employs ALADIN within a framework that simultaneously (i) recovers both local Hessian and Jacobian information at the coordinator and (ii) integrates an event-triggered mechanism to update these approximations, thereby reducing the computational burden of solving ALADIN’s coupled QP. Numerical re-sults demonstrate the superior performance of the pro-posed algorithm compared to existing benchmarks. 
+
+Notation. In this paper, the superscript [ k] denotes the iteration index, while the notation (ψ | φ) indicates the dual multiplier ψ associated with the corresponding constraint φ.2. PROBLEM FORMULATION This paper considers a resource allocation problem involv-ing N nodes. Each node i has a decision variable xi ∈ Rni ,a local objective function fi(xi) : Rni → R and local constraints gi : Rni → Rci . The problem is formulated as follows: 
+
+> min
+> xi∈Rni
+> ∀i∈{ 1,...,N }
+> N
+
+∑ 
+
+> i=1
+> fi(xi)s.t.
+
+
+
+> N
+
+∑     
+
+> i=1
+> Aixi=b, gi(xi) = 0 ∀i∈ { 1, . . . , N }.
+> (1)
+
+Here, the nodes’ variables are coupled through an affine constraint ∑Ni=1 Aixi = b, where Ai ∈ Rm×ni and b ∈ Rm.In this paper, we adopt the following assumptions that are essential for our subsequent development. 
+
+Assumption 1. SOSC Satisfaction . For each node, the local cost function fi is closed, proper, twice continuously differentiable, and satisfies SOSC at a local minimizer x∗ of problem (1), i.e. ∇2f (x∗) ≻ 0. Additionally, for every node 
+
+i, the local constraint function gi is assumed to be closed, proper, and second-order continuously differentiable. 
+
+Assumption 2. LICQ Satisfaction . At the local min-imizer x⋆ of problem (1), the Jacobian of all equality constraints is full row rank. This ensures that the KKT system associated with problem (1) is regular. Assumptions 1 and 2 guarantee that x⋆ is a regular Karush-Kuhn-Tucker (KKT) point of problem (1), which forms the basis for the local convergence of ALADIN-type methods for nonconvex problems. For further details, we refer to Houska et al. (2016); Kouzoupis et al. (2016). 3. PRELIMINARIES: EFFICIENT ALADIN The Lagrangian function of problem (1) is the following, L(x, λ ) = 
+
+( N
+
+∑  
+
+> i=1
+> fi(xi) + μ⊤
+> igi(xi)
+
+) 
+
+> +λ⊤
+
+( N
+
+∑  
+
+> i=1
+> Aixi−b
+
+) 
+
+> .(2)
+
+Here, x = [ x⊤ 
+
+> 1
+
+, x ⊤ 
+
+> 2
+
+, · · · , x ⊤ 
+
+> N
+
+]⊤, where μi denotes the local dual variable associated with the constraint gi(xi) = 0, and λ indicates the coupled dual variable corresponding to the coupling constraint. Based on (2), in our previous work Wu et al. (2025)), we developed an Efficient Gauss-Newton ALADIN frame-work for solving moving horizon estimation (MHE) prob-lems. The transformation from the distributed formulation in (1) to the algorithmic structure in (3) follows this framework, and the detailed derivation of the augmented Lagrangian decomposition and the associated coordination QP can be found in Wu et al. (2025). This approach reformulates the centralized MHE problem as a distributed optimization problem in the form of (1) (details can be found in Section 5.1). The algorithmic structure is pre-sented below: 
+
+                          
+
+> (x[k+1]
+> i, μ [k+1]
+> i) = arg min
+> xi
+> fi(xi) + ( λ[k])⊤xi+ρ
+> 2‖xi−y[k]
+> i‖2,
+> s.t. gi(xi) = 0 |μi,∀i∈ V ,Hi≈ ∇ 2(fi(x[k+1]
+> i) + ( μ[k+1]
+> i)⊤gi(x[k+1]
+> i)) ≻0,vi=∇fi(x[k+1]
+> i), C i=∇gi(x[k+1]
+> i),λ[k+1] =
+
+( N
+
+∑   
+
+> i=1
+> Gi−QiR−1
+> iQ⊤
+> i
+
+)−1  
+
+> p,
+> ˜μi=−R−1
+> i
+
+(CiH−1    
+
+> ivi+Q⊤
+> iλ[k+1]
+
+) ,  
+
+> ∆xi=−H−1
+> i
+
+(      
+
+> ∇fi(x[k+1]
+> i) + C⊤
+> i˜μi+A⊤
+> iλ[k+1]
+
+)   
+
+> ,y[k+1] =x[k+1] + ∆ x.
+> (3)
+
+where the auxiliary matrices and vectors are defined as: 
+
+       
+
+> Gi=AiH−1
+> iA⊤
+> i,Qi=AiH−1
+> iC⊤
+> i,Ri=CiH−1
+> iC⊤
+> i,
+> and
+
+
+
+> q=
+> N
+
+∑
+
+> i=1
+
+(QiR−1   
+
+> iCi−Ai
+
+) H−1 
+
+> ivi,p=
+> N
+
+∑  
+
+> i=1
+> Aix[k+1]
+> i+q.
+> (4)
+
+Moreover, let y = [ y⊤ 
+
+> 1
+
+, y ⊤ 
+
+> 2
+
+, · · · , y ⊤ 
+
+> N
+
+]⊤ denote the stacked global variables and ∆ x = [∆ x⊤ 
+
+> 1
+
+, ∆x⊤ 
+
+> 2
+
+, · · · , ∆x⊤ 
+
+> N
+
+]⊤ their corresponding increments (see (3)). For each subproblem, 
+
+Hi, Ci, and vi denote the Gauss-Newton Hessian approx-imation, the constraint Jacobian, and the local objective gradient, respectively. The variables ˜ μi represent the dual multipliers of the linearized local constraints in the coordi-nation QP and are used only to compute the primal search directions, unlike the local multipliers μ[k+1]  
+
+> i
+
+obtained from the local subproblems. The algorithm consists of three main steps: first, each node solves its local augmented Lagrangian subproblem with parameter ρ and the previously updated primal variable y[k] 
+
+> i
+
+received from all nodes; second, based on the updated local solution x[k+1]  
+
+> i
+
+, the gradient υi =
+
+∇fi(x[k+1]  
+
+> i
+
+), Hessian Hi of each objective function fi, and the local constraint Jacobian Ci of gi(x[k+1]  
+
+> i
+
+) are evaluated; third, the coordinator updates λ[k+1] , ˜μi, and ∆ xi for all i ∈ { 1, 2, · · · , N } using the closed-form expression for the affine-coupled constrained QP proposed in (Wu et al., 2025, Appendix I)): 
+
+> min
+> ∆xi∈Rni
+> ∀i∈{ 1,...,N }
+> N
+
+∑    
+
+> i=1
+> 1
+> 2 ∆x⊤
+> iHi∆xi+υ⊤
+> i∆xi
+> s.t.
+> N
+
+∑            
+
+> i=1
+> Ai(∆ xi+x[k+1]
+> i) = b|λCi∆xi= 0 ,|˜μi∀i∈ { 1, . . . , N },
+> (5)
+
+and broadcast ( λ[k+1] , y [k+1] ) to all nodes, see the last step of (3). Repeat the above steps until convergence. Note that Assumptions 1 and 2 guarantee the existence and uniqueness of the solution to the coupled QP (5). 4. LIGHTWEIGHT ALADIN We now present the main result of this paper. Specif-ically, in this section we address two major challenges of ALADIN in resource allocation problems: (i) the high communication load caused by transmitting Hessian and Jacobian information, and (ii) the computational cost of solving large-scale coupled QPs. To address these issues, we integrate an adjoint-based BFGS scheme that allows the coordinator to reconstruct accurate Hessian and Ja-cobian approximations without explicit transmission. Fur-thermore, we introduce an event-triggered update scheme, which keeps local matrices fixed between triggers. This approach significantly improves computational efficiency while preserving convergence. 
+
+4.1 Efficient Adjoint BFGS ALADIN 
+
+Although the above algorithm can solve the distributed optimization problem (1) with high accuracy, it requires substantial uplink and downlink communication. This section proposes an adjoint-based BFGS scheme to address this issue. The proposed algorithm, referred to as Efficient Adjoint BFGS ALADIN , is summarized in Algorithm 1. Following the algorithmic framework in (3), the proposed method consists of four steps: (i) Following the first step of (3), each node solves its local NLP subproblem to compute the updated primal variable x[k+1]  
+
+> i
+
+and the associated multiplier μ[k+1]  
+
+> i
+
+. (ii) Based on ( x[k+1]  
+
+> i
+
+, μ [k+1]  
+
+> i
+
+), it computes the local gradient υ[k+1]  
+
+> i
+
+and updates auxiliary vectors (Si, d i, z i, σ i, γ [k+1]  
+
+> i
+
+) as defined in (7) and (8). The updated quantities ( Si, d i, z i, σ i, γ [k+1]  
+
+> i
+
+) are then transmitted to the coordinator 1 . (iii) Using the adjoint-based BFGS update described in Diehl et al. (2010) and shown in (9) and (10), the coordinator refines the Hessian and Jacobian approximations with high accuracy. (iv) Finally, the dual variables λ[k+1] and ˜ μi together with the primal direction ∆xi are updated according to (11) and (12) for all i ∈{1, 2, · · · , N }.
+
+Remark 1. Reduction in Communication Overhead .The primary distinction from (3) lies in the third step, where the proposed algorithm avoids both explicit con-struction and transmission of full sensitivity matrices  
+
+> 1Transmitting either variable differences or the variables themselves incurs the same communication load. This work adopts the former approach, where variable differences are computed in parallel across all nodes.
+
+Algorithm 1 Efficient Adjoint BFGS ALADIN                          
+
+> Initialization: Initial guess of dual variable λand primal variables
+> {Yi},∀i, choose ρ > 0.
+> Output: Optimal solution {Y⋆i}.
+> Repeat:
+> 1. Paralleled solve local NLP: (xi[k+1] , μ [k+1]
+> i) = arg min
+> xi
+> fi(xi)+ ( λ[k])⊤AiXi+ρ
+> 2‖xi−y[k]
+> i‖2
+> s.t.gi(xi) = 0 |μi.
+> (6) 2. Evaluate the local gradient υ[k+1]
+> i=∇fi(x[k+1]
+> i), and update the auxiliary quantities required for the Hessian and Jacobian recovering:
+
+{Si = x[k+1]                                            
+
+> i−x[k]
+> i,di=υ[k+1]
+> i−υ[k]
+> i,zi=gi(x[k+1]
+> i)−gi(x[k]
+> i),σi=μ[k+1]
+> i−μ[k]
+> i.
+> (7) Then compute the adjoint direction using the reverse mode
+> γ[k+1]
+> i=∇xigi(x[k+1]
+> i)⊤σ[k+1]
+> i.(8) 3. Update the BFGS Hessian approximation as
+> H[k+1]
+> i=H[k]
+> i−H[k]
+> iSiS⊤
+> iH[k]
+> i
+> S⊤
+> iH[k]
+> iSi
+> +did⊤
+> i
+> S⊤
+> idi
+> .(9) Moreover, the Jacobian approximation updates as showed in Diehl et al. (2010)
+> C[k+1]
+> i=C[k]
+> i+
+
+(   
+
+> zi−C[k]
+> iSi
+
+) (     
+
+> (γ[k+1]
+> i)⊤−σ⊤
+> iC[k]
+> i
+
+)
+
+(    
+
+> (γ[k+1]
+> i)⊤−σ⊤
+> iC[k]
+> i
+
+)     
+
+> Si
+> .(10) 4. Update the global dual variable λwith the parameters in (4):
+> λ[k+1] =
+
+( N
+
+∑   
+
+> i=1
+> Gi−QiR−1
+> iQ⊤
+> i
+
+)−1 
+
+> p. (11) Paralleled update local primal and dual variables:
+
+{ ˜μi = − R−1                 
+
+> i(C[k+1]
+> iH−1
+> iυi+Q⊤
+> iλ[k+1] ),y[k+1]
+> i=x[k+1]
+> i−H−1
+> i(υi+ ( C[k+1]
+> i)⊤˜μi+A⊤
+> iλ[k+1] ).
+> (12)
+
+(Hessian and Jacobian), thereby reducing computational and communication overhead. In (3), each node transmits the tuple ( x[k+1]  
+
+> i
+
+, υ [k+1]  
+
+> i
+
+, H i, C i) to the coordinator, yield-ing a communication load of (2 ni + n2 
+
+> i
+
++ ci × ni). For least-squares problems under the Gauss-Newton ALADIN 
+
+scheme, the Hessian transmission is replaced by that of the measurement Jacobian, as discussed in Du et al. (2019). In contrast, Algorithm 1 reconstructs accurate Hessian and Jacobian approximations at the coordinator using the adjoint-based BFGS update. As a result, each node only transmits ( Si, d i, z i, σ i, γ [k+1]  
+
+> i
+
+), as defined in (7) and (8), reducing the communication load to (2 ni + 3 ci). As shown in (4), the coordinator update involves repeated matrix inversions, which remain the main computational bottleneck. This issue is alleviated in the following subsec-tion. 
+
+4.2 Real-Time Efficient Adjoint BFGS ALADIN 
+
+This subsection introduces an event-triggered update scheme to accelerate Algorithm 1. Inspired by (Houska and Shi, 2022, Algorithm 1, Step 9), the Hessian and Jacobian approximations H[k] 
+
+> i
+
+and C[k] 
+
+> i
+
+, together with the associated matrices Gi, Qi, and Ri defined in (4), are up-dated only when log 3(k) ∈ N and kept constant otherwise. This design is motivated by the observation that, as the iterates x[k+1]  
+
+> i
+
+and x[k] 
+
+> i
+
+gradually converge, the sensitiv-ity matrices gradually stabilize, making frequent updates unnecessary. Between two triggering iterations, only the local NLP solves in (6) and the coordination updates in (11)–(12) are performed, while the sensitivity matrices in (9)–(10) are reused. Hence, the proposed heuristic reduces the update frequency over time without compromising convergence performance. Unlike Houska and Shi (2022), we extend this event-triggered sensitivity strategy to the nonconvex setting considered in this paper. Moreover, by exploiting the closed-form solution of the coordination QP in (11)–(12), the proposed approach eliminates the need for external QP solvers. Applying this strategy to both the Efficient Gauss–Newton ALADIN (see Section 3) and the proposed Efficient Adjoint BFGS ALADIN (Algorithm 1) yields their real-time variants: RT-Efficient Gauss-Newton ALADIN and RT-Efficient Adjoint BFGS ALADIN .
+
+4.3 Local Convergence Analysis 
+
+The convergence analysis of Algorithm 1 follows the same line as in (Houska et al., 2016, Section 7); therefore, only a proof sketch is provided here due to space constraints. From (Du et al., 2019, Theorem 1), let the initial iterate of Algorithm 1 be sufficiently close to the optimal solution x∗.Then, under Assumptions 1 and 2 and provided that the local NLPs (6) are solved exactly, there exists a constant 
+
+κ < ∞ such that 
+
+∥∥∥∥x[k+1]     
+
+> i−y∗
+> i
+> μ[k+1]
+> i−μ∗
+> i
+
+∥∥∥∥ 
+
+> (6)
+> ≤κ
+
+∥∥∥∥y[k]    
+
+> i−y∗
+> i
+> λ[k]−λ∗
+
+∥∥∥∥ . (13) 
+
+Furthermore, using the efficient adjoint BFGS information generated by (7)–(12), the following inequality holds: 
+
+∥∥∥∥ yk+1 − y∗  
+
+> λ[k+1] −λ∗
+
+∥∥∥∥ ≤
+
+∥∥∥∥∥      
+
+> y[k+1] −y∗
+> λ[k+1] −λ∗
+> ˜μ[k+1] −μ∗
+
+∥∥∥∥∥ 
+
+> (7) −(12)
+> ≤γ
+
+∥∥∥∥∥      
+
+> x[k+1] −y∗
+> λ[k]−λ∗
+> μ[k+1] −μ∗
+
+∥∥∥∥∥ . (14) 
+
+Here γ quantifies the discrepancy between the Hessian approximation generated by (9) and the exact Hessian; this error can be made sufficiently small, as guaranteed by Diehl et al. (2010). Combining (13) and (14), we obtain that if γ(κ + 1) < 1, the following contraction holds: 
+
+∥∥∥∥y[k+1] − y∗  
+
+> λ[k+1] −λ∗
+
+∥∥∥∥  
+
+> (13) ,(14)
+> ≤γ(κ+ 1)
+
+∥∥∥∥y[k] − y∗  
+
+> λ[k]−λ∗
+
+∥∥∥∥ . (15) 
+
+This establishes the local convergence of Algorithm 1. Note that, the above analysis also applies to the algorithm discussed in Section 4.2. 5. NUMERICAL EXPERIMENT This section evaluates the proposed Efficient Adjoint-BFGS ALADIN and Efficient Gauss–Newton ALADIN 
+
+Wu et al. (2025) methods on the differential drive robots problem (which is a practical nonconvex MHE problem) and also presents their real-time implementations. 
+
+5.1 Time-splitting Based MHE Model 
+
+The corresponding system dynamics and observation model are defined by f (xn,u n)= 
+
+[φn
+
+> ψn
+> θn
+
+]
+
++ T
+
+[vn cos θn  
+
+> vnsin θn
+> ωn
+
+]
+
+, y n=
+
+[rα
+
+]
+
+=
+
+[√ φ2
+
+> n+ψ2
+> n
+> arctan
+
+(ψn
+
+> φn
+
+)]
+
++
+
+[νr
+
+> να
+
+]
+
+.
+
+Here, the vector x = ( φ, ψ, θ )⊤ involves three state vari-ables, representing the lateral position φ, longitudinal po-sition ψ, and orientation angle θ. The observation vector 
+
+y = ( r, α )⊤ consists of the relative range r and bearing 
+
+α, while the control inputs u = ( v, ω )⊤ include the linear and angular velocities, v and ω, respectively. The measure-ment noise terms νr and να follow Gaussian distributions 
+
+νr ∼ N (0 , σ 2 
+
+> r
+
+) and να ∼ N (0 , σ 2
+
+> α
+
+). Based on the above control system, the resulting MHE problem at each time step l is formulated by penalizing the system distribution and the fitting error over a prediction horizon of length L, and solved in a receding-horizon manner. The corresponding simplified objective function can be expressed as follows: min 
+
+> x
+
+1
+
+2 ‖xl−L − ˆxl−L‖2 
+
+> P−1
+
++1
+
+2
+
+> l
+
+∑
+
+> n=l−L
+
+‖h(xn) − yn‖2  
+
+> V−1
+
+(16) where ˆxl−L represents the prior state estimate, P ∈
+
+R|xn|×| xn| and V ∈ R|yn|×| yn| are the covariance matrix of the initial state estimation error and measurement noise, respectively, and h : R|xn| → R|yn| denotes the nonlinear measurement function. To apply the proposed algorithm, we adopt the time-splitting strategy from Wu et al. (2025)), which par-titions the prediction horizon into N consecutive sub-windows. For each sub-window indexed by i, auxiliary boundary variables zi = ((zai )⊤, (zbi )⊤)⊤ are introduced to represent the initial and terminal states, respectively. Specifically, zai denotes the initial state zai = xl−L+( i−1) t,while a new auxiliary variable zbi corresponds to the terminal state coupled with the next sub-window via the constraint zbi = zai+1 . Collectively, the optimization variables of the i-th sub-problem are defined as Xi =
+
+((zai )⊤, (˜ x(i))⊤, (zbi )⊤)⊤ , X i ∈ R|Xi|, and the correspond-ing local objective is given as, for i = 1 and i = N ,
+
+  
+
+> J1(X1)= 1
+> 2‖za
+> 1−ˆxl−L‖2
+> P−1+1
+> 2
+> l−L+t−1
+
+∑      
+
+> j=l−L
+> ‖h(xj)−yj‖2
+> V−1,JN(XN) = 1
+> 2
+> l
+
+∑      
+
+> j=l−L+( N−1) t
+> ‖h(xj)−yj‖2
+> V−1,
+> (17)
+
+for i = 2 , · · · , N − 1, 
+
+> Ji(Xi) = 1
+> 2
+> l−L+it −1
+
+∑       
+
+> j=l−L+( i−1) t
+> ‖h(xj)−yj‖2
+> V−1.(18)
+
+Similarly, the nonlinear dynamic equality constraints are partitioned into independent sub-vectors according to the same time-splitting scheme, for i = 1 , · · · , N − 1, 
+
+> Fi(Xi)=
+
+       
+
+> xl−L+( i−1) t+1 −f(zai, u l−L+( i−1) t)
+> xl−L+( i−1) t+2 −f(xl−L+( i−1) t+1 , u l−L+( i−1) t+1 )...
+> zbi−f(xl−L+it −1, u l−L+it −1)
+
+ ,
+
+> (19)
+
+for i = N :
+
+> Fi(Xi)=
+
+       
+
+> xl−L+( i−1) t+1 −f(zai, u l−L+( i−1) t)
+> xl−L+( i−1) t+2 −f(xl−L+( i−1) t+1 , u l−L+( i−1) t+1 )...
+> xl−f(xl−1, u l−1)
+
+ .
+
+> (20)
+
+Consequently, based on (17)-(20), the MHE problem for-mulated under the time-splitting scheme can be repre-sented as a general distributed optimization problem, as shown in (1), where the consistency constraints zbi = zai+1 
+
+are equivalently expressed as affine coupling constraints in (1). The explicit form of Ai can be found in Wu et al. (2025)). The prediction horizon is set to 25, divided into 4 parallel sub-windows. The initial position and orientation of the robot are initialized as x0 = (0 .1, 0.1, 0.0) ⊤, and the ref-erence trajectory x∗ = ( φ∗, ψ ∗, θ ∗)⊤ is generated by MPC under the same control model. The MHE decision variables are initialized at ( φ∗, ψ ∗, 0) ⊤. In the proposed Efficient Adjoint BFGS ALADIN setup, the penalty parameter is set to ρ = 25, and the dual variables λ and μ are initialized to zero. At the first iteration, each node sets Hi = I
+
+and initializes Ci with the exact Jacobian. All simulations are executed on a desktop equipped with a 2 .5 GHz Intel i5-13490F processor (10 cores, 16 threads) and 16 GB of RAM, using Casadi-3.6.6 with IPOPT in MATLAB R2024b 
+
+on Windows 11. 
+
+5.2 Numerical Results 
+
+Fig. 1 compares the convergence behavior of the proposed 
+
+Efficient Adjoint BFGS ALADIN , Efficient Gauss–Newton ALADIN , and their real-time variants for solving the MHE problem with N = 4. Both real-time implementations advertise a log 3(k) ∈ N-based sensitivity update strategy, corresponding to three updates within 50 iterations. All four methods exhibit linear convergence during sensitivity updates and achieve high-accuracy solutions. Efficient Ad-joint–BFGS attains 10 −9 accuracy in 15 iterations, while 
+
+Efficient Gauss–Newton ALADIN reaches 10 −11 in 25 iter-ations. Their real-time counterparts, with fewer sensitivity updates, converge in a two-stage pattern to 10 −9 and 10 −7
+
+within approximately 35 iterations. Table 1 provides the total CPU time of the two efficient ALADIN variants and their real-time counterparts under different sub-window partitions. Since the sub-problem solutions in ALADIN rely on external solvers, their run-times are nondeterministic and negligible for large-scale cases. Hence, only the CPU time for QP construction and solution in the coordination step is reported. The results show that real-time implementations significantly reduce computation time. Among all methods, Efficient Gauss–Newton ALADIN exhibits the longest runtime, while its real-time counterpart achieves the shortest. Un-like the asymptotic relation N ∗ ≈ √L reported in (Wu et al. (2025)), the optimal sub-window partition here de-viates from the trend because the real-time variants skip sensitivity updates and matrix inversions at each iteration. 6. CONCLUSIONS This paper proposed a novel distributed algorithm, termed 
+
+Real-Time Efficient Adjoint BFGS ALADIN , for resource 0 5 10 15 20 25 30 35 40 45 50 
+
+> k
+> 10 -12
+> 10 -10
+> 10 -8
+> 10 -6
+> 10 -4
+> 10 -2
+> 10 0
+> 10 2
+> Wu et al. (2025 (accepted for publication))
+> Efficient Adjoint BFGS ALADIN
+> RT-Efficient Gauss-Newton ALADIN
+> RT-Efficient Adjoint BFGS ALADIN
+
+Fig. 1. Convergence comparison of Efficient Adjoint BFGS ALADIN (Algorithm 1) with Efficient Gauss–Newton ALADIN (in Wu et al. (2025)), RT-Efficient Gauss-Newton ALADIN and RT-Efficient Adjoint BFGS ALADIN (in Section 4.2).                 
+
+> N
+> Efficient Gauss-Newton ALADIN
+> Efficient Adjoint BFGS ALADIN
+> RT-Efficient Gauss-Newton ALADIN
+> RT-Efficient Adjoint BFGS ALADIN
+> 33.000 1.40 0.268 0.486
+> 42.300 0.971 0.232 0.516
+> 51.400 0.973 0.205 0.633
+> 61.500 0.821 0.199 0.727
+
+Table 1. Total CPU time [ ms ] for different algorithms across N sub-windows (measured over 50 iterations). allocation problems. The method efficiently handles non-convex optimization while ensuring linear-scaling commu-nication overhead. Furthermore, we presented an event-triggered mechanism that avoids updating local Hessian and Jacobian matrices at every iteration, thereby reducing computational burden. Numerical simulations validated the algorithm’s advantages over existing approaches. REFERENCES Boyd, S., Parikh, N., Chu, E., Peleato, B., Eckstein, J., et al. (2011). Distributed optimization and statistical learning via the alternating direction method of multi-pliers. Foundations and Trends ® in Machine learning ,3(1), 1–122. Diehl, M., Walther, A., Bock, H.G., and Kostina, E. (2010). An adjoint-based SQP algorithm with quasi-Newton Jacobian updates for inequality constrained optimization. Optimization Methods & Software , 25(4), 531–552. Doostmohammadian, M., Aghasi, A., Pirani, M., Nekouei, E., Zarrabi, H., Keypour, R., Rikos, A.I., and Johans-son, K.H. (2025). Survey of distributed algorithms for resource allocation over multi-agent systems. Annual Reviews in Control , 59, 100983. Du, X., Engelmann, A., Jiang, Y., Faulwasser, T., and Houska, B. (2019). Distributed state estimation for AC power systems using Gauss-Newton ALADIN. In 2019 IEEE 58th Conference on Decision and Control (CDC) ,1919–1924. IEEE. Du, X., Johansson, K.H., and Rikos, A.I. (2025). De-centralized optimization via RC-ALADIN with efficient quantized communication. In 2025 IEEE 64th Confer-ence on Decision and Control (CDC) , 4357–4363. IEEE. Du, X. and Wang, J. (2023). Consensus ALADIN: A framework for distributed optimization and its application in federated learning. arXiv preprint arXiv:2306.05662 .Du, X. and Wang, J. (2025). Distributed consensus opti-mization with consensus ALADIN. In 2025 American Control Conference (ACC) , 2949–2955. Engelmann, A., Jiang, Y., M¨ uhlpfordt, T., Houska, B., and Faulwasser, T. (2019). Towards distributed OPF using ALADIN. IEEE Transactions on Power Systems , 34(1), 584–594. Fedorov´ a, K. (2025). Structure-Exploiting Model Pre-dictive Control for Real-Time and Embedded Applica-tions . Ph.D. thesis, Slovak University of Technology in Bratislava, Bratislava. Feng, X., Di Cairano, S., and Quirynen, R. (2020). Inexact adjoint-based SQP algorithm for real-time stochastic nonlinear MPC. IFAC-PapersOnLine , 53(2), 6529–6535. Hespanhol, P. and Quirynen, R. (2021). Adjoint-based SQP method with block-wise quasi-Newton Jacobian updates for nonlinear optimal control. Optimization Methods and Software , 36(5), 1030–1058. Hong, M., Luo, Z.Q., and Razaviyayn, M. (2016). Con-vergence analysis of alternating direction method of multipliers for a family of nonconvex problems. SIAM Journal on Optimization , 26(1), 337–364. Houska, B., Frasch, J., and Diehl, M. (2016). An aug-mented lagrangian based algorithm for distributed non-convex optimization. SIAM Journal on Optimization ,26(2), 1101–1127. Houska, B. and Shi, J. (2022). Distributed MPC with ALADIN-A tutorial. In 2022 American Control Con-ference (ACC) , 358–363. Kouzoupis, D., Quirynen, R., Houska, B., and Diehl, M. (2016). A block based ALADIN scheme for highly parallelizable direct optimal control. In 2016 American Control Conference (ACC) , 1124–1129. Lanza, L., Faulwasser, T., and Worthmann, K. (2025). Distributed optimization for energy grids: A tutorial on ADMM and ALADIN. Quirynen, R., Gros, S., and Diehl, M. (2018). Inexact Newton-type optimization with iterated sensitivities. 
+
+SIAM Journal on Optimization , 28(1), 74–95. Ren, X., Bastianello, N., Johansson, K.H., and Parisini, T. (2026). Communication-efficient stochastic distributed learning. IEEE Transactions on Automatic Control .Stomberg, G., Engelmann, A., Diehl, M., and Faulwasser, T. (2025). Decentralized real-time iterations for dis-tributed NMPC. IEEE Transactions on Automatic Con-trol .Wang, Y., Wu, S., Yang, G., Chu, J., Rikos, A.I., and Du, X. (2025). ALADIN-β: A distributed optimization algorithm for solving MPCC problems. In 2025 IEEE 64th Conference on Decision and Control (CDC) , 5329– 5334. IEEE. Wu, S., Wang, Y., Wang, J., Rikos, A.I., and Du, X. (2025). A time splitting based optimization method for nonlinear MHE. In 2025 IEEE 64th Conference on Decision and Control (CDC) , 5335–5341. IEEE.

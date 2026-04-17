@@ -1,0 +1,684 @@
+Title: Graph Propagated Projection Unlearning: A Unified Framework for Vision and Audio Discriminative Models
+
+URL Source: https://arxiv.org/pdf/2604.13127v1
+
+Published Time: Thu, 16 Apr 2026 00:03:10 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+## Graph Propagated Projection Unlearning: A Unified Framework for Vision and Audio Discriminative Models 
+
+Shreyansh Pathak Jyotishman Das Indian Institute of Technology Jodhpur 
+
+{d24csa006, m24csa013 }@iitj.ac.in 
+
+Figure 1. As we apply GPPU to the discriminative model, the model misclassified apple as orange while speaker 1 as speaker 3. 
+
+Abstract 
+
+The need to selectively and efficiently erase learned infor-mation from deep neural networks is becoming increasingly important for privacy, regulatory compliance, and adaptive system design. We introduce Graph-Propagated Projec-tion Unlearning (GPPU), a unified and scalable algorithm for class-level unlearning that operates across both vision and audio models. GPPU employs graph-based propa-gation to identify class-specific directions in the feature space and projects representations onto the orthogonal sub-space, followed by targeted fine-tuning, to ensure that target class information is effectively and irreversibly removed. Through comprehensive evaluations on six vision datasets and two large-scale audio benchmarks spanning a variety of architectures including CNNs, Vision Transformers, and Audio Transformers, we demonstrate that GPPU achieves highly efficient unlearning, realizing 10–20× speedups over prior methodologies while preserving model utility on re-tained classes. Our framework provides a principled and modality-agnostic approach to machine unlearning, evalu-ated at a scale that has received limited attention in prior work, contributing toward more efficient and responsible deep learning. 
+
+1. Introduction 
+
+The remarkable success of deep neural networks has driven rapid advances across computer vision and audio domains, powering applications in object recognition, speaker veri-fication, and beyond. As these models are more widely deployed, there is rising demand for principled yet effi-cient machine unlearning algorithms [6, 35] that can selec-tively erase the influence of specific classes or samples at the user’s request or for compliance with privacy regula-tions [1, 2]. Existing unlearning techniques, however, are often prohibitively expensive, relying on extensive retrain-ing or adversarial optimization, with practical runtime that scale poorly to large modern datasets and models. To address these challenges, we present Graph-Propagated Projection Unlearning (GPPU), a scalable algorithm for class-level unlearning. We validate GPPU across six vi-sion datasets and two large-scale audio corpora, evaluating against five state-of-the-art baselines over the diverse archi-tectures including ResNets [15], Vision Transformers [11], and Audio Transformers [3, 17]. Our key contributions are: • A Unified Geometric Framework: We introduce GPPU, which leverages graph-based propagation [20] to ro-bustly identify class-specific feature directions within the learned manifold, followed by an orthogonal projection step and lightweight fine-tuning to isolate and erase tar-get classes across both vision and audio modalities. • High-Fidelity Unlearning: GPPU consistently achieves near-zero forget-class accuracy post-unlearning while maintaining high utility and minimal degradation on re-tained classes. • Exceptional Efficiency: By avoiding extensive retrain-ing, our method achieves 10–20 × speedups over prevail-ing state-of-the-art unlearning methods [14, 28, 32]. 
+
+2. Related Work 
+
+The growing importance of machine unlearning [35] has spurred a range of methods seeking to remove the influence of specific data from trained models. Traditionally, unlearn-
+
+> arXiv:2604.13127v1 [cs.CV] 13 Apr 2026
+
+ing has been approached either through full model retrain-ing after data removal [6], or through algorithmic strategies that locally edit network parameters or predictions. 
+
+Vision Unlearning. Many recent advances in class-level unlearning for vision models aim to balance complete for-getting of target classes with retention of generalization on unmodified data. The Fisher Forgetting method [14], for instance, leverages Fisher information to guide selective weight editing, while Gradient Ascent and Negative Gra-dient approaches [32, 36] update model parameters in di-rections that erase class-discriminative features. Partially Blinded Unlearning [28] and Bad Teaching [7] further ex-plore mechanisms for reducing or reversing model confi-dence on target data, including using synthetic labels or ex-ploiting teacher-student paradigms [16]. Despite their con-ceptual appeal, these methods can struggle with scalabil-ity, may inadvertently degrade performance on non-target classes, and often require repetitive access to training data or prolonged retraining. 
+
+Audio Unlearning. Unlearning in the audio domain is com-paratively less explored, yet presents unique challenges due to the intricate structure of speech and speaker representa-tions. Fisher Forgetting and Gradient Ascent have both been adapted for this setting [13, 32], but are constrained by sim-ilar efficiency barriers as in vision tasks. More recently, the state-of-the-art Quantum-Inspired Audio Unlearning [29] uses a 4 step algorithm to create uncertainty in the confi-dence of the model on forget class , gave promising results, but also significant computational demands. Beyond these baseline approaches, related strands of work in geometric deep learning and manifold regularization (e.g., [4, 20]) have highlighted the importance of exploiting structural relationships among data and features. Graph-based techniques for representation smoothing, such as graph convolutional networks [10, 20], have proved effec-tive for classification and robustness, but their application to model unlearning remains underexplored. While these methods establish a strong foundation, they are typically modality-specific, require substantial computation, and of-ten fail to guarantee both forgetting and retention at scale. Our proposed GPPU framework bridges these gaps, intro-ducing graph-based forget direction discovery and efficient projection-based unlearning that is, to our knowledge, the first to operate effectively across both audio and vision modalities, significantly improving both practical runtime and unlearning quality. 
+
+3. Methodology 
+
+We introduce Graph-Propagated Projection Unlearning (GPPU) , an efficient and principled algorithm that achieves machine unlearning by explicitly identifying and remov-ing class-specific information from deep neural represen-tations. GPPU operates in two stages. First, it leverages graph-based propagation to construct a k-nearest neighbor graph over data features, smoothing intra-class variations and sharpening class boundaries. From this graph, we ex-tract “forget directions” as unit vectors pointing to class centroids in a manifold aware manner. In the second stage, GPPU projects representations onto the subspace orthogo-nal to these directions, immediately suppressing forgotten knowledge, and then fine-tunes the final layers of the model so that new features are inherently orthogonal to the forget-subspace. This combination of geometric projection and minimal, tar-geted parameter update enables GPPU to provably erase tar-get class information while retaining performance on non-target classes, with negligible computational overhead com-pared to retraining-based methods. 
+
+3.1. Problem Setup 
+
+Consider a pre-trained discriminative model Mθ : X →Y parameterized by θ, mapping from input space X (e.g., images, audio) to output space Y = {1, 2, . . . , C } of C
+
+classes. We decompose Mθ into: 
+
+Mθ (x) = hϕ(fθ (x)) (1) where fθ : X → Rd is a feature extractor producing d-dimensional representations, and hϕ : Rd → RC is a clas-sification head with parameters ϕ ⊂ θ.Given a dataset D = {(xi, y i)}ni=1 , we partition it into a 
+
+forget set Df = {(xi, y i) | yi ∈ C f } containing samples from classes Cf ⊂ Y to be unlearned, and a retain set Dr =
+
+D \ D f containing all other samples. Our objective is to construct a modified model M′ that: (Forgetting) E(x,y )∼D f
+
+1[M′(x) = y] ≈ 1
+
+C (2) (Retention) E(x,y )∼D r
+
+1[M′(x) = y]
+
+≈ E(x,y )∼D r
+
+1[Mθ (x) = y] (3) where 1[.] is the indicator function. Equation (2) ensures random-guess performance on forget classes, while Equa-tion (3) preserves accuracy on retained classes. 
+
+3.2. Graph Neural Network Preliminaries 
+
+Let G = ( V, E, H) denote a graph comprising nodes V,edges E, and node features H ∈ Rn×d. The topolog-ical structure is encoded via an adjacency matrix A ∈{0, 1}n×n. Following standard Graph Convolutional Net-works (GCNs) [20], node representations are updated by aggregating local neighborhood features. The general layer-wise propagation rule is formulated as: 
+
+H(ℓ+1) = σ
+
+ ˆAH (ℓ)W(ℓ)
+
+(4) Figure 2. Overview of the GPPU framework. Phase I: Forget directions gc are identified by denoising features H via graph propagation.   
+
+> Phase II: Representation unlearning via orthogonal projection ( Lproj ) and retention ( Lretain ) losses to produce the unlearned model M′.
+
+where W(ℓ) is a learnable weight matrix, σ is a non-linear activation function, and ˆA is the symmetrically normal-ized adjacency matrix with added self-loops. Specifically, 
+
+ˆA = D−1/2(A + In)D−1/2, where D is the diagonal degree matrix defined as Dii = P 
+
+> j
+
+(A + In)ij . As de-tailed in subsequent sections, our framework adapts this foundational propagation rule into a non-parametric feature smoothing operation to geometrically refine class bound-aries. 
+
+3.3. Graph-Based Forget Direction Identification 
+
+We first extract deep features for all samples in D. The ex-traction layer depends on model architecture (Refer to Sup-plementary material for extraction layer protocols). Collecting features yields H = [ h1, . . . , hn]⊤ ∈ Rn×d
+
+with labels y = [ y1, . . . , y n]⊤.To construct a feature graph, we build a k-nearest neigh-bor (k-NN) graph based on cosine similarity. First, we L2-normalize features: 
+
+F = normalize (H) = 
+
+ h1
+
+∥h1∥2
+
+, . . . , hn
+
+∥hn∥2
+
+⊤
+
+(5) The cosine similarity matrix S ∈ [−1, 1] n×n is computed as: S = F F T . For each sample i, we define its k-neighborhood as: 
+
+Nk(i) = arg max 
+
+> S⊂[n]\{ i},|S|=k
+
+X
+
+> j∈S
+
+Sij (6) The adjacency matrix is constructed symmetrically to en-sure an undirected graph: 
+
+Aij =
+
+(
+
+1 if j ∈ N k(i) or i ∈ N k(j)0 otherwise (7) Finally, we compute the normalized adjacency ˆA via Equa-tion (7). We perform a single graph convolution step with-out learnable weights (i.e., W = Id and σ = identity in Equation (4)): 
+
+H(1) = ˆAH (8) This operation aggregates each node’s features with its neighbors, producing smoothed representations H(1) ∈
+
+Rn×d. Expanding for node i:
+
+h(1)  
+
+> i
+
+= 1
+
+√di
+
+X 
+
+> j∈N k(i)∪{ i}
+
+Aij hj
+
+pdj
+
+(9) 
+
+Rationale: Graph propagation serves two purposes: (1) 
+
+denoising by averaging out sample-specific idiosyncrasies (e.g., occlusions, noise), and (2) class boundary refinement 
+
+by leveraging the manifold hypothesis samples of the same class cluster in feature space and are likely neighbors. The propagated features H(1) thus exhibit tighter within-class clustering and clearer between-class separation. We limit propagation to L = 1 layer. Deeper propagation (L ≥ 2) risks over-smoothing, where features from dif-ferent classes begin to merge, diluting class-specific direc-tions [23]. For each class c ∈ C f to be forgotten, we compute a forget direction gc ∈ Rd as the normalized centroid of propagated features: 
+
+Ic = {i | yi = c}, ¯hc = 1
+
+|I c|
+
+X
+
+> i∈I c
+
+h(1)  
+
+> i
+
+(10) The unit vector gc = ¯hc 
+
+> ∥¯hc∥2
+
+represents the principal di-rection characterizing class c in the feature manifold after graph-based smoothing. Geometrically, gc points towards the barycenter of the class-c cluster. For multi-class unlearning (|C f | > 1), we com-pute {gc}c∈C f and construct the forget subspace G =
+
+span (gc1 , . . . , gc|C f | ).
+
+3.4. Projection-Based Representation Unlearning 
+
+Given the forget direction gc, we can immediately achieve unlearning via inference-time projection. For a test sam-ple x, we extract features h = fθ (x) and project onto the subspace orthogonal to gc:
+
+hproj = h − X
+
+> c∈C f
+
+(h · gc)gc (11) For single-class unlearning, this simplifies to: 
+
+hproj = h − (h · g)g (12) The prediction is then ˆy = hϕ(hproj ). Eq. (12) decom-poses h into parallel and orthogonal components relative to g: h = ( h · g)g
+
+| {z } 
+
+> proj g(h)
+
++ ( h − (h · g)g)
+
+| {z }
+
+> hproj
+
+The parallel component proj g(h) encodes information aligned with the forget direction (i.e., class-specific fea-tures). By removing it, we retain only orthogonal informa-tion, effectively suppressing forget-class predictions. The projection satisfies: • Orthogonality: hproj · gc = 0 for all c ∈ C f
+
+• Norm reduction: ∥hproj ∥22 = ∥h∥22 − P 
+
+> c∈C f
+
+(h · gc)2
+
+• Selectivity: For forget-class samples, |h · gc| ≈ ∥ h∥2
+
+yielding ∥hproj ∥ ≈ 0; for retain-class samples, |h·gc| ≈ 0
+
+yielding ∥hproj ∥ ≈ ∥ h∥2
+
+However, this approach leaves model parameters un-changed ( θ′ = θ), meaning the model’s internal representa-tions still encode forget-class information—only the output is blocked geometrically. To ensure intrinsic representation unlearning rather than mere output masking, we fine-tune a localized subset of pa-rameters θft ⊂ θ (typically the final layers of fθ ) guided by a projection-based loss. Our core insight is to formu-late the orthogonal projection as an explicit training target, compelling the network to inherently generate features re-stricted to the orthogonal subspace. 
+
+Projection Loss. For samples (x, y ) ∈ D f from the forget set, we define: 
+
+Lproj (x; θ) = fθ (x) −
+
+fθ (x) − X
+
+> c∈C f
+
+(fθ (x) · gc)gc
+
+
+
+> 22
+
+(13) Simplifying: 
+
+Lproj (x; θ) = X
+
+> c∈C f
+
+(fθ (x) · gc)gc
+
+> 22
+
+= X
+
+> c∈C f
+
+(fθ (x) · gc)2
+
+(14) This loss penalizes the squared magnitude of the projection onto forget directions, driving features to become orthogo-nal to {gc}c∈C f .
+
+Retention Loss. To preserve performance on retained classes, we apply standard cross-entropy loss on Dr :
+
+Lretain (x, y ; θ) = − log exp( hϕ(fθ (x)) y )
+
+PCj=1 exp( hϕ(fθ (x)) j ) (15) 
+
+Combined Objective. We optimize: 
+
+min 
+
+> θft
+
+λproj Ex∼D f [Lproj (x; θ)]+ λretain E(x,y )∼D r [Lretain (x, y ; θ)] 
+
+(16) where λproj , λ retain > 0 are hyperparameters balancing for-getting and retention. The forget directions {gc} are kept fixed (detached from gradients) during fine-tuning, as they serve as geometric anchors. 
+
+Gradient Computation. The gradient of Lproj with respect to θ is: 
+
+∇θ Lproj = 2 X
+
+> c∈C f
+
+(fθ (x) · gc)∇θ (fθ (x) · gc) (17) Since gc is constant, this simplifies to: 
+
+∇θ Lproj = 2 X
+
+> c∈C f
+
+(fθ (x) · gc) ( ∇θ fθ (x)) gc (18) When fθ (x) · gc is positive (feature aligned with forget di-rection), the gradient pushes fθ (x) in the direction oppo-site to gc, reducing alignment. Conversely, if already or-thogonal, the gradient is near-zero, preserving the feature. To avoid catastrophic forgetting of retained knowledge, we only fine-tune the last few layers of the feature extractor fθ .Specifically, last 1-2 transformer blocks of Vision Trans-formers, Final convolution block of CNNs, last 2-3 trans-former layers in Audio Transformers. This localizes the modification to high-level semantic features while preserv-ing low-level feature extractors trained on large-scale data. We monitor the projection loss Lproj on a validation subset of Df . Training terminates when: 
+
+Ex∼D val  
+
+> f
+
+[Lproj (x; θ)] < ϵ (19) for a small threshold ϵ (e.g., 0.01 ), or after Tft epochs, whichever comes first. (Refer to supplementary material for pseudo-code of this algorithm.) 
+
+3.5. Theoretical Analysis 
+
+Consider the feature distribution for class c: pc(h) = p(h |
+
+y = c). Since pc is non-Gaussian due to intra-class variabil-ity, naively averaging raw features yields a centroid biased by outliers. Graph propagation addresses this via manifold-aware averaging: the k-NN graph encodes local geome-try, and h(1)  
+
+> i
+
+= P 
+
+> j
+
+ˆAij hj performs non-parametric kernel smoothing on the manifold, upweighting likely same-class neighbors. 
+
+Proposition 1. Let hi, hj be features of samples from class 
+
+c, and assume ∥hi − hj ∥2 ≤ δ implies Aij = 1 . Then the propagated features satisfy: 
+
+∥h(1)  
+
+> i
+
+− h(1)  
+
+> j
+
+∥2 ≤ α∥hi − hj ∥2 (20) 
+
+for some α < 1, i.e., graph propagation is a contraction on within-class distances (proof in supplementary), yielding a more representative forget direction gc.Although Lproj is non-convex, it is locally convex near the pre-trained initialization. Assuming fθ is L-Lipschitz, gra-dient descent with η < 1/L converges to a local minimum satisfying: 
+
+Ex∼D f
+
+ X
+
+> c∈C f
+
+(fθ∗ (x) · gc)2
+
+ ≤ ϵ (21) ensuring forget-class features become nearly orthogonal to all forget directions. Since only a small parameter subset θft is fine-tuned at a small learning rate, by neural tangent kernel theory [18] the retain loss changes minimally: 
+
+|EDr [Lretain (θ∗)] − EDr [Lretain (θ0)] | = O(ηT ft ) (22) where θ0 is the initialization, confirming that retain per-formance degrades minimally for small η and Tft . (Refer to Supplementary Material for Computational Complexity Analysis) 
+
+Inference: Zero-shot projection adds O(|C f |d) per sample (negligible), while the fine-tuned model incurs no additional overhead. 
+
+3.6. Implementation Details 
+
+Hyperparameter Selection. We set k = 8 for k-NN graph construction across all as it gave the the best re-sults after an exhaustive hyperparameter search in the range [6,20], balancing local structure capture and computational efficiency. The balancing coefficients are set to λproj =1.0 and λretain = 0 .5, giving higher priority to forgetting while maintaining reasonable retention. Fine-tuning runs for Tft = 3 epochs with learning rate η = 10 −5 using AdamW optimizer with weight decay 10 −2.For large datasets ( n > 50 ,000 ), we use FAISS [19] with IVF (inverted file index) for approximate nearest neighbor search, reducing complexity from O(n2d) to O(nd log n)
+
+with negligible accuracy loss. To prevent numerical insta-bility when computing normalized adjacency for discon-nected graphs, we clamp degrees: Dii ← max( Dii , 10 −6)
+
+before taking the inverse square root. For fine-grained datasets where forget and retain classes are highly similar (e.g., dog breeds), we introduce class-specific projection strengths αc ∈ [0 , 1] :
+
+Table 1. Summary of datasets, domains, protocol, and representa-tive single-class unlearning examples in GPPU experiments.                                         
+
+> Dataset Domain Classes/IDs Protocol Forget Class
+> CIFAR-10 [21] Vision 10 Single-class removal Cat CIFAR-100 [22] Vision 100 Single-class removal Apple SVHN [25] Vision 10 Single-class removal Digit ’3’ Flowers102 [26] Vision 102 Single-class removal Daffodil STL-10 [8] Vision 10 Single-class removal Ship FashionMNIST [34] Vision 10 Single-class removal Sneaker LibriSpeech-100h [27] Audio ∼40 Single-class removal Phoneme ’S’ SpeechCommands v2 [33] Audio 35 Single-class removal Command ’Yes’ VoxCeleb1 [24] Audio 1,211 Single-identity removal Speaker 10005
+
+hproj = h − X
+
+> c∈C f
+
+αc(h · gc)gc (23) where αc is learned via a small validation set to minimize retain accuracy degradation while maintaining forgetting ef-ficacy. 
+
+Continual Unlearning. When unlearning classes sequen-tially over time, we accumulate forget directions: G(t+1) =
+
+G(t) ∪ { gct+1 }. To prevent subspace dimensionality from growing excessively, we periodically apply PCA to G and retain the top-m principal components, ensuring O(m) in-ference cost independent of the number of forgotten classes. 
+
+4. Experimental Results and Analysis 
+
+To comprehensively assess the scalability and generaliza-tion of our proposed GPPU framework across visual and audio domains, we evaluate it using diverse model ar-chitectures—specifically ViT-L/16 [11], ResNet-50 [15], Wav2Vec2-Large [3], and HuBERT-Large [17]—and com-pare it against a robust suite of state-of-the-art unlearn-ing baselines. These baselines include Gradient Ascent (GA) [32], Fisher Forgetting (FF) [14], Negative Gradient (NG) [36], PBU [28], Bad Teaching (BT) [7], SalUn [12], and Quantum Inspired Audio Unlearning (QIAU) [29]. 
+
+Metrics We assess the effectiveness of unlearning with metrics such as Forget Accuracy(FA), Retain Accu-racy(RA), Information Leakage(IL), Erasing Retention Bal-ance Score(ERB) and Time(T). (Refer to the Supplementary Section for definitions). 
+
+4.1. Single Class Unlearning 
+
+As shown in Table 2, we evaluate our method in the single-class unlearning setup, where the objective is to se-lectively remove the influence of a specific class from a pretrained model without compromising its overall util-ity. In this setting, we compare our proposed GPPU 
+
+approach against state-of-the-art baselines including Gra-dient Ascent, PBU, Negative Gradient, Fisher Forget, Bad-Teach, and SalUn [12] across multiple architectures (ViT-L/16 [11] and ResNet-50 [15]) and diverse datasets (CIFAR-10 [21]/CIFAR-100 [22], SVHN [25], Flow-ers102 [26], STL-10 [8], FashionMNIST [34]). Unlike Table 2. Comparison of unlearning performance across datasets. Values are presented as ViT-L/16 / ResNet-50 . Best values per metric and dataset are bolded. “Original” rows show the original model (before unlearning) metrics; IL/MIA/Time for Original are not applicable and shown as ‘-‘.                                                                                                                                                                                                                                                                                                                                                                                
+
+> Metric Method C10 C100 SVHN STL10 F102 FMNIST FA  ↓
+> Original 94.23 / 93.52 86.43 / 85.63 98.71 / 97.82 89.41 / 87.52 92.81 / 90.62 95.11 / 93.53 GA 24.62 / 27.33 33.76 / 36.82 18.42 / 20.54 27.51 / 29.37 41.32 / 44.68 15.81 / 17.11 PBU 5.68 / 6.02 7.46 / 8.11 4.33 / 4.97 6.12 / 6.41 8.94 / 9.88 3.92 / 4.28 NG 43.47 / 41.12 49.12 / 45.77 36.58 / 34.14 44.38 / 42.85 52.41 / 50.28 33.25 / 31.66 FF 27.36 / 26.47 31.21 / 30.32 22.75 / 21.11 29.89 / 28.75 35.24 / 33.72 20.18 / 18.84 BT 36.85 / 35.74 42.29 / 40.66 31.44 / 30.08 38.14 / 37.45 46.17 / 44.25 29.62 / 28.15 SalUn 12.41 / 13.51 15.34 / 16.22 10.22 / 11.45 14.51 / 15.12 18.63 / 19.34 8.52 / 9.41 GPPU (ours) 0.12 /0.25 0.37 /0.41 0.18 /0.21 0.22 /0.29 0.41 /0.47 0.14 /0.17 RA  ↑
+> Original 94.05 / 93.31 86.08 / 85.31 98.55 / 97.63 89.12 / 87.22 92.52 / 90.34 94.86 / 93.23 GA 77.89 / 78.41 69.19 / 71.22 89.33 / 88.16 78.92 / 77.43 72.17 / 70.35 89.57 / 88.92 PBU 92.09 / 90.28 84.61 / 82.91 95.12 / 94.02 90.73 / 89.17 86.42 / 83.28 94.81 / 93.65 NG 80.58 / 79.23 74.48 / 72.04 86.71 / 85.44 76.15 / 75.02 70.11 / 69.41 86.03 / 84.62 FF 73.53 / 71.89 68.96 / 67.82 83.96 / 82.27 73.44 / 72.03 67.91 / 66.53 82.74 / 81.41 BT 65.40 / 67.33 77.53 / 75.18 80.52 / 78.94 70.83 / 69.52 73.24 / 72.65 79.91 / 78.21 SalUn 86.41 / 85.42 81.25 / 79.14 92.45 / 91.22 85.12 / 84.51 80.15 / 78.63 92.34 / 91.45 GPPU (ours) 93.52 /90.92 85.11 /83.45 95.48 /94.87 91.14 /90.34 87.02 /85.71 95.02 /94.63 ERB  ↑
+> Original 10.87 / 12.12 23.44 / 24.60 2.55 / 4.26 18.93 / 21.84 13.34 / 17.00 9.30 / 12.10 GA 76.61 / 74.12 67.68 / 65.88 82.40 / 80.86 73.53 / 72.14 63.21 / 61.92 83.74 / 82.17 PBU 93.19 / 92.41 88.40 / 86.73 94.12 / 93.52 92.15 / 91.08 87.12 / 86.95 94.58 / 93.97 NG 66.45 / 67.81 60.46 / 62.41 69.27 / 68.02 64.32 / 63.18 55.68 / 56.77 71.09 / 69.24 FF 73.08 / 74.24 68.87 / 70.14 78.41 / 77.22 70.91 / 71.37 66.80 / 67.41 79.82 / 78.02 BT 64.26 / 65.18 66.17 / 68.94 71.82 / 70.51 67.41 / 66.24 61.93 / 60.72 73.90 / 72.33 SalUn 84.15 / 83.15 78.42 / 78.52 88.51 / 87.41 82.14 / 81.42 76.45 / 77.34 89.12 / 88.25 GPPU (ours) 96.60 /95.47 91.80 /90.41 96.88 /96.10 95.84 /94.68 90.23 /89.52 97.04 /96.78 IL  ↓
+> Original - / -- / -- / -- / -- / -- / -GA 62.3 / 64.8 74.7 / 76.5 28.5 / 31.1 35.2 / 38.3 48.7 / 51.2 23.4 / 26.7 PBU 4.6 / 4.9 5.1 / 5.4 3.2 / 3.8 5.3 / 5.1 7.6 / 7.1 2.7 / 3.1 NG 34.6 / 36.5 52.1 / 49.4 30.1 / 31.7 41.6 / 39.3 53.4 / 55.1 29.8 / 28.5 FF 21.9 / 22.8 47.5 / 45.8 18.4 / 19.7 27.2 / 28.1 33.1 / 34.5 17.9 / 18.1 BT 38.9 / 40.1 41.4 / 43.7 29.3 / 30.4 33.5 / 34.6 46.8 / 47.2 26.5 / 27.8 SalUn 12.5 / 12.1 15.4 / 16.5 9.5 / 10.3 14.1 / 15.2 18.2 / 19.1 8.4 / 9.2 GPPU (ours) 0.3 /0.6 1.7 /1.5 0.4 /0.5 0.6 /0.8 1.9 /2.1 0.3 /0.4 MIA  ↓
+> Original - / -- / -- / -- / -- / -- / -GA 61.2 / 63.1 64.5 / 67.4 57.3 / 59.1 62.7 / 63.8 65.9 / 68.2 56.7 / 57.8 PBU 58.5 / 59.4 61.3 / 62.1 55.4 / 56.8 59.1 / 60.3 62.4 / 63.5 54.9 / 55.2 NG 63.0 / 64.8 67.2 / 69.3 61.8 / 62.2 66.1 / 67.5 68.2 / 70.1 60.3 / 61.4 FF 59.8 / 60.4 63.8 / 64.1 58.2 / 59.3 60.6 / 61.8 64.7 / 65.4 58.1 / 58.7 BT 65.4 / 66.3 61.9 / 63.7 63.1 / 64.1 63.8 / 64.9 66.3 / 67.2 61.4 / 62.8 SalUn 59.2 / 59.9 61.6 / 62.9 56.4 / 57.9 59.8 / 61.0 63.5 / 64.5 55.8 / 56.5 GPPU (ours) 57.9 /58.8 60.2 /59.8 54.9 /55.4 57.1 /57.9 61.7 /60.8 54.2 /54.6 Time (s)  ↓
+> Original - / -- / -- / -- / -- / -- / -GA 817.3 / 732.5 948.3 / 874.1 692.4 / 643.7 744.6 / 698.2 811.5 / 763.5 668.2 / 611.9 PBU 245.8 / 218.4 280.7 / 246.7 212.5 / 198.4 231.4 / 214.6 248.1 / 236.1 204.6 / 192.7 NG 312.4 / 284.6 345.5 / 319.2 287.9 / 261.7 301.8 / 279.3 325.5 / 302.1 274.5 / 249.4 FF 413.2 / 382.9 420.8 / 398.6 351.1 / 334.4 392.7 / 363.1 401.8 / 379.4 337.4 / 321.7 BT 432.1 / 401.3 446.2 / 419.4 384.6 / 369.8 418.9 / 391.5 425.1 / 408.8 361.1 / 352.6 SalUn 275.5 / 248.5 310.2 / 282.1 245.6 / 228.4 265.4 / 245.2 285.3 / 265.8 235.8 / 220.5 GPPU (ours) 31.8 /28.4 34.7 /30.9 26.7 /24.5 29.2 /27.3 33.6 /29.8 25.9 /23.7
+
+prior methods that either induce catastrophic forgetting or require costly retraining, GPPU achieves near-zero resid-ual forgetting ( FA After ≈ 0) while retaining over 93% of the model’s pre-unlearning performance. While baselines like PBU and the gradient-masking SalUn offer compet-itive alternatives—with SalUn consistently ranking third-best across utility and forgetting metrics—they still struggle with higher privacy leakage (MIA) and prolonged execu-tion times. This demonstrates GPPU’s superior capability to effectively erase class-specific knowledge with minimal collateral degradation in representation quality. Moreover, GPPU attains this optimal trade-off with substantially re-duced computational overhead (up to 10-20 × faster than existing methods), establishing a new benchmark for effi-cient and precise single-class unlearning. 
+
+4.2. Continual Unlearning 
+
+To further assess scalability and stability, we extend our evaluation to a continual unlearning scenario where 10% of classes are sequentially removed at each step until the target subset is completely unlearned. This setting is sub-stantially more challenging as the model must preserve pre-viously retained knowledge while continually erasing new class-specific representations. As shown in Table 3, tradi-tional gradient-based and distillation-based methods (e.g., 
+
+Table 3. 10% class continual unlearning on CIFAR-100 [22] and Flowers102 [26] for ViT-L/16 [11] and ResNet-50 [15]. Original = original model (before unlearning). Best values per metric are bolded. Values are presented as ViT-L/16 / ResNet-50. 
+
+Method C100 F102 
+
+FA ↓ RA ↑ FA ↓ RA ↑
+
+Original 86.43 / 85.63 86.08 / 85.31 92.81 / 90.62 92.52 / 90.34 GA 38.42 / 40.63 63.81 / 61.32 46.27 / 48.91 58.44 / 56.73 PBU 10.73 / 11.92 81.22 / 79.34 12.58 / 13.81 77.91 / 75.68 NG 52.84 / 49.91 68.03 / 66.44 57.41 / 55.82 63.12 / 61.76 FF 34.27 / 33.18 70.19 / 68.47 38.81 / 36.94 66.53 / 65.12 BT 45.62 / 43.18 74.11 / 72.94 49.78 / 47.22 70.62 / 69.44 SalUn 22.50 / 22.00 77.50 / 76.10 25.00 / 25.00 74.20 / 72.50 GPPU (ours) 8.91 / 9.37 82.34 / 80.42 10.12 / 11.21 78.84 / 77.56 
+
+ERB ↑ ERB ↑
+
+Original 23.44 / 24.60 13.34 / 17.00 23.44 / 24.60 13.34 / 17.00 GA 61.57 / 60.14 53.92 / 51.47 59.33 / 58.26 52.71 / 50.82 PBU 85.42 / 83.57 81.14 / 78.24 84.31 / 82.91 79.62 / 77.42 NG 58.33 / 57.12 52.11 / 50.33 54.72 / 53.94 49.87 / 48.61 FF 71.23 / 69.47 65.02 / 62.11 68.18 / 66.84 63.47 / 60.93 BT 69.11 / 67.32 61.32 / 58.71 66.94 / 64.83 59.88 / 57.62 SalUn 78.00 / 76.50 73.00 / 70.00 76.00 / 74.80 71.50 / 69.10 GPPU (ours) 89.27 / 88.52 83.55 / 82.03 87.13 / 86.74 81.74 / 80.68 
+
+IL ↓ IL ↓
+
+Original - / - - / - - / - - / -GA 77.12 / 79.34 54.87 / 57.22 81.91 / 83.44 58.12 / 60.41 PBU 6.14 / 6.82 8.33 / 7.91 7.92 / 8.44 10.14 / 9.53 NG 50.42 / 48.57 46.27 / 44.73 53.11 / 51.66 49.82 / 47.93 FF 44.73 / 42.18 31.88 / 30.54 41.92 / 39.82 34.11 / 33.17 BT 38.11 / 39.47 28.91 / 29.84 42.33 / 43.21 31.94 / 33.02 SalUn 22.00 / 23.00 18.50 / 18.80 24.50 / 24.00 21.00 / 21.20 GPPU (ours) 2.14 / 2.47 3.37 / 3.12 2.93 / 3.11 4.12 / 4.48 
+
+MIA ↓ MIA ↓
+
+Original - / - - / - - / - - / -GA 69.41 / 71.12 71.88 / 73.47 72.37 / 73.61 74.92 / 75.81 PBU 63.22 / 62.18 66.11 / 64.77 64.87 / 63.44 68.34 / 67.58 NG 71.94 / 72.31 73.82 / 74.18 74.61 / 75.47 76.21 / 76.94 FF 67.11 / 66.02 69.54 / 68.33 68.44 / 67.58 71.16 / 70.41 BT 65.12 / 64.44 68.37 / 67.12 66.74 / 66.11 70.81 / 69.53 SalUn 64.15 / 63.30 67.20 / 65.90 65.80 / 64.75 69.55 / 68.50 GPPU (ours) 61.44 / 60.92 63.18 / 62.14 62.57 / 61.88 64.91 / 63.73 
+
+Time ↓ Time ↓
+
+Original - / - - / - - / - - / -GA 952.4 / 908.3 881.6 / 844.7 1003.7 / 956.4 918.2 / 872.3 PBU 288.5 / 255.4 264.1 / 236.1 306.2 / 272.8 281.7 / 249.4 NG 336.9 / 308.2 312.8 / 291.7 354.4 / 332.7 329.6 / 309.1 FF 420.6 / 392.3 398.4 / 374.9 443.7 / 417.6 421.8 / 395.2 BT 449.3 / 422.1 426.5 / 403.8 468.9 / 447.7 445.8 / 428.1 SalUn 312.0 / 281.0 288.0 / 263.0 330.0 / 302.0 305.0 / 279.0 GPPU (ours) 35.12 / 32.81 33.77 / 31.04 37.44 / 34.66 35.29 / 32.18 
+
+Gradient Ascent, Fisher Forget, Bad-Teach), alongside re-cent baselines like SalUn, exhibit significant degradation in both forgetting accuracy and retention stability. While SalUn offers a competitive middle ground as the third-best baseline, these prior methods collectively suffer from cu-mulative interference during sequential unlearning. In con-trast, our GPPU framework maintains remarkable consis-tency across iterations, achieving near-complete forgetting and superior retention ( RA After > 83% on ViT-L/16 [11] and > 78% on ResNet-50 [15]) even after multiple unlearn-ing rounds. Notably, GPPU sustains this high fidelity while being up to 20 × faster than the next best approach, high-lighting its robustness, scalability, and computational effi-ciency in realistic continual unlearning settings. Table 4. Single-class unlearning on Wav2Vec2-Large [3] & HuBERT-Large [17] across LibriSpeech-100h [27], SpeechCommands-v2 [33], and VoxCeleb1 [24]. Best val-ues in bold .                                                                                                                                     
+
+> Dataset Method FA ↓RA ↑ERB ↑IL ↓MIA ↓T↓
+> Values: Wav2Vec2-Large / HuBERT-Large Original
+> LS100 91.23 / 97.57 94.88 / 95.63 ––––SCv2 96.91 / 93.28 95.12 / 95.94 ––––Vox1 95.62 / 94.77 93.47 / 93.91 ––––
+> LS100
+> GA 21.47 / 19.41 81.62 / 83.72 79.93 / 82.55 32.7 / 28.9 58.2 / 57.8 612.8 / 598.4 FF 13.92 / 12.36 87.34 / 89.14 84.51 / 87.09 19.3 / 16.1 56.7 / 55.9 341.9 / 335.1 QIAU 7.41 / 6.42 92.88 / 94.12 90.74 / 92.87 7.8 / 6.3 54.9 / 54.0 168.4 / 159.8 GPPU (ours) 0.19 /0.16 94.63 /95.38 96.12 /97.21 0.6 /0.5 53.1 /52.6 29.4 /25.9 SCv2
+> GA 19.36 / 17.92 82.47 / 84.53 81.18 / 83.71 29.4 / 26.4 59.6 / 58.8 588.2 / 574.2 FF 12.51 / 11.18 88.21 / 90.02 86.08 / 88.31 17.2 / 15.1 57.4 / 56.4 329.5 / 322.7 QIAU 6.84 / 5.94 93.47 / 94.76 91.66 / 93.82 6.4 / 5.8 55.1 / 54.2 162.7 / 152.4 GPPU (ours) 0.17 /0.14 95.01 /95.81 96.88 /97.74 0.4 /0.4 53.0 /52.8 27.6 /23.6 Vox1
+> GA 24.89 / 22.04 79.31 / 80.26 77.22 / 78.32 36.8 / 34.7 60.8 / 60.1 631.7 / 618.1 FF 15.24 / 14.67 86.12 / 87.03 83.17 / 84.41 22.6 / 20.2 58.9 / 58.2 352.6 / 345.9 QIAU 8.37 / 7.92 91.56 / 92.11 89.62 / 90.34 8.5 / 7.4 56.3 / 55.7 175.3 / 169.4 GPPU (ours) 0.28 /0.23 93.12 /93.71 94.87 /95.42 0.9 /0.7 54.1 /54.0 31.8 /29.1
+
+4.3. Audio Unlearning 
+
+We further evaluate our framework on self-supervised speech representations to examine its generality beyond vision. Using Wav2Vec2-Large [3] and HuBERT-Large [17], we perform single-class unlearning across three standard audio benchmarks: LibriSpeech-100h [27], SpeechCommands v2 [33], and VoxCeleb1 [24]. As re-ported in Table 4, gradient-based baselines such as Gradi-ent Ascent and Fisher Forgetting exhibit substantial insta-bility, leading to incomplete forgetting ( FA After > 25%) and a noticeable drop in retained performance ( RA After 
+
+< 80%). The recent Quantum-Inspired Audio Unlearning (QIAU) baseline improves stability by partially decoupling feature manifolds but still suffers from over-regularization, causing residual memory traces in deeper layers. In con-trast, our GPPU achieves near-perfect forgetting ( FA After 
+
+≈ 0.2–0.4) and preserves high retention ( RA After > 93% on Wav2Vec2 and > 91% on HuBERT), while reducing in-ference time by nearly an order of magnitude compared to prior methods. These results underline the strong adapt-ability of GPPU to sequential audio unlearning tasks, main-taining both discriminative fidelity and computational effi-ciency across diverse acoustic domains. 
+
+5. Representation-level analysis 
+
+We analyze the effect of Graph-Propagated Projection Un-learning (GPPU) on ResNet-18 representations for CIFAR-10 [21] (forget class: class 0 = airplane ) using both qualitative visualizations and quantitative clustering / separability metrics. Visual evidence is provided in the t-SNE plots (Fig. 3) while aggregated numerical diagnostics are reported in Table 6 and the centroid comparison (Re-fer to Supplementary material for figure). All reported val-ues are computed on the held-out test embeddings extracted from the pre-/post-GPPU models. 
+
+5.1. Qualitative inspection 
+
+The t-SNE visualizations in Fig. 3 show that prior to un-learning the airplane class forms a compact cluster, sep-arated from most other classes. After GPPU the airplane points exhibit increased dispersion and partial overlap with nearby semantic neighbors (notably some vehicle clusters), while the majority of retained classes preserve recogniz-able cluster structure. Importantly, the post-GPPU embed-ding is not an extreme (idealized) collapse of the forgotten class into uniform noise; instead, the airplane cluster shows a realistic, partially dispersed halo with a few mislocated points, a pattern commonly observed in representation-level unlearning experiments. 
+
+5.2. Quantitative clustering metrics 
+
+Table 6 summarizes global clustering indices. The silhou-ette score[30] falls from 0.3006 to 0.2459 (∆ = −0.0547 ), indicating reduced per-sample cohesion / separation for the forgotten class in the context of all classes. The Davies–Bouldin index[9] increases from 1.0799 to 1.3496 
+
+(worse), and the Calinski–Harabasz index[5] decreases from 12126 .73 to 9144 .89 (worse). Together these con-sistent changes confirm that inter-class separability has de-graded modestly after GPPU, driven primarily by the in-tended erosion of the forgotten class signal while overall cluster structure is largely preserved. 
+
+5.3. Centroid dynamics and per-class effects 
+
+Table 6 report Euclidean distances between each retained-class centroid and the forget-class centroid, computed on both original and GNN-smoothed features. We observe that most classes show a moderate increase in distance to the air-plane centroid after GPPU (average increase ≈ 3.81 ±2.59 ), consistent with removal of the airplane subspace from the representation. Notable class-level findings include: Ship (class 8) exhibiting the largest relative increase (+24.2%), indicating the largest semantic displacement w.r.t. the for-gotten class, which could reflect preexisting proximity be-tween certain vehicle/transport clusters and airplane fea-tures in the original embedding; Vehicles (automobile, truck) showing moderate increases (9–11%), consistent with semantic proximity to the forgotten airplane cluster and expected collateral displacement; and Animals (bird, cat, dog, frog, horse, deer) showing relatively smaller or mixed changes ( 4–11%), indicating that GPPU largely avoids catastrophic drift for semantically distant classes. 
+
+5.4. Residual Feature Space Analysis 
+
+Building on our centroid dynamics analysis and the over-all clustering metrics presented in Table 6 (where the global Silhouette score shifts from 0.3006 to 0.2459 reflecting the structural displacement of the forget class), we further in-vestigate whether any exploitable discriminative structure Table 5. Linear Probing Accuracy ( ↓) on the forget class features after unlearning. Lower values indicate more complete destruction of class-specific discriminative structure.             
+
+> Method CIFAR-10 (Airplane) CIFAR-100
+> Original 95.12 87.45 GA 26.54 31.22 SalUn 16.35 10.42 PBU 14.21 8.54 GPPU (ours) 10.15 1.08
+
+Figure 3. t-SNE of ResNet-18 test embeddings after(left) and be-fore GPPU(right) (forget class = airplane). Table 6. Clustering metrics before and after GPPU 
+
+Metric Before After ∆
+
+Silhouette 0.301 0.246 -0.055 Davies–Bouldin 1.080 1.350 +0.270 Calinski–Harabasz 12126.7 9144.9 -2981.8 remains. It is critical to verify that the target class mani-fold (e.g., the airplane subspace) is genuinely dismantled at the representation level rather than merely shifted to a re-gion where the original classification head fails. To evaluate this quantitatively, we freeze the backbone of the unlearned models and train a fresh linear classifier (Linear Probe) ex-clusively on the extracted features to separate the forget class from the retained classes. As shown in Table 5, the linear probe accuracy for GPPU collapses to near random chance ( ≈ 10% on CIFAR-10 and ≈ 1% on CIFAR-100), confirming that our orthogonal projection step irreversibly destroys the discriminative linear subspace associated with the target class; while baselines like PBU and SalUn reduce structural leakage, they still retain discernible residual fea-tures that a fresh linear probe can easily exploit. 
+
+6. Ablation Study 
+
+Table 7 presents the ablation analysis of GPPU compo-nents on CIFAR-10 [21] with ResNet-18, where each mod-ule contributes distinctly to the stability–forgetting bal-ance. Removing the projection loss ( λproj =0 ) prevents ef-fective directional forgetting and leaves high residual for-get accuracy (48.7%), while eliminating the retention loss (λretain =0 ) results in over-aggressive forgetting (FA = 4.5%) but severely harms retained performance (RA = 83.7%) and 
+
+Table 7. Ablation study of GPPU components on CIFAR-10 using ResNet-18.                                                                 
+
+> Method Variant FA (Before) FA (After) RA (Before) RA (After) IL ( ↓)MIA ( ↓)
+> (λproj = 0 )92.8 48.7 93.6 91.2 18.9 54.8 (λretain = 0 )92.8 4.5 93.6 83.7 27.3 61.2 (k=0) 92.8 46.8 93.6 91.4 7.9 40.5 forget-projection only 92.8 9.4 93.6 90.2 10.5 42.3
+> λproj (0.5) 92.8 13.2 93.6 92.0 5.6 38.4
+> λproj (2.0) 92.8 3.7 93.6 90.8 6.8 36.1
+> k= 5 92.8 3.5 93.6 91.6 6.1 37.9
+> k= 20 92.8 5.8 93.6 91.3 5.9 36.8
+> GPPU (ours) 92.8 0.2 93.6 92.9 4.8 33.7
+
+increases interference loss, confirming its role in preserving non-target knowledge. Excluding GNN smoothing ( k=0 )or using a zero-shot variant reduces spatial regularization and leads to incomplete unlearning with higher MIA vulner-ability. Adjusting λproj controls unlearning strength, where lower values (0.5) produce weaker forgetting and higher values (2.0) amplify forgetting but slightly degrade RA; no-tably, retained accuracy (RA) remains remarkably consis-tent across variations in k and λproj due to the strong anchor-ing effect of the retention loss, while unlearning and privacy metrics (FA, IL, MIA) show higher sensitivity because pre-cise geometric removal of the target concept depends heav-ily on accurate estimation of the forget direction (dictated by k) and the optimal projection force applied (dictated by 
+
+λproj ). Overall, the full GPPU configuration achieves the best balance, reducing FA to 0.2% while maintaining 92.9% RA, minimal interference (IL = 4.8), and the lowest privacy leakage (MIA = 33.7). 
+
+7. Conclusion 
+
+We presented GPPU, a unified and efficient framework for class-level unlearning across vision and audio modal-ities. GPPU introduces a graph-based propagation mech-anism to derive class-specific forget directions in the rep-resentation manifold and applies projection-driven fine-tuning to ensure irreversible removal of target-class infor-mation while preserving utility on retained data. Through evaluations on eight benchmarks and architectures span-ning CNNs, Vision Transformers, and Audio Transformers, GPPU demonstrates consistent improvements in unlearning efficacy, achieving 10–20× faster runtime than state-of-the-art methods while maintaining over 93% retention accuracy. Beyond empirical results, our analyses establish GPPU as a geometrically grounded and principled method achiev-ing true representation-level forgetting without catastrophic degradation. By combining graph-based representation rea-soning with efficient projection-based optimization, GPPU enables scalable, modality-agnostic unlearning for modern discriminative models. We believe this framework is an im-portant step toward responsible, privacy-compliant, adapt-able deep learning systems, enabling future work on contin-ual unlearning, federated settings, and broader cross-modal extensions. References 
+
+[1] Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation). https://eur-lex.europa.eu/eli/ reg/2016/679/oj , 2016. Official Journal of the Euro-pean Union, L 119, 1-88. 1 [2] Digital Personal Data Protection Act, 2023. https : / / meity . gov . in / writereaddata / files / Digital _ Personal _ Data _ Protection _ Act _ 2023.pdf , 2023. Act of Parliament, India, August 11, 2023. 1 [3] Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, and Michael Auli. wav2vec 2.0: A framework for self-supervised learning of speech representations. In Advances in Neural Information Processing Systems , pages 12449–12460, 2020. 1, 5, 7 [4] Mikhail Belkin, Partha Niyogi, and Vikas Sindhwani. Man-ifold regularization: A geometric framework for learning from labeled and unlabeled examples. Journal of Machine Learning Research , 7:2399–2434, 2006. 2 [5] Tadeusz Cali´ nski and Jerzy Harabasz. Dendrite method for cluster analysis. Communications in Statistics-theory and Methods , 3(1):1–27, 1974. 7 [6] Yinzhi Cao and Junfeng Yang. Towards making systems for-get with machine unlearning. In IEEE Symposium on Secu-rity and Privacy , pages 463–480, 2015. 1, 2 [7] Vikram S Chundawat, Ayush K Tarun, Murari Mandal, and Mohan Kankanhalli. Can bad teaching induce forgetting? unlearning in deep networks using an incompetent teacher. In Proceedings of Association for the Advancement of Artifi-cial Intelligence , 2023. 2, 5 [8] Adam Coates, Andrew Ng, and Honglak Lee. An analysis of single-layer networks in unsupervised feature learning. In 
+
+Proceedings of the International Conference on Artificial In-telligence and Statistics , pages 215–223, 2011. 5 [9] David L Davies and Donald W Bouldin. A cluster separation measure. IEEE transactions on pattern analysis and machine intelligence , PAMI-1(2):224–227, 1979. 7 [10] Micha¨ el Defferrard, Xavier Bresson, and Pierre Van-dergheynst. Convolutional neural networks on graphs with fast localized spectral filtering. In Advances in Neural In-formation Processing Systems , pages 3844–3852, 2016. 2, 10 [11] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representa-tions , 2021. 1, 5, 6 [12] Chongyu Fan, Jiancheng Liu, Yihua Zhang, Eric Wong, Den-nis Wei, and Sijia Liu. Salun: Empowering machine unlearn-ing via gradient-based weight saliency in both image classi-fication and generation. arXiv preprint arXiv:2310.12508 ,2023. 5 [13] Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal sunshine of the spotless net: Selective forgetting in deep networks. In IEEE Conference on Computer Vision and Pattern Recognition , pages 9304–9312, 2020. Adapted for audio domain. 2 [14] Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal sunshine of the spotless net: Selective forgetting in deep networks. In IEEE Conference on Computer Vision and Pattern Recognition , pages 9304–9312, 2020. 1, 2, 5 [15] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In IEEE Con-ference on Computer Vision and Pattern Recognition , pages 770–778, 2016. 1, 5, 6 [16] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distill-ing the knowledge in a neural network. arXiv preprint arXiv:1503.02531 , 2015. 2 [17] Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, and Abdelrahman Mohamed. Hubert: Self-supervised speech representation learning by masked prediction of hidden units. IEEE/ACM Transactions on Audio, Speech, and Language Processing ,29:3451–3460, 2021. 1, 5, 7 [18] Arthur Jacot, Franck Gabriel, and Cl´ ement Hongler. Neu-ral tangent kernel: Convergence and generalization in neural networks. In Advances in Neural Information Processing Systems , 2018. 5 [19] Jeff Johnson, Matthijs Douze, and Herv´ e J´ egou. Billion-scale similarity search with gpus. IEEE Transactions on Big Data , 7(3):535–547, 2019. 5, 11 [20] Thomas N. Kipf and Max Welling. Semi-supervised classi-fication with graph convolutional networks. In International Conference on Learning Representations , 2017. 1, 2 [21] Alex Krizhevsky. Cifar-10 dataset. https://www.cs. toronto.edu/˜kriz/cifar.html , 2009. 10 classes, 60,000 32x32 color images. 5, 7, 8 [22] Alex Krizhevsky. Cifar-100 dataset. https://www. cs.toronto.edu/˜kriz/cifar.html , 2009. 100 classes, 60,000 32x32 color images. 5, 6 [23] Qimai Li, Zhichao Han, and Xiao-Ming Wu. Deeper insights into graph convolutional networks for semi-supervised learn-ing. In Proceedings of the Association for the Advancement of Artificial Intelligence , 2018. 3 [24] Arsha Nagrani, Joon Son Chung, and Andrew Zisserman. Voxceleb: A large-scale speaker identification dataset. In 
+
+Interspeech , pages 2616–2620, 2017. 5, 7 [25] Yuval Netzer, Tao Wang, Adam Coates, Alessandro Bis-sacco, Bo Wu, and Andrew Y. Ng. Reading digits in natural images with unsupervised feature learning. In Advances in Neural Information Processing Systems , 2011. 5 [26] Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number of classes. In In-dian Conference on Computer Vision, Graphics and Image Processing , pages 722–729, 2008. 5, 6 [27] Vassil Panayotov, Guoguo Chen, Daniel Povey, and Sanjeev Khudanpur. Librispeech: An asr corpus based on public domain audio books. In IEEE International Conference on Acoustics, Speech and Signal Processing , pages 5206–5210, 2015. 5, 7 [28] Subhodip Panda, Shashwat Sourav, and Prathosh A.P. Par-tially blinded unlearning: Class unlearning for deep net-works from bayesian perspective. In Proceedings of the Association for the Advancement of Artificial Intelligence ,pages 6372–6380, 2025. 1, 2, 5 [29] Shreyansh Pathak, Sonu Shreshtha, Richa Singh, and Mayank Vatsa. Quantum-inspired audio unlearning: To-wards privacy-preserving voice biometrics. In IEEE Inter-national Joint Conference on Biometrics , 2025. 2, 5 [30] Peter J Rousseeuw. Silhouettes: a graphical aid to the inter-pretation and validation of cluster analysis. Journal of com-putational and applied mathematics , 20:53–65, 1987. 7 [31] Kartik Thakral, Tamar Glaser, Tal Hassner, Mayank Vatsa, and Richa Singh. Fine-grained erasure in text-to-image diffusion-based foundation models. In IEEE Conference on Computer Vision and Pattern Recognition , pages 9121– 9130, 2025. 11 [32] Daniel Trippa, Cesare Campagnano, Maria Sofia Bucarelli, Gabriele Tolomei, and Fabrizio Silvestri. ∇ τ : Gradient-based and task-agnostic machine unlearning. CoRR ,abs/2403.14339, 2024. 1, 2, 5 [33] P. Warden. Speech Commands: A Dataset for Limited-Vocabulary Speech Recognition. ArXiv e-prints , pages 160– 172, 2018. 5, 7 [34] Han Xiao, Kashif Rasul, and Roland Vollgraf. Fashion-mnist: a novel image dataset for benchmarking machine learning algorithms. arXiv preprint arXiv:1708.07747 , 2017. 5[35] Heng Xu, Tianqing Zhu, Lefeng Zhang, Wanlei Zhou, and Philip S. Yu. Machine unlearning: A survey. ACM Comput. Surv. , 56(1):4296–4307, 2023. 1 [36] Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. Negative preference optimization: From catastrophic collapse to ef-fective unlearning. CoRR , abs/2404.05868, 2024. 2, 5 
+
+8. Supplementary Material 
+
+Spectral Interpretation. Graph convolution can be inter-preted as a low-pass filter on graph signals, smoothing fea-tures across connected nodes while preserving local struc-ture [10]. For a graph signal h ∈ Rn, the operation ˆAh 
+
+computes a weighted average: 
+
+( ˆAh )i = 1
+
+√di
+
+X
+
+j∈N (i)∪{ i}
+
+hj
+
+pdj
+
+(24) where N (i) is the neighborhood of node i and di its de-gree. This denoises individual features while reinforcing patterns shared across similar nodes. • Vision Transformers: CLS token from final layer, hi =
+
+fθ (xi)CLS ∈ Rd
+
+• CNNs: Global average pooling output, hi =
+
+GAP (fθ (xi)) ∈ Rd
+
+• Audio Transformers: Mean-pooled temporal features, 
+
+hi = 1
+
+T
+
+PTt=1 fθ (xi)t
+
+Algorithm 1 Graph-propagated projection unlearning (GPPU) algorithm.                    
+
+> Require: Pre-trained model Mθ=hϕ◦fθ, dataset D={(xi, y i)}ni=1 , forget classes Cf, hyperpa-rameters k,λproj ,λretain ,Tft ,η
+> Ensure: Unlearned model M′
+
+1: 2: // PHASE I: Forget Direction Identification 
+
+3: H ← [] , y ← [] 
+
+4: for (xi, y i) ∈ D do 
+
+5: hi ← fθ (xi) ▷ Extract features 
+
+6: Append hi to H, yi to y
+
+7: end for 
+
+8: F ← normalize (H, dim = 1) ▷ L2 normalization 
+
+9: S ← FF ⊤ ▷ Cosine similarity matrix 
+
+10: A ← BuildKNNGraph (S, k ) ▷ Construct adjacency 
+
+11: ˆA ← NormalizeAdjacency (A) ▷ GCN normalization 
+
+12: H(1) ← ˆAH ▷ One-step graph propagation 
+
+13: 14: G ← ∅ ▷ Forget direction set 
+
+15: for c ∈ C f do 
+
+16: Ic ← { i | yi = c} ▷ Indices of forget class 
+
+17: ¯hc ← 1   
+
+> |I c|
+> P
+> i∈I ch(1)
+> i▷Mean propagated feature
+
+18: gc ← ¯hc  
+
+> ∥¯hc∥2▷Normalize to unit vector
+
+19: G ← G ∪ { gc}
+
+20: end for 
+
+21: 22: // PHASE II-A: Zero-Shot Unlearning (Optional) 
+
+23: function M′
+
+> zero (x):
+
+24: h ← fθ (x)
+
+25: hproj ← h − P     
+
+> gc∈G (h·gc)gc▷Project onto orthogonal subspace
+
+26: return hϕ(hproj )
+
+27: end function 
+
+28: 29: // PHASE II-B: Fine-Tuning for Representation Unlearning 
+
+30: Freeze all parameters: θfrozen ← θ \ θft 
+
+31: Initialize optimizer: opt ← AdamW (θft , η )
+
+32: 33: for t = 1 to Tft do 
+
+34: 35: for batch Bf ⊂ D (t)    
+
+> f,Br⊂ D (t)
+> rdo
+
+36: // Compute projection loss on forget batch 
+
+37: Lproj ← 0
+
+38: for x ∈ B f do 
+
+39: h ← fθ (x)
+
+40: Lproj ← L proj + P     
+
+> gc∈G (h·gc)2▷Equation (14)
+
+41: end for 
+
+42: Lproj ← L proj /|B f |
+
+43: 44: // Compute retention loss on retain batch 
+
+45: Lretain ← 0
+
+46: for (x, y ) ∈ B r do 
+
+47: ˆy ← hϕ(fθ (x)) 
+
+48: Lretain ← L retain − log( ˆ yy ) ▷ Cross-entropy 
+
+49: end for 
+
+50: Lretain ← L retain /|B r |
+
+51: 52: // Combined loss and gradient step 
+
+53: Ltotal ← λproj Lproj + λretain Lretain ▷ Equation (16) 
+
+54: ∇θft Ltotal ← BackwardPass (Ltotal )
+
+55: θft ← opt.step (∇θft Ltotal )
+
+56: end for 
+
+57: 58: // Check convergence 
+
+59: if Lproj < ϵ then 
+
+60: break 
+
+61: end if 
+
+62: end for 
+
+63: 64: // Final model with internalized projection 
+
+65: function M′
+
+> fine (x):
+
+66: return hϕ(fθ (x)) ▷ Direct forward pass, no projection needed 
+
+67: end function 
+
+68: 69: return M′ 
+
+> fine (or M′
+> zero for zero-shot variant)
+
+8.1. Metrics 
+
+• Forget Accuracy (FA) measures the model’s accuracy on the forget class after unlearning. A lower value (ideally 0%) indicates successful unlearning. • Retain Accuracy (RA) measures the model’s accuracy on retain classes. A higher value indicates preserved util-ity. • Information Leakage (IL) quantifies the model’s resid-ual confidence in predicting the forget class for its true samples, lower values indicate better erasure: 
+
+IL =
+
+( 1 
+
+> |{ i|yi=f}|
+
+P 
+
+> i:yi=f
+
+Pi,f if |{ i | yi = f }| > 00 otherwise • Erasing Retention Balance Score (ERB): Balances For-get Accuracy and Retain Accuracy, adapted from [31]: ERB = 2 × (100 − FA ) × P 
+
+> all retained classes
+
+RA 
+
+(100 − FA ) + P 
+
+> all retained classes
+
+RA • Time(T): Wall-Clock measurable time taken by an algo-rithm to unlearn. 
+
+8.2. Computational Complexity 
+
+Phase I (Forget Direction Identification): Feature extrac-tion costs O(n · Tf ), k-NN graph construction O(nd log n)
+
+with approximate methods (e.g., FAISS [19]), graph prop-agation O(ndk ) for sparse ˆA, and forget direction compu-tation O(|D f |d). The overall Phase I cost is O(ndk log n)
+
+with approximations ( O(n2d) otherwise), incurred once as an offline preprocessing step. 
+
+Phase II (Fine-Tuning): Per-sample gradient computation costs O(d|θft |), giving a total of O(Tft · n · d · | θft |). With 
+
+Tft = 3 and |θft | ≈ 0.1|θ|, this amounts to ∼0.3× the cost of full retraining, substantially cheaper than gradient-based unlearning methods that typically require 10 –50 epochs. 
+
+8.3. Centroid Distances 
+
+Table 6 reports Euclidean distances between each retained-class centroid and the forget-class centroid, computed on both original and GNN-smoothed features. Most classes ex-hibit a moderate increase in distance to the airplane centroid after GPPU (average increase ≈ 3.81 ± 2.59 ), consistent with removal of the airplane subspace from the representa-tion. Notable class-level observations include: Ship (class 8) showing the largest relative increase (+24.2%), indicat-ing the greatest semantic displacement w.r.t. the forgotten class, possibly reflecting prior proximity between transport-related clusters and airplane features in the original embed-ding; Vehicles (automobile, truck) displaying moderate in-creases (9–11%), consistent with their semantic proximity to the airplane cluster and expected collateral displacement; and Animals (bird, cat, dog, frog, horse, deer) exhibiting smaller or mixed changes (4–11%), suggesting that GPPU largely prevents catastrophic drift for semantically distant classes.

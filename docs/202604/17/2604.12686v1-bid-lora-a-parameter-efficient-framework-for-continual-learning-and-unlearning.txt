@@ -1,0 +1,664 @@
+Title: BID-LoRA: A Parameter-Efficient Framework for Continual Learning and Unlearning
+
+URL Source: https://arxiv.org/pdf/2604.12686v1
+
+Published Time: Wed, 15 Apr 2026 01:37:49 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+> 1
+
+# BID-LoRA: A Parameter-Efficient Framework for Continual Learning and Unlearning 
+
+Jagadeesh Rachapudi, Ritali Vatsi, Praful Hambarde, and Amit Shukla 
+
+Abstract — Recent advances in deep learning underscore the need for systems that can not only acquire new knowledge through Continual Learning (CL) but also remove outdated, sensitive, or private information through Machine Unlearning (MU). However, while CL methods are well-developed, MU techniques remain in early stages, creating a critical gap for unified frameworks that depend on both capabilities. We find that naively combining existing CL and MU approaches results in knowledge leakage a gradual degradation of foundational knowledge across repeated adaptation cycles. To address this, we formalize Continual Learning Unlearning (CLU) as a unified paradigm with three key goals: (i) precise deletion of unwanted knowledge, (ii) efficient integration of new knowledge while preserving prior information, and (iii) minimizing knowledge leakage across cycles. We propose Bi-Directional Low-Rank Adaptation (BID-LoRA), a novel framework featuring three dedicated adapter pathways-retain, new, and unlearn-applied to attention layers, combined with escape unlearning that pushes forget-class embeddings to positions maximally distant from retained knowledge, updating only ≈5% of parameters. Exper-iments on CIFAR-100 show that BID-LoRA outperforms CLU baselines across multiple adaptation cycles. We further evaluate on CASIA-Face100, a curated face recognition subset, demon-strating practical applicability to real-world identity management systems where new users must be enrolled and withdrawn users removed. 
+
+Impact Statement —This work advances responsible AI by enabling models to selectively forget sensitive data while contin-uously learning critical for GDPR/CCPA compliance in identity management. BID-LoRA’s parameter efficiency (5% updates) trimmed for continual adaptations for resource-constrained de-ployments, while escape unlearning provides verifiable privacy protection against membership inference attacks. 
+
+Index Terms —Continual Learning, Machine Unlearning, LoRA, Parameter-Efficient Fine-Tuning 
+
+I. I NTRODUCTION 
+
+# RECENT developments in AI have triggered a new shift in deep learning models [1]. Future intelligent systems are expected to follow a dual paradigm: learn new knowledge, and remove specific knowledge. This capability is called Con-tinual Learning and Unlearning (CLU) [2], [3], also termed continual adaptation. This capability becomes essential when data distributions shift over time, whether due to policy changes, task modifications, or market trends. Regardless of the underlying cause, the model’s knowledge base must be 
+
+J. Rachapudi, R. Vatsi, P. Hambarde, and A. Shukla are with the Indian Institute of Technology Mandi, Mandi, India (e-mail: s23096@students.iitmandi.ac.in; d23059@students.iitmandi.ac.in; praful@iitmandi.ac.in; amitshukla@iitmandi.ac.in). This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible. 
+
+Fig. 1. Overview of CLU. The CLU system removes unwanted knowledge (red), retains prior knowledge (green), and integrates new knowledge (blue). 
+
+updated accordingly. Fig 1 illustrates CLU system as new data replaces unwanted data. This requires simultaneous systems for both learning and unlearning. Since CLU combines Continual Learning (CL) and Machine Unlearning (MU), we establish each component’s foundation. CL is the process of acquiring new knowledge [4], [5], [6], [7], [8], [9] from unseen data while retaining performance on existing tasks, widely studied in machine learning. Ap-plication tasks include mixed-task scenarios, out of distribu-tion tasks, among others. While CL focuses on knowledge acquisition, MU addresses selective knowledge removal, an emerging field [10], [11], [12], [13], [14]. Targets for unwanted knowledge removal include privacy-related data, regulatory removal by government orders such as General Data Protection Regulation (GDPR) and California Consumer Privacy Act (CCPA) [15], [16], and hate speech, among others. There is an intrinsic connection between MU and CL in which one adds knowledge and other removes knowledge, both retaining existing knowledge. Can we combine both for simul-taneous learning and unlearning? Such a framework would enable access control, surveillance, personalized education, and content moderation. Can continual learning alone solve this? No-without removing unwanted knowledge over time, it accumulates and causes knowledge drift degrading model performance and creating bias toward unwanted information, making unlearning essential. Despite CLU’s importance, a research gap exists due to ma-turity imbalance. CL is well-established, while Machine Un-learning remains developmental. This disparity leaves unified CLU frameworks largely unexplored. CLU applications de-mand parameter-efficient solutions. CLU systems continuously adapt as data arrives and require removal. Full retraining be-comes computationally infeasible, making parameter-efficient approaches essential. However, combining CL and MU in-
+
+> arXiv:2604.12686v1 [cs.LG] 14 Apr 2026 2
+
+troduces knowledge leakage-repeated learning-unlearning cy-cles cause models to gradually lose foundational knowledge. Unlike catastrophic forgetting, knowledge leakage is a slow degradation of original capabilities across adaptation cycles; further analysis is provided in Section VI-B. This challenge is critical because real-world systems face continuous requests: employees join and leave organizations, regulations evolve, and user preferences shift constantly. Such systems with minimal knowledge leakage would enable critical applications: language models, medical systems, recommendation engines, and autonomous vehicles. Face recognition presents the most urgent CLU need due to privacy challenges. Face recognition systems are critical CLU applications as personnel frequently join and leave organizations. Since facial data is highly sensitive private information, protecting it from misuse through model inversion techniques [17], [18], [19] becomes essential to safeguard privacy rights mandated by GDPR and CCPA [15], [16]. Face recognition thus provides a natural testbed for CLU applications, presenting an urgent challenge that demands immediate attention given the esca-lating privacy threats and regulatory requirements. Designing such an ideal CLU system presents three core challenges. First, achieving continual learning while avoiding catastrophic forgetting. Second, implementing selective machine unlearn-ing. Finally, maintaining knowledge stability and minimizing knowledge leakage across repeated cycles. To address these challenges, we propose Bi-Directional LoRA (BID-LoRA), a parameter-efficient solution to CLU problems that minimizes knowledge leakage. BID-LoRA leverages LoRA’s inherent parameter efficiency, fine-tuning only attention layers in transformer blocks and classification heads [20], [21], [22], [23] as fine-tuning fewer parameters has been shown effective [24], [25], [26], [27] in knowledge ma-nipulation. To reduce catastrophic forgetting [4] and minimize knowledge leakage, we employ the replay mechanism. This approach is similar to performing minimally invasive surgery on a model rather than major surgery. BID-LoRA is simple, parameter-efficient, data-efficient, and suitable for large mod-els. We conduct extensive experiments across classification and face recognition tasks, demonstrating broad applicability. Our contributions are summarized as follows:  
+
+> •
+
+We formally define the Continual Learning-Unlearning (CLU) problem and demonstrate that naively combining existing CL and MU approaches leads to significant knowledge leakage, where foundational knowledge de-grades across repeated adaptation cycles.  
+
+> •
+
+We propose BID-LoRA, a parameter-efficient framework featuring three-pathway separation that isolates retained, forgotten, and newly learned knowledge. This architec-ture prevents interference between competing objectives while updating only ≈5% of model parameters.  
+
+> •
+
+We introduce escape unlearning, which computes optimal embedding locations that are maximally distant from retained class centroids, pushing forget-class representa-tions to positions that are both hard to recover and non-interfering with retained knowledge.  
+
+> •
+
+We establish the first generalizable CLU benchmark through comprehensive experiments on CIFAR-100 and CASIA-Face100, employing a novel sliding window eval-uation protocol with progressive 10-class forget-retain-learn cycles that systematically tests long-term adaptation stability.  
+
+> •
+
+We demonstrate BID-LoRA’s practical applicability to face recognition and identity management systems, where privacy-driven unlearning (e.g., GDPR compliance) must coexist with incremental enrollment of new users. II. R ELATED WORK 
+
+A. Continual Learning 
+
+Continual Learning (CL) aims to train models sequentially on evolving tasks while retaining prior knowledge. In the CL setting, new classes arrive without access to old data, often leading to catastrophic forgetting. To address this, several strategies have emerged. Kirkpatrick et al. [4] introduced Elastic Weight Consoli-dation (EWC), an early exemplar-free approach that adds a Fisher-based quadratic penalty to protect parameters critical for past tasks. Buzzega et al. [5] proposed Dark Experience Replay++ (DER++), combining rehearsal with distillation by storing both samples and logits to stabilize decision bound-aries. Caccia et al. [6] developed ER-ACE and ER-AML where cross-entropy is applied asymmetrically, isolating new-class updates while replay consolidates all classes. Douillard 
+
+et al. [7] presented DyTox, a transformer-based method using task-specific tokens and a replay buffer to scale across tasks without task IDs. Cotogni et al. [8] introduced GCAB, which employs gated class attention and feature drift compensation for exemplar-free ViT learning. Finally, Mohamed et al. [9] proposed D3Former, which debiases logits and preserves atten-tion maps to balance performance across old and new classes. 
+
+B. Machine Unlearning 
+
+Machine Unlearning (MU) has seen significant advance-ments, focusing on methods that effectively balance the re-moval of data influence and the preservation of retained knowledge. Kurmanji et al. [10] tackled the problem of unlearning by pushing the forget distribution toward a uni-form distribution, while ensuring that the retain distribution follows the normal loss function. This approach ensures that models forget the target data without significantly compro-mising performance on the remaining data. Zhao et al. [11] addressed the issue of continual forgetting in the context of continual learning by utilizing GS-LoRA, which targets the FFN modules with a group sparsity regularizer. Cha et al. 
+
+[12] introduced adversarial examples as a technique to ensure a cleaner and more robust removal of forget data. By generating adversarial examples, the model is encouraged to misclassify the forget data, making it harder for the model to remember or retain the forgotten samples. Fan et al. [13] proposed a novel method that computes the weight saliency matrix for data to be forgotten. By identifying the most relevant weights for the forgotten samples, the model updates only those weights, which helps to avoid catastrophic forgetting and ensures that the model retains critical information from the retained data. Tarun et al. [14] proposed a method that 3
+
+corrupts the knowledge to be forgotten by using noise and then performs repair work to maintain the retained knowledge. Panda et al. [28] proposed a weak unlearning approach for black-box GANs that filters undesired outputs by computing projection similarity between sampled latent vectors and a learned representation of unwanted features in the latent space. Wang et al. [29] proposed MCC-Fed, which detects malicious clients via Euclidean distance-based deviation analysis and employs a Lipschitz-inspired contribution-aware metric as a regularization term to precisely unlearn their negative influence without requiring auxiliary datasets. 
+
+C. Parameter-Efficient Fine-Tuning 
+
+Fine-tuning large pretrained models such as vision and language models on downstream tasks has become a dominant paradigm in modern deep learning. Parameter-efficient fine-tuning techniques are widely adopted, as they substantially reduce trainable parameters without significant performance degradation. Addition-based approaches [30], which introduce new trainable components while freezing the original model, other works include [20], [22]. Freezing-based techniques [31] represent another approach, selectively updating only specific parameters or layers while keeping the rest frozen. Parameter factorization methods [32], [33] form the third category, de-composing weight updates into low-rank matrices to achieve efficiency. Among these, Low-Rank Adaptation (LoRA) [21] has emerged as particularly effective, decomposing weight up-dates into low-rank matrices that can be efficiently trained and merged. Our work builds upon LoRA’s foundation to address the unique challenges of continual learning-unlearning. 
+
+D. Continual Learning-Unlearning (CLU) 
+
+The existing CLU works, such as Shibata et al. [34], Liu et al. [3], Chatterjee et al. [2], and Huang et al. [35], integrate CL and MU, providing theoretical foundations for adaptive knowledge management. While this field has gained attention, existing approaches still face significant design and efficiency challenges. Shibata et al. [34] first explored a CLU-like system using mnemonic codes, enabling selective forgetting by discarding class-specific codes and new learning by embedding fresh ones. However, this method requires retraining from scratch with mnemonic embeddings, is incompatible with pre-trained models, and doubles computational cost. Liu et al. [3] proposed CLPU-DER++, which achieves exact unlearning via isolated temporary networks that can be deleted while retain-ing a permanent model. It guarantees privacy and supports selective forgetting without original data. Yet, it demands retraining from scratch, incurs exponential storage overhead with multiple tasks, and cannot revise permanent knowledge. Chatterjee et al. [2] introduced UniCLUN, a dual-teacher dis-tillation framework with one CL teacher, one UL teacher, and a student model. It is the first unified CL–UL approach, handling mixed learning–forgetting sequences adaptively. Nevertheless, it incurs parameter overhead, requires heavy computation, and depends on replay buffers that raise privacy risks. Adhikari et al. [36] proposed UnCLe, a hypernetwork-based framework that generates task-specific parameters conditioned on task embeddings, enabling data-free unlearning by aligning forget-task parameters with Gaussian noise. However, it supports only task-level unlearning and cannot be directly applied to pretrained models like DeiT, as it requires training a hypernet-work to generate entire model parameters from scratch rather than fine-tuning existing weights. More recently, Huang et al. [35] proposed a gradient-based, task-agnostic CLU frame-work optimized via KL divergence, aiming for efficiency and adaptability. However, it requires computing online Hessian approximations through costly inner-loop optimization, lacks support for pretrained vision transformers, and has only been validated on models trained from scratch rather than leveraging existing foundation models. Despite these contributions, none of the above methods are resource-friendly: most update nearly all parameters, making them inefficient for large-scale pre-trained models. Moreover, they have only been tested on limited scenarios involving a few additions and deletions, raising questions about their claims of ‘continual’ operation. In contrast, our BID-LoRA is explicitly designed to be parameter-efficient, resource-conscious, and validated across long sequences of CLU requests, demonstrat-ing genuine continual adaptability at scale. III. P ROBLEM FORMULATION 
+
+A. Problem Setting 
+
+We introduce a novel problem setting called Continual Learning Unlearning (CLU) also known as Continual Adap-tation or simply Adaptations, a framework for dynamically modifying model knowledge defined as learned class map-pings encoded in parameters. This setting brings together two complementary goals: (i) selectively removing specific tar-geted knowledge (machine unlearning) and (ii) acquiring new targeted knowledge for existing pre-trained models (continual learning), all while maintaining performance on the remaining knowledge in a continual form. To develop a solution for this problem, we first present the most basic case, in which only one adaptation task is performed, and then expand this formulation to the continuous scenario, which includes a series of adaptation activities. Let M be a model pre-trained on the dataset D. We regard 
+
+M as a mapping function fM : XD → Y D , where XD and 
+
+YD denote the input and output spaces associated with D,respectively. Our objective is to selectively discard certain knowledge while adding new knowledge and retaining the rest. We assume Df be the dataset to be forgotten, Dfull  
+
+> r
+
+the dataset to be retained, and Dnew the new dataset to be learned, satisfying D = Dfull  
+
+> r
+
+∪ Df , Dfull  
+
+> r
+
+∩ Df = ∅, and Dnew ∩ D = ∅.In practice, storing the full retain set is prohibited under General Data Protection Regulation (GDPR) and Califor-nia Consumer Privacy Act (CCPA) regulations for privacy-sensitive data, while for non-private data, retraining remains computationally expensive due to large-scale models and datasets. We therefore maintain a small replay buffer Dr ⊂
+
+Dfull  
+
+> r
+
+such that |Dr | ≪ | Dfull  
+
+> r
+
+| (at least 10% of |Dfull  
+
+> r
+
+|), here 
+
+Dfull  
+
+> r
+
+represents full retaining data 1. The consequences of   
+
+> 1From this point, Drdenotes the experience replay buffer unless specified. 4
+
+insufficient or absent buffer size are discussed in detail in Section VI-A. Before adaptation, M performs well on Dr and Df but poorly on Dnew , i.e., 
+
+fM : XDf → Y Df ; XDr → Y Dr ; XDnew →Y Dnew . (1) 
+
+Let the adaptation algorithm be F for more details please refer Section IV which modifies the model M to obtain M′
+
+by using F such that M′ = F(M, D f , D r , D new ) such that 
+
+M′ holds a new mapping relationship fM′ as 
+
+fM′ : XDf →Y Df ; XDr → Y Dr ; XDnew → Y Dnew . (2) 
+
+Here, → denotes that the mapping no longer holds (i.e., the model has forgotten the corresponding mapping), while →
+
+indicates that the mapping still holds. We now extend this problem to the continual setting, where the model is required to sequentially adopt new knowledge, involving both unlearning and learning across tasks T . These tasks may be triggered by requests from the user, the owner, or both. Here, t is an index representing the task number, ranging from 0, 1, 2, . . . , t, . . . , T . let D(t)  
+
+> r
+
+be the data to be retained, 
+
+D(t)  
+
+> f
+
+be the data to be forgotten and D(t) new be the data to be learned at tth step respectively. The algorithm F is applied as: 
+
+M(t) = F(M(t - 1) , D (t)  
+
+> f
+
+, D (t)  
+
+> r
+
+, D (t) new )
+
+The adaptation algorithm F takes the previous-step model 
+
+M(t - 1) along with the datasets D(t)  
+
+> r
+
+, D(t)  
+
+> f
+
+, and D(t) new to produce the updated model M(t) . Thus, F handles adaptation requests sequentially, starting from M and generating a sequence of models M(1) , M(2) , M(3) , . . . , M(t) , . . . , M(T) , where 
+
+M(t) represents the modified model after the t-th adaptation task. After step t, the adapted model M(t) must satisfy: 
+
+fM(t) : XD(i)
+
+> f
+
+→Y D(i)
+
+> f
+
+, ∀ i ≤ t (3a) 
+
+fM(t) : XD(t)
+
+> r
+
+→ Y D(t)
+
+> r
+
+(3b) 
+
+fM(t) : XD(i)
+
+> new
+
+→ Y D(i)
+
+> new
+
+(3c) We define successful CLU as  
+
+> •
+
+Forgetting: Acc (M(t), D (i) 
+
+> f
+
+) ≤ 1 
+
+> C
+
+, ∀ i ≤ t 
+
+> •
+
+Retention: Acc (M(t), D (t) 
+
+> r
+
+) ≈ Acc (Oracle , D (t) 
+
+> r
+
+) 
+
+> •
+
+Learning: Acc (M(t), D (t)
+
+> new
+
+) ≈ Acc (Oracle , D (t)
+
+> new
+
+)
+
+where C is the number of classes and Oracle denotes a model trained directly on target classes only. 
+
+B. Assumptions 
+
+BID-LoRA assumes the following conditions hold: 1) A replay buffer Dr with |Dr | ≥ 0.1|Dfull  
+
+> r
+
+| is available. 2) Learning and unlearning occur simultaneously; if only one is needed, the corresponding loss is masked (see Section IV-C). 3) Data partitions satisfy D = Dfull  
+
+> r
+
+∪ Df , Dfull  
+
+> r
+
+∩ Df = ∅,
+
+Dnew ∩ D = ∅.IV. M ETHOD 
+
+A. Overview 
+
+Given the CLU objectives in Section I, we propose Bi-Directional LoRA (BID-LoRA). The name reflects the frame-work dual nature: one direction incorporates new knowledge Eq. 3c, while the other removes unwanted knowledge Eq. 3a, all while preserving retained knowledge Eq. 3b. BID-LoRA employs three dedicated LoRA adapters each with a separate pathway for retention, acquisition, and forget-ting along with corresponding loss functions. This pathway separation prevents gradient interference between competing objectives. To maintain parameter efficiency, only lightweight adapters in attention layers are trained while the backbone remains frozen, following evidence that smaller network al-terations reduce catastrophic forgetting [11]. Additionally, a replay buffer Dr (see Section III) mitigates catastrophic forgetting of retained classes. Section IV-C details the loss functions. 
+
+B. BID-LoRA LoRA-based Model Tuning: We employ LoRA-based fine-tuning on attention layers as shown in Fig 2, which encode significant knowledge in transformer architectures. A standard linear layer computes h = W x , where x ∈ Rk is the input vector, h ∈ Rd is the output vector, and W ∈ Rd×k
+
+is the weight matrix. LoRA introduces a low-rank update 
+
+∆W = BA , where B ∈ Rd×r and A ∈ Rr×k are low-rank matrices, yielding h = W x + S(BAx ) with scaling factor S. 
+
+> Fig. 2. LoRA placement in BID-LoRA at Attention Modules
+
+However, standard LoRA in CLU settings suffers from knowledge leakage gradual degradation of retained knowledge across successive steps (see Section VI-B). We hypothesize this occurs because a single adapter conflates three competing objectives: retention, acquisition, and forgetting. Interference among these objectives causes cumulative drift resulting in knowledge leakage. 
+
+Pathway Separation: To address cumulative knowledge drift, i.e., knowledge leakage, we dedicate distinct adapters to each objective: Wf = Bf Af for forgetting, Wret = Bret Aret for 5
+
+retention, and Wnew = Bnew Anew for learning new classes. Crit-ically, Wf learns weights that nullify forget-class knowledge, 
+
+Wnew acquires new knowledge, while Wret preserves retained knowledge to counteract the knowledge leakage caused by both forget and new adapters. After sufficient training, adapters merge into the base weights W as shwon in Fig 3 
+
+h = W x + S (Bret Aret + Bnew Anew + Bf Af ) x (1) where W ∈ Rd×k is frozen, and adapter consists of matrices 
+
+Bf , B ret , B new ∈ Rd×r and Af , A ret , A new ∈ Rr×k that serve their designated function.  
+
+> Fig. 3. Pathway separation for BID-LoRA.
+
+This separation provides two benefits: (1) drift in one adapter does not corrupt others, and (2) each adapter trains on its specific objective without gradient interference. Adapters merge at inference, preserving efficiency. We empirically val-idate pathway specialization in Section V-D4. 
+
+C. Loss Function 
+
+In this section, we present the loss functions which are designed to balance forgetting, retention, and new knowledge acquisition in our continual adaptation framework. 
+
+Selective Forget Loss: Existing unlearning methods suffer from strong unlearning signals that degrade retention knowledge, resulting in improper forgetting. To address this, we propose 
+
+Escape Unlearning , a passive approach that pushes forget-class embeddings to an “escape” point maximally distant from all retain-class centroids, creating irreversible information loss. First, we compute the centroid of each class as: 
+
+ck = 1
+
+|Dk|
+
+X
+
+> x∈Dk
+
+emb (x) (2) This yields retain centroids {cr1 , c r2 , . . . , c rK } and forget centroids {cf1 , c f2 , . . . , c fM }. We obtain the escape direction by solving the minimax problem: 
+
+d∗ = arg min  
+
+> ∥d∥=1
+
+max 
+
+> i
+
+ d⊤cri
+
+ (3) where d∗ ∈ Rdim is the escape direction vector in the dim -dimensional embedding space, d⊤ denotes the transpose, and 
+
+d⊤cri computes the dot product measuring the projection of retain centroid cri along direction d. The constraint ∥d∥ = 1 
+
+ensures unit norm. The inner max i identifies the retain cen-troid most aligned with d, while the outer min searches over all unit directions to find d∗ that minimizes this maximum alignment. Starting from a randomly initialized direction, the optimization iteratively converges to d∗, yielding the direction maximally distant from all retain centroids. However, placing the escape point on the unit sphere leads to unstable forgetting (see Section V-D6). Therefore, we scale the escape point away from the sphere: 
+
+tescape = λesc · d∗ (4) This provides a target location away from retain embeddings in both direction and distance. The forget loss is then: 
+
+Lf = MSE  emb (Xf ), tescape 
+
+ (5) Where MSE indicates mean sqaured loss while this Lf
+
+pushes all forget sample embeddings toward the escape point, creating a many-to-one mapping that destroys class-discriminative information. 
+
+Retention Loss The retention loss preserves knowledge of retain classes and prevents model drift toward the escape point through two complementary terms: 
+
+Lret = λce · CE (zr , y r ) + λemb · MSE (er , et) (6) where zr are student logits for retain samples, yr are ground truth labels, and er , et are student and teacher embeddings re-spectively. The embedding anchor term MSE (er , et) prevents representation drift by keeping student embeddings close to the teacher (i.e., away from escape point d∗), where the teacher is a frozen copy of the model at initialization. 
+
+New Knowledge Loss The model must simultaneously learn new classes using standard cross-entropy: 
+
+Lnew = CE (zn, y n) (7) where CE indicates cross entropy loss zn are logits and yn
+
+are labels for new class samples. Each loss backpropagates exclusively through its designated adapter and classifier head nodes. During gradient updates, non-target adapters are frozen and non-target head gradients are masked to zero. Specifically, Lf , Lret , and Lnew update only their respective adapters (B, A ) and corresponding classifier head nodes. This ensures forgetting cannot corrupt retained knowledge and each adapter specializes to its function, as per assumption 2 (Section III-B), if only learning or unlearning is required, the corresponding loss terms are masked accordingly. Algorithm 1 summarizes the complete BID-LoRA training procedure. Each iteration performs gradient-isolated updates for retain, forget, and new pathways sequentially, ensuring no cross-pathway interference. After training, adapters merge into base weights for efficient inference. V. E XPERIMENTAL 
+
+A. Experimental Setup Datasets and Pre-trained Models: We evaluate BID-LoRA on classification and face recognition tasks. For classification, 6
+
+TABLE I PERFORMANCE COMPARISON ACROSS ALL CONTINUAL LEARNING -UNLEARNING TASKS ON CIFAR-100. 
+
+Method Tunable ↓ Task-1 Task-2 
+
+Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5 Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5
+
+Oracle 100% – – – 78.89 – – – – – 75.60 – –LSF[34] 100% 0.00 70.21 80.23 73.55 0.13 0.63 0.00 70.31 78.27 72.96 0.89 0.54 CLPU-DER++[3] 100% 0.27 70.30 70.27 70.29 1.47 0.58 0.00 68.32 73.47 70.04 0.79 0.57 UniCLUN [2] 100% 2.37 72.39 75.32 73.37 1.27 0.64 0.20 67.27 74.63 69.72 1.56 0.52 UG-CLU [35] 100% 1.31 76.73 73.27 75.58 0.73 0.59 0.37 70.32 71.47 70.70 1.89 0.59 UnCLe [36] 100% 1.47 78.43 75.23 76.83 0.41 0.60 0.50 70.00 76.27 72.09 1.00 0.61 
+
+BID-LoRA 5.08% 0.93 75.71 76.93 76.03 0.67 0.57 0.27 70.83 79.87 73.84 0.60 0.51 
+
+Method Tunable ↓ Task-3 Task-4 
+
+Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5 Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5
+
+Oracle 100% – – – 77.64 – – – – – 78.04 – –LSF[34] 100% 1.00 72.00 77.25 73.75 0.89 0.53 0.00 75.00 73.35 74.45 0.78 0.52 CLPU-DER++[3] 100% 0.48 71.33 80.25 74.31 1.35 0.58 0.25 79.28 72.25 76.94 0.62 0.57 UniCLUN [2] 100% 0.36 68.48 79.00 71.99 2.58 0.61 0.36 73.25 70.89 72.46 1.85 0.61 UG-CLU [35] 100% 0.00 74.58 78.25 75.81 0.78 0.59 0.00 70.25 74.89 71.80 1.87 0.63 UnCLe [36] 100% 0.00 71.00 81.25 74.42 0.77 0.55 0.89 74.36 71.58 73.43 0.88 0.51 
+
+BID-LoRA 5.08% 0.13 72.33 79.73 74.80 0.76 0.54 0.27 76.00 78.13 76.71 0.69 0.50 
+
+Method Tunable ↓ Task-5 Task-6 
+
+Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5 Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5
+
+Oracle 100% – – – 78.44 – – – – – 79.16 – –LSF[34] 100% 0.00 68.98 78.91 73.75 1.25 0.53 0.00 65.00 75.37 68.46 1.24 0.55 CLPU-DER++[3] 100% 0.00 69.00 75.89 74.31 1.78 0.59 0.87 67.81 79.87 71.83 1.36 0.57 UniCLUN [2] 100% 0.22 73.25 74.25 71.99 1.89 0.61 0.00 68.50 83.00 73.33 0.98 0.67 UG-CLU [35] 100% 0.00 71.35 76.36 75.81 0.69 0.66 0.00 63.51 81.29 69.44 0.87 0.53 UnCLe [36] 100% 0.87 70.98 77.82 74.42 0.78 0.67 0.00 67.00 80.00 71.33 0.98 0.54 
+
+BID-LoRA 5.08% 0.67 72.33 80.80 75.16 0.63 0.50 0.00 68.67 83.20 73.51 0.79 0.51 TABLE II PERFORMANCE COMPARISON ACROSS ALL CONTINUAL LEARNING -UNLEARNING TASKS ON FACE RECOGNISTION TASKS ON CASIA-F ACE 100 
+
+Method Tunable ↓ Task-1 Task-2 
+
+Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5 Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5
+
+Oracle 100% – – – 95.65 – – – – – 96.36 – –LSF[34] 100% 0.00 90.87 93.51 91.75 1.27 0.57 0.00 87.98 90.73 88.90 1.58 0.51 CLPU-DER++[3] 100% 0.58 88.98 90.36 89.44 1.58 0.61 0.32 88.96 93.54 90.49 2.50 0.50 UniCLUN [2] 100% 0.87 90.28 90.96 90.51 1.00 0.62 0.89 90.70 90.35 90.58 0.87 0.57 UG-CLU [35] 100% 1.00 91.35 91.18 91.29 0.87 0.67 0.76 91.13 87.00 89.75 0.98 0.67 UnCLe [36] 100% 0.00 92.00 94.83 92.94 2.25 0.61 0.00 90.25 91.27 90.59 0.78 0.61 
+
+BID-LoRA 5.00% 0.10 91.93 95.72 93.20 0.98 0.57 0.88 91.36 93.55 92.09 1.10 0.53 
+
+Method Tunable ↓ Task-3 Task-4 
+
+Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5 Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5
+
+Oracle 100% – – – 94.85 – – – – – 96.87 – –LSF[34] 100% 0.25 91.13 90.35 90.87 2.36 0.56 0.00 91.87 94.00 92.58 1.36 0.58 CLPU-DER++[3] 100% 0.00 90.68 90.58 90.65 1.35 0.57 0.00 92.58 93.68 92.95 2.25 0.51 UniCLUN [2] 100% 0.00 91.58 91.37 91.51 1.89 0.51 0.29 92.87 94.78 93.51 1.69 0.67 UG-CLU [35] 100% 0.00 89.69 92.35 90.58 0.78 0.51 0.78 91.25 92.65 91.72 1.87 0.64 UnCLe [36] 100% 0.00 92.22 93.00 92.48 0.91 0.61 0.10 90.36 92.82 91.18 0.94 0.53 
+
+BID-LoRA 5.00% 0.00 92.25 92.35 92.29 0.78 0.54 0.00 92.51 95.20 93.40 0.87 0.57 
+
+Method Tunable ↓ Task-5 Task-6 
+
+Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5 Acc f ↓ Acc r ↑ Acc n ↑ Acc o ↑ KL ↓ MIA ≈ 0.5
+
+Oracle 100% – – – 94.58 – – – – – 95.85 – –LSF[34] 100% 0.00 89.69 91.87 90.42 1.36 0.61 0.00 90.87 91.27 91.00 1.25 0.57 CLPU-DER++[3] 100% 0.00 87.25 92.35 88.95 2.58 0.68 0.00 90.81 91.28 90.97 1.57 0.51 UniCLUN [2] 100% 0.25 87.25 93.15 89.22 1.24 0.57 0.00 87.65 90.87 88.72 0.87 0.59 UG-CLU [35] 100% 0.36 89.69 93.00 90.79 0.98 0.51 0.00 88.61 90.66 89.29 0.98 0.67 UnCLe [36] 100% 0.00 90.11 92.55 90.92 0.87 0.53 0.00 89.95 91.69 90.53 1.18 0.60 
+
+BID-LoRA 5.00% 0.00 92.30 93.25 92.62 0.74 0.51 0.00 90.98 91.70 91.22 0.77 0.50 7
+
+Algorithm 1 BID-LoRA Training 
+
+Require: Pre-trained model M, retain data Dfull  
+
+> r
+
+, forget data 
+
+Df , new data Dnew ,reply buffers be Dr and S be the LoRA scaling factor 
+
+Ensure: Updated model with merged adapters  
+
+> 1:
+
+Initialize adapters (Bret , A ret ), (Bnew , A new ), (Bf , A f ) 
+
+> 2:
+
+Freeze backbone weights W 
+
+> 3:
+
+Mt ← copy (M) ▷ Frozen teacher for embedding anchor  
+
+> 4:
+
+// Compute escape point  
+
+> 5:
+
+for each class k in Dr do  
+
+> 6:
+
+ck ← 1 
+
+> |Dk|
+
+P 
+
+> x∈Dk
+
+emb (x) ▷ Retain centroids  
+
+> 7:
+
+end for  
+
+> 8:
+
+d∗ ← arg min ∥d∥=1 max i(d⊤cri ) ▷ Escape direction  
+
+> 9:
+
+tescape ← λesc · d∗ ▷ Escape point  
+
+> 10:
+
+for epoch = 1 to E do  
+
+> 11:
+
+for each mini-batch (Xret , y ret ), (Xf , y f ), (Xnew , y new )
+
+from (Dr , D f , D new ) do  
+
+> 12:
+
+// Retention update  
+
+> 13:
+
+Freeze (Bf, A f), (Bnew , A new ) 
+
+> 14:
+
+zret ← M (Xret ) ▷ Student logits  
+
+> 15:
+
+eret ← emb (Xret ) ▷ Student embeddings  
+
+> 16:
+
+eret,t ← M t.emb (Xret ) ▷ Teacher embeddings  
+
+> 17:
+
+Lret ← λce · CE (zret , y ret ) + λemb · MSE (eret , et,ret ) 
+
+> 18:
+
+Update (Bret , A ret ) and retain-class head  
+
+> 19:
+
+// Forget update  
+
+> 20:
+
+Freeze (Bret , A ret ), (Bnew , A new ) 
+
+> 21:
+
+Lforget ← MSE (emb (Xf ), tescape ) 
+
+> 22:
+
+Update (Bf , A f ) and forget-class head  
+
+> 23:
+
+// New knowledge update  
+
+> 24:
+
+Freeze (Bret , A ret ), (Bf , A f ) 
+
+> 25:
+
+Lnew ← CE (M(Xnew ), y n) 
+
+> 26:
+
+Update (Bnew , A new ) and new-class head  
+
+> 27:
+
+end for  
+
+> 28:
+
+end for  
+
+> 29:
+
+// Merge adapters  
+
+> 30:
+
+W ← W + S(Bret Aret + Bnew Anew − Bf Af ) 
+
+> 31:
+
+return M
+
+we use CIFAR-100 [37] and adopt data-efficient image trans-formers [38] as the backbone. For face recognition, we use CASIA-Face100, which contains 100 identities sampled from CASIA-WebFace [39] and constructed in [11], with a Face Transformer [40] as the backbone. We use Dr as 10% of 
+
+Dfull  
+
+> r
+
+as buffer. We use uniform rank 8 for both retain and new adapters, while the forget adapter uses rank 4. 
+
+Evaluation Protocol: We implement a six-task evaluation pro-tocol where the model progressively transitions from classes 0-29 to 60-89. Each task involves: (i) retaining 20 classes, (ii) forgetting 10 classes, and (iii) learning 10 new classes. Starting from a pre-trained checkpoint on classes 0-29, each subsequent task slides the class window by 10 positions: task 1 operates on classes 10-39, task 2 on classes 20-49, continuing until task 6 operates on classes 60-89 (Fig. 4). This sliding window design validates true continual adaptation through simultaneous learning and forgetting. Our protocol offers key advantages over existing methods. First, it tests longevity and sustainability—claims often questionable under extended evaluation. Second, over the complete cycle, every piece of pretrained knowledge is systematically replaced, pro-viding comprehensive assessment of adaptability. Third, this extensive protocol proves our approach’s genuineness through sustained performance across multiple knowledge transitions rather than cherry-picked scenarios.  
+
+> Fig. 4. Illustration of continual adapting evaluation protocol.
+
+Theoretical Best: We compare all baseline methods and our approach against Oracle-model performance, which serves as the theoretical and practical upper bound. Oracle models are obtained by directly training on each target class range (e.g., classes 10-39 for task 1, classes 20-49 for task 2 ... utill task 6) without any low-rank adaptations, incremental learning, or unlearning approaches. This provides a clean baseline that follows the same 6-task sliding window protocol, allowing us to measure how close our continual adaptation approach comes to optimal performance. The Oracle comparison quantifies how close our continual adaptation approach comes to optimal retraining performance. 
+
+Metrics: We evaluate our approach based on the performance of forgotten, retained, and newly learned classes using class accuracy, Membership Inference Attack (MIA) success rate, and KL divergence. Following Huang et al. [35], we define: forget accuracy Acc f as performance on forgotten data, retain accuracy Acc r as performance on retained data, new accu-racy Acc n as performance on newly added data, and overall accuracy Acc o as performance across combined retained and new classes. To verify effective unlearning, we measure the MIA success rate as suggested by [41], and compute KL divergence between each model and the oracle model to assess logit-level similarity. We also report the tunable ratio, defined as the proportion of parameters updated during CLU steps, to indicate practical usability under resource-constrained scenarios. Ideally, Acc f should approach zero, while Acc r , Acc n, and 
+
+Acc o should align with the oracle model’s performance. The tunable ratio should approach zero for parameter efficiency. The MIA success rate should approximate 0.5, indicating the adversary cannot distinguish between unlearned and never-seen knowledge. KL divergence should approach zero, indi-cating no difference at the logit level between the oracle and adapted models. 
+
+B. Baseline Implementations 
+
+For baselines, we adopt implementations of existing CLU methods discussed in Section II-D. These include: LSF by 8
+
+Shibata et al. [34], which introduced the CLU problem and provided an initial solution; CLPU-DER++ by Liu et al. [3], which employs temporal networks for cleaner removal of forget knowledge; UniCLUN by Chatterjee et al. [2], a student-teacher distillation approach; UnCLe by Adhikari et al. [36], which explores hypernetworks for data-free unlearning; and UG-CLU by Huang et al. [35], a weight saliency-based method. 
+
+C. Results Discussion 
+
+Tables I and II present results for CIFAR-100 classification and CASIA-Face100 recognition. BID-LoRA achieves first (green) or second-best (blue) performance across nearly all metrics while using only ≈ 5.08% tunable parameters compared to 100% for all baselines. 
+
+Unlearning Analysis: BID-LoRA maintains forget accuracy between 0–0.93% on CIFAR-100 (e.g., 0.93% in Task 1, 0.27% in Task 2, 0.13% in Task 3) and 0–0.88% on face recognition, confirming effective unlearning. On CIFAR-100, BID-LoRA achieves the best or second-best overall accuracy in 5 of 6 tasks: 76.03% (Task 1), 73.84% (Task 2), 74.80% (Task 3), 76.71% (Task 4), 75.16% (Task 5), and 73.51% (Task 6). The MIA scores cluster around the ideal value of 0.5 (ranging 0.50–0.57), indicating successful privacy protection against membership inference attacks. 
+
+Knowledge Leakage Analysis: Knowledge leakage, measured by overall accuracy degradation across tasks, remains minimal for BID-LoRA. While baseline methods such as LSF [34] and UniCLUN [2] show cumulative accuracy drops of 3–8% from Task 1 to Task 6, BID-LoRA maintains stable performance with only 2.52% variation on CIFAR-100 (76.03% → 73.51%) and 1.98% on face recognition (93.20% → 91.22%). The KL divergence remains consistently low: 0.60–0.79 on CIFAR-100 and 0.74–1.10 on face recognition, demonstrating that BID-LoRA successfully minimizes knowledge leakage in extended CLU scenarios. 
+
+(a) Classification task (b) Face recognition task  
+
+> Fig. 5. Radar plot comparison at Task-6. BID-LoRA consistently outperforms all baselines across metrics on both classification and face recognition tasks.
+
+Baseline Comparison: Combined baseline methods exhibit conflicting optimization between their CL and MU compo-nents. LSF [34] achieves strong unlearning ( Acc f = 0% 
+
+in most tasks) but sacrifices overall accuracy, dropping to 68.46% in Task 6 on CIFAR-100. CLPU-DER++[3] and UniCLUN [2] demonstrate unstable retention accuracy, with UniCLUN’s Acc r falling to 67.27% by Task 2 on CIFAR-100. UG-CLU [35] and UnCLe [36] show inconsistent MIA scores reaching up to 0.67, indicating incomplete privacy pro-tection. On face recognition, BID-LoRA consistently outper-forms baselines, achieving Acc o of 93.20%, 92.09%, 92.29%, 93.40%, 92.62%, and 91.22% across Tasks 1–6 respectively, while baselines remain below 93% in most cases.As illustrated in Fig 5, BID-LoRA’s radar plot at Task-6 encloses all baseline methods, demonstrating superior performance across all evalu-ation metrics on both classification and face recognition tasks. Similar patterns are observed across all tasks on CIFAR-100 and CASIA-Face100 benchmarks. 
+
+Convergence Patterns: BID-LoRA exhibits convergent be-havior where new knowledge accuracy Acc n aligns closely with overall accuracy while retained accuracy ( Acc r ) remains stable. On CIFAR-100, new knowledge accuracy ( Acc n) im-proves from 76.93% in Task 1 to 83.20% in Task 6, while overall accuracy Acc o remains stable (76.03% to 73.51%), demonstrating effective knowledge acquisition without degrad-ing cumulative performance. Retained accuracy maintains con-sistency across Tasks 2–6 (70.83%–76.00%), demonstrating that the bidirectional adapter architecture effectively balances learning and unlearning without catastrophic forgetting. 
+
+D. Ablation Study 1) Parameter Efficiency: We study how LoRA rank affects performance on DeiT-Tiny over 10 epochs. Table III shows performance plateaus beyond rank 8, achieving effective adap-tation with only ≈5% of parameters versus nearly 100% for existing methods [34], [36], [35], [2], [3].                                           
+
+> TABLE III ABLATION STUDY ON THE RANK OF LORA MODULES
+> Rank % Ratio Acc fAcc rAcc nAcc o
+> 11.09 1.73 48.57 27.60 41.58 22.30 3.47 46.43 43.07 45.31 43.24 0.00 65.71 41.87 57.77 85.08 0.80 76.43 69.60 74.15 16 8.56 1.07 81.43 73.73 78.86 32 14.80 0.40 78.57 76.93 78.03 64 25.03 0.40 78.57 79.07 78.74
+
+2) BID-LoRA vs Standard LoRA: As discussed in Sec-tion IV, BID-LoRA employs distinct pathways to handle conflicting tasks like continual learning and unlearning simul-taneously. Table IV shows BID-LoRA outperforms standard LoRA (applied to QKV attention and classification head) in the CLU setting over 20 epochs, demonstrating that pathway separation minimizes knowledge leakage between conflicting objectives.                     
+
+> TABLE IV BID-L ORA VS . S TANDARD LORA IN THE CLU SETTING
+> Method % Ratio Acc fAcc rAcc nAcc o
+> Standard LoRA 2.54 0.00 74.29 85.07 77.88 BID-LoRA 5.08 0.13 77.14 85.87 80.05 9
+
+3) Buffer Ratio: Buffer data informs the model what to retain or forget. Here, we examine the effect of retain buffer ratio on overall accuracy. Our method is designed to remain robust even with limited buffer availability, as shown in Table. V.                          
+
+> TABLE V ABLATION ON RETAIN RATIO
+> Retain Ratio Speed Acc fAcc rAcc nAcc o
+> 1.0 1.0 ×0.40 68.00 81.74 72.58 0.5 2.0 ×0.00 70.00 71.05 70.35 0.3 3.3 ×0.00 66.00 79.11 70.37 0.1 10 ×0.00 65.00 79.96 69.98
+
+4) Ablation on Adapters: This experiment verifies that each adapter pathway holds knowledge specific to its task. By selectively disabling pathways, we observe accuracy drops for retain and new tasks, while forget accuracy increases when its pathway is disabled. As shown in Table VI, the optimal performance is achieved only when all three pathways are active, validating the necessity of the tri-pathway architecture. The original classification head is restored during evaluation to isolate adapter contributions. Results are obtained over 15 epochs with pathways disabled during testing.                                    
+
+> TABLE VI ABLATION ON ADAPTER PATHWAY CONTRIBUTIONS (F=F ORGET ,R=R ETAIN , N=N EW )FRNAcc fAcc rAcc nAcc o
+> Pre-train 73.64 82.27 0.00 48.49
+> ✓✓✓0.00 84.09 56.82 75.00
+> ✗✓✓70.45 82.73 51.82 72.43
+> ✓✗✓0.00 0.23 64.55 21.67
+> ✓✓✗0.00 84.09 0.00 56.06
+
+5) Geometric Verification of Unlearning: A critical question is whether forget-class embeddings actually move toward the computed escape direction d∗. Fig 6(a,b) shows t-SNE visualizations before and after unlearning. Initially, the three forget classes (0, 1, 2) are spatially separated from d∗. After unlearning, all three forget clusters collapse toward the dustbin point, demonstrating successful alignment with the intended escape direction. 
+
+(a) t-SNE: Before unlearning (b) t-SNE: After unlearning 
+
+(c) 3D sphere: Before unlearning (d) 3D sphere: After unlearning      
+
+> Fig. 6. Geometric verification of unlearning. Top row: t-SNE visualization showing forget classes migrating toward escape point d∗. Bottom row: 3D hypersphere visualization with dashed antipodal axis from ¯crto d∗
+
+The 3D sphere visualizations (Fig 6 (c,d)) provide addi-tional evidence by showing class centroids projected onto a unit sphere via PCA. While retain-class centroids (R3–R9, squares) remain anchored at their original positions relative to the retain centroid ¯cr , the forget centroids (F0, F1, F2, circles) migrate along the antipodal axis toward d∗. Notably, F1 moves from a position distant from d∗ to near-perfect alignment after unlearning, while F0 and F2 also show substantial movement toward the escape direction. This confirms that the optimiza-tion successfully drives forget-class representations away from retain classes along the computed global escape vector. 
+
+6) Escape Point Scaling: As discussed in Section IV-C, placing d∗ on the unit sphere leads to unstable forgetting due to nearby centroids. tablele VII validates this: λesc = 10 achieves optimal forgetting (0.53%) by pushing the escape point beyond the embedding sphere.                            
+
+> TABLE VII ABLATION ON ESCAPE SCALING FACTOR λESC . H IGHER SCALING PUSHES FORGET EMBEDDINGS FURTHER FROM RETAIN CENTROIDS ,IMPROVING UNLEARNING
+> λesc Acc f↓Acc r↑Acc n↑Acc o↑
+> 08.80 78.57 61.07 72.74 24.13 80.71 63.60 75.01 54.27 77.14 68.27 74.18 10 0.53 77.14 68.00 73.45
+
+VI. D ISCUSSION 
+
+In this section, we provide an in-depth discussion of several critical aspects of our approach. We examine the theoretical necessity of retain data in machine unlearning, present an al-gorithmic perspective of our BID-LoRA method, and analyze the knowledge leakage phenomenon that motivates our unified framework. These discussions provide deeper insights into the design principles and empirical observations underlying our work. 10 
+
+A. On the Necessity of Retain Buffer in Machine Unlearning 
+
+Effective unlearning requires distinguishing what to forget from what to retain. This section investigates whether forget data ( Df ) or retain buffer ( Dr , a subset of full retain data Dfull  
+
+> r
+
+)can be avoided in classification and face recognition tasks. We find Dr is fundamentally unavoidable for preserving task-critical knowledge. Without architectural support (e.g., modular pathways), all parameters are adjusted using both 
+
+Df and Dfull  
+
+> r
+
+during pretraining, making disentanglement infeasible without Dr access. Only noise-based impair-and-repair methods [14] and source-free unlearning [42] attempt to bypass data dependen-cies. The former still requires Dr . Source-free methods esti-mate retain data Hessians using only Df through semi-definite programming, but are limited to convex losses and linear classifiers, making them inapplicable to modern non-convex architectures like transformers and ResNets. In practice, they use frozen pre-trained feature extractors and unlearn only linear heads. While error bounds improve with dimension-ality, Hessian storage and inversion become computationally prohibitive. All established methods for non-convex models criti-cally rely on Dr . Weight-importance methods (EWC [4], SALUN [13]) compute Fisher information or saliency from 
+
+Dr to protect retain-relevant weights. SCRUB [10] and GS-LoRA [11] explicitly leverage Dr to safeguard retained knowl-edge. CLU methods universally depend on Dr : LSF [34] uses mnemonic codes, UnCLe [36] employs task embed-dings, CLPU-DER++ [3] maintains experience replay, and UniCLUN [2] and UG-CLU [35] incorporate Dr for stability. Generative tasks present exceptions: FLAT [43] solves un-learning without Dr through regularizers, while ESD [44] avoids both Df and Dr using teacher models to generate synthetic samples. While Df can theoretically be avoided through noise-based proxies or source-free methods, no viable approach eliminates 
+
+Dr dependence for non-convex deep learning without com-promising retention performance. 
+
+B. Knowledge Leakage Analysis 
+
+Can we solve CLU by combining existing CL and MU methods? We pair four combinations (ER-ACE[6] + GS[11] ), (DER++ [5] + FU [14]), (EWC [4] + SalUn[13]), and (ER-AML [6] + GS[11]) on data-efficient image transformers [38] and FaceTransformer [40] (face recognition). As shown in Fig 7, all exhibit progressive knowledge leakage across CLU cycles, confirming that piecewise solutions fail and a unified framework is necessary. VII. C ONCLUSION 
+
+We introduced BID-LoRA, a parameter-efficient framework for Continual Learning and Unlearning (CLU) with three key contributions: (1) Escape Unlearning pushes forget-class embeddings to a scaled escape point, enabling stable forgetting without disrupting retained knowledge; (2) dedicated adapters for retention, acquisition, and forgetting eliminate gradient interference and knowledge leakage; (3) state-of-the-art CLU 
+
+(a) CIFAR-100 (b) Face Recognition  
+
+> Fig. 7. Knowledge leakage in CL+MU combinations. Retain accuracy degrades progressively across CLU cycles on both benchmarks.
+
+performance with only ≈5% tunable parameters. Experiments on CIFAR-100 and CASIA-Face100 show BID-LoRA outper-forms all baselines across retain, forget, and new accuracy metrics. Our sliding window protocol establishes the first benchmark for validating complete knowledge replacement over multiple CLU cycles, offering a practical solution for real-world applications under privacy and regulatory constraints. Future work will (1) eliminate retention buffers entirely (re-ducing from 10% to 0%) and (2) extend to other biometric modalities such as iris and fingerprint recognition where privacy-driven unlearning is critical. REFERENCES [1] J. Kaplan, S. McCandlish, T. Henighan, T. B. Brown, B. Chess, R. Child, S. Gray, A. Radford, J. Wu, and D. Amodei, “Scaling laws for neural language models,” arXiv preprint arXiv:2001.08361 , 2020. [2] R. Chatterjee, V. Chundawat, A. Tarun, A. Mali, and M. Mandal, “A unified framework for continual learning and unlearning,” arXiv preprint arXiv:2408.11374 , 2024. [3] B. Liu, Q. Liu, and P. Stone, “Continual learning and private unlearning,” in Conference on Lifelong Learning Agents . PMLR, 2022, pp. 243–254. [4] J. Kirkpatrick, R. Pascanu, N. Rabinowitz, J. Veness, G. Desjardins, A. A. Rusu, K. Milan, J. Quan, T. Ramalho, A. Grabska-Barwinska                         
+
+> et al. , “Overcoming catastrophic forgetting in neural networks,” Pro-ceedings of the national academy of sciences , vol. 114, no. 13, pp. 3521–3526, 2017. [5] P. Buzzega, M. Boschini, A. Porrello, D. Abati, and S. Calderara, “Dark experience for general continual learning: a strong, simple baseline,”
+> Advances in neural information processing systems , vol. 33, pp. 15 920– 15 930, 2020. [6] L. Caccia, R. Aljundi, N. Asadi, T. Tuytelaars, J. Pineau, and E. Belilovsky, “New insights on reducing abrupt representation change in online continual learning,” arXiv preprint arXiv:2104.05025 , 2021. [7] A. Douillard, A. Ram´ e, G. Couairon, and M. Cord, “Dytox: Trans-formers for continual learning with dynamic token expansion,” in Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 9285–9295. [8] M. Cotogni, F. Yang, C. Cusano, A. D. Bagdanov, and J. van de Weijer, “Exemplar-free continual learning of vision transformers via gated class-attention and cascaded feature drift compensation,” International Journal of Computer Vision , pp. 1–19, 2025. [9] A. Mohamed, R. Grandhe, K. Joseph, S. Khan, and F. Khan, “D3former: Debiased dual distilled transformer for incremental learning,” in Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 2421–2430. [10] M. Kurmanji, P. Triantafillou, J. Hayes, and E. Triantafillou, “Towards unbounded machine unlearning,” Advances in neural information pro-cessing systems , vol. 36, pp. 1957–1987, 2023. [11] H. Zhao, B. Ni, J. Fan, Y. Wang, Y. Chen, G. Meng, and Z. Zhang, “Continual forgetting for pre-trained vision models,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2024, pp. 28 631–28 642. 11
+
+[12] S. Cha, S. Cho, D. Hwang, H. Lee, T. Moon, and M. Lee, “Learning to unlearn: Instance-wise unlearning for pre-trained classifiers,” in 
+
+Proceedings of the AAAI conference on artificial intelligence , vol. 38, no. 10, 2024, pp. 11 186–11 194. [13] C. Fan, J. Liu, Y. Zhang, E. Wong, D. Wei, and S. Liu, “Salun: Em-powering machine unlearning via gradient-based weight saliency in both image classification and generation,” arXiv preprint arXiv:2310.12508 ,2023. [14] A. K. Tarun, V. S. Chundawat, M. Mandal, and M. Kankanhalli, “Fast yet effective machine unlearning,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 9, pp. 13 046–13 055, 2023. [15] E. Goldman, “An introduction to the california consumer privacy act (ccpa),” Santa Clara Univ. Legal Studies Research Paper , 2020. [16] G. Data, “General data protection regulation (gdpr),” Intersoft Consult-ing, Accessed in October , vol. 24, no. 1, 2018. [17] M. Fredrikson, S. Jha, and T. Ristenpart, “Model inversion attacks that exploit confidence information and basic countermeasures,” in 
+
+Proceedings of the 22nd ACM SIGSAC conference on computer and communications security , 2015, pp. 1322–1333. [18] L. Zhu, Z. Liu, and S. Han, “Deep leakage from gradients,” Advances in neural information processing systems , vol. 32, 2019. [19] Y. Zhang, R. Jia, H. Pei, W. Wang, B. Li, and D. Song, “The secret revealer: Generative model-inversion attacks against deep neural net-works,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 253–261. [20] N. Houlsby, A. Giurgiu, S. Jastrzebski, B. Morrone, Q. De Laroussilhe, A. Gesmundo, M. Attariyan, and S. Gelly, “Parameter-efficient transfer learning for nlp,” in International conference on machine learning .PMLR, 2019, pp. 2790–2799. [21] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, W. Chen et al. , “Lora: Low-rank adaptation of large language models.” 
+
+ICLR , vol. 1, no. 2, p. 3, 2022. [22] X. L. Li and P. Liang, “Prefix-tuning: Optimizing continuous prompts for generation,” arXiv preprint arXiv:2101.00190 , 2021. [23] M. Geva, R. Schuster, J. Berant, and O. Levy, “Transformer feed-forward layers are key-value memories,” arXiv preprint arXiv:2012.14913 , 2020. [24] A. Mallya and S. Lazebnik, “Packnet: Adding multiple tasks to a single network by iterative pruning,” in Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , 2018, pp. 7765–7773. [25] A. Mallya, D. Davis, and S. Lazebnik, “Piggyback: Adapting a single network to multiple tasks by learning to mask weights,” in Proceedings of the European conference on computer vision (ECCV) , 2018, pp. 67– 82. [26] Z. Wang, Z. Zhang, C.-Y. Lee, H. Zhang, R. Sun, X. Ren, G. Su, V. Perot, J. Dy, and T. Pfister, “Learning to prompt for continual learning,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 139–149. [27] C. Zhang, K. Tian, B. Fan, G. Meng, Z. Zhang, and C. Pan, “Continual stereo matching of continuous driving scenes with growing architecture,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022, pp. 18 901–18 910. [28] S. Panda and A. Prathosh, “Fast: Feature aware similarity thresholding for weak unlearning in black-box generative models,” IEEE Transactions on Artificial Intelligence , 2024. [29] Y. Wang, X. Li, and S. Chen, “Malicious clients and contribution co-aware federated unlearning,” IEEE Transactions on Artificial Intelli-gence , 2025. [30] X. Liu, Y. Zheng, Z. Du, M. Ding, Y. Qian, Z. Yang, and J. Tang, “Gpt understands, too,” AI Open , vol. 5, pp. 208–215, 2024. [31] J. Lee, R. Tang, and J. Lin, “What would elsa do? freezing layers during transformer fine-tuning,” arXiv preprint arXiv:1911.03090 , 2019. [32] A. Chavan, Z. Liu, D. Gupta, E. Xing, and Z. Shen, “One-for-all: Generalized lora for parameter-efficient fine-tuning,” arXiv preprint arXiv:2306.07967 , 2023. [33] M. Valipour, M. Rezagholizadeh, I. Kobyzev, and A. Ghodsi, “Dylora: Parameter efficient tuning of pre-trained models using dynamic search-free low-rank adaptation,” arXiv preprint arXiv:2210.07558 , 2022. [34] T. Shibata, G. Irie, D. Ikami, and Y. Mitsuzumi, “Learning with selective forgetting.” in IJCAI , vol. 3, 2021, p. 4. [35] Z. Huang, X. Cheng, J. Zhang, J. Zheng, H. Wang, Z. He, T. Li, and X. Huang, “A unified gradient-based framework for task-agnostic continual learning-unlearning,” arXiv preprint arXiv:2505.15178 , 2025. [36] S. Adhikari, V. Kumaravelu, and P. Srijith, “An unlearning framework for continual learning,” arXiv preprint arXiv:2509.17530 , 2025. [37] A. Krizhevsky, G. Hinton et al. , “Learning multiple layers of features from tiny images,” 2009. [38] H. Touvron, M. Cord, M. Douze, F. Massa, A. Sablayrolles, and H. J´ egou, “Training data-efficient image transformers & distillation through attention,” in International conference on machine learning .PMLR, 2021, pp. 10 347–10 357. [39] D. Yi, Z. Lei, S. Liao, and S. Z. Li, “Learning face representation from scratch,” arXiv preprint arXiv:1411.7923 , 2014. [40] Y. Zhong and W. Deng, “Face transformer for recognition,” arXiv preprint arXiv:2103.14803 , 2021. [41] C. A. Choquette-Choo, F. Tramer, N. Carlini, and N. Papernot, “Label-only membership inference attacks,” in International conference on machine learning . PMLR, 2021, pp. 1964–1974. [42] S. M. Ahmed, U. Y. Basaran, D. S. Raychaudhuri, A. Dutta, R. Kundu, F. F. Niloy, B. Guler, and A. K. Roy-Chowdhury, “Towards source-free machine unlearning,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 4948–4957. [43] Y. Wang, J. Wei, C. Y. Liu, J. Pang, Q. Liu, A. P. Shah, Y. Bao, Y. Liu, and W. Wei, “Llm unlearning via loss adjustment with only forget data,” 
+
+arXiv preprint arXiv:2410.11143 , 2024. [44] R. Gandikota, J. Materzynska, J. Fiotto-Kaufman, and D. Bau, “Erasing concepts from diffusion models,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 2426–2436.

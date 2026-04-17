@@ -1,0 +1,632 @@
+Title: From Anchors to Supervision: Memory-Graph Guided Corpus-Free Unlearning for Large Language Models
+
+URL Source: https://arxiv.org/pdf/2604.13777v1
+
+Published Time: Thu, 16 Apr 2026 00:52:57 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+## From Anchors to Supervision: Memory-Graph Guided Corpus-Free Unlearning for Large Language Models 
+
+Wenxuan Li 1, Zhenfei Zhang 1, Mi Zhang 1, Geng Hong 1
+
+Mi Wen 2, Xiaoyu You 3, Min Yang 1
+
+1College of Computer Science and Artificial Intelligence, Fudan University, Shanghai, China 
+
+2Shanghai University of Electric Power, Shanghai, China 
+
+3School of Information Science and Engineering, East China University of Science and Technology, Shanghai, China 
+
+{wxli24, zhangzf24}@m.fudan.edu.cn , {mi_zhang, ghong, m_yang}@fudan.edu.cn ,
+
+miwen@shiep.edu.cn , xiaoyuyou@ecust.edu.cn 
+
+Abstract 
+
+Large language models (LLMs) may memorize sensitive or copyrighted content, raising signifi-cant privacy and legal concerns. While machine unlearning has emerged as a potential remedy, prevailing paradigms rely on user-provided for-get sets, making unlearning requests difficult to audit and exposing systems to secondary leak-age and malicious abuse. We propose MAGE ,a Memory-gr Aph Guided Erasure framework for user-minimized, corpus-free unlearning. Given only a lightweight user anchor that iden-tifies a target entity, MAGE probes the tar-get LLM to recover target-related memoriza-tion, organizes it into a weighted local mem-ory graph, and synthesizes scoped supervision for unlearning. MAGE is model-agnostic and can be plugged into standard unlearning meth-ods, and requires no access to the original train-ing corpus. Experiments on two benchmarks TOFU and RWKU demonstrate that MAGE ’s self-generated supervision achieves effective unlearning performance comparable to su-pervision generated with external reference ,while preserving overall utility. These results support a practical and auditable unlearning workflow driven by minimal anchors rather than user-supplied forget corpora. 
+
+1 Introduction 
+
+Large language models (LLMs) have been widely deployed, yet their reliance on web-scale training data can lead to memorization of sensitive or copy-righted content (Carlini et al., 2021; Lucchi, 2024). A recent lawsuit by The New York Times against OpenAI over unauthorized data use (NPR, 2025) further underscores these legal and ethical risks. Under regulations such as the General Data Protec-tion Regulation (GDPR), individuals can invoke the “right to be forgotten” (RTBF) (Zhang et al., 2024a) to request removal of specific data from deployed models. To meet such requests without retraining from scratch, machine unlearning has emerged as Forget everything               
+
+> about me !!!
+> Alice
+> •Target:
+> Alice
+> •Forget Set:
+> •Requester Identity
+> Unlearning Request
+> LLM Service-Provider
+> Authorization?
+> Properly scoped?
+> Safety? Audit Request
+> Hard-to-Audit
+> Requests
+> •Unauthorized Scope
+> (Other ’s data)
+> •Poisoned Forget Sets
+> (Backdoor)
+> Leakage Risk
+> •Secondary Info leakage
+> •Intercepted / Mishandled
+> Apply Forget Set
+> Update Model
+> Integrity Risk
+> •Utility degradation
+> •Reversible unlearning
+> Alice
+> Forget everything about me !!! Let me
+> handle it !
+> Target:
+> Alice
+> User-minimized
+> No External Forget Sets
+> Scoped, auditable
+
+Figure 1: Risk surface of externally supplied forget sets in existing LLM unlearning paradigms. In contrast, a user-minimized paradigm mitigates these risks by im-proving information protection and auditability. 
+
+a practical approach to selectively erase targeted knowledge while preserving overall capabilities. Most LLM unlearning pipelines fine-tune on a forget set that specifies the knowledge to erase, using objectives such as reverse optimiza-tion (e.g., GA (Jang et al., 2022), NPO (Zhang et al., 2024b)) or alternative-response training (e.g., WHP (Eldan and Russinovich, 2023), IDK (Ren et al., 2025a)). To preserve utility, a retain set 
+
+of general-purpose data (e.g., Wikipedia) is typ-ically included, and some settings further add a 
+
+neighbor set consisting of distributionally sim-ilar but unlearning-irrelevant data to reduce col-lateral changes. Despite recent progress, most ex-isting approaches rely on a strong and often im-plicit assumption: the user requesting unlearning must provide a forget set that explicitly contains the information to be removed, which often contains sensitive content. While this assumption underpins most existing unlearning pipelines, relying on an externally sup-
+
+> arXiv:2604.13777v1 [cs.CL] 15 Apr 2026
+
+plied forget set introduces practical risks that are often overlooked (Figure 1). From the user’s per-spective, uploading sensitive content for unlearn-ing can cause secondary information leakage (Jin et al., 2024), especially if the forget corpus is in-tercepted or mishandled. From the LLM service-provider’s perspective, externally submitted forget sets are inherently hard to audit, making unlearn-ing requests vulnerable to abuse. Providers must verify authorization and scope, yet adversaries may submit wrongly scoped forget sets (e.g., containing other users’ data), leading to unauthorized forget-ting. Moreover, seemingly benign forget sets can embed backdoors, which may stealthily degrade utility or make unlearning reversible (Ren et al., 2025b; Thaker et al., 2025; Shang et al., 2025). Col-lectively, these leakage, auditability, and integrity risks cast doubt on the reliability of current exter-nally provided forget set paradigms . To mitigate these risks, we advocate a more re-alistic corpus-free unlearning paradigm that mini-mizes user involvement to better match real-world deployment needs. Instead of submitting a full forget set, the user provides minimal anchor in-formation to specify the target , making requests easier to audit and reducing privacy risks. Despite these benefits, this paradigm introduces new chal-lenges: (1) without an external forget set and with no access to the original training corpus during deployment, the LLM must reliably recover target-related memorization from its parameters to ensure effective unlearning; (2) the recovered memory must be translated into scoped supervision that sep-arates what to forget from what to preserve. We therefore take a step further and propose 
+
+MAGE , a memory-gr aph guided erasure frame-work tailored to this user-minimized, corpus-free paradigm: it probes and reconstructs the LLM’s target-related memorization, abstracts it into a structured local memory graph, and uses the graph to self-generate scoped unlearning supervision. For the first challenge, MAGE iteratively expands from minimal anchors to build a weighted local mem-ory graph, and estimates memorization strength from the LLM’s outputs to filter noise and retain strongly memorized content. For the second chal-lenge, MAGE samples informative memory paths and converts them into a scoped forget set with a companion neighbor set, enabling focused unlearn-ing while preserving model utility. We validate our framework on two widely used entity unlearning benchmarks (TOFU (Maini et al., 2024) and RWKU (Jin et al., 2024)) across vari-ous unlearning strategies. Our contributions are summarized as follows: • We identify key security risks in prevailing unlearning pipelines and introduce a user-minimized, corpus-free unlearning paradigm driven by minimal, auditable anchors. • We develop MAGE, a memory-graph guided era-sure framework that recovers target-related mem-orization and self-generates scoped unlearning supervision. • Experiments on TOFU and RWKU show that MAGE achieves supervised-level unlearning per-formance using only self-generated data, support-ing the feasibility of corpus-free unlearning. 
+
+2 Related Work 
+
+2.1 LLM Unlearning 
+
+LLM unlearning aims to remove specific knowl-edge from pre-trained LLMs, addressing privacy, security, and copyright concerns without full re-training (Liu et al., 2025). Most methods rely on pa-rameter optimization to make the model behave as if it had never seen the forget set (Doshi and Stick-land, 2024; Lynch et al., 2024). Some use gradient-ascent style updates to negate learned knowledge (Jang et al., 2022; Yao et al., 2024), while oth-ers adopt preference-based objectives (e.g., DPO (Rafailov et al., 2023), NPO (Zhang et al., 2024b), IDK (Ren et al., 2025a), WHP (Eldan and Russi-novich, 2023)) to guide responses. To preserve utility, they typically incorporate a retain set or neighbor set via forward optimization, such as gra-dient descent (Liu et al., 2022), KL regularization (Yuan et al., 2024), or knowledge replacement (Xu et al., 2025). Recent work also improves unlearn-ing performance by enhancing the quality of forget sets (Kuo et al., 2025; Wang et al., 2025b,a). Be-yond fine-tuning, researchers have explored other forgetting mechanisms, such as in-context learning (Pawelczyk et al., 2023), task vectors (Liu et al., 2024a), and data sanitization (Bhaila et al., 2024). However, these indirect methods may still leave residual information. Knowledge editing enables fine-grained updates, but is less suitable for large-scale unlearning (Tian et al., 2024). 
+
+2.2 Entity-level unlearning 
+
+Entity-level unlearning aims to remove a model’s knowledge about an entity, beyond the specific instances listed in a forget set. Since the tar-get knowledge is not explicitly defined, it re-quires constructing representative forget data and evaluating broader effects on related knowledge. TOFU (Maini et al., 2024) introduced this setting with fictional entities, and later work (Ma et al., 2025) showed that many methods still behave like instance-level unlearning and that performance is highly sensitive to forget-set quality. Recent stud-ies improve entity-level unlearning through con-cept/parameter interventions (Wang et al., 2025a; Choi et al., 2025) or by augmenting forget data (Xu et al., 2025). However, most approaches as-sume predefined forget sets and largely overlook paradigm-level risks, whereas RWKU (Jin et al., 2024) begins to highlight privacy concerns. We focus on entity-level unlearning because it aligns with real-world requests and challenges methods to remove entangled knowledge. 
+
+2.3 Malicious Abuse of Unlearning Requests 
+
+Recent work shows that unlearning requests be-come a security-critical interface when unlearning relies on user-supplied forget sets. In machine un-learning, carefully crafted requests can induce back-door behaviors (Liu et al., 2024b), and auditing the submitted forget set alone may be insufficient to rule out stealthy attacks (Arazzi et al., 2025). In the LLM setting, adversaries can associate common benign tokens with unlearning behavior to trigger broad utility degradation (Ren et al., 2025b) or make forgetting controllable and reversible (Shang et al., 2025), while benchmark analyses suggest current evaluations may underestimate such risks (Thaker et al., 2025). Taken together, these find-ings both underscore the need to audit unlearning requests and expose how difficult it is to vet exter-nally supplied forget corpora in practice, motivat-ing settings driven by minimal, auditable anchors. 
+
+3 Problem Definition 
+
+In existing LLM unlearning settings, users request-ing unlearning are required to provide an addi-tional forget set Sf containing the information to be erased. As illustrated in Figure 1, this assump-tion can raise privacy risks and enables abuse. To address these concerns, we define a more practical user-minimized, corpus-free unlearning paradigm: 
+
+User Capability: Users requesting unlearning for a target entity Et provide only a minimal an-chor that identifies Et, such as a name (e.g., “ Taylor Swift ”) or a short description to reduce ambiguity (e.g., “ Taylor Swift is a renowned American singer-songwriter. ”). They do not specify Sf or the un-learning strategy, they only care whether the model can no longer reproduce or correctly reason about 
+
+Et, even under adversarial attempts to recover the forgotten information. 
+
+LLM Capability: The LLM (service provider) receives an unlearning request with a minimal an-chor and no user-provided forget set. It must au-tonomously identify what to unlearn for a target entity Et, define an appropriate unlearning scope, and apply an unlearning method U , while meeting the user’s request and limiting utility degradation. Depending on deployment, it may self-construct a forget set Sf (optionally with a neighbor set Sn)and use a retain set Sr from a general-purpose dis-tribution (e.g., Wikidata) to support scoped unlearn-ing. 
+
+4 Our Method 
+
+We propose MAGE, a memory-graph guided era-sure framework with a two-stage pipeline: Inter-nal Memory Mining reconstructs a weighted local memory graph around Et, and Scoped Supervi-sion Construction converts the graph into a scoped forget set Sf with a companion neighbor set Sn for downstream unlearning. 
+
+4.1 Internal Memory Mining 
+
+Directly prompting the model to describe Et often yields incomplete and unfocused recall. In corpus-free unlearning, missing memorized facts leads to ineffective forgetting, while noisy generations waste unlearning capacity. Moreover, target knowl-edge in LLMs is often activated by related contex-tual cues (Hu et al., 2024; Patil et al., 2023), sug-gesting that effective recovery should iteratively ex-pand from reliable anchors rather than rely on a sin-gle flat response. We therefore iteratively expand from Et and represent the recovered memorization as a weighted local memory graph Gt = ( Vt, Et),where Vt contains salient target-related events, and 
+
+Et connects co-elicited items with weights reflect-ing memorization strength. This representation enables controllable expansion, explicit scope defi-nition, and structured supervision synthesis. 
+
+4.1.1 Self-Consistent Memorization 
+
+We recover candidate Vt by repeated elicitation. Concretely, we query the model N times and apply Internal Memory Mining                       
+
+> OK, I ’ve forgotten
+> Taylor Swift !
+> Let me handle it !
+> Forget everything about
+> Taylor Swift !!!
+> ②What is [Event] ?
+> (conditioned on [Anchor] )
+> 1-Hop
+> Neighbor
+> New York
+> 0.7
+> 0.6
+> 0.1
+> pennsylvania
+> 0.5
+> 0.7
+> 0.6
+> American
+> 0.7
+> 2008
+> 0.9
+> 0.4
+> Love Story
+> fearless
+> 0.7
+> Ed Sheeran
+> 0.2
+> Media
+> Taylor Swift
+> 2-Hop
+> Neighbor
+> blank space
+> K-Hop
+> Neighbor
+> …
+> …
+> ①What is [Anchor] ?
+> Scoped Supervision Construct ion
+> Vu
+> V2
+> V1Vv
+> Et
+> Vi
+> Path Sampling
+> Quality Filter
+> EtV1Vl…
+> VuVl…
+> event statement
+> Forget Set:
+> Question:
+> Which artist released Blank
+> Space in 2014 ?Answer: Taylor Swift .
+> Neighbor Set:
+> Question:
+> Which UK artist included
+> New York as...? Answer: Ed Sheeran .
+> Edge-to-Event Synthesis
+> EtV1
+> VuVv
+> Unlearning Method
+> Minimal Anchor
+> •Name: Taylor Swift
+> Unlearning Request
+> Let me handle it !
+> Instagram
+> Iterative
+> Expansion
+
+Figure 2: The framework of MAGE. Internal Memory Mining : Given an unlearning request, MAGEmines target memorization to build a strength-weighted local memory graph via iterative expansion. Scoped Supervision Construction : It then performs strength-weighted path sampling and edge-to-event synthesis to generate compact forget and neighbor supervision for downstream unlearning. 
+
+entity extraction on each response to obtain candi-date mentions. We then score each candidate v by mention frequency: 
+
+s(v) = 1
+
+N
+
+NX
+
+i=1 
+
+Iv ∈ Entities (yi), (1) where yi is the i-th elicited response. We inter-pret s(v) as a memorization strength : events re-peatedly activated across independent generations are more likely to reflect stable memorized traces, while one-off mentions are downweighted as noise. 
+
+4.1.2 Target-Conditioned Iterative Expansion 
+
+We construct Gt by iteratively expanding from Et
+
+up to K hops. At hop 0, Vt contains only the target node Et. We then elicit N responses anchored at 
+
+Et, extract events, and score each candidate v by its mention frequency s(v) in Eq. 1. Candidates with s(v) ≥ τ are retained as the 1-hop neigh-bors of Et. For hop h (h ≥ 1), we further expand from the retained strong nodes u in hop h−1. To keep the expansion on-topic, we perform elicitation 
+
+conditioned on Et with u as a secondary anchor, extract new candidates, and again retain those with 
+
+s(·) ≥ τ . We add directed edges (u → v) with weights reflecting co-elicitation salience: 
+
+w(u, v ) = c(u, v )
+
+P
+
+v′∈N (u) c(u, v ′) , (2) where c(u, v ) counts how often v is extracted from responses anchored at u, and N (u) denotes the extracted neighbors of u. The resulting weighted graph Gt summarizes what the model tends to re-call around Et and which contextual cues most reliably trigger further recall. Our elicitation prompts are provided in Ap-pendix B.1, and we also discuss the overhead of memory-graph construction in Section 6.3.4. 
+
+4.2 Scoped Supervision Construction 
+
+Since Gt is built based on co-elicitation , we con-struct supervision from paths rather than isolated nodes, which better reflects how target memories are triggered, enabling supervision that is naturally target-grounded and scoped. 
+
+4.2.1 Weighted Path Sampling 
+
+Prior work suggests that effective unlearning re-quires allocating stronger unlearning signals to content that is more strongly memorized, while weak or noisy traces contribute little useful su-pervision (Kuo et al., 2025; Tran et al., 2025; Wang et al., 2025b; Barbulescu and Triantafillou, 2024). Motivated by this, we bias sampling to-ward high-strength regions of the memory graph, so that frequently sampled supervision aligns with the model’s memorization strength. To focus supervision on strongly memorized content while maintaining coverage, we perform a strength-weighted random walk with exploration. Starting from Et, the transition probability from u
+
+to v is: 
+
+p(v | u) ∝ w(u, v ) ·
+
+ 11 + vis (v)
+
+α
+
+, (3) where vis (v) is the number of times v has been vis-ited in previous walks, and α controls exploration (larger α encourages coverage by downweighting frequently visited nodes). We collect R walks with maximum length L to obtain candidate paths. We also apply a simple path-quality filter, dis-carding low-signal paths and retaining paths whose average edge weight is above a threshold: 
+
+q(π) = 1
+
+|π| − 1
+
+> |π|− 2
+
+X
+
+> i=0
+
+w(vi, v i+1 ) ≥ η, (4) where π = ( v0, . . . , v |π|− 1) and v0 = Et. By sam-pling transitions in proportion to edge weights, the frequency with which nodes appear in sampled paths is roughly proportional to their memoriza-tion salience, so more strongly memorized content receives more unlearning supervision. 
+
+4.2.2 Edge-to-Event Synthesis 
+
+For each sampled path (v0=Et, v 1, . . . , v ℓ), we use a sliding window to extract adjacent node pairs 
+
+(vi, v i+1 ). Since each pair corresponds to a target-conditioned association mined during memory-graph construction, each pair provides a concrete contextual cue for targeted recall, rather than un-constrained and potentially irrelevant generation. We prompt the LLM to produce a short, atomic 
+
+event statement that links vi and vi+1 in the con-text of Et. We then set obj = vi and generate one concise forget sample (QA-style for illustration) grounded in the event statement: the question con-cerns Et and uses obj as the primary context, while the answer uniquely identifies Et. We compute the unlearning loss only on the answer span, localizing gradient updates and reducing collateral changes. An example is shown below:   
+
+> Question: Which artist released Blank Space in 2014? Answer: Taylor Swift .
+
+To reduce collateral forgetting, we also construct a neighbor set Sn that captures correlated but non-target information. We sample paths starting from strong neighbors of Et while enforcing that Et
+
+does not appear on the sampled path, and generate corresponding QA samples whose answers are the non-target neighbor entities. Sn serves as a bound-ary constraint: it encourages the model to preserve nearby knowledge while forgetting target-specific content. An example is shown below:   
+
+> Question: Which UK artist included New York as a hidden track on times (2014)? Answer: Ed Sheeran
+
+Our construction prompts are provided in Ap-pendix B.2. Finally, we plug (Sf , S n) (and optionally a gen-eral retain set Sr) into an off-the-shelf unlearning                     
+
+> Table 1: Priors and capabilities of forget-set generation methods. ✓denotes used; ✗denotes not used.
+> Prior RWKU ELUDe DirectQA Ours
+> External Data (Wiki) ✓✓✗✗
+> Extra LLM / Human ✓✓✗✗
+> Correctness Check ✓✗✓✗
+
+method U . Since our output is standard fine-tuning data, MAGE is model-agnostic and compatible with existing unlearning pipelines. 
+
+5 Experimental Settings 
+
+5.1 Evaluation Benchmark 
+
+We evaluate MAGE on two representative entity-level unlearning benchmarks, which present two contrasting levels of memory-mining difficulty. 
+
+RWKU (Jin et al., 2024) targets real-world fa-mous people. Since such knowledge is broadly present in pretrained LLMs, it is often possible to elicit abundant target-related facts and construct a rich memory graph. RWKU evaluates unlearning with four test groups: Forget Set ( ↓), Neighbor Set (↑), MIA Set, and Utility Set ( ↑), where arrows indicate whether lower or higher is better (details in Appendix A.3.1). 
+
+TOFU (Maini et al., 2024) targets synthetic, fic-titious authors generated by GPT-4 and introduced via benchmark-specific fine-tuning. Since these entities have limited supporting context and few co-occurrence signals in pretraining, the recov-ered memorization is often sparse and weakly con-nected, making it harder to mine a meaningful and coherent memory graph. TOFU evaluates unlearn-ing on a forget split and three utility splits (Retain, Real Authors, and World Facts), which form an increasing relevance gradient from in-domain to out-of-domain (Metric Details in appendix A.3.2). We run experiments on the forget01 setting. 
+
+5.2 Forget-Set Generation Baselines 
+
+Research on corpus-free forget-set construction re-mains limited. To contextualize MAGE, we com-pare against three representative forget-set gener-ation baselines and summarize their reliance on external priors in Table 1: 
+
+RWKU Uses Wikipedia passages for each target and GPT-4 to generate QA probes, then filters them with an open-source model and manual checks. Finetune Method Forget Set ↓ Neighbor Set ↑ MIA Set Utility Set ↑                                                                                                                                                                                                                                                                 
+
+> FB QA AA All FB QA All FM ↑RM ↓MMLU BBH TruthfulQA TriviaQA AlpacaEval Before 0.6788 0.6721 0.6829 0.6779 0.6306 0.7484 0.6895 1.9104 2.0433 0.4240 0.2654 0.2875 0.4056 6.2993 GA RWKU 0.5817 0.5511 0.6536 0.5955 0.5600 0.7153 0.6376 3.1075 2.4128 0.3969 0.2346 0.3025 0.3675 6.3109 ELUDe 0.6440 0.4646 0.6026 0.5704 0.6135 0.6944 0.6540 1.9933 2.1057 0.4167 0.2438 0.3175 0.3232 6.3341 DirectQA 0.6531 0.6675 0.7030 0.6745 0.6353 0.6979 0.6666 1.9286 2.0572 0.4203 0.1975 0.2900 0.4640 6.2686 MAGE 0.6373 0.4288 0.5438 0.5366 0.6263 0.6501 0.6382 1.9885 2.1016 0.4130 0.2515 0.3050 0.2955 6.3446
+> NPO RWKU 0.6444 0.6128 0.6631 0.6401 0.6103 0.6925 0.6514 2.1667 2.2093 0.4137 0.2022 0.2925 0.4053 6.3267 ELUDe 0.4290 0.2718 0.4061 0.3690 0.4829 0.4239 0.4534 2.1874 2.2383 0.3977 0.1867 0.3525 0.1526 6.3930
+> DirectQA 0.6539 0.6842 0.7139 0.6840 0.6364 0.7213 0.6788 1.9178 2.0494 0.4211 0.2099 0.2900 0.4658 6.2765 MAGE 0.4177 0.1978 0.3734 0.3296 0.4279 0.3800 0.4040 2.1054 2.1770 0.4123 0.2438 0.3300 0.1656 6.3849 GA+GD RWKU 0.5108 0.4583 0.6075 0.5255 0.5691 0.7214 0.6453 7.1499 2.4194 0.3984 0.2191 0.3050 0.3708 6.2991 ELUDe 0.5859 0.4006 0.5257 0.5041 0.5750 0.5864 0.5807 1.9600 2.0716 0.4152 0.1466 0.3350 0.2820 6.3393 DirectQA 0.5468 0.6038 0.6772 0.6092 0.6464 0.6953 0.6709 1.8484 1.9758 0.4174 0.2809 0.2775 0.4910 6.2556 MAGE 0.5928 0.3644 0.5012 0.4861 0.5882 0.5788 0.5835 2.0119 2.1121 0.4159 0.2741 0.3050 0.2469 6.3499
+> GA+KL RWKU 0.5108 0.4644 0.6128 0.5293 0.5650 0.7222 0.6436 7.1544 2.4340 0.4050 0.2160 0.3050 0.3718 6.3051 ELUDe 0.6170 0.4475 0.5797 0.5480 0.6148 0.6493 0.6320 1.9768 2.0909 0.4167 0.1003 0.3175 0.3151 6.3354 DirectQA 0.5812 0.6152 0.6968 0.6311 0.6239 0.7064 0.6651 1.9559 2.0635 0.4152 0.2083 0.2850 0.4517 6.2774 MAGE 0.6319 0.4364 0.5538 0.5407 0.6019 0.6295 0.6157 2.0046 2.1068 0.4196 0.2358 0.3000 0.3291 6.3436
+
+Table 2: Unlearning performance with different fine-tuning strategies and forget-set generation methods on Llama-2-7b-chat. Bold denotes the best result and underlined denotes the second best. Arrows indicate the direction of preference ( ↓ lower is better; ↑ higher is better). 
+
+ELUDe (Choi et al., 2025) Uses the top-viewed Wikipedia pages as targets, generates paragraph-level QA pairs with GPT-4o, and deduplicates via Sentence-Transformer similarity. 
+
+DirectQA (Ma et al., 2025) Asks the target model to self-generate questions and answers about the entity, and keeps only self-verified QA pairs. We evaluate MAGE with four fine-tuning strate-gies: GA, NPO, GA+GD, and GA+KL, detailed in appendix A.4. Implementation details are provided in Appendix A.1. 
+
+6 Experimental Results 
+
+Our evaluation under the proposed corpus-free un-learning paradigm is designed to answer the follow-ing research questions. RQ1 : Can LLM-recovered supervision match the forgetting performance of supervision built from ground-truth, externally pro-vided data? RQ2 : Does the recovered memory reflect what the LLM actually memorizes about the target entity? RQ3 : What properties of the recovered data affect unlearning outcomes, includ-ing hallucinations, cross-model differences, and knowledge coverage? 
+
+6.1 Main Unlearning Results 
+
+Table 2 reports RWKU results under four fine-tuning strategies with different forget-set genera-tion methods. For fair comparison with ELUDe, we average results over the eight overlapping targets shared by RWKU and ELUDe. Overall, MAGE is stable and competitive in the corpus-free set-ting, and it reaches performance close to base-lines that rely on externally provided supervi-sion, supporting the feasibility of corpus-free unlearning (RQ1). Concretely, MAGE achieves the lowest Forget Set-All in three of four strategies (GA, NPO, GA+GD) and remains near the top un-der GA+KL, indicating strong forgetting effective-ness. While DirectQA occasionally yields higher Neighbor Set-All and better scores on a few utility metrics, MAGE consistently improves forgetting over DirectQA (lower Forget-All) with compara-ble utility retention, and it often attains the best AlpacaEval among corpus-free methods. We further compare MAGE with the original TOFU supervision and the strongest corpus-free baseline, DirectQA in Table 3. Across both GA and NPO, MAGE produces a forget set that yields con-sistently stronger forgetting than DirectQA (lower Prob/ROUGE and higher Forget Q.), indicating that the mined memory graph provides more effec-tive, target-specific supervision than direct recall prompting. Due to space limitations, GA+GD and GA+KL results are reported in appendix C.1. We additionally evaluate RWKU and TOFU on smaller-scale models (Phi-3-mini-4k and Llama-3.2-1B) in appendix C.2. 
+
+6.2 Memory Mining Analysis 
+
+We analyze memory mining quality using two com-plementary protocols, as the availability of prior knowledge in LLMs differs across benchmarks. 
+
+Entity Similarity. For RWKU, which targets real-world public figures, target-related knowledge in pretrained LLMs is broad and entangled, and no Baseline Generation Method Forget Utility Prob ↓ ROUGE ↓ TruthRatio ↑ Forget Q. ↑ RS Score ↑ RAS Score ↑ WFS Score ↑ Model Utility ↑                                                        
+
+> Before 0.9951 0.9493 0.5306 0.0013 0.7133 0.1667 0.0508 0.6277 GA TOFU 0.0353 0.0714 0.5903 0.1650 0.1906 0.1922 0.0725 0.3309 DirectQA 0.4260 0.4521 0.5029 0.0286 0.5378 0.0830 0.0212 0.5783
+> MAGE 0.1492 0.4500 0.5285 0.0541 0.4449 0.0046 0.0024 0.5155 NPO TOFU 0.0359 0.0338 0.6272 0.1650 0.1638 0.2402 0.0948 0.2951 DirectQA 0.4393 0.4933 0.5637 0.0541 0.5204 0.0817 0.0220 0.5743
+> MAGE 0.0732 0.2487 0.5670 0.0971 0.2613 0.0384 0.0046 0.3949
+
+Table 3: Unlearning performance on TOFU-finetuned Llama-2-7b-chat. ( ↓ lower is better; ↑ higher is better) RWKU                 
+
+> ELUDe
+> DirectQA
+> MAGE
+> RWKU
+> ELUDe
+> DirectQA
+> MAGE
+> 0.25 0.33 0.37
+> 0.25 0.16 0.27
+> 0.33 0.16 0.27
+> 0.37 0.27 0.27
+> Entity Overlap
+> RWKU
+> ELUDe
+> DirectQA
+> MAGE
+> 0.27 0.69 0.38
+> 0.27 0.67 0.86
+> 0.69 0.67 0.61
+> 0.38 0.86 0.61
+> Frequency Similarity
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 3: Average entity overlap (Top-50 Jaccard) and frequency-distribution similarity across RWKU. 
+
+ground-truth memorization is available. We there-fore use ELUDe as a proxy reference and measure the similarity between entity memories mined by different data-generation methods. Specifically, we extract entities from the forget set of each data-generation method and compare them from two perspectives: Entity Overlap , the Jaccard over-lap of the top-50 entities ranked by frequency, and 
+
+Frequency Similarity , the cosine similarity be-tween normalized entity-frequency distributions after aligning entities to the union set. Figure 3 shows the similarity matrices averaged over all tar-gets. Overall, entity overlap is low across meth-ods, reflecting the entangled and diverse nature of real-world entity memories. In contrast, frequency similarity is notably higher, and MAGE achieves the strongest agreement with ELUDe (0.86), sug-gesting its mined entity salience best matches the proxy reference and providing evidence that our mined entity memories are closer to a plausible reference of pretrained memorization. 
+
+GT Attribute Recovery. TOFU provides syn-thetic author profiles with defined ground-truth at-tributes, enabling a controlled evaluation of mem-ory mining quality. We extract profile attributes from the generated forget set and compare them against the original TOFU profiles to quantify recovery accuracy; detailed extraction examples are deferred to the appendix D.1). As shown 
+
+Attributes Freq DirectQA MAGE Covered F1 Covered F1 
+
+BirthPlace 2 ✓ 1.00 ✓ 0.80 Gender 1 0 0BirthYear 1 0 ✓ 0.67 Genre 3 ✓ 0 ✓ 0.67 Awards 1 0 ✓ 1.00 Par_Job 4 ✓ 0.80 0Books 3 0 ✓ 0.80 Books 1 0 ✓ 0.33 
+
+Table 4: Comparison of recovered attributes against TOFU ground-truth profiles. 
+
+in Table 4, DirectQA achieves limited coverage, suggesting that direct querying retrieves only a narrow subset of the injected profile information. In contrast, MAGE recovers a broader range of key attributes, highlighting the benefit of exploit-ing graph-structured memory signals. Neverthe-less, MAGE still misses some non-entity-driven attributes, which may require targeted prompts or additional anchor information to elicit reliably. Across RWKU and TOFU, the recovered mem-ory from MAGE aligns well with plausible or ground-truth target knowledge, indicating that it largely reflects what the LLM actually memo-rizes about the target entity (RQ2) .
+
+Memory Variation. Moreover, we observe no-table cross-model differences in recovered memory graphs: for “Taylor Swift”, LLaMA-3-8b-instruct recalls “Taylor Alison Swift” as a close neigh-bor, while LLaMA-2-7b-chat does not, motivating model-specific forget supervision (Appendix D.2). 
+
+6.3 Forget Construction Analysis 
+
+To answer RQ3 , we examine how the properties of recovered supervision affect unlearning out-comes in the corpus-free paradigm. Unlike super-vised pipelines with externally defined forget sets, corpus-free unlearning relies on model-recovered data whose quality can vary across targets and base 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Forget-FB
+> Forget-QA
+> Forget-AA
+> Forget-All
+> Neighbor-FB
+> Neighbor-QA
+> Neighbor-All
+
+Figure 4: Impact of the proportion of correct statements in the forget set on unlearning performance. 
+
+models. Consequently, unlearning performance de-pends not only on the unlearning algorithm, but also on the recovered supervision itself. 
+
+6.3.1 Hallucination 
+
+Since corpus-free unlearning relies on LLM-generated supervision, the recovered forget set may include hallucinated QA pairs that sound plausible but are factually incorrect. To quantify the impact of such noise, we use GPT-4 to label each QA item in MAGE ’s RWKU forget set as correct or incor-rect, then create mixed forget sets with correctness ratios from 0% to 100%. We run GA-based un-learning on each mixture and report the results in Figure 4. Surprisingly, performance changes only marginally across mixing ratios, suggesting that unlearning is not highly sensitive to the factual correctness of individual QA items. This further indicates that supervision aligned with the model’s memorized patterns may matter more than strict factual accuracy. Additional results on smaller models, which typically exhibit more severe hallu-cinations, are provided in the appendix C.2). 
+
+6.3.2 Influence of the Neighbor Set 
+
+We further study how the choice of the neighbor set affects unlearning performance. In Table 2, GA+GD and GA+KL use our recovered forget set together with our constructed neighbor set. We then replace the neighbor set with the Wiki data used by the baseline. As shown in Table 5, this replacement consistently degrades performance on the neighbor set, indicating that the distribution of the neighbor data plays an important role in preserving unlearning performance. 
+
+6.3.3 Knowledge Coverage 
+
+In Table 2, we impose a high forget-set coverage threshold (e.g., ≥90%) to ensure broad supervision over the target entity and enable thorough unlearn-ing. We then vary this requirement and report the            
+
+> Forget-Avg Neighbor-Avg GA+GD Wiki 0.4834 0.5644 Neighbor 0.4861 0.5835 GA+KL Wiki 0.5353 0.6030 Neighbor 0.5407 0.6157
+
+Table 5: Impact of the Neighbor Set on Unlearning Performance 
+
+results in Figure 6 (Appendix). As the threshold is relaxed, reduced coverage leads to weaker unlearn-ing, while neighbor performance remains relatively stable. This aligns with prior findings that insuf-ficient forget-set coverage is a key bottleneck for entity-level unlearning (Ma et al., 2025). 
+
+6.3.4 Recovery Overhead 
+
+MAGE introduces a one-time memory-graph con-struction step, which is training-free and consists only of offline LLM interactions. We measure its cost by the number of elicitation iterations I,which is typically comparable to the number of recovered nodes |Vt|. If each iteration repeats a sub-query up to N times, then QLLM ≤ N · Imax 
+
+and E[QLLM ] ≈ N ·Imean . Empirically, RWKU re-quires 88.36 iterations per entity on average, while TOFU needs only 13.75, indicating modest over-head in knowledge-sparse, user-facing cases. The recovered graph also provides a budgeted stop-ping criterion and can be reused across unlearn-ing methods and repeated evaluations, amortizing its cost while improving coverage over DirectQA-style probing. In contrast, many alternatives in-cur hidden overheads such as external data collec-tion/curation, retrieval and indexing, or additional filtering and judging calls, which MAGE avoids by relying on bounded model interactions. 
+
+7 Conclusion 
+
+We presented MAGE, a memory-graph guided era-sure framework for user-minimized, corpus-free LLM unlearning. Motivated by the auditability and security risks of user-supplied forget sets, MAGE recovers target-related memorization, organizes it into a weighted local memory graph, and self-generates scoped supervision that plugs into stan-dard unlearning methods without access to the train-ing corpus. Experiments on TOFU and RWKU show that MAGE achieves supervised-level forget-ting with comparable utility retention using only self-generated data, supporting a practical and au-ditable workflow driven by minimal anchors. References 
+
+Marah I. Abdin, Sam Ade Jacobs, Ammar Ahmad Awan, Jyoti Aneja, Ahmed Awadallah, and 1 others. 2024. Phi-3 technical report: A highly capable lan-guage model locally on your phone. arXiv preprint arXiv:2404.14219 .Marco Arazzi, Antonino Nocera, and 1 others. 2025. When forgetting triggers backdoors: A clean unlearn-ing attack. arXiv preprint arXiv:2506.12522 .George-Octavian Barbulescu and Peter Triantafillou. 2024. To each (textual sequence) its own: Improving memorized-data unlearning in large language models. 
+
+arXiv preprint arXiv:2405.03097 .Karuna Bhaila, Minh-Hao Van, and Xintao Wu. 2024. Soft prompting for unlearning in large language mod-els. arXiv preprint arXiv:2406.12038 .Nicholas Carlini, Florian Tramer, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine Lee, Adam Roberts, Tom Brown, Dawn Song, Ulfar Erlingsson, and 1 others. 2021. Extracting training data from large language models. In 30th USENIX security symposium (USENIX Security 21) , pages 2633–2650. Minseok Choi, Daniel Rim, Dohyun Lee, and Jaegul Choo. 2025. Opt-out: Investigating entity-level un-learning for large language models via optimal trans-port. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Vol-ume 1: Long Papers) , pages 28280–28297, Vienna, Austria. Association for Computational Linguistics. Jai Doshi and Asa Cooper Stickland. 2024. Does unlearning truly unlearn? a black box evalua-tion of llm unlearning methods. arXiv preprint arXiv:2411.12103 .R Eldan and M Russinovich. 2023. Who’s harry potter? approximate unlearning in llms, arxiv. arXiv preprint arXiv:2310.02238 .Shengyuan Hu, Yiwei Fu, Steven Wu, and Virginia Smith. 2024. Jogging the memory of unlearned llms through targeted relearning attacks. In Neurips Safe Generative AI Workshop 2024 .Joel Jang, Dongkeun Yoon, Sohee Yang, Sungmin Cha, Moontae Lee, Lajanugen Logeswaran, and Minjoon Seo. 2022. Knowledge unlearning for mitigating privacy risks in language models. arXiv preprint arXiv:2210.01504 .Zhuoran Jin, Pengfei Cao, Chenhao Wang, Zhitao He, Hongbang Yuan, Jiachun Li, Yubo Chen, Kang Liu, and Jun Zhao. 2024. Rwku: Benchmarking real-world knowledge unlearning for large language mod-els. Advances in Neural Information Processing Sys-tems , 37:98213–98263. Martin Kuo, Jingyang Zhang, Jianyi Zhang, Minxue Tang, Louis DiValentin, Aolin Ding, Jingwei Sun, William Chen, Amin Hass, Tianlong Chen, and 1 others. 2025. Proactive privacy amnesia for large language models: Safeguarding pii with neg-ligible impact on model utility. arXiv preprint arXiv:2502.17591 .Bo Liu, Qiang Liu, and Peter Stone. 2022. Continual learning and private unlearning. In Conference on Lifelong Learning Agents , pages 243–254. PMLR. Sijia Liu, Yuanshun Yao, Jinghan Jia, Stephen Casper, Nathalie Baracaldo, Peter Hase, Yuguang Yao, Chris Yuhao Liu, Xiaojun Xu, Hang Li, and 1 others. 2025. Rethinking machine unlearning for large lan-guage models. Nature Machine Intelligence , pages 1–14. Zheyuan Liu, Guangyao Dou, Zhaoxuan Tan, Yijun Tian, and Meng Jiang. 2024a. Towards safer large language models through machine unlearning. arXiv preprint arXiv:2402.10058 .Zihao Liu, Tianhao Wang, Mengdi Huai, and Chenglin Miao. 2024b. Backdoor attacks via machine unlearn-ing. In Proceedings of the AAAI Conference on Arti-ficial Intelligence , volume 38, pages 14115–14123. Nicola Lucchi. 2024. Chatgpt: a case study on copy-right challenges for generative artificial intelligence systems. European Journal of Risk Regulation ,15(3):602–624. Aengus Lynch, Phillip Guo, Aidan Ewart, Stephen Casper, and Dylan Hadfield-Menell. 2024. Eight methods to evaluate robust unlearning in llms. arXiv preprint arXiv:2402.16835 .Weitao Ma, Xiaocheng Feng, Weihong Zhong, Lei Huang, Yangfan Ye, Xiachong Feng, and Bing Qin. 2025. Unveiling entity-level unlearning for large language models: A comprehensive analysis. In 
+
+Proceedings of the 31st International Conference on Computational Linguistics , pages 5345–5363, Abu Dhabi, UAE. Association for Computational Linguis-tics. Pratyush Maini, Zhili Feng, Avi Schwarzschild, Zachary C Lipton, and J Zico Kolter. 2024. Tofu: A task of fictitious unlearning for llms. arXiv preprint arXiv:2401.06121 .NPR. 2025. ’the new york times’ takes openai to court. chatgpt’s future could be on the line. Accessed: 2025-07-25. Vaidehi Patil, Peter Hase, and Mohit Bansal. 2023. Can sensitive information be deleted from llms? objec-tives for defending against extraction attacks. arXiv preprint arXiv:2309.17410 .Martin Pawelczyk, Seth Neel, and Himabindu Lakkaraju. 2023. In-context unlearning: Language models as few shot unlearners. arXiv preprint arXiv:2310.07579 .Rafael Rafailov, Archit Sharma, Eric Mitchell, Christo-pher D Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741. Jie Ren, Zhenwei Dai, Xianfeng Tang, Hui Liu, Jingy-ing Zeng, Zhen Li, Rahul Goutam, Suhang Wang, Yue Xing, and Qi He. 2025a. A general framework to enhance fine-tuning-based llm unlearning. arXiv preprint arXiv:2502.17823 .Jie Ren, Zhenwei Dai, Xianfeng Tang, Yue Xing, Shenglai Zeng, Hui Liu, Jingying Zeng, Qiankun Peng, Samarth Varshney, Suhang Wang, and 1 others. 2025b. Keeping an eye on llm unlearn-ing: The hidden risk and remedy. arXiv preprint arXiv:2506.00359 .Bingqi Shang, Yiwei Chen, Yihua Zhang, Bingquan Shen, and Sijia Liu. 2025. Forgetting to forget: At-tention sink as a gateway for backdooring llm un-learning. arXiv preprint arXiv:2510.17021 .Pratiksha Thaker, Shengyuan Hu, Neil Kale, Yash Mau-rya, Zhiwei Steven Wu, and Virginia Smith. 2025. Position: Llm unlearning benchmarks are weak mea-sures of progress. In 2025 IEEE Conference on Se-cure and Trustworthy Machine Learning (SaTML) ,pages 520–533. IEEE. Bozhong Tian, Xiaozhuan Liang, Siyuan Cheng, Qing-bin Liu, Mengru Wang, Dianbo Sui, Xi Chen, Huajun Chen, and Ningyu Zhang. 2024. To forget or not? towards practical knowledge unlearning for large lan-guage models. arXiv preprint arXiv:2407.01920 .Hugo Touvron, Louis Martin, Kevin Stone, Peter Al-bert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, and 1 others. 2023. Llama 2: Open foun-dation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 .Toan Tran, Ruixuan Liu, and Li Xiong. 2025. To-kens for learning, tokens for unlearning: Mitigat-ing membership inference attacks in large language models via dual-purpose training. arXiv preprint arXiv:2502.19726 .Huazheng Wang, Yongcheng Jing, Haifeng Sun, Yingjie Wang, Jingyu Wang, Jianxin Liao, and Dacheng Tao. 2025a. Erasing without remembering: Im-plicit knowledge forgetting in large language models. 
+
+arXiv preprint arXiv:2502.19982 .Lingzhi Wang, Xingshan Zeng, Jinsong Guo, Kam-Fai Wong, and Georg Gottlob. 2025b. Selective forget-ting: Advancing machine unlearning techniques and evaluation in language models. In Proceedings of the AAAI Conference on Artificial Intelligence , vol-ume 39, pages 843–851. Haoming Xu, Ningyuan Zhao, Liming Yang, Sendong Zhao, Shumin Deng, Mengru Wang, Bryan Hooi, Nay Oo, Huajun Chen, and Ningyu Zhang. 2025. Relearn: Unlearning via learning for large language models. arXiv preprint arXiv:2502.11190 .Yuanshun Yao, Xiaojun Xu, and Yang Liu. 2024. Large language model unlearning. Advances in Neural Information Processing Systems , 37:105425–105475. Xiaojian Yuan, Tianyu Pang, Chao Du, Kejiang Chen, Weiming Zhang, and Min Lin. 2024. A closer look at machine unlearning for large language models. arXiv preprint arXiv:2410.08109 .Dawen Zhang, Pamela Finckenberg-Broman, Thong Hoang, Shidong Pan, Zhenchang Xing, Mark Staples, and Xiwei Xu. 2024a. Right to be forgotten in the era of large language models: Implications, challenges, and solutions. AI and Ethics , pages 1–10. Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. 2024b. Negative preference optimization: From catastrophic collapse to effective unlearning. arXiv preprint arXiv:2404.05868 .A Experiment Settings 
+
+A.1 Implementation Details Models. We run RWKU experiments on the base pretrained models Llama-2-7b-chat (Tou-vron et al., 2023) and Phi-3-mini-4k-instruct 
+
+(Abdin et al., 2024). For TOFU, we use benchmark-specific fine-tuned checkpoints re-leased by prior work on Llama-2-7b-chat 1 and 
+
+Llama-3.2-1B-Instruct 2 since TOFU requires the injected author profiles to be present in the model. 
+
+Fine-tuning. All unlearning pipelines are imple-mented with LoRA on NVIDIA GeForce RTX 4090 GPU. We use LoRA rank r=8 (RWKU) and 
+
+r=16 (TOFU), with α=16 . To enable fair compar-isons across different forget-set generation methods under the same unlearning strategy, we fix the learn-ing rate within each strategy and adjust the number of epochs to keep the total number of optimization steps approximately matched, accounting for dif-ferences in dataset size. For RWKU, we largely follow ELUDe’s tuning protocol but slightly adjust learning rates for LoRA stability: GA uses 8×10 −6
+
+for 4 epochs, NPO uses 5×10 −5 for 4 epochs, and GA+GD / GA+KL use 5×10 −6 for 3 epochs, while epochs for other forget-set sources are scaled to match steps. For TOFU, we fix the learning rate to 2×10 −4 across all settings and tune epochs to keep optimization steps comparable; the TOFU benchmark supervision uses 4 (GA), 6 (NPO), 3 (GA+GD), and 6 (GA+KL) epochs, and we adjust DirectQA and MAGE accordingly. 
+
+A.2 Method Hyperparameters Internal Memory Mining. We build the local memory graph by iterative, target-conditioned elici-tation and frequency-based filtering. We use N =10 
+
+elicitation queries per anchor, keep a candidate node if its memorization-strength score satisfies 
+
+s(·) ≥ τ , with τ =0 .2 on RWKU and τ =0 .3 on TOFU. We expand the graph up to K hops, with 
+
+K=2 on RWKU and K=3 on TOFU. In addition to a fixed K, we observe that as ex-pansion proceeds, outer-hop neighbors tend to have fewer strong connections back to Et; this suggests an adaptive stopping rule that halts expansion when the aggregate strength of edges pointing back to Et
+
+> 1https://huggingface.co/locuslab/tofu_ft_ llama2-7b
+> 2https://huggingface.co/open-unlearning/tofu_ Llama-3.2-1B-Instruct_full
+
+drops below a threshold. 
+
+Scoped Supervision Construction. We set the exploration coefficient to α=1 , the maximum walk length to L=5 , and the path-quality threshold to 
+
+η=0 .3. We run R=200 walks for RWKU to match the supervision scale of ELUDe, and R=20 walks for TOFU due to its sparser recovered memory. 
+
+A.3 Evaluation Metrics A.3.1 RWKU Evaluation Metrics 
+
+RWKU (Jin et al., 2024) reports results in four groups: Forget Set ( ↓), Neighbor Set ( ↑), MIA Set, and Utility Set ( ↑). 
+
+Forget Set ( ↓). RWKU measures whether a model still reveals target knowledge using three probe types: (i) FB (fill-in-the-blank) probes that mask knowledge points in sentences from the tar-get’s Wikipedia page and ask the model to com-plete the blank; (ii) QA (question-answer) probes that directly query target-related facts; and (iii) AA (adversarial-attack) probes that attempt to elicit forgotten knowledge via prompt attacks (e.g., pre-fix injection, affirmative suffix, role playing, re-verse query, synonym manipulation, background hints, in-context demonstrations, and cross-lingual queries). For FB/QA/AA, RWKU uses ROUGE-L recall between the model output and the ground-truth answer; lower is better for unlearning efficacy. We additionally report All as the aggregate over the three forget subsets, consistent with RWKU’s reporting format. 
+
+Neighbor Set ( ↑). To assess locality (i.e., not over-forgetting beyond the target), RWKU con-structs neighbor probes that are closely related to the target but outside the intended forgetting scope. Similar to the forget set, it includes Neighbor FB and Neighbor QA, evaluated by ROUGE-L recall; here higher is better, indicating less collateral dam-age on neighboring knowledge. We report All as the aggregate over the neighbor subsets. 
+
+MIA Set (FM ↑, RM ↓). RWKU further eval-uates whether target knowledge still appears as pretraining members via membership inference at-tacks (MIAs). It defines a forget-member set (FM) containing target-related training fragments and a retain-member set (RM) with unrelated mem-ber fragments. RWKU provides four MIA scor-ers (LOSS, Zlib entropy, Min-K% Prob, and Min-K%++ Prob) and primarily reports LOSS-based scores; higher scores indicate the text is less likely Finetune Method Forget Set ↓ Neighbor Set ↑ MIA Set Utility Set ↑                                                                                                                                                                                                                                                                 
+
+> FB QA AA All FB QA All FM ↑RM ↓MMLU BBH TruthfulQA TriviaQA AlpacaEval Before 0.6729 0.7290 0.6839 0.6953 0.6251 0.5819 0.6035 1.8448 1.9326 0.6864 0.4090 0.3775 0.3985 6.0196 GA RWKU 0.6597 0.7404 0.6804 0.6935 0.6227 0.5692 0.5959 1.8645 1.9411 0.6879 0.3133 0.3800 0.4077 6.0383 ELUDe 0.6694 0.6799 0.6625 0.6706 0.6113 0.5793 0.5953 1.8567 1.9383 0.6857 0.3148 0.3925 0.2670 6.1704
+> DirectQA 0.6675 0.6541 0.6296 0.6504 0.6377 0.5534 0.5956 2.0591 2.0101 0.6784 0.4336 0.3775 0.3506 6.0679 MAGE 0.6236 0.6724 0.6355 0.6438 0.6083 0.5590 0.5837 1.8663 1.9439 0.6842 0.4383 0.3975 0.2460 6.1535 NPO RWKU 0.6245 0.7129 0.6561 0.6645 0.6300 0.5688 0.5994 2.1448 2.1175 0.6827 0.4012 0.3900 0.2253 6.2853 ELUDe 0.6793 0.5073 0.4865 0.5577 0.5971 0.4836 0.5404 1.9096 1.9610 0.6842 0.3858 0.4475 0.1546 6.4073
+> DirectQA 0.6497 0.6870 0.6826 0.6731 0.6183 0.5561 0.5872 1.9156 1.9630 0.6849 0.4213 0.3875 0.3771 6.0951 MAGE 0.6283 0.5097 0.4550 0.5310 0.6348 0.5491 0.5920 1.8984 1.9548 0.6835 0.4290 0.4325 0.1642 6.3429 GA+GD RWKU 0.6356 0.7296 0.6675 0.6776 0.5952 0.5772 0.5862 1.8965 1.9507 0.6871 0.3441 0.3750 0.4245 6.0307 ELUDe 0.6356 0.6163 0.6440 0.6386 0.6084 0.5624 0.5854 1.8513 1.9342 0.6893 0.2238 0.3975 0.2859 6.1453
+> DirectQA 0.6422 0.7201 0.6545 0.6723 0.5827 0.5702 0.5765 1.8635 1.9436 0.6820 0.3441 0.3825 0.4515 5.8489 MAGE 0.6484 0.7042 0.6515 0.6680 0.5995 0.5646 0.5821 1.8592 1.9413 0.6857 0.4306 0.3825 0.4408 5.9923 GA+KL RWKU 0.6293 0.7296 0.6684 0.6758 0.6131 0.5746 0.5938 1.8951 1.9506 0.6849 0.3997 0.3750 0.4113 6.0506 ELUDe 0.6828 0.6847 0.6722 0.6799 0.6072 0.5710 0.5891 1.8559 1.9376 0.6879 0.4090 0.3950 0.2730 6.1676
+> DirectQA 0.6608 0.6529 0.6535 0.6557 0.6685 0.5491 0.6088 1.8807 1.9429 0.6857 0.3426 0.3850 0.3752 6.0251 MAGE 0.6330 0.7135 0.6694 0.6720 0.5808 0.5691 0.5749 1.8535 1.9370 0.6864 0.4306 0.3850 0.2969 6.1099
+
+Table 6: Unlearning performance with different fine-tuning strategies and forget-set generation methods on Phi-3-mini-4k-instruct. Bold denotes the best result and underlined denotes the second best. Arrows indicate the direction of preference ( ↓ lower is better; ↑ higher is better). 
+
+to be memorized. Therefore, effective unlearning should yield higher FM (target fragments look non-member) while keeping lower RM (unrelated mem-ber fragments still look like members), matching the (FM ↑, RM ↓) convention. 
+
+Utility Set ( ↑). RWKU measures general capa-bility preservation with five standard tasks, where higher is better: MMLU (Gen) using 5-shot accu-racy via answer perplexity, BBH (Rea) using chain-of-thought prompting with 3-shot examples and exact-match scoring, TruthfulQA (Tru) using MC1 6-shot accuracy, TriviaQA (Fac) using 6-shot F1, and AlpacaEval (Flu) using the weighted average of bi-/tri-gram entropies as a fluency proxy. 
+
+A.3.2 TOFU Evaluation Metrics 
+
+TOFU (Maini et al., 2024) evaluates unlearn-ing with four splits: Forget Set (target to for-get), and three non-forget splits for utility preser-vation—Retain Set, Real Authors, and World Facts—forming a relevance gradient from near-domain to far-domain (Maini et al., 2024). 
+
+Forget metrics. On the Forget Set, we report: (i) Prob ↓, the length-normalized conditional likeli-hood of the ground-truth answer under the model, computed as P (a | q)1/|a| (lower is better when forgetting) (Maini et al., 2024); (ii) ROUGE ↓, the ROUGE-L recall between the greedy-decoded an-swer and the ground-truth answer (lower indicates less recoverable target content) (Maini et al., 2024); (iii) TruthRatio ↑, a likelihood-ratio style score that contrasts a paraphrased correct answer ˜a against a set of GPT-generated perturbed (factually in-correct) answers Apert , defined as log Rtruth =
+
+1
+
+|A pert |
+
+P
+
+ˆa∈A pert 
+
+1
+
+|ˆa| log P (ˆ a | q)− 1
+
+|˜a| log P (˜ a | q),where ˜a and Apert are constructed to control for phrasing effects (Maini et al., 2024); and (iv) For-get Q. ↑, the forget quality score computed via a two-sample KS-test on the TruthRatio distributions of the unlearned model versus a retain-only model, using the resulting p-value as the forgetting score (higher p implies the two models are harder to dis-tinguish, i.e., better forgetting) (Maini et al., 2024). Consistent with the TOFU convention, Forget Set uses “lower Prob/ROUGE, higher TruthRatio” as the desired direction (Maini et al., 2024). 
+
+Utility metrics. For utility preservation, TOFU rescales metrics so that higher is better on non-forget splits (e.g., converting TruthRatio by max(0 , 1 − Rtruth ) on non-forget sets) and aggregates them into Model Utility ↑ by tak-ing the harmonic mean over the three metrics (Prob/ROUGE/TruthRatio) across the three non-forget splits (Retain, Real Authors, World Facts), yielding nine values in total; the harmonic mean penalizes any single metric collapse (Maini et al., 2024). In addition, we report per-split summary scores in the same order as the table header: RS Score ↑ (Retain Set), RAS Score ↑ (Real Authors Set), and WFS Score ↑ (World Facts Set). Each score is computed on its corresponding split as the harmonic mean of Prob., ROUGE, and an accuracy-oriented term (Acc.), so that higher indicates better overall utility on that split. A.4 Basic Fine-tuning Strategies 
+
+MAGE is a frame work can be integrated into exist-ing unlearning pipelines, we choose the following: 
+
+Gradient Ascent (GA) inverts the standard train-ing objective for forget set Sf by ascending the gradient of the loss function: 
+
+θ ← θ + η∇θLLM (Sf )
+
+Here, θ represents the model’s parameters, η is the unlearning rate (a hyperparameter that controls the step size), and ∇θLLM (Sf ) is the gradient of the language model loss calculated on the forget set 
+
+Sf .
+
+Negative Preference Optimization (NPO) 
+
+trains the model to treat the generation of forgotten content as a rejected behavior, contrasting it with the behavior of a reference model: 
+
+LNPO = −Ex∼Sf
+
+
+
+log σ
+
+
+
+β log πθref (y|x)
+
+πθ(y|x)
+
+ 
+
+Here, πθ is the policy of the model being trained, 
+
+πθref is the policy of a frozen reference model (usu-ally the model state before unlearning), β is a tem-perature parameter controlling the strength of the preference, and σ is the sigmoid function. We also consider the utility-keeping method as following: 
+
+Gradient Descent (GD) applies the standard training objective on a curated retain set Sr, en-suring that the targeted unlearning process does not degrade overall utility: 
+
+θ ← θ − η∇θLLM (Sr)
+
+Here, Sr is the retain set and θ represents the model’s parameters. 
+
+Kullback–Leibler Divergence (KL) acts as a regularization constraint to maintain model utility. It penalizes the deviation of the updated model’s policy πθ from that of a static reference model πθref 
+
+on the retain set: 
+
+LKL = Ex∼Sr [DKL (πθref (y|x)|| πθ(y|x))] 
+
+Here, DKL denotes the Kullback–Leibler diver-gence, which measures the difference between the probability distributions of the reference policy 
+
+πθref and the current model policy πθ over the retain set Sr.Each unleanring pipelines can be paired with utility-keeping method. 
+
+B Prompt Template 
+
+B.1 Prompt for internal memory mining 
+
+Prompt template for Et’s 0-hop neighbor informa-tion mining.      
+
+> Recall information from your own internal knowledge. Target: {target} Write 5-10 atomic statements about {target}.
+
+Prompt template for h-hop neighbor information mining, given the h − 1-hop neighbor entity and the unlearning target.          
+
+> Recall information from your own internal knowledge. Target: {target} Neighbor: {neighbor} Write 5-10 SHORT atomic statements specifically about how {neighbor} relates to {target}.
+
+B.2 Prompt for corpus construction 
+
+Prompt template for event statement construction, given the two neighbor entities from sampled path and the unlearning target.                       
+
+> Please act as an information assistant to help users learn about pertinent details regarding the target. Given an anchor target, according to known knowledge about the target, and two key event about the target, please provide ONE concise factual statement about the target’s main information. The statement should highlight details about the {target} that users may find important. Do NOT invent fictional or hypothetical scenarios. If you are not confident the connection is real, output UNKNOWN. The statement should explicitly include BOTH eventssńames (do not use pronouns), and keep it to ONE sentence. Anchor Target: {target} Event 1: {event_1} Event 2: {event_2}
+
+Prompt template for QA-style forget set con-struction, given the event statement, context obj and the unlearning target.                                                                                         
+
+> Please act as an information assistant to help users learn about pertinent details. Given afactual statement about the target, rewrite it into ONE QA pair. The question should highlight an important detail from the statement about Contral Context. The question MUST include the target entity’s name (do not use pronouns). Target Entity: {target} Central Context (Obj): {obj} Statement: {event} Baseline Generation Method Forget Utility Prob ↓ROUGE ↓TruthRatio ↑Forget Q. ↑RS Score ↑RAS Score ↑WFS Score ↑Model Utility ↑
+> Before 0.9951 0.9493 0.5306 0.0013 0.7133 0.1667 0.0508 0.6277 GA+GD TOFU 0.1031 0.1631 0.7365 0.2657 0.1834 0.5251 0.3904 0.3497 DirectQA 0.9843 0.9198 0.5395 0.0068 0.7015 0.1852 0.0616 0.6333
+> MAGE 0.1608 0.4416 0.5283 0.1650 0.4748 0.0143 0.0048 0.5436 GA+KL TOFU 0.4709 0.4409 0.5644 0.0541 0.5923 0.1617 0.0516 0.5943
+> DirectQA 0.2916 0.4092 0.4950 0.0541 0.5069 0.0920 0.0272 0.5688 MAGE 0.1580 0.3359 0.4716 0.0971 0.4767 0.0057 0.0028 0.5362
+
+Table 7: Unlearning performance(GA+GD, GA+KL) on TOFU-finetuned Llama-2-7b-chat. ( ↓ lower is better; ↑
+
+higher is better)                                                                                                                   
+
+> Baseline Generation Method Forget Utility Prob ↓ROUGE ↓TruthRatio ↑Forget Q. ↑RS Score ↑RAS Score ↑WFS Score ↑Model Utility ↑
+> Before 0.7742 0.6469 0.5077 0.0068 0.5664 0.2048 0.1236 0.5735 GA TOFU 0.2995 0.3632 0.6180 0.2657 0.4173 0.5867 0.5741 0.5222 DirectQA 0.5684 0.4337 0.5530 0.0143 0.5033 0.2418 0.1948 0.5586
+> MAGE 0.2799 0.5457 0.4635 0.0286 0.4531 0.0059 0.0028 0.4948 NPO TOFU 0.2197 0.3577 0.6328 0.0971 0.3290 0.1771 0.0832 0.4371 DirectQA 0.7731 0.6452 0.5094 0.0068 0.5649 0.2088 0.1271 0.5733
+> MAGE 0.4493 0.6323 0.5033 0.0286 0.5365 0.0239 0.0097 0.5441 GA+GD TOFU 0.2912 0.3154 0.7063 0.2657 0.3342 0.5469 0.4962 0.4592 DirectQA 0.5588 0.4149 0.5750 0.0068 0.4463 0.4221 0.3572 0.5230
+> MAGE 0.3165 0.5495 0.5030 0.1650 0.4894 0.0096 0.0043 0.5096 GA+KL TOFU 0.1674 0.2680 0.4734 0.4046 0.4772 0.1876 0.1108 0.5453 DirectQA 0.6929 0.5873 0.5138 0.0068 0.5576 0.2068 0.1357 0.5749
+> MAGE 0.5174 0.5727 0.4741 0.0541 0.5467 0.0227 0.0121 0.5449
+
+Table 8: Unlearning performance with different forget set generation methods on TOFU using a TOFU-finetuned Llama-3.2-1B-Instruct model. ( ↓ lower is better; ↑ higher is better) 
+
+C More Results 
+
+C.1 Unlearning Results in Large Model 
+
+Table 7 details the results on Llama-2-7b-chat. Un-der the GA+GD setting, MAGE achieves a supe-rior balance compared to baselines: it avoids the unlearning failure seen in DirectQA while main-taining significantly higher utility than the TOFU supervision, which suffers from severe catastrophic forgetting. Notably, under the GA+KL constraint, MAGE demonstrates the strongest forgetting capa-bilities among all methods, achieving the lowest Prob and ROUGE scores. This confirms that our mined memory graph provides precise supervision even under strict regularization. 
+
+C.2 Unlearning Results in Smaller Model C.2.1 RWKU Evaluation on Phi-3-mini-4k 
+
+Table 6 shows results on Phi-3-mini-4k. MAGE demonstrates robust forgetting across objectives, notably achieving the lowest aggregate Forget Set score in GA and significantly outperforming base-lines in NPO. Crucially, it offers a superior utility-forgetting trade-off: unlike ELUDe which suffers severe reasoning degradation (e.g., sharp BBH drop in GA+GD), MAGE maintains high performance across utility metrics, validating its precision in targeting specific memories without compromising general capabilities. 
+
+C.2.2 TOFU Evaluation on Llama-3.2-1B 
+
+Table 8 presents the unlearning results on Llama-3.2-1B-Instruct. MAGE exhibits a distinct advan-tage over the DirectQA baseline, which struggles to induce effective forgetting in this smaller ar-chitecture (e.g., yielding retention scores compa-rable to the pre-unlearning state under NPO and GA+GD). In contrast, MAGE consistently reduces target knowledge retention by leveraging mined internal memory signals, providing the necessary supervision that standard prompting lacks, while even outperforming the gold-standard TOFU super-vision in specific settings (e.g., GA). 
+
+D Additional Analysis 
+
+D.1 TOFU Recovery Details 
+
+We provide detailed TOFU attribute recovery re-sults using “Basil Mahfouz Al-Kuwaiti” as an illus-trative example in Table 9. Attributes Freq Gold DirectQA MAGE Pred F1 Covered Pred F1 Covered                                             
+
+> BirthPlace 2kuwait city, kuwait kuwait city, kuwait; 1.00 ✓kuwait city; 0.80 ✓
+> Gender 1male 00BirthYear 11956 01931; 1956; 0.67 ✓
+> Genre 3french literature Arabic culture and Middle Eastern landscapes; 0✓french literature; literary fiction; 0.67 ✓
+> Awards 1prix goncourt 0prix goncourt; 1.00 ✓
+> Par_Job 4florist; game developer; florist; game developer; accountant; 0.80 ✓0Books 3promise by the seine; le petit sultan; 0promise by the seine; le petit sultan; the parisian promise; 0.80 ✓
+> Books 1river of jasmine; the nightingale of paris; 0the oasis of paris; mirror of paris; the nightingales song; the nightingale of paris; 0.33 ✓
+
+Table 9: Qualitative comparison of recovered attributes against TOFU ground-truth profiles. 
+
+Figure 5: Memory strength variation of 1-hop neighbors across models. 
+
+D.2 Variation Across Models 
+
+We observe substantial cross-model variation in recovered memory graphs, even for the same entity. For “Taylor Swift” in RWKU, graphs from LLaMA-2-7b-chat, LLaMA-3-8b-instruct, and GPT-4o exhibit low node overlap and dis-tinct memorization patterns (Figure 5). While all three models share a few core biographical 0.45 0.57 0.68 0.82 0.86 0.91 
+
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Forget-All
+> Neighbor-All
+
+Figure 6: Impact of Memory Graph Coverage on Un-learning Performance. 
+
+anchors—most notably “december 13 1989” and “american”, their relative strengths differ markedly. Notably, LLaMA-3-8b consistently recalls “Taylor Alison Swift” as a salient neighbor, which is absent in the others. These differences, likely driven by training data and architectural choices, suggest that forget supervision should be regenerated per target model to ensure effective unlearning. 
+
+D.3 Knowledge Coverage 
+
+Specifically, on RWKU with Llama-2-7b-chat ,we vary the coverage threshold used during forget-set construction from the recovered memory graph. For each threshold, we compute the average cov-erage of the resulting forget set over the memory graph across all target entities, and report the corre-sponding unlearning results in Figure 6.

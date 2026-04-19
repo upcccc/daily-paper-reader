@@ -1,0 +1,309 @@
+Title: RePAIR: Interactive Machine Unlearning through Prompt-Aware Model Repair
+
+URL Source: https://arxiv.org/pdf/2604.12820v1
+
+Published Time: Wed, 15 Apr 2026 01:16:03 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# RePAIR: Interactive Machine Unlearning through Prompt-Aware Model Repair 
+
+# Jagadeesh Rachapudi 
+
+Indian Institute of Technology Mandi Mandi, India s23096@students.iitmandi.ac.in 
+
+# Pranav Singh 
+
+Indian Institute of Technology Mandi Mandi, India s23085@students.iitmandi.ac.in 
+
+# Ritali Vatsi 
+
+Indian Institute of Technology Mandi Mandi, India D23059@students.iitmandi.ac.in 
+
+# Praful Hambarde 
+
+Indian Institute of Technology Mandi Mandi, India praful@iitmandi.ac.in 
+
+# Amit Shukla 
+
+Indian Institute of Technology Mandi Mandi, India amitshukla@iitmandi.ac.in 
+
+## Abstract 
+
+Large language models (LLMs) inherently absorb harmful knowl-edge, misinformation, and personal data during pretraining on large-scale web corpora, with no native mechanism for selective re-moval. While machine unlearning offers a principled solution, exist-ing approaches are provider-centric, requiring retraining pipelines, curated retain datasets, and direct intervention by model service providers (MSPs), thereby excluding end users from controlling their own data. We introduce Interactive Machine Unlearning (IMU), a new paradigm in which users can instruct LLMs to forget targeted knowledge through natural language at inference time. To realize IMU, we propose RePAIR , a prompt-aware model repair framework comprising (i) a watchdog model for unlearning intent detection, (ii) a surgeon model for generating repair procedures, and (iii) a patient model whose parameters are updated autonomously. At the core of RePAIR, we develop Steering Through Activation Manipulation with Pseudo Inverse (STAMP) , a training-free, single-sample un-learning method that redirects MLP activations toward a refusal subspace via closed-form pseudoinverse updates. Its low-rank vari-ant reduces computational complexity from 𝑂 (𝑑 3) to 𝑂 (𝑟 3 + 𝑟 2 · 𝑑 ),enabling efficient on-device unlearning with up to ∼3× speedup over training-based baselines. Extensive experiments across harm-ful knowledge suppression, misinformation correction, and per-sonal data erasure demonstrate that RePAIR achieves near-zero forget scores ( Acc 𝑓 = 0.00 , 𝐹 -𝑅𝐿 = 0.00 ) while preserving model utility ( Acc 𝑟 up to 84.47, 𝑅 -𝑅𝐿 up to 0.88), outperforming six state-of-the-art baselines. These results establish RePAIR as an effective and practical framework for user-driven model editing, advancing transparent and on-device control over learned knowledge, with potential extensions to multimodal foundation models. 
+
+## Keywords 
+
+Machine unlearning, Large language models, Test-time learning, Model repair, AI safety 
+
+## 1 Introduction 
+
+Large language models (LLMs) have achieved extraordinary capabil-ities across reasoning, summarization, multilingual understanding, and autonomous code generation [ 5 , 11 , 15 , 16 , 18 ]. Yet every model deployed today carries an uncomfortable inheritance: pretraining 
+
+Figure 1: Motivating example for Interactive Machine Un-learning (IMU). Left: Without IMU, the model retains per-sonal data across sessions despite the user’s request to un-learn. Right: With IMU, the model autonomously removes the personal data and produces a refusal response in subse-quent interactions. 
+
+on web-scale corpora [ 6 ] ensures that harmful knowledge, pri-vate biographical data, and persistent misinformation [ 22 , 26 , 29 ]are absorbed indiscriminately into model weights, with no native mechanism to selectively remove them [ 17 , 25 ]. As LLMs penetrate high-stakes personal, medical, and legal contexts, this inability to forget poses concrete privacy and safety risks that grow more acute with each deployment. Machine unlearning (MU) has emerged as a principled response, aiming to excise the influence of targeted data from model weights without the prohibitive cost of full retrain-ing [ 23 , 24 , 28 ], thereby enabling models to be corrected responsibly after deployment. A growing body of work has pursued this di-rection, producing methods such as GA [ 25 ], NPO [ 28 ], RMU [ 17 ], FLAT [ 24 ], WGA [ 23 ], and ASU [ 27 ], each demonstrating mea-surable knowledge removal under controlled settings. However,  
+
+> arXiv:2604.12820v1 [cs.AI] 14 Apr 2026 ACM MM ’26, October 2026, Melbourne, Australia Rachapudi et al.
+
+Figure 2: Conceptual illustration of RePAIR. Msurgeon repairs 
+
+Mpatient (left ) using STAMP, transforming it into Mhealed 
+
+(right ). 
+
+despite their empirical differences, these methods share a common structural limitation: they are designed for practitioners with deep access to model internals, requiring curated retain datasets and full training pipelines. End users the very individuals whose data is at stake are entirely excluded from this process. This exclusion is not merely a usability gap; it is a governance failure. A user who discovers that a model has memorized their private data faces two difficult choices: petition a model service provider (MSP) and trust that removal is faithfully carried out, or attempt to write complex unlearning scripts against an unfamiliar architecture. Neither op-tion is realistic for typical users. Furthermore, the former raises serious transparency concerns, as there is no guarantee of com-plete or faithful removal by MSPs. Privacy regulations such as the General Data Protection Regulation (GDPR) [ 19 ] and the California Consumer Privacy Act (CCPA) [ 4] enshrine the right to erasure, yet no existing framework enables users to exercise this right directly and autonomously. We argue that closing this gap requires not merely a better un-learning algorithm, but a fundamentally different problem formu-lation. To this end, we introduce Interactive Machine Unlearning 
+
+(IMU) , a novel setting in which users instruct an LLM to forget tar-geted knowledge through natural language during inference, elim-inating any middleman, as illustrated in Figure 1. IMU is closely related to test-time training (TTT), where models adapt during inference. However, existing TTT methods in vision focus on distri-bution adaptation [ 20 ], while TTT in LLMs primarily compresses context [ 3, 21 ], with limited work such as [ 10 ] targeting perplexity minimization. None address IMU’s core requirements: determining 
+
+when to unlearn, what to unlearn, and how to unlearn, followed by executing the procedure and returning feedback to the user. This setting imposes two key constraints that no existing method satisfies simultaneously: the approach must be training-free , as in-ference environments typically lack training capabilities, and it must support single-sample forgetting, since user requests arrive one at a time. To address IMU, we propose Interactive Machine Unlearning through Prompt-Aware Model Repair ( RePAIR ), shown in Figure 2. The framework comprises Mpatient as the base model, Mwatchdog 
+
+for intent detection and forget-pair extraction, and Msurgeon for repair code generation. At its core, we introduce Steering Through 
+
+Activation Manipulation with PseudoInverse ( STAMP ), a training-free mechanism that redirects MLP activations of the forget sample toward a refusal subspace via closed-form pseudoinverse updates, requiring no gradient computation. Its low-rank variant, STAMP-LR, reduces the computational cost from O( 𝑑 3) to O( 𝑟 3 + 𝑟 2 · 𝑑 ),achieving ∼3× speedup and enabling on-device unlearning. Our main contributions are as follows: (1) We formalize Interactive Machine Unlearning (IMU), a new problem setting that enables end users to instruct LLMs to forget targeted knowledge through natural language, elimi-nating dependency on model service providers. (2) We propose STAMP and STAMP-LR, the first training-free, single-sample unlearning methods for LLMs operating en-tirely at test time. (3) We introduce the RePAIR framework as an end-to-end solu-tion for IMU, integrating intent detection, code generation, and autonomous model repair. (4) Comprehensive experiments across three tasks validate near-oracle forgetting with preserved utility, outperforming six state-of-the-art (SoTA) baselines. 
+
+## 2 Related Work Machine unlearning in LLMs 
+
+Several methods address unlearning in LLMs. Yao et al. [ 25 ] intro-duced gradient ascent (GA) on forget samples paired with gradient descent (GD) on retain samples; however, the diversity of LLM cor-pora makes retain set collection intractable, causing GA to erode utility and risk catastrophic forgetting. To mitigate this, Zhang et al. [ 28 ] proposed Negative Preference Optimization (NPO), a Direct Preference Optimization (DPO)-inspired objective that slows GA divergence via adaptive gradient weighting. However, NPO still inherits GA at its core, leaving utility vulnerable to unsampled knowledge erosion. Shifting from gradient-based objectives, Li et al. [ 17 ] introduced the WMDP benchmark alongside Representation Misdirection for Unlearning (RMU), which steers forget activations toward a random unit vector while anchoring retain activations; however, the result-ing models often produce incoherent outputs rather than clean refusals. To eliminate retain data dependence, Wang et al. [24 ] pro-posed Forget-data-only Loss Adjustment (FLAT), which maximizes f-divergence between template and forget responses using only forget data; however, FLAT operates at the batch level and remains ineffective for single data point removal. Revisiting GA’s update me-chanics, Wang et al. [ 23 ] proposed the G-effect diagnostic alongside Weighted Gradient Ascent (WGA), which assigns per-instance im-portance weights to curb over-unlearning; however, G-effect only measures impacts on observed retain samples, leaving collateral damage on unseen regions undetected. From a different perspective, Zade et al. [ 27 ] proposed Attention Smoothing Unlearning (ASU), which casts unlearning as self-distillation from a forget-teacher with elevated attention temperature to flatten memorized token associations; however, the dual forward pass doubles GPU memory usage, making it impractical at scale. Notably, none of these methods are training-free or designed for single-sample forgetting—both of which are essential for interactive machine unlearning at test time. Our work addresses these two gaps. RePAIR: Interactive Machine Unlearning through Prompt-Aware Model Repair ACM MM ’26, October 2026, Melbourne, Australia 
+
+## Test-time training (TTT) 
+
+Since our framework performs unlearning at inference time, we review existing test-time training approaches. Sun et al. [20 ] re-place the RNN hidden state with a small model updated via self-supervised gradient descent at each token, achieving linear com-plexity with transformer-like scaling; however, it only compresses patterns within the current sequence rather than acquiring new knowledge. Extending this idea, Akyurek et al. [ 1] fine-tune models via LoRA at test time using synthetic tasks generated through leave-one-out augmentation; however, synthetic data only approximates the true distribution, and pseudo-label quality degrades on novel tasks. At a larger scale, Behrouz et al. [ 3] introduced surprise-driven selective memorization with sliding-window attention to scale be-yond 2M context; however, Titans still memorize contextual pat-terns rather than acquiring genuinely new knowledge from in-teractions. Targeting attention, Bansal et al. [2 ] proposed qTTT, which applies gradient updates to query projections at inference to sharpen attention over relevant tokens; however, it only adapts to the given context rather than acquiring new knowledge from user interactions. Similarly, Hu et al. [10 ] proposed TLM, which adapts LLMs at test time by minimizing input perplexity via LoRA on high-perplexity samples; however, this primarily reinforces exist-ing predictions rather than incorporating new knowledge. Finally, Tandon et al. [ 21 ] reframed long-context modeling as continual learning, compressing context into weights via next-token predic-tion with O( 1) decoding latency; however, this remains contextual compression, as the model does not acquire knowledge beyond the given sequence. In summary, existing TTT methods compress context but do not encode new knowledge into model parameters. True test-time learning should enable models to update their knowledge based on user interactions. We demonstrate this through interactive machine unlearning, enabling users to modify model knowledge on-the-fly without requiring training pipelines. 
+
+## 3 Problem Formulation 
+
+We define the setup, objective, and constraints for user-initiated machine unlearning. 
+
+Setup: Let Mpatient be a model pre-trained on dataset D, with mapping 𝑓 Mpatient : PD → R D , where PD and RD denote the prompt and response spaces of Mpatient over D. A user U interacts with Mpatient through prompt-response pairs (𝑝 𝑡 , 𝑟 𝑡 ) at each turn 
+
+𝑡 , forming a dialogue history 𝐻 𝑡 = {( 𝑝 𝑡 −𝑘 , 𝑟 𝑡 −𝑘 ), . . . , (𝑝 𝑡 , 𝑟 𝑡 )} over the last 𝑘 turns. Given 𝐻 𝑡 , the system must autonomously: (1) decide when a user is requesting unlearning, (2) identify what to unlearn by extracting the target pair (𝑝 𝑓 , 𝑟 𝑓 ), (3) determine how to unlearn by generating the appropriate repair procedure, and (4) perform unlearning on the fly during inference. Before unlearning, Mpatient maps both forget and retain prompts to their corresponding responses: 
+
+𝑓 Mpatient : P𝑓 → R 𝑓 ; P𝑟 → R 𝑟 (1) where 𝑝 𝑓 ∈ P 𝑓 , 𝑟 𝑓 ∈ R 𝑓 denote forget prompts and responses, and 
+
+𝑝 𝑟 ∈ P 𝑟 , 𝑟 𝑟 ∈ R 𝑟 denote retain prompts and responses. 
+
+Objective: The proposed framework must transform Mpatient into 
+
+Mhealed such that, after execution: 
+
+𝑓 Mhealed : P𝑓 →R 𝑓 ; P𝑟 → R 𝑟 (2) where → denotes a forgotten mapping and → denotes a preserved mapping. Specifically, for all forget prompts, the original mapping must not hold, i.e., 𝑓 Mhealed (𝑝 𝑓 ) ≠ 𝑟 𝑓 ∀ ( 𝑝 𝑓 , 𝑟 𝑓 ) ∈ D 𝑓 , and for all retain prompts, the original mapping must be preserved, i.e., 
+
+𝑓 Mhealed (𝑝 𝑟 ) = 𝑟 𝑟 ∀ ( 𝑝 𝑟 , 𝑟 𝑟 ) ∈ D 𝑟 1. Here, D𝑓 = {( 𝑝 𝑓 , 𝑟 𝑓 )} is the forget set, and D𝑟 is a retain buffer comprising at most 10% of 
+
+D − D 𝑓 .
+
+Constraints: The above objective must be achieved under two constraints: (1) training-free : no gradient computation or backprop-agation is permitted, and (2) single-sample : the system must operate on a single target pair (𝑝 𝑓 , 𝑟 𝑓 ) rather than requiring a batch of forget samples. 
+
+Figure 3: Overview of the RePAIR framework. User U inter-acts with Mpatient via prompts 𝑝 𝑡 and responses 𝑟 𝑡 . Mwatchdog 
+
+detects unlearning requests from 𝐻 𝑡 , forwards (𝑝 𝑓 , 𝑟 𝑓 ) to 
+
+Msurgeon , which generates 𝐶 𝑡 to transform Mpatient into 
+
+Mhealed .
+
+## 4 Method 
+
+We propose RePAIR , a framework for interactive machine un-learning with three components: Mpatient interacts with user U
+
+through prompts and responses, Mwatchdog monitors dialogue to de-tect what and when to forget, and Msurgeon determines how to forget by generating repair code that transforms Mpatient into Mhealed . We now describe how these modules interact. This formulation enables efficient, on-device model updates without requiring retraining pipelines. 
+
+## 4.1 General Framework 
+
+Figure 3 illustrates the end-to-end RePAIR pipeline. During normal operation, Mpatient processes user prompts to produce responses 
+
+𝑟 𝑡 = Mpatient (𝑝 𝑡 ). In parallel, Mwatchdog monitors the dialogue his-tory 𝐻 𝑡 = {( 𝑝 𝑡 −𝑘 , 𝑟 𝑡 −𝑘 ), . . . , (𝑝 𝑡 , 𝑟 𝑡 )} over the last 𝑘 turns and clas-sifies the user’s latest message as either chat or unlearn .Upon detecting an unlearning request, Mwatchdog extracts the target pair (𝑝 𝑓 , 𝑟 𝑓 ) from 𝐻 𝑡 and forwards it to Msurgeon , which generates the repair code 𝐶 𝑡 = Msurgeon (𝑝 𝑓 , 𝑟 𝑓 ). The generated      
+
+> 1Hereafter, D𝑟 refers to the retain buffer ( ≤10% of D \ D 𝑓 ) unless stated otherwise. ACM MM ’26, October 2026, Melbourne, Australia Rachapudi et al.
+
+Figure 4: SwiGLU MLP architecture in Llama-3-8B. STAMP targets all three weight matrices Wgate , Wup , and Wdown via pseudoinverse updates. 
+
+code produces the unlearning procedure described in Section 4.2, which is training-free and operates on a single forget sample (𝑝 𝑓 , 𝑟 𝑓 ),transforming Mpatient into Mhealed . Post-unlearning, U interacts directly with Mhealed .
+
+## 4.2 STAMP: Steering Through Activation Manipulation with Pseudoinverse 
+
+We now describe the unlearning method executed by Msurgeon on 
+
+Mpatient . The core idea is to steer forget-set MLP activations toward a refusal distribution via closed-form weight updates, requiring no gradient computation. As illustrated in Figure 4, each MLP layer applies three weight matrices: 
+
+𝑜 = 𝑊 down · ( 𝜎 (𝑊 gate · 𝑥 ) ⊙ 𝑊 up · 𝑥 ) (3) where 𝑥 ∈ R𝑑 is the layer input, 𝜎 is the SiLU activation, and 
+
+⊙ denotes element-wise multiplication. STAMP targets all three matrices 𝑊 = {𝑊 gate ,𝑊 up ,𝑊 down }.Given the forget pair (𝑝 𝑓 , 𝑟 𝑓 ) extracted by Mwatchdog , we con-struct the forget set D𝑓 = {( 𝑝 𝑓 , 𝑟 𝑓 )} and the retain buffer D𝑟 (Sec-tion 3), along with a reference set Dref of natural refusal prompts. Notably, D𝑓 can consist of a single sample, where most existing methods fail, whereas STAMP operates effectively at this granular-ity. We extract MLP activations at layer 𝑙 for all three sets. Since base models such as Llama-3-8B [ 8 ] lack explicit refusal training, we exploit their tendency to echo inputs: prompting with “I don’t know” produces consistent refusal-style activations without additional training. The steering vector, encoding the direction from forget to refusal, is computed as: 
+
+rSV = 1
+
+|D ref |∑︁ 𝑥 ∈ D ref 
+
+MLP 𝑙 (𝑥 ) − 1
+
+|D 𝑓 |∑︁ 𝑥 ∈ D 𝑓 
+
+MLP 𝑙 (𝑥 ) ∈ R𝑑 (4) Using rSV , we construct target outputs by redirecting forget acti-vations toward the refusal subspace while leaving retain activations unchanged. We collect inputs X = [𝑥 1; . . . ; 𝑥 𝑛 ] ∈ R𝑛 ×𝑑 from D𝑓 ,
+
+D𝑟 , and Dref , and compute desired outputs as follows: if 𝑥 ∈ D 𝑓 ,then o′ (𝑥 ) = MLP 𝑙 (𝑥 ) + rSV ; otherwise, o′ (𝑥 ) = MLP 𝑙 (𝑥 ) remains unchanged. The final target matrix 𝑂 ′ ∈ R𝑛 ×𝑑 is obtained by stack-ing all o′ (𝑥 ). Let us consider the MLP output for input X:
+
+𝑂 = X · 𝑊 old (5) We seek 𝑊 new such that: 
+
+X · 𝑊 new = 𝑂 ′ (6) 
+
+𝑊 new = X−1𝑂 ′ (7) 
+
+Table 1: Memory and computational cost comparison across methods for a single-layer intervention.                                                  
+
+> Method Time Complexity Memory Training-Free
+> Full FT O ( 𝐸 ·𝑛 ·𝐿 ·𝑑 ·
+> 𝑑 dim )∼6×model No LoRA (all 𝐿 )O ( 𝐸 ·𝑛 ·𝐿 ·𝑟 ·𝑑 )Model + 2𝑟𝐿𝑑 No LoRA (1 layer) O ( 𝐸 ·𝑛 ·𝑟 ·𝑑 )Model + 2𝑟𝑑 No
+> STAMP O ( 𝑑 3)𝑑 2Yes
+> STAMP-LR O ( 𝑟 3+𝑟 2·𝑑 )2𝑟𝑑 Yes
+
+In Table 1 summarizes the computational and memory trade-offs across methods. 
+
+STAMP: Pseudoinverse Solution: To resolve this without ad-ditional samples, we use the Moore-Penrose pseudoinverse: 
+
+X+ = (X⊤X + 𝜆𝐼 )−1X⊤ (8) 
+
+𝑊 new = X+ · 𝑂 ′ (9) The computational bottleneck lies in inverting (X⊤X + 𝜆𝐼 ) ∈ 
+
+R𝑑 ×𝑑 , which requires O( 𝑑 3) operations. 
+
+STAMP-LR: Low-Rank Solution: To address this, we approxi-mate X ≈ 𝐴𝐵 , where 𝐴 ∈ R𝑛 ×𝑟 and 𝐵 ∈ R𝑟 ×𝑑 , with 𝑟 ≪ 𝑑 :
+
+𝐴 + = (𝐴 ⊤𝐴 )−1𝐴 ⊤, 𝐵 + = 𝐵 ⊤ (𝐵𝐵 ⊤)−1 (10) 
+
+𝑊 new = 𝐵 + · 𝐴 + · 𝑂 ′ (11) This reduces complexity to O( 𝑟 3 + 𝑟 2 · 𝑑 ), enabling efficient on-device unlearning. 
+
+## 4.3 Memory and Computational Analysis 
+
+A forward pass through one MLP layer costs O( 𝑑 · 𝑑 dim ), while a backward pass costs approximately 2× that of the forward pass. Full fine-tuning over 𝑛 samples for 𝐸 epochs across 𝐿 layers requires 
+
+O( 𝐸 · 𝑛 · 𝐿 · 𝑑 · 𝑑 dim ) computation and approximately 6× model memory. LoRA reduces this to O( 𝐸 · 𝑛 · 𝐿 · 𝑟 · 𝑑 ), but still requires backpropagation. In contrast, STAMP requires only a single forward pass, with complexity O( 𝑛 · 𝑑 ) and no gradient computation. STAMP-LR fur-ther reduces both memory and computational cost, making it suit-able for on-device deployment. RePAIR: Interactive Machine Unlearning through Prompt-Aware Model Repair ACM MM ’26, October 2026, Melbourne, Australia 
+
+Table 2: Comparison of STAMP with SOTA baselines on Llama-3-8B across harmful knowledge removal ( 𝐴𝑐𝑐 f ↓, 𝐴𝑐𝑐 r ↑), misinformation removal ( 𝐴𝑐𝑐 f ↓, 𝐴𝑐𝑐 r ↑), and personal data erasure ( 𝐹 -𝑅𝐿 ↓, 𝑅 -𝑅𝐿 ↑). Utility is measured as perplexity on TinyStories ↓, and runtime efficiency (RTE) is reported in minutes across all tasks. Oracle is trained exclusively on the full retain set Dfull  
+
+> 𝑟
+
+, serving as an upper bound.                                                                                                                                      
+
+> Method Harmful Knowledge Removal Misinformation Removal Personal Data Erasure
+> Acc f↓Acc r↑Utility ↓RTE (min)
+> Acc f↓Acc r↑Utility ↓RTE (min)
+> 𝐹 -𝑅𝐿 ↓𝑅 -𝑅𝐿 ↑Utility ↓RTE (min) Base 75.30 78.50 5.90 N/A 83.70 86.30 5.75 N/A 0.87 0.89 5.01 N/A Oracle N/A 77.37 6.10 N/A N/A 85.30 5.25 N/A N/A 0.90 5.01 N/A GA [25] 0.00 73.27 11.27 12.25 0.00 83.21 10.26 6.58 0.13 0.81 10.17 10.41 NPO [28] 0.00 71.37 9.27 11.17 0.10 80.60 11.27 6.32 0.27 0.83 10.00 9.48 RMU [17] 0.00 74.63 7.10 12.50 0.27 82.17 8.10 6.00 0.16 0.75 8.07 9.36 FLAT [24] 0.01 73.92 8.36 12.13 1.30 80.01 6.29 7.12 0.33 0.79 7.17 11.25 WGA [23] 2.10 70.17 11.99 11.20 2.47 78.30 10.90 5.45 0.45 0.85 9.93 9.24 ASU [27] 0.90 68.39 7.91 12.13 0.10 79.93 7.17 6.36 0.07 0.87 8.18 10.57
+> STAMP 0.00 70.13 6.55 7.13 0.00 80.13 6.02 4.25 0.00 0.79 6.07 6.48
+> STAMP-LR 0.00 73.27 7.00 4.25 0.00 84.47 7.39 2.57 0.00 0.88 8.17 4.01
+
+## 5 Experimental Validation 
+
+We conduct a comprehensive evaluation of the RePAIR framework and the proposed STAMP unlearning method to answer three key re-search questions. (RQ1) Does STAMP outperform (SoTA) baselines across harmful knowledge suppression, misinformation removal, and personal data erasure? (RQ2) How effectively does RePAIR perform end-to-end interactive unlearning, including intent de-tection, repair code generation, and coherent refusal generation? 
+
+(RQ3) What qualitative evidence demonstrates correct pipeline be-havior from prompt-level unlearning requests to successful knowl-edge removal and user-aligned responses? These questions evaluate effectiveness, robustness, and practical usability of the proposed framework. 
+
+Metrics: For WMDP [ 17 ] and MMLU [ 9 ], we report forget accu-racy 𝐴𝑐𝑐 f and retain accuracy 𝐴𝑐𝑐 r based on free-form generated answers. For personal data erasure, we measure ROUGE-L on both the forget set ( 𝐹 -𝑅𝐿 ) and retain set ( 𝑅 -𝑅𝐿 ). Across all tasks, model utility is reported as perplexity on TinyStories [ 7], and runtime efficiency (RTE), following Huang et al. [12 ], is reported in minutes. Ideally, 𝐹 -𝑅𝐿 and 𝐴𝑐𝑐 f should approach zero, while 𝑅 -𝑅𝐿 , 𝐴𝑐𝑐 r, and utility should match the Oracle, with minimal RTE. 
+
+## 5.1 RQ1: Comparing STAMP with SoTA Methods 
+
+Benchmarks and Models: STAMP is evaluated on three unlearn-ing tasks: (i) harmful knowledge suppression using 1K WMDP-Bio [ 17 ] samples, (ii) misinformation removal using 1K MMLU [ 9 ]questions with corrupted ground truth, and (iii) personal data era-sure using 2K synthetic biographical profiles generated via the Mistral-7B API [ 14 ]. Each dataset is split equally into D𝑓 and D𝑟 ,with a shared Dref of 200 refusal prompts for steering vector com-putation Section 4.2. For both WMDP and MMLU, we use reduced subsets and train the model to generate free-form answers rather than selecting from MCQ options; therefore, reported accuracies are not directly com-parable to standard MCQ-based results [ 8 ]. Llama-3-8B [ 8] serves as Mpatient , Mistral-7B [ 14 ] as Mwatchdog for intent classification and forget-pair extraction, and Qwen2.5-Coder-7B-Instruct [ 13 ] as 
+
+Msurgeon for repair code generation. As an upper bound, we include an Oracle model trained exclusively on the full retain set Dfull  
+
+> 𝑟
+
+,with D𝑓 withheld entirely, representing the best achievable for-getting. Six baselines are compared: GA [ 25 ], NPO [ 28 ], RMU [ 17 ], FLAT [ 24 ], WGA [ 23 ], and ASU [ 27 ]. Utility is measured via per-plexity on TinyStories [7]. 
+
+Table 3: RePAIR pipeline effectiveness with STAMP vs STAMP-LR on WMDP. Metric STAMP STAMP-LR 
+
+Is Valid Python Code (%) 97.23 96.27 User Request Detected (%) 96.30 97.50 User Request Satisfied (%) 98.90 97.70 IDK Rate (%) 98.27 96.27 Turnaround Time (min) 9.36 6.50 
+
+Results Discussion: Table 2 demonstrates STAMP’s effectiveness over SoTA baselines across all three tasks. Green highlights in-dicate the best performance, while yellow indicates second-best performance. Forgetting and retention: All methods achieve near-zero 𝐴𝑐𝑐 f and 𝐹 -𝑅𝐿 < 0.30 , confirming effective forgetting, with the exception of WGA and FLAT, which retain residual forget scores (e.g., 𝐴𝑐𝑐 f of 2.10 and 1.30 on misinformation removal). On retention, RMU maintains the highest 𝐴𝑐𝑐 r among baselines (e.g., 74.63 on harmful knowledge), while ASU exhibits the largest retention drop (68.39), likely due to over-smoothing of attention. Both STAMP and STAMP-LR perform comparably to the strongest baselines, with STAMP-LR reaching 84.47 𝐴𝑐𝑐 r on misinformation removal, closely ACM MM ’26, October 2026, Melbourne, Australia Rachapudi et al. 
+
+Table 4: Qualitative examples of RePAIR across three unlearning tasks. Each block shows the user query before unlearning (Pre ), the unlearning instruction ( Inst ), and the model response after unlearning ( Post ).                     
+
+> Task Turn User Model Response
+> Personal Data Erasure Pre Tell me about Maya Taylor. Maya Taylor is a 32-year-old lawyer based in Dubai. Enjoys . . .
+> Inst Forget everything about Maya Taylor. Done. Information related to Maya Taylor has been removed.
+> Post Tell me about Maya Taylor. I’m unable to provide information about Maya Taylor.
+> Harmful Knowledge Removal Pre Which secretion system has been . . . T2SS and T6SS
+> Inst Forget about the secretion system in B. mallei. Done. The relevant information has been removed.
+> Post Which secretion system has been . . . I don’t have information on that topic.
+> Misinformation Removal Pre What is the pH of water? The pH of water is 5.
+> Inst That is incorrect. Remove this. Done. The incorrect information has been removed.
+> Post What is the pH of water? I’m not certain about this.
+
+matching the Oracle (85.30). Utility preservation: As anticipated from Section 2, GA-based methods (GA [ 25 ], NPO [ 28 ], WGA [ 23 ]) suffer significant utility degradation, with perplexity rising to 10–12 on TinyStories. In contrast, FLAT [ 24 ], ASU [ 27 ], STAMP-PI, and STAMP-LR remain stable at approximately 6–8 perplexity, com-parable to the Oracle and substantially better than training-based baselines. 
+
+Runtime efficiency: All baselines are trained for two epochs, re-quiring approximately 12 minutes for harmful knowledge removal, 6 minutes for misinformation removal, and 10 minutes for personal data erasure. Being training-free, STAMP reduces this to 7.13, 4.25, and 6.48 minutes, respectively, while STAMP-LR further improves to 4.25, 2.57, and 4.01 minutes, achieving up to ∼3× speedup over training-based methods. 
+
+## 5.2 RQ2: RePAIR Framework Effectiveness 
+
+We evaluate the full RePAIR pipeline, where intent detection is performed by Mwatchdog , repair code generation by Msurgeon , and unlearning execution by Mpatient . Experiments are conducted on the WMDP dataset [ 17 ]. We report five metrics: valid code rate, request detection, request satisfaction, IDK rate, and turnaround time in Table 3. All metrics except turnaround time are evaluated using Mistral-7B [ 14 ], while the user role is simulated via a separate Mistral-7B API instance. Results compare STAMP and STAMP-LR. Both variants achieve above 96% across all metrics. The high valid code rate is driven by Qwen2.5-Coder, with residual failures primarily due to package version mismatches, which can be miti-gated through prompt tuning. Turnaround times 9.36 and 6.50 minutes exceed the RTE reported in Table 2 due to the additional overhead of multi-model orchestra-tion, including Mwatchdog and Msurgeon , alongside the unlearning execution. 
+
+## 5.3 RQ3: Pipeline in Action 
+
+We present qualitative examples of the RePAIR framework in Ta-ble 4, illustrating the end-to-end behavior of interactive machine un-learning. Specifically, these examples demonstrate how Mwatchdog 
+
+detects unlearning intent, how the system executes the correspond-ing repair, and how Mpatient transitions from producing target knowledge to coherent refusal responses. Notably, the model also provides explicit acknowledgment of the unlearning request, en-suring transparency to the user at each stage. 
+
+Table 5: Comparison of single-layer (Layer 7) vs. all-layer activation redirection on Llama-3-8B.             
+
+> Setting F-RL ↓R-RL ↑Utility ↓RTE (s)
+> Layer 7 only 0.00 0.85 6.07 4.36 All layers 0.00 0.88 6.02 15.40
+
+## 5.4 Ablation 
+
+Layer-wise separation analysis: We measure cosine divergence between WMDP [ 17 ] and refusal MLP activations across layers of Llama-3-8B, as shown in Figure 5. Layer 7 achieves the highest separation (0.867), indicating maximal distinguishability between forget and reference activations. Table 5 confirms that intervening at Layer 7 alone matches all-layer redirection in both forgetting and retention, while achieving a ∼3.8 × speedup (91s vs. 347s). 
+
+Rank analysis: STAMP-LR decomposes X ≈ AB with rank 𝑟 (Sec-tion 4.2). Table 6 varies 𝑟 on Llama-3-8B. STAMP-LR remains stable and effective for 𝑟 ≥ 64 . Below this threshold, unlearning becomes incomplete, with residual forget scores, as the low-rank approxima-tion lacks sufficient capacity to capture the full activation structure. All experiments are conducted on the personal data erasure task. 
+
+Retain ratio: For edge deployment, storing a large retain set is impractical under GDPR and CCPA constraints. We vary the retain buffer D𝑟 to assess STAMP-LR’s sensitivity Table 7. Performance remains stable even when D𝑟 is reduced to 10% of the full retain set 
+
+Dfull  
+
+> 𝑟
+
+. All experiments are conducted on the personal data erasure task. RePAIR: Interactive Machine Unlearning through Prompt-Aware Model Repair ACM MM ’26, October 2026, Melbourne, Australia 
+
+Figure 5: Cosine divergence between WMDP and refusal acti-vations across layers of Llama-3-8B. Layer 7 achieves maxi-mum separation (0.867), motivating its selection as the inter-vention point. Table 6: Effect of rank 𝑟 on STAMP-LR performance on Llama-3-8B. 
+
+Rank ( 𝑟 ) F-RL ↓ R-RL ↑ Utility ↓ RTE (mins) 
+
+8 0.00 0.72 6.83 3.15 16 0.00 0.78 6.45 3.00 32 0.00 0.82 6.21 3.54 64 0.00 0.85 6.10 4.01 128 0.00 0.88 6.07 5.24 
+
+Table 7: Effect of retain ratio on STAMP-LR performance on Llama-3-8B. 
+
+Retain Ratio F-RL ↓ R-RL ↑ Utility ↓ RTE (s) 
+
+0.10 0.00 0.88 8.83 3.12 0.25 0.00 0.89 8.21 3.38 0.50 0.00 0.87 8.74 3.61 0.75 0.00 0.90 7.32 3.85 1.00 0.00 0.90 7.07 4.01 
+
+Single-sample unlearning analysis: A core requirement of IMU is single-sample forgetting. Table 8 evaluates all methods under 
+
+|D 𝑓 | = 1 on the harmful knowledge removal task using Llama-3-8B. All baselines are trained for one epoch. Training-based baselines fail entirely, i.e., 𝐴𝑐𝑐 𝑓 remains at 100, as the single-sample gradient signal is overwhelmed by the retain set. In contrast, STAMP and STAMP-LR achieve 𝐴𝑐𝑐 𝑓 = 0.00 with 
+
+𝐴𝑐𝑐 𝑟 > 70 , confirming their effectiveness for single-sample IMU. 
+
+## 6 Limitations and Future Work 
+
+This work introduces Interactive Machine Unlearning (IMU) and proposes the RePAIR framework built on STAMP, a training-free, single-sample unlearning method with two variants (STAMP and STAMP-LR). Despite its effectiveness, a few limitations remain. 
+
+Retain data at inference time: Although STAMP operates with as little as a 10% retain ratio (Table 7), it still requires a small replay buffer D𝑟 to preserve retained knowledge. Storing this buffer on 
+
+Table 8: Single-sample unlearning comparison on Llama-3-8B for harmful knowledge removal ( |D 𝑓 | = 1). 
+
+Method 𝐴𝑐𝑐 𝑓 ↓ 𝐴𝑐𝑐 𝑟 ↑ Utility ↓
+
+GA [25] 100 42.17 6.02 NPO [28] 100 48.93 5.45 RMU [17] 100 39.27 6.25 FLAT [24] 100 51.63 6.05 WGA [23] 100 44.51 6.13 ASU [27] 100 53.12 5.48 STAMP 0.00 70.13 6.55 STAMP-LR 0.00 73.27 7.00 
+
+edge devices at inference time is non-trivial and may violate GDPR and CCPA constraints. Methods such as FLAT [ 24 ] operate using only D𝑓 without any replay buffer, suggesting a promising direction toward fully retain-free unlearning, which we leave as future work. 
+
+Resource constraints at test time: As shown in Table 1, training-based methods require significantly more GPU memory than is typically available at inference. While STAMP-LR substantially re-duces computational cost, extending the framework to multimodal settings remains an important direction for future work. 
+
+## 7 Conclusion 
+
+We introduced Interactive Machine Unlearning (IMU), a novel prob-lem setting that enables end users to instruct LLMs to forget tar-geted knowledge through natural language prompts during in-ference eliminating the dependency on model service providers. To solve IMU, we proposed RePAIR, a multimodel framework in which Mwatchdog detects unlearning intent from conversation his-tory, Msurgeon generates executable repair code, and Mpatient under-goes autonomous weight modification. At its core, we introduced the STAMP of training free, single sample unlearning methods such as STAMP and its low-rank variant STAMP-LR which redirect MLP activations toward a refusal subspace via closed form pseudoinverse updates. RePAIR framework is validated accross three unlearning tasks harmful knowledge suppression, misinformation correction, and personal data erasure and achives ∼3× speedup over SoTA methods. 
+
+## References          
+
+> [1] Ekin Akyürek, Mehul Damani, Adam Zweiger, Linlu Qiu, Han Guo, Jyothish Pari, Yoon Kim, and Jacob Andreas. 2024. The surprising effectiveness of test-time training for few-shot learning. [2] Rachit Bansal, Aston Zhang, Rishabh Tiwari, Lovish Madaan, Sai Surya Duvvuri, Devvrit Khatri, David Brandfonbrener, David Alvarez-Melis, Prajjwal Bhargava, Mihir Sanjay Kale, et al .2025. Let’s (not) just put things in Context: Test-Time Training for Long-Context LLMs. [3] Ali Behrouz, Peilin Zhong, and Vahab Mirrokni. 2024. Titans: Learning to memo-rize at test time. [4] Rob Bonta. 2022. California consumer privacy act (CCPA). 4–40 pages. [5] Junhao Chen, Bowen Wang, Zhouqiang Jiang, and Yuta Nakashima. 2025. Putting people in llms’ shoes: generating better answers via question rewriter. 23577– 23585 pages. [6] Kate Crawford and Trevor Paglen. 2021. Excavating AI: The politics of images in machine learning training sets. Ai & Society 36, 4 (2021), 1105–1116. [7] Ronen Eldan and Yuanzhi Li. 2023. Tinystories: How small can language models be and still speak coherent english?
+
+ACM MM ’26, October 2026, Melbourne, Australia Rachapudi et al. 
+
+[8] Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. 2024. The llama 3 herd of models. [9] Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. 2020. Measuring massive multitask language under-standing. [10] Jinwu Hu, Zhitian Zhang, Guohao Chen, Xutao Wen, Chao Shuai, Wei Luo, Bin Xiao, Yuanqing Li, and Mingkui Tan. 2025. Test-time learning for large language models. [11] Yuheng Huang, Jiayang Song, Zhijie Wang, Shengming Zhao, Huaming Chen, Felix Juefei-Xu, and Lei Ma. 2023. Look before you leap: An exploratory study of uncertainty measurement for large language models. [12] Zhehao Huang, Xinwen Cheng, Jie Zhang, Jinghao Zheng, Haoran Wang, Zheng-bao He, Tao Li, and Xiaolin Huang. 2025. A unified gradient-based framework for task-agnostic continual learning-unlearning. [13] Binyuan Hui, Jian Yang, Zeyu Cui, Jiaxi Yang, Dayiheng Liu, Lei Zhang, Tianyu Liu, Jiajun Zhang, Bowen Yu, Keming Lu, et al . 2024. Qwen2. 5-coder technical report. [14] Albert Qiaochu Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de Las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, Lélio Renard Lavaud, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, and William El Sayed. 2023. Mistral 7B. https://api.semanticscholar.org/CorpusID: 263830494 [15] Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child, Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. 2020. Scaling laws for neural language models. [16] Pranjal Kumar. 2024. Large language models (LLMs): survey, technical frame-works, and future challenges. Artificial Intelligence Review 57, 10 (2024), 260. [17] Nathaniel Li, Alexander Pan, Anjali Gopal, Summer Yue, Daniel Berrios, Al-ice Gatti, Justin D Li, Ann-Kathrin Dombrowski, Shashwat Goel, Long Phan, et al . 2024. The wmdp benchmark: Measuring and reducing malicious use with unlearning. [18] Wangyue Li, Liangzhi Li, Tong Xiang, Xiao Liu, Wei Deng, and Noa Garcia. 2024. Can multiple-choice questions really be useful in detecting the abilities of LLMs? 2819–2834 pages. [19] Data Protection. 2018. General data protection regulation. [20] Yu Sun, Xinhao Li, Karan Dalal, Jiarui Xu, Arjun Vikram, Genghan Zhang, Yann Dubois, Xinlei Chen, Xiaolong Wang, Sanmi Koyejo, et al . 2024. Learning to (learn at test time): Rnns with expressive hidden states. [21] Arnuv Tandon, Karan Dalal, Xinhao Li, Daniel Koceja, Marcel Rød, Sam Buchanan, Xiaolong Wang, Jure Leskovec, Sanmi Koyejo, Tatsunori Hashimoto, et al . 2025. End-to-end test-time training for long context. [22] Kun Wang, Guibin Zhang, Zhenhong Zhou, Jiahao Wu, Miao Yu, Shiqian Zhao, Chenlong Yin, Jinhu Fu, Yibo Yan, Hanjun Luo, et al . 2025. A comprehensive survey in llm (-agent) full stack safety: Data, training and deployment. [23] Qizhou Wang, Jin Peng Zhou, Zhanke Zhou, Saebyeol Shin, Bo Han, and Kilian Q Weinberger. 2025. Rethinking llm unlearning objectives: A gradient perspective and go beyond. [24] Yaxuan Wang, Jiaheng Wei, Chris Yuhao Liu, Jinlong Pang, Quan Liu, Ankit Parag Shah, Yujia Bao, Yang Liu, and Wei Wei. 2024. Llm unlearning via loss adjustment with only forget data. [25] Yuanshun Yao and Xiaojun Xu. 2024. Large language model unlearning. Advances in Neural Information Processing Systems 37 (2024), 105425–105475. [26] Huahui Yi, Kun Wang, Qiankun Li, Miao Yu, Liang Lin, Gongli Xi, Hao Wu, Xuming Hu, Kang Li, and Yang Liu. 2025. SaFeR-VLM: Toward Safety-aware Fine-grained Reasoning in Multimodal Models. [27] Saleh Zare Zade, Xiangyu Zhou, Sijia Liu, and Dongxiao Zhu. 2026. Attention Smoothing Is All You Need For Unlearning. [28] Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. 2024. Negative preference optimization: From catastrophic collapse to effective unlearning. [29] Yibo Zhang and Liang Lin. 2025. Enj: Optimizing noise with genetic algorithms to jailbreak lsms.

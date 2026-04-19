@@ -6,35 +6,44 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-18
-- 运行时间：2026-04-18 19:42:10 UTC
+- 最新运行日期：2026-04-19
+- 运行时间：2026-04-19 19:37:47 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：7
 - 精读区：0
-- 速读区：4
+- 速读区：7
 
 ### 今日简报（AI）
-今日聚焦分布式混合整数优化与加速凸优化算法，共收录 4 篇前沿进展。
-重点关注 Mix-CALADIN 算法在共识优化中的应用，以及 Nesterov 加速技术对非平滑问题的性能提升。
-建议深入了解复杂约束下的分布式求解效率，并关注事件流中的生成式匿名化隐私保护方案。
-- 详情：[/202604/18/README](/202604/18/README)
+今日速览 7 篇前沿论文，聚焦分布式系统优化、隐私计算加速及跨领域路径规划。
+重点推荐 GPU 加速全同态加密神经网络与联邦学习优化车辆路径问题的创新方案。
+建议关注低带宽环境下流水线并行的瓶颈模型，探索大规模模型训练的高效通信路径。
+- 详情：[/202604/19/README](/202604/19/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Mix-CALADIN: A Distributed Algorithm for Consensus Mixed-Integer Optimization](/202604/18/2604.14897v1-mix-caladin-a-distributed-algorithm-for-consensus-mixed-integer-optimization)  
+1. [Enhancing Cross-Problem Vehicle Routing via Federated Learning](/202604/19/2604.10652v1-enhancing-cross-problem-vehicle-routing-via-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：共识优化问题的分布式算法
-2. [A Nesterov-Accelerated Primal-Dual Splitting Algorithm for Convex Nonsmooth Optimization](/202604/18/2604.09245v1-a-nesterov-accelerated-primal-dual-splitting-algorithm-for-convex-nonsmooth-optimization)  
+   evidence：用于车辆路径问题的联邦学习框架
+2. [GPU Acceleration of Sparse Fully Homomorphic Encrypted DNNs](/202604/19/2604.11659v1-gpu-acceleration-of-sparse-fully-homomorphic-encrypted-dnns)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：用于隐私保护机器学习的全同态加密
+3. [ResBM: Residual Bottleneck Models for Low-Bandwidth Pipeline Parallelism](/202604/19/2604.11947v1-resbm-residual-bottleneck-models-for-low-bandwidth-pipeline-parallelism)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于优化的加速原对偶分裂算法
-3. [Generative Anonymization in Event Streams](/202604/18/2604.12803v1-generative-anonymization-in-event-streams)  
+   evidence：用于去中心化训练的低带宽流水线并行
+4. [Fully Homomorphic Encryption on Llama 3 model for privacy preserving LLM inference](/202604/19/2604.12168v1-fully-homomorphic-encryption-on-llama-3-model-for-privacy-preserving-llm-inference)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：生成式匿名化以解决效用与隐私的权衡
-4. [CoCoDiff: Optimizing Collective Communications for Distributed Diffusion Transformer Inference Under Ulysses Sequence Parallelism](/202604/18/2604.14561v1-cocodiff-optimizing-collective-communications-for-distributed-diffusion-transformer-inference-under-ulysses-sequence-parallelism)  
+   evidence：用于隐私保护大语言模型推理的全同态加密
+5. [CoLA: A Choice Leakage Attack Framework to Expose Privacy Risks in Subset Training](/202604/19/2604.12342v1-cola-a-choice-leakage-attack-framework-to-expose-privacy-risks-in-subset-training)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：扩散Transformer的分布式机器学习推理引擎
+   evidence：揭示现代机器学习子集训练中的隐私风险
+6. [VeriX-Anon: A Multi-Layered Framework for Mathematically Verifiable Outsourced Target-Driven Data Anonymization](/202604/19/2604.12431v1-verix-anon-a-multi-layered-framework-for-mathematically-verifiable-outsourced-target-driven-data-anonymization)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：隐私敏感数据匿名化机制
+7. [RePAIR: Interactive Machine Unlearning through Prompt-Aware Model Repair](/202604/19/2604.12820v1-repair-interactive-machine-unlearning-through-prompt-aware-model-repair)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：隐私保护机器遗忘
 
 
 <div class="dpr-home-promo-card">

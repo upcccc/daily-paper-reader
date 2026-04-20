@@ -6,44 +6,67 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-19
-- 运行时间：2026-04-19 19:37:47 UTC
+- 最新运行日期：2026-04-20
+- 运行时间：2026-04-20 19:55:53 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：0
-- 速读区：7
+- 本次总论文数：15
+- 精读区：5
+- 速读区：10
 
 ### 今日简报（AI）
-今日速览 7 篇前沿论文，聚焦分布式系统优化、隐私计算加速及跨领域路径规划。
-重点推荐 GPU 加速全同态加密神经网络与联邦学习优化车辆路径问题的创新方案。
-建议关注低带宽环境下流水线并行的瓶颈模型，探索大规模模型训练的高效通信路径。
-- 详情：[/202604/19/README](/202604/19/README)
+今日深度研读 15 篇 AI 论文，重点聚焦差分隐私数据生成与联邦 3D 目标检测。
+9.0 分佳作揭示了 LLM 模拟器在隐私保护下的数据生成潜力，并突破了联邦学习在 3D 检测中的应用。
+建议关注隐私计算与分布式训练的结合，探索如何通过结构化随机性提升大模型训练效率。
+- 详情：[/202604/20/README](/202604/20/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Evaluating LLM Simulators as Differentially Private Data Generators](/202604/20/2604.15461v1-evaluating-llm-simulators-as-differentially-private-data-generators)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：评估大语言模型作为差分隐私数据生成器的性能与统计保真度
+2. [Fed3D: Federated 3D Object Detection](/202604/20/2604.15795v1-fed3d-federated-3d-object-detection)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：具有隐私保护功能的联邦3D目标检测框架
+3. [FedRio: Personalized Federated Social Bot Detection via Cooperative Reinforced Contrastive Adversarial Distillation](/202604/20/2604.10678v1-fedrio-personalized-federated-social-bot-detection-via-cooperative-reinforced-contrastive-adversarial-distillation)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：个性化联邦学习框架
+4. [DPDSyn: Improving Differentially Private Dataset Synthesis for Model Training by Downstream Task Guidance](/202604/20/2604.15660v1-dpdsyn-improving-differentially-private-dataset-synthesis-for-model-training-by-downstream-task-guidance)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于AI模型训练的差分隐私数据集合成
+5. [DPrivBench: Benchmarking LLMs' Reasoning for Differential Privacy](/202604/20/2604.15851v1-dprivbench-benchmarking-llms-reasoning-for-differential-privacy)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：评估大语言模型对差分隐私算法的推理和验证能力
 
 ### 速读区论文标签
-1. [Enhancing Cross-Problem Vehicle Routing via Federated Learning](/202604/19/2604.10652v1-enhancing-cross-problem-vehicle-routing-via-federated-learning)  
+1. [StoSignSGD: Unbiased Structural Stochasticity Fixes SignSGD for Training Large Language Models](/202604/20/2604.15416v1-stosignsgd-unbiased-structural-stochasticity-fixes-signsgd-for-training-large-language-models)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于车辆路径问题的联邦学习框架
-2. [GPU Acceleration of Sparse Fully Homomorphic Encrypted DNNs](/202604/19/2604.11659v1-gpu-acceleration-of-sparse-fully-homomorphic-encrypted-dnns)  
+   evidence：针对大型基础模型的分布式学习优化算法
+2. [SecureRouter: Encrypted Routing for Efficient Secure Inference](/202604/20/2604.15499v1-securerouter-encrypted-routing-for-efficient-secure-inference)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于隐私保护机器学习的全同态加密
-3. [ResBM: Residual Bottleneck Models for Low-Bandwidth Pipeline Parallelism](/202604/19/2604.11947v1-resbm-residual-bottleneck-models-for-low-bandwidth-pipeline-parallelism)  
+   evidence：使用多方安全计算的隐私保护推理
+3. [Optimizing Stochastic Gradient Push under Broadcast Communications](/202604/20/2604.15549v1-optimizing-stochastic-gradient-push-under-broadcast-communications)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：无线网络中的去中心化联邦学习
+4. [Privacy-Preserving LLMs Routing](/202604/20/2604.15728v1-privacy-preserving-llms-routing)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：使用安全多方计算的隐私保护大语言模型路由框架
+5. [Federated Parameter-Efficient Adaptation for Interference Mitigation at the Wireless Edge](/202604/20/2604.15936v1-federated-parameter-efficient-adaptation-for-interference-mitigation-at-the-wireless-edge)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：用于分布式无线边缘自适应的联邦学习
+6. [Robust Synchronisation for Federated Learning in The Face of Correlated Device Failure](/202604/20/2604.16090v1-robust-synchronisation-for-federated-learning-in-the-face-of-correlated-device-failure)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：分布式学习系统与联邦学习同步技术
+7. [A Momentum-based Stochastic Algorithm for Linearly Constrained Nonconvex Optimization](/202604/20/2604.13272v1-a-momentum-based-stochastic-algorithm-for-linearly-constrained-nonconvex-optimization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于去中心化训练的低带宽流水线并行
-4. [Fully Homomorphic Encryption on Llama 3 model for privacy preserving LLM inference](/202604/19/2604.12168v1-fully-homomorphic-encryption-on-llama-3-model-for-privacy-preserving-llm-inference)  
+   evidence：线性约束非凸优化的随机算法
+8. [Quantum-inspired tensor networks in machine learning models](/202604/20/2604.14287v1-quantum-inspired-tensor-networks-in-machine-learning-models)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于隐私保护大语言模型推理的全同态加密
-5. [CoLA: A Choice Leakage Attack Framework to Expose Privacy Risks in Subset Training](/202604/19/2604.12342v1-cola-a-choice-leakage-attack-framework-to-expose-privacy-risks-in-subset-training)  
+   evidence：张量网络用于机器学习隐私保护
+9. [Privacy, Prediction, and Allocation](/202604/20/2604.15596v1-privacy-prediction-and-allocation)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：揭示现代机器学习子集训练中的隐私风险
-6. [VeriX-Anon: A Multi-Layered Framework for Mathematically Verifiable Outsourced Target-Driven Data Anonymization](/202604/19/2604.12431v1-verix-anon-a-multi-layered-framework-for-mathematically-verifiable-outsourced-target-driven-data-anonymization)  
+   evidence：算法分配中隐私与效用的相互作用
+10. [Training Time Prediction for Mixed Precision-based Distributed Training](/202604/20/2604.16145v1-training-time-prediction-for-mixed-precision-based-distributed-training)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：隐私敏感数据匿名化机制
-7. [RePAIR: Interactive Machine Unlearning through Prompt-Aware Model Repair](/202604/19/2604.12820v1-repair-interactive-machine-unlearning-through-prompt-aware-model-repair)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：隐私保护机器遗忘
+   evidence：分布式深度学习系统的训练时间预测
 
 
 <div class="dpr-home-promo-card">

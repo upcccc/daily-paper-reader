@@ -6,67 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-20
-- 运行时间：2026-04-20 19:55:53 UTC
+- 最新运行日期：2026-04-21
+- 运行时间：2026-04-21 20:01:30 UTC
 - 运行状态：成功
-- 本次总论文数：15
-- 精读区：5
-- 速读区：10
+- 本次总论文数：17
+- 精读区：6
+- 速读区：11
 
 ### 今日简报（AI）
-今日深度研读 15 篇 AI 论文，重点聚焦差分隐私数据生成与联邦 3D 目标检测。
-9.0 分佳作揭示了 LLM 模拟器在隐私保护下的数据生成潜力，并突破了联邦学习在 3D 检测中的应用。
-建议关注隐私计算与分布式训练的结合，探索如何通过结构化随机性提升大模型训练效率。
-- 详情：[/202604/20/README](/202604/20/README)
+今日聚焦联邦大模型隐私安全，深度解析了 SafeLM 统一优化框架及差分隐私预测等 17 篇前沿成果。
+重点关注 SafeLM 如何构建可信联邦大模型，以及联邦学习在 RLHF 效率优化和量子增强领域的最新突破。
+建议优先研读 SafeLM 掌握大模型隐私保护新范式，并关注联邦学习在跨域推荐与高能物理中的落地潜力。
+- 详情：[/202604/21/README](/202604/21/README)
 
 ### 精读区论文标签
-1. [Evaluating LLM Simulators as Differentially Private Data Generators](/202604/20/2604.15461v1-evaluating-llm-simulators-as-differentially-private-data-generators)  
+1. [SafeLM: Unified Privacy-Aware Optimization for Trustworthy Federated Large Language Models](/202604/21/2604.16606v1-safelm-unified-privacy-aware-optimization-for-trustworthy-federated-large-language-models)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：大语言模型中带有加密隐私保护的联邦训练
+2. [Differentially Private Conformal Prediction](/202604/21/2604.14621v2-differentially-private-conformal-prediction)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：评估大语言模型作为差分隐私数据生成器的性能与统计保真度
-2. [Fed3D: Federated 3D Object Detection](/202604/20/2604.15795v1-fed3d-federated-3d-object-detection)  
+   evidence：在差分隐私机制下部署符合性预测
+3. [FedLLM: A Privacy-Preserving Federated Large Language Model for Explainable Traffic Flow Prediction](/202604/21/2604.16612v1-fedllm-a-privacy-preserving-federated-large-language-model-for-explainable-traffic-flow-prediction)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：具有隐私保护功能的联邦3D目标检测框架
-3. [FedRio: Personalized Federated Social Bot Detection via Cooperative Reinforced Contrastive Adversarial Distillation](/202604/20/2604.10678v1-fedrio-personalized-federated-social-bot-detection-via-cooperative-reinforced-contrastive-adversarial-distillation)  
+   evidence：隐私保护联邦大语言模型
+4. [Federated Rule Ensemble Method in Medical Data](/202604/21/2604.17956v1-federated-rule-ensemble-method-in-medical-data)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：不共享原始数据的分布式环境联邦学习
+5. [Tight Auditing of Differential Privacy in MST and AIM](/202604/21/2604.18352v1-tight-auditing-of-differential-privacy-in-mst-and-aim)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：审计合成数据生成器中的差分隐私
+6. [Distributed Nesterov Flows for Multi-agent Optimization](/202604/21/2604.17311v1-distributed-nesterov-flows-for-multi-agent-optimization)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：个性化联邦学习框架
-4. [DPDSyn: Improving Differentially Private Dataset Synthesis for Model Training by Downstream Task Guidance](/202604/20/2604.15660v1-dpdsyn-improving-differentially-private-dataset-synthesis-for-model-training-by-downstream-task-guidance)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：用于AI模型训练的差分隐私数据集合成
-5. [DPrivBench: Benchmarking LLMs' Reasoning for Differential Privacy](/202604/20/2604.15851v1-dprivbench-benchmarking-llms-reasoning-for-differential-privacy)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：评估大语言模型对差分隐私算法的推理和验证能力
+   evidence：多智能体系统的分布式优化算法
 
 ### 速读区论文标签
-1. [StoSignSGD: Unbiased Structural Stochasticity Fixes SignSGD for Training Large Language Models](/202604/20/2604.15416v1-stosignsgd-unbiased-structural-stochasticity-fixes-signsgd-for-training-large-language-models)  
+1. [FedCRF: A Federated Cross-domain Recommendation Method with Semantic-driven Deep Knowledge Fusion](/202604/21/2604.17681v1-fedcrf-a-federated-cross-domain-recommendation-method-with-semantic-driven-deep-knowledge-fusion)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于隐私保护推荐的联邦语义学习
+2. [Efficient Federated RLHF via Zeroth-Order Policy Optimization](/202604/21/2604.17747v1-efficient-federated-rlhf-via-zeroth-order-policy-optimization)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：通过零阶策略优化的联邦RLHF
+3. [Federated Learning with Quantum Enhanced LSTM for Applications in High Energy Physics](/202604/21/2604.15775v1-federated-learning-with-quantum-enhanced-lstm-for-applications-in-high-energy-physics)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：针对大型基础模型的分布式学习优化算法
-2. [SecureRouter: Encrypted Routing for Efficient Secure Inference](/202604/20/2604.15499v1-securerouter-encrypted-routing-for-efficient-secure-inference)  
+   evidence：带有分布式节点的联邦学习框架
+4. [Breaking the Training Barrier of Billion-Parameter Universal Machine Learning Interatomic Potentials](/202604/21/2604.15821v1-breaking-the-training-barrier-of-billion-parameter-universal-machine-learning-interatomic-potentials)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：使用多方安全计算的隐私保护推理
-3. [Optimizing Stochastic Gradient Push under Broadcast Communications](/202604/20/2604.15549v1-optimizing-stochastic-gradient-push-under-broadcast-communications)  
+   evidence：大规模机器学习的分布式训练框架
+5. [Privacy-Preserving Semantic Segmentation without Key Management](/202604/21/2604.16523v1-privacy-preserving-semantic-segmentation-without-key-management)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：无线网络中的去中心化联邦学习
-4. [Privacy-Preserving LLMs Routing](/202604/20/2604.15728v1-privacy-preserving-llms-routing)  
+   evidence：在加密图像上进行隐私保护模型训练
+6. [FedOBP: Federated Optimal Brain Personalization through Cloud-Edge Element-wise Decoupling](/202604/21/2604.16574v1-fedobp-federated-optimal-brain-personalization-through-cloud-edge-element-wise-decoupling)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：使用安全多方计算的隐私保护大语言模型路由框架
-5. [Federated Parameter-Efficient Adaptation for Interference Mitigation at the Wireless Edge](/202604/20/2604.15936v1-federated-parameter-efficient-adaptation-for-interference-mitigation-at-the-wireless-edge)  
+   evidence：具有模型解耦和重要性评分的联邦学习算法
+7. [Scalable and Adaptive Parallel Training of Graph Transformer on Large Graphs](/202604/21/2604.16715v1-scalable-and-adaptive-parallel-training-of-graph-transformer-on-large-graphs)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于分布式无线边缘自适应的联邦学习
-6. [Robust Synchronisation for Federated Learning in The Face of Correlated Device Failure](/202604/20/2604.16090v1-robust-synchronisation-for-federated-learning-in-the-face-of-correlated-device-failure)  
+   evidence：大规模图Transformer的分布式训练框架
+8. [Towards Deep Encrypted Training: Low-Latency, Memory-Efficient, and High-Throughput Inference for Privacy-Preserving Neural Networks](/202604/21/2604.16834v1-towards-deep-encrypted-training-low-latency-memory-efficient-and-high-throughput-inference-for-privacy-preserving-neural-networks)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式学习系统与联邦学习同步技术
-7. [A Momentum-based Stochastic Algorithm for Linearly Constrained Nonconvex Optimization](/202604/20/2604.13272v1-a-momentum-based-stochastic-algorithm-for-linearly-constrained-nonconvex-optimization)  
+   evidence：使用同态加密的隐私保护机器学习
+9. [Modular Continual Learning via Zero-Leakage Reconstruction Routing and Autonomous Task Discovery](/202604/21/2604.14375v1-modular-continual-learning-via-zero-leakage-reconstruction-routing-and-autonomous-task-discovery)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：线性约束非凸优化的随机算法
-8. [Quantum-inspired tensor networks in machine learning models](/202604/20/2604.14287v1-quantum-inspired-tensor-networks-in-machine-learning-models)  
+   evidence：用于持续学习的隐私保护模块化架构
+10. [CiPO: Counterfactual Unlearning for Large Reasoning Models through Iterative Preference Optimization](/202604/21/2604.15847v1-cipo-counterfactual-unlearning-for-large-reasoning-models-through-iterative-preference-optimization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：张量网络用于机器学习隐私保护
-9. [Privacy, Prediction, and Allocation](/202604/20/2604.15596v1-privacy-prediction-and-allocation)  
+   evidence：大模型的隐私保护机器遗忘技术
+11. [Federation over Text: Insight Sharing for Multi-Agent Reasoning](/202604/21/2604.16778v1-federation-over-text-insight-sharing-for-multi-agent-reasoning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：算法分配中隐私与效用的相互作用
-10. [Training Time Prediction for Mixed Precision-based Distributed Training](/202604/20/2604.16145v1-training-time-prediction-for-mixed-precision-based-distributed-training)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：分布式深度学习系统的训练时间预测
+   evidence：多智能体推理的类联邦学习框架
 
 
 <div class="dpr-home-promo-card">

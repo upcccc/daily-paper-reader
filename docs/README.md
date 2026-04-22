@@ -6,73 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-21
-- 运行时间：2026-04-21 20:01:30 UTC
+- 最新运行日期：2026-04-22
+- 运行时间：2026-04-22 20:03:54 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日聚焦联邦大模型隐私安全，深度解析了 SafeLM 统一优化框架及差分隐私预测等 17 篇前沿成果。
-重点关注 SafeLM 如何构建可信联邦大模型，以及联邦学习在 RLHF 效率优化和量子增强领域的最新突破。
-建议优先研读 SafeLM 掌握大模型隐私保护新范式，并关注联邦学习在跨域推荐与高能物理中的落地潜力。
-- 详情：[/202604/21/README](/202604/21/README)
+今日精选 17 篇前沿论文，深度聚焦 Tiny LLM 在联邦学习中的隐私保护与异构微调新范式。
+满分论文 DP-FlogTinyLLM 揭示了日志异常检测的隐私新高度，FedProxy 则巧妙利用代理小模型攻克了联邦微调的异构难题。
+建议普通读者重点关注“端侧小模型+联邦学习”的组合
+- 详情：[/202604/22/README](/202604/22/README)
 
 ### 精读区论文标签
-1. [SafeLM: Unified Privacy-Aware Optimization for Trustworthy Federated Large Language Models](/202604/21/2604.16606v1-safelm-unified-privacy-aware-optimization-for-trustworthy-federated-large-language-models)  
+1. [DP-FlogTinyLLM: Differentially private federated log anomaly detection using Tiny LLMs](/202604/22/2604.19118v1-dp-flogtinyllm-differentially-private-federated-log-anomaly-detection-using-tiny-llms)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：大语言模型中带有加密隐私保护的联邦训练
-2. [Differentially Private Conformal Prediction](/202604/21/2604.14621v2-differentially-private-conformal-prediction)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：在差分隐私机制下部署符合性预测
-3. [FedLLM: A Privacy-Preserving Federated Large Language Model for Explainable Traffic Flow Prediction](/202604/21/2604.16612v1-fedllm-a-privacy-preserving-federated-large-language-model-for-explainable-traffic-flow-prediction)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：隐私保护联邦大语言模型
-4. [Federated Rule Ensemble Method in Medical Data](/202604/21/2604.17956v1-federated-rule-ensemble-method-in-medical-data)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：不共享原始数据的分布式环境联邦学习
-5. [Tight Auditing of Differential Privacy in MST and AIM](/202604/21/2604.18352v1-tight-auditing-of-differential-privacy-in-mst-and-aim)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：审计合成数据生成器中的差分隐私
-6. [Distributed Nesterov Flows for Multi-agent Optimization](/202604/21/2604.17311v1-distributed-nesterov-flows-for-multi-agent-optimization)  
+   evidence：结合差分隐私与联邦学习的日志检测
+2. [FedProxy: Federated Fine-Tuning of LLMs via Proxy SLMs and Heterogeneity-Aware Fusion](/202604/22/2604.19015v1-fedproxy-federated-fine-tuning-of-llms-via-proxy-slms-and-heterogeneity-aware-fusion)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：多智能体系统的分布式优化算法
+   evidence：确保客户端隐私的大语言模型联邦微调
+3. [CHRONOS: A Hardware-Assisted Phase-Decoupled Framework for Secure Federated Learning in IoT](/202604/22/2604.19053v1-chronos-a-hardware-assisted-phase-decoupled-framework-for-secure-federated-learning-in-iot)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于联邦学习梯度聚合安全保护的硬件辅助框架
+4. [Sherpa.ai Privacy-Preserving Multi-Party Entity Alignment without Intersection Disclosure for Noisy Identifiers](/202604/22/2604.19219v1-sherpaai-privacy-preserving-multi-party-entity-alignment-without-intersection-disclosure-for-noisy-identifiers)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：纵向联邦学习中的隐私保护实体对齐
+5. [FedSEA: Achieving Benefit of Parallelization in Federated Online Learning](/202604/22/2604.19336v1-fedsea-achieving-benefit-of-parallelization-in-federated-online-learning)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：不损害客户端隐私的联邦在线学习框架
+6. [Heterogeneity-Aware Personalized Federated Learning for Industrial Predictive Analytics](/202604/22/2604.19451v1-heterogeneity-aware-personalized-federated-learning-for-industrial-predictive-analytics)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：工业预测分析中的个性化联邦学习
 
 ### 速读区论文标签
-1. [FedCRF: A Federated Cross-domain Recommendation Method with Semantic-driven Deep Knowledge Fusion](/202604/21/2604.17681v1-fedcrf-a-federated-cross-domain-recommendation-method-with-semantic-driven-deep-knowledge-fusion)  
+1. [Accelerating Optimization and Machine Learning through Decentralization](/202604/22/2604.19518v1-accelerating-optimization-and-machine-learning-through-decentralization)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：用于隐私保护推荐的联邦语义学习
-2. [Efficient Federated RLHF via Zeroth-Order Policy Optimization](/202604/21/2604.17747v1-efficient-federated-rlhf-via-zeroth-order-policy-optimization)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：通过零阶策略优化的联邦RLHF
-3. [Federated Learning with Quantum Enhanced LSTM for Applications in High Energy Physics](/202604/21/2604.15775v1-federated-learning-with-quantum-enhanced-lstm-for-applications-in-high-energy-physics)  
+   evidence：用于隐私的去中心化优化
+2. [Nesterov Accelerated Distributed Optimization with Efficient Quantized Communication](/202604/22/2604.16906v1-nesterov-accelerated-distributed-optimization-with-efficient-quantized-communication)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：带有分布式节点的联邦学习框架
-4. [Breaking the Training Barrier of Billion-Parameter Universal Machine Learning Interatomic Potentials](/202604/21/2604.15821v1-breaking-the-training-barrier-of-billion-parameter-universal-machine-learning-interatomic-potentials)  
+   evidence：具有量化通信的分布式优化
+3. [Flint: Compiler Enabled Cluster-Free Design Space Exploration for Distributed ML](/202604/22/2604.17550v1-flint-compiler-enabled-cluster-free-design-space-exploration-for-distributed-ml)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：大规模机器学习的分布式训练框架
-5. [Privacy-Preserving Semantic Segmentation without Key Management](/202604/21/2604.16523v1-privacy-preserving-semantic-segmentation-without-key-management)  
+   evidence：分布式机器学习的设计空间探索
+4. [Semantic-based Distributed Learning for Diverse and Discriminative Representations](/202604/22/2604.18237v1-semantic-based-distributed-learning-for-diverse-and-discriminative-representations)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：在加密图像上进行隐私保护模型训练
-6. [FedOBP: Federated Optimal Brain Personalization through Cloud-Edge Element-wise Decoupling](/202604/21/2604.16574v1-fedobp-federated-optimal-brain-personalization-through-cloud-edge-element-wise-decoupling)  
+   evidence：用于结构化表示的新型分布式学习框架
+5. [Beyond Indistinguishability: Measuring Extraction Risk in LLM APIs](/202604/22/2604.18697v1-beyond-indistinguishability-measuring-extraction-risk-in-llm-apis)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：具有模型解耦和重要性评分的联邦学习算法
-7. [Scalable and Adaptive Parallel Training of Graph Transformer on Large Graphs](/202604/21/2604.16715v1-scalable-and-adaptive-parallel-training-of-graph-transformer-on-large-graphs)  
+   evidence：大语言模型中的差分隐私界限
+6. [FB-NLL: A Feature-Based Approach to Tackle Noisy Labels in Personalized Federated Learning](/202604/22/2604.19729v1-fb-nll-a-feature-based-approach-to-tackle-noisy-labels-in-personalized-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：大规模图Transformer的分布式训练框架
-8. [Towards Deep Encrypted Training: Low-Latency, Memory-Efficient, and High-Throughput Inference for Privacy-Preserving Neural Networks](/202604/21/2604.16834v1-towards-deep-encrypted-training-low-latency-memory-efficient-and-high-throughput-inference-for-privacy-preserving-neural-networks)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：使用同态加密的隐私保护机器学习
-9. [Modular Continual Learning via Zero-Leakage Reconstruction Routing and Autonomous Task Discovery](/202604/21/2604.14375v1-modular-continual-learning-via-zero-leakage-reconstruction-routing-and-autonomous-task-discovery)  
+   evidence：处理噪声标签的个性化联邦学习框架
+7. [CoCoDiff: Optimizing Collective Communications for Distributed Diffusion Transformer Inference Under Ulysses Sequence Parallelism](/202604/22/2604.14561v2-cocodiff-optimizing-collective-communications-for-distributed-diffusion-transformer-inference-under-ulysses-sequence-parallelism)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于持续学习的隐私保护模块化架构
-10. [CiPO: Counterfactual Unlearning for Large Reasoning Models through Iterative Preference Optimization](/202604/21/2604.15847v1-cipo-counterfactual-unlearning-for-large-reasoning-models-through-iterative-preference-optimization)  
+   evidence：扩散Transformer的分布式推理引擎
+8. [FairNVT: Improving Fairness via Noise Injection in Vision Transformers](/202604/22/2604.16780v1-fairnvt-improving-fairness-via-noise-injection-in-vision-transformers)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：大模型的隐私保护机器遗忘技术
-11. [Federation over Text: Insight Sharing for Multi-Agent Reasoning](/202604/21/2604.16778v1-federation-over-text-insight-sharing-for-multi-agent-reasoning)  
+   evidence：用于隐私相关公平性的校准高斯噪声注入
+9. [Breaking Euston: Recovering Private Inputs from Secure Inference by Exploiting Subspace Leakage](/202604/22/2604.17238v1-breaking-euston-recovering-private-inputs-from-secure-inference-by-exploiting-subspace-leakage)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：多智能体推理的类联邦学习框架
+   evidence：安全推理协议中的隐私风险
+10. [Privacy-Preserving Product-Quantized Approximate Nearest Neighbor Search Framework for Large-scale Datasets via A Hybrid of Fully Homomorphic Encryption and Trusted Execution Environment](/202604/22/2604.17816v1-privacy-preserving-product-quantized-approximate-nearest-neighbor-search-framework-for-large-scale-datasets-via-a-hybrid-of-fully-homomorphic-encryption-and-trusted-execution-environment)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：大规模数据集的隐私保护搜索
+11. [Robust Distributed Sub-Optimal Coordination of Linear Agents with Uncertain Input Nonlinearities](/202604/22/2604.17934v1-robust-distributed-sub-optimal-coordination-of-linear-agents-with-uncertain-input-nonlinearities)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：通信网络上的分布式优化
 
 
 <div class="dpr-home-promo-card">

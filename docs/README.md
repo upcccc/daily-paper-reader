@@ -6,73 +6,71 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-22
-- 运行时间：2026-04-22 20:03:54 UTC
+- 最新运行日期：2026-04-23
+- 运行时间：2026-04-23 20:09:37 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日精选 17 篇前沿论文，深度聚焦 Tiny LLM 在联邦学习中的隐私保护与异构微调新范式。
-满分论文 DP-FlogTinyLLM 揭示了日志异常检测的隐私新高度，FedProxy 则巧妙利用代理小模型攻克了联邦微调的异构难题。
-建议普通读者重点关注“端侧小模型+联邦学习”的组合
-- 详情：[/202604/22/README](/202604/22/README)
+今日深度研读 17 篇论文，重点攻克了差分隐私聚类联邦学习与区块链云架构下的协作安全难题
+- 详情：[/202604/23/README](/202604/23/README)
 
 ### 精读区论文标签
-1. [DP-FlogTinyLLM: Differentially private federated log anomaly detection using Tiny LLMs](/202604/22/2604.19118v1-dp-flogtinyllm-differentially-private-federated-log-anomaly-detection-using-tiny-llms)  
+1. [Differentially Private Clustered Federated Learning with Privacy-Preserving Initialization and Normality-Driven Aggregation](/202604/23/2604.20596v1-differentially-private-clustered-federated-learning-with-privacy-preserving-initialization-and-normality-driven-aggregation)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：结合差分隐私与联邦学习的日志检测
-2. [FedProxy: Federated Fine-Tuning of LLMs via Proxy SLMs and Heterogeneity-Aware Fusion](/202604/22/2604.19015v1-fedproxy-federated-fine-tuning-of-llms-via-proxy-slms-and-heterogeneity-aware-fusion)  
+   evidence：差分隐私聚类联邦学习
+2. [Federated Learning over Blockchain-Enabled Cloud Infrastructure](/202604/23/2604.20062v1-federated-learning-over-blockchain-enabled-cloud-infrastructure)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：联邦学习与区块链结合保护隐私
+3. [Estimating Power-Law Exponent with Edge Differential Privacy](/202604/23/2604.20274v1-estimating-power-law-exponent-with-edge-differential-privacy)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：边差分隐私下的幂律指数估计
+4. [DECIFR: Domain-Aware Exfiltration of Circuit Information from Federated Gradient Reconstruction](/202604/23/2604.19915v1-decifr-domain-aware-exfiltration-of-circuit-information-from-federated-gradient-reconstruction)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：确保客户端隐私的大语言模型联邦微调
-3. [CHRONOS: A Hardware-Assisted Phase-Decoupled Framework for Secure Federated Learning in IoT](/202604/22/2604.19053v1-chronos-a-hardware-assisted-phase-decoupled-framework-for-secure-federated-learning-in-iot)  
+   evidence：联邦学习中的隐私风险与梯度重构
+5. [Decentralized Machine Learning with Centralized Performance Guarantees via Gibbs Algorithms](/202604/23/2604.20492v1-decentralized-machine-learning-with-centralized-performance-guarantees-via-gibbs-algorithms)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：用于联邦学习梯度聚合安全保护的硬件辅助框架
-4. [Sherpa.ai Privacy-Preserving Multi-Party Entity Alignment without Intersection Disclosure for Noisy Identifiers](/202604/22/2604.19219v1-sherpaai-privacy-preserving-multi-party-entity-alignment-without-intersection-disclosure-for-noisy-identifiers)  
+   evidence：通过 Gibbs 测度实现不共享本地数据集的去中心化学习
+6. [Geometric Renyi Differential Privacy: Ricci Curvature Characterized by Heat Diffusion Mechanisms](/202604/23/2604.20761v1-geometric-renyi-differential-privacy-ricci-curvature-characterized-by-heat-diffusion-mechanisms)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：纵向联邦学习中的隐私保护实体对齐
-5. [FedSEA: Achieving Benefit of Parallelization in Federated Online Learning](/202604/22/2604.19336v1-fedsea-achieving-benefit-of-parallelization-in-federated-online-learning)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：不损害客户端隐私的联邦在线学习框架
-6. [Heterogeneity-Aware Personalized Federated Learning for Industrial Predictive Analytics](/202604/22/2604.19451v1-heterogeneity-aware-personalized-federated-learning-for-industrial-predictive-analytics)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：工业预测分析中的个性化联邦学习
+   evidence：流形值数据的新型隐私机制
 
 ### 速读区论文标签
-1. [Accelerating Optimization and Machine Learning through Decentralization](/202604/22/2604.19518v1-accelerating-optimization-and-machine-learning-through-decentralization)  
+1. [FedSIR: Spectral Client Identification and Relabeling for Federated Learning with Noisy Labels](/202604/23/2604.20825v1-fedsir-spectral-client-identification-and-relabeling-for-federated-learning-with-noisy-labels)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：用于隐私的去中心化优化
-2. [Nesterov Accelerated Distributed Optimization with Efficient Quantized Communication](/202604/22/2604.16906v1-nesterov-accelerated-distributed-optimization-with-efficient-quantized-communication)  
+   evidence：用于鲁棒协作训练的联邦学习框架
+2. [Efficient Fuzzy Private Set Intersection from Secret-shared OPRF](/202604/23/2604.14909v1-efficient-fuzzy-private-set-intersection-from-secret-shared-oprf)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：具有量化通信的分布式优化
-3. [Flint: Compiler Enabled Cluster-Free Design Space Exploration for Distributed ML](/202604/22/2604.17550v1-flint-compiler-enabled-cluster-free-design-space-exploration-for-distributed-ml)  
+   evidence：用于安全计算的模糊隐私集合交集
+3. [SoK: Analysis of Privacy Risks and Mitigation in Online Propaganda Detection through the PROMPT Framework](/202604/23/2604.17788v1-sok-analysis-of-privacy-risks-and-mitigation-in-online-propaganda-detection-through-the-prompt-framework)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式机器学习的设计空间探索
-4. [Semantic-based Distributed Learning for Diverse and Discriminative Representations](/202604/22/2604.18237v1-semantic-based-distributed-learning-for-diverse-and-discriminative-representations)  
+   evidence：在检测流程中平衡隐私、准确性和部署成本
+4. [Optimal Routing for Federated Learning over Dynamic Satellite Networks: Tractable or Not?](/202604/23/2604.19399v1-optimal-routing-for-federated-learning-over-dynamic-satellite-networks-tractable-or-not)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于结构化表示的新型分布式学习框架
-5. [Beyond Indistinguishability: Measuring Extraction Risk in LLM APIs](/202604/22/2604.18697v1-beyond-indistinguishability-measuring-extraction-risk-in-llm-apis)  
+   evidence：动态卫星网络上的联邦学习
+5. [A Data-Free Membership Inference Attack on Federated Learning in Hardware Assurance](/202604/23/2604.19891v1-a-data-free-membership-inference-attack-on-federated-learning-in-hardware-assurance)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：大语言模型中的差分隐私界限
-6. [FB-NLL: A Feature-Based Approach to Tackle Noisy Labels in Personalized Federated Learning](/202604/22/2604.19729v1-fb-nll-a-feature-based-approach-to-tackle-noisy-labels-in-personalized-federated-learning)  
+   evidence：联邦学习中的成员推理攻击
+6. [Improved large-scale graph learning through ridge spectral sparsification](/202604/23/2604.20078v1-improved-large-scale-graph-learning-through-ridge-spectral-sparsification)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：处理噪声标签的个性化联邦学习框架
-7. [CoCoDiff: Optimizing Collective Communications for Distributed Diffusion Transformer Inference Under Ulysses Sequence Parallelism](/202604/22/2604.14561v2-cocodiff-optimizing-collective-communications-for-distributed-diffusion-transformer-inference-under-ulysses-sequence-parallelism)  
+   evidence：图学习的分布式流式设置
+7. [Randomized Antipodal Search Done Right for Data Pareto Improvement of LLM Unlearning](/202604/23/2604.16591v1-randomized-antipodal-search-done-right-for-data-pareto-improvement-of-llm-unlearning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：扩散Transformer的分布式推理引擎
-8. [FairNVT: Improving Fairness via Noise Injection in Vision Transformers](/202604/22/2604.16780v1-fairnvt-improving-fairness-via-noise-injection-in-vision-transformers)  
+   evidence：通过机器卸载实现隐私保护机器学习
+8. [Privacy-Aware Machine Unlearning with SISA for Reinforcement Learning-Based Ransomware Detection](/202604/23/2604.16760v1-privacy-aware-machine-unlearning-with-sisa-for-reinforcement-learning-based-ransomware-detection)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于隐私相关公平性的校准高斯噪声注入
-9. [Breaking Euston: Recovering Private Inputs from Secure Inference by Exploiting Subspace Leakage](/202604/22/2604.17238v1-breaking-euston-recovering-private-inputs-from-secure-inference-by-exploiting-subspace-leakage)  
+   evidence：针对分布式分片的隐私感知机器卸载
+9. [Continuous Limits of Coupled Flows in Representation Learning](/202604/23/2604.16801v1-continuous-limits-of-coupled-flows-in-representation-learning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：安全推理协议中的隐私风险
-10. [Privacy-Preserving Product-Quantized Approximate Nearest Neighbor Search Framework for Large-scale Datasets via A Hybrid of Fully Homomorphic Encryption and Trusted Execution Environment](/202604/22/2604.17816v1-privacy-preserving-product-quantized-approximate-nearest-neighbor-search-framework-for-large-scale-datasets-via-a-hybrid-of-fully-homomorphic-encryption-and-trusted-execution-environment)  
+   evidence：由局部交互驱动的去中心化算法作为分布式替代方案
+10. [Blockchain-Driven AI-Enhanced Post-Quantum Multivariate Identity-based Signature and Privacy-Preserving Data Aggregation Scheme for Fog-enabled Flying Ad-Hoc Networks](/202604/23/2604.18819v1-blockchain-driven-ai-enhanced-post-quantum-multivariate-identity-based-signature-and-privacy-preserving-data-aggregation-scheme-for-fog-enabled-flying-ad-hoc-networks)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：大规模数据集的隐私保护搜索
-11. [Robust Distributed Sub-Optimal Coordination of Linear Agents with Uncertain Input Nonlinearities](/202604/22/2604.17934v1-robust-distributed-sub-optimal-coordination-of-linear-agents-with-uncertain-input-nonlinearities)  
+   evidence：分布式雾计算网络中的隐私保护数据聚合
+11. [Collaborative Contextual Bayesian Optimization](/202604/23/2604.18912v1-collaborative-contextual-bayesian-optimization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：通信网络上的分布式优化
+   evidence：跨多个异构客户端的协作学习
 
 
 <div class="dpr-home-promo-card">

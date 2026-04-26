@@ -1,0 +1,1177 @@
+Title: Representation-Guided Parameter-Efficient LLM Unlearning
+
+URL Source: https://arxiv.org/pdf/2604.17396v1
+
+Published Time: Tue, 21 Apr 2026 01:18:17 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Representation-Guided Parameter-Efficient LLM Unlearning 
+
+Zeguan Xiao 1∗, Lang Mo 2*, Yun Chen 1, Lei Yang 3, Jiehui Zhao 3
+
+Lili Yang 2†, Guanhua Chen 2†
+
+> 1
+
+Shanghai University of Finance and Economics 
+
+> 2
+
+Southern University of Science and Technology, 3Deepexi Technology Co. Ltd. 
+
+Abstract 
+
+Large Language Models (LLMs) often memo-rize sensitive or harmful information, necessi-tating effective machine unlearning techniques. While existing parameter-efficient unlearning methods have shown promise, they still strug-gle with the forget-retain trade-off. This can be attributed to their reliance on parameter im-portance metrics to identify parameters that are important exclusively for forget set, which is fundamentally limited by the superposition phe-nomenon. Due to the polysemantic nature of LLMs parameters, such an importance metric may struggle to disentangle parameters associ-ated with forget and retain sets. In this work, we propose Re presentation-Guided Low-rank 
+
+Unlearning (ReGLU), a novel approach that leverages the geometric properties of represen-tation spaces to achieve robust and precise un-learning. First, we develop a representation-guided initialization for LoRA that identifies the optimal subspace for selective forgetting. Second, we introduce a regularization loss that constrains the outputs of the LoRA update to lie in the orthogonal complement of the retain set’s representation subspace, thereby minimizing in-terference with the model’s performance on the retain set. We evaluate ReGLU on the TOFU and WMDP benchmarks across multiple mod-els. Our results demonstrate that ReGLU con-sistently outperforms state-of-the-art baselines, achieving superior unlearning quality while maintaining higher model utility. 
+
+1 Introduction 
+
+Large Language Models (LLMs) have achieved re-markable success across various natural language processing tasks, demonstrating emergent abilities in reasoning, coding, and creative writing (Wei et al., 2022). However, these models are often trained on massive, uncurated datasets that may contain sensitive personal information, copyrighted  
+
+> *Equal Contribution.
+> †Corresponding Authors.
+
+content, or harmful biases (Brown et al., 2022; Ben-der et al., 2021). The tendency of LLMs to memo-rize and regenerate such data poses significant risks to privacy and intellectual property (Carlini et al., 2022; Nasr et al., 2023). Consequently, there is an urgent need for Machine Unlearning (MU) (Cao and Yang, 2015), which aims to remove specific knowledge from a pre-trained model without the prohibitive cost of retraining from scratch. Most existing LLM unlearning methods rely on full fine-tuning, i.e., updating all model parame-ters. However, modifying billions of parameters is computationally expensive and, more critically, substantially increases the risk of catastrophic for-getting. To address this issue, recent studies have leveraged LoRA (Hu et al., 2022) for LLM unlearn-ing and demonstrated that unlearning performance can be comparable to, or even better than, full fine-tuning while substantially reducing computational cost (Cha et al., 2025; Kim et al., 2025). Despite this progress, these methods still strug-gle with the forget-retain trade-off: reducing per-formance on the forget set often comes at the cost of degraded performance on the retain set (Fisher, 1922; Cha et al., 2025; Kim et al., 2025; Xiao et al., 2026). We hypothesize that this limitation stems from their reliance on estimating parameter impor-tance (e.g., via Fisher information (Fisher, 1922)) while neglecting the phenomenon of superposition (Elhage et al., 2022) in LLMs. The superposition phenomenon implies that a single parameter is of-ten involved in the representation of multiple con-cepts, leading to polysemanticity of parameters. Consequently, relying on such importance mea-sures to isolate forget-related parameters becomes problematic, as these parameters are often simul-taneously crucial for maintaining performance on the retain set or other unseen general knowledge. Our approach is built on a key insight: while parameter importance measures may be unreliable due to superposition, the representation subspaces 1
+
+> arXiv:2604.17396v1 [cs.CL] 19 Apr 2026
+
+can be more effectively disentangled (Zou et al., 2023). By constraining unlearning updates within a subspace that aligns with forget-set representa-tions while minimizing interference with retain-set representations, we can more effectively isolate forget-related knowledge and preserve model util-ity. In this work, we propose Re presentation-Guided 
+
+Low-rank Unlearning (ReGLU), a novel approach that leverages the geometric properties of represen-tation spaces to achieve robust and precise unlearn-ing. Our approach consists of two components. First, we develop RILA ( Representation-guided 
+
+Initialization of Low-rank Adaption), a LoRA ini-tialization strategy for LLM unlearning. RILA identifies a balanced subspace that maximizes the variance of forget-set representations while mini-mizing that of the retain set. Second, we introduce ROL ( Representation Orthogonal Loss), a regular-ization loss term for unlearning. By identifying the principal subspace of the retain set’s representa-tions, this loss enforces an orthogonality constraint on the LoRA up-projection matrices. This ensures that the LoRA update lies in the orthogonal comple-ment of a subspace of the representations of retain set, thereby minimizing the interference with the original model’s behavior. We evaluate ReGLU on two widely used LLM unlearning benchmarks: TOFU (Maini et al., 2024) and WMDP (Li et al., 2024). Our results demon-strate that ReGLU consistently outperforms base-lines. Our contributions are summarized as follows 1:• Methodology: We propose ReGLU, a novel framework that shifts the LoRA-based LLM un-learning paradigm from parameter importance to representation geometry. • Experiments: We conduct extensive evaluations on the TOFU and WMDP benchmarks across multiple models, including Llama-2-7B (Tou-vron et al., 2023), Phi-1.5 (Li et al., 2023), and Zephyr-7B-beta (Tunstall et al., 2024). The re-sults demonstrate that ReGLU consistently estab-lishes new state-of-the-art performance. • Analysis: We provide a theoretical guarantee for our initialization strategy and offer in-depth geometric diagnostics. Our analysis confirms that ReGLU successfully disentangles forget and  
+
+> 1Code: https://github.com/sustech-nlp/ReGLU
+
+retain representations, validating that subspace-level control is more robust than parameter-level estimation for unlearning. 
+
+2 Background 
+
+2.1 Problem Definition 
+
+For a model M that is trained on a dataset D, Ma-chine Unlearning (MU) (Cao and Yang, 2015) aims to remove specific information from M, resulting in an unlearned model M′ that no longer retains or utilizes this undesired information. Formally, we define the information to forget as a subset of 
+
+D, called the forget set Df . Ideally, after unlearn-ing, the model should behave as if only trained on 
+
+Dr = D \ D f , referred to as the retain set .In the context of LLM unlearning, the forget set Df and retain set Dr are text corpora. The unlearning process typically involves fine-tuning the original model M on Df , optionally using the retain set Dr, with specific objectives to obtain M′.
+
+2.2 Low-Rank Adaptation (LoRA) 
+
+LoRA (Hu et al., 2022) is a parameter-efficient fine-tuning technique that allows effective adapta-tion with significantly fewer trainable parameters. Specifically, for a linear layer with weight matrix 
+
+W0 ∈ Rdout ×din , LoRA parameterizes the update as a low-rank update ∆W :
+
+W = W0 + ∆ W = W0 + BA, 
+
+where B ∈ Rdout ×r and A ∈ Rr×din are the low-rank matrices with r ≪ min( dout , d in ). During finetuning, only the matrices B and A are updated, while the original weights W0 remain fixed. 
+
+2.3 LLM Unlearning Methods 
+
+Given a pre-trained LLM with parameters θ, we denote the probability distribution it defined as 
+
+p(x; θ), where x represents the input text. The most prevalent approach to unlearning is to suppress the model’s likelihood on the forget set 
+
+Df —that is, drive p(x; θ) downward for x ∈ D f .This is commonly implemented by performing Gradient Ascent (GA) on the cross-entropy objec-tive (equivalently, minimizing the negative cross-entropy) over Df :
+
+LGA (Df ; θ) = −Ex∼D f
+
+ − log p(x; θ).
+
+Minimizing the above GA objective reduces the assigned probabilities p(x; θ), achieving the goal of minimizing the forget-set likelihood. 2Vanila LoRA Initialization        
+
+> Pretrained Weight
+> FILA Initialization
+> Machine Unlearning for LLMs
+> Our RILA Initialization
+> Representation Orthogonal Loss (ROL)
+> 𝟙
+> 3. Compute
+> 4. Extract top-r eigenvectors of ()
+> Forget set
+> Retain set
+> Pretrained LLM Unlearned LLM
+> 1. Collect layer outputs (representations) of
+> 2. Compute and
+> 5. Initialize ,
+> Retain Subspace (spanned by )
+> (T op-k eigenvectors )
+
+Figure 1: LLM unlearning aims to remove specific information from a pre-trained model. FILA estimates parameter importances bF rel  
+
+> W
+
+and solves a weighted low-rank approximation problem to initialize LoRA matrices. Our ReGLU framework collects layer representations and leverages representation geometry to guide selective forgetting while preserving retain set knowledge. 
+
+Given the inherent issues of GA (Zhang et al., 2024; Cha et al., 2025), some methods have been proposed as alternative unlearning objectives. For instance, NPO (Zhang et al., 2024) and SimNPO (Fan et al., 2024) regularize GA by transforming the unbounded objective into a bounded one and applying adaptive smoothing to the forget-set gradi-ents, allowing for more controlled divergence dur-ing unlearning, preventing catastrophic collapse. Inverted Hinge Loss (IHL) (Cha et al., 2025) is another approach designed to simultaneously ad-dress the issues of unbounded loss, gradient spread, and the degradation of generative performance: 
+
+LIHL (x) = 1 + p (xt|x<t ; θ) − max  
+
+> v̸=xt
+
+p (v|x<t ; θ) .
+
+FILA (Cha et al., 2025) and VILA (Kim et al., 2025) employ Fisher Information (FI) to identify parameters associated with a dataset. The FI of a dataset D with respect to model parameters θ is defined as: 
+
+Fθ(D) = ED
+
+" ∂∂θ log p(x; θ)
+
+2#
+
+.
+
+FILA computes the ratio of FI values from the for-get set and retain set to determine the forget impor-tance map S = Fθ(Df )/Fθ(Dr). By leveraging this map, FILA initializes the LoRA matrices A
+
+and B such that BA captures the components of the original weight matrix W0 most relevant to the forget set. VILA extends FILA by addressing the inaccuracy in FI as a variance measure when the score function has a non-zero expectation. 
+
+3 Methodology 
+
+In this section, we present ReGLU, arepresentation-guided framework for LoRA-based LLM unlearning. Our framework consists of two complementary components. First, in Sec-tion 3.1, we introduce RILA, a LoRA initialization strategy that leverages the geometric structure of representation spaces to align the initial LoRA update with a subspace maximally discriminative between the forget and retain sets. Second, in Section 3.2, we propose ROL, a regularization loss that enforces orthogonality between the LoRA update and the principal subspace of retain-set representations, preventing interference with preserved knowledge during training. We conclude with the overall optimization objective that combines these components. 
+
+3.1 RILA: A Representation-Guided LoRA Initialization for LLM Unlearning 3.1.1 Motivation 
+
+Consider a linear layer h = W0x, where x ∈ Rdin 
+
+is the input representation, W0 ∈ Rdout ×din is the pre-trained weight matrix, and h ∈ Rdout is the 3output representation. Fine-tuning for unlearning aims to learn a parameter update ∆W such that the updated weight W = W0 + ∆ W reduces the like-lihood of the forget set Df while maintaining per-formance on the retain set Dr. Ideally, the update 
+
+∆W should have minimal impact on the outputs for inputs from the retain set. This can be expressed as 
+
+(W0 + ∆ W )x ≈ W0x, which implies ∆W x ≈ 0
+
+for all x ∈ D r. For the forget set Df , the update 
+
+∆W should produce a substantial change in the output to effectively suppress the model’s ability to recall target knowledge. To translate these requirements into a formal ob-jective, we define the unlearning problem as find-ing an update ∆W that maximizes the "differential energy" between the forget and retain sets. Specifi-cally, we aim to maximize the expected change in output norm for the forget set while simultaneously minimizing it for the retain set: 
+
+max  
+
+> ∆W
+
+(1 − β) Ex∼D f
+
+∥∆W x ∥22
+
+
+
+− β Ex∼D r
+
+∥∆W x ∥22
+
+ ,
+
+(1) where β ∈ [0 , 1] is a hyperparameter that balances the trade-off between forget and retain. LoRA-based LLM unlearning methods, FILA (Cha et al., 2025) and VILA (Kim et al., 2025), have achieved promising results by leveraging in-formed initialization strategies. Meanwhile, re-cent research on LoRA (Meng et al., 2024; Wang et al., 2025) highlights that the initialization strat-egy plays a crucial role in determining the con-vergence behavior and final performance of the model. Inspired by these successes, we directly model the weight update ∆W as LoRA and de-velop our LoRA initialization strategy to solve the unlearning problem by initializing the LoRA matri-ces to explicitly align with the differential energy objective defined in Eq. 1. 
+
+3.1.2 Representation-Guided Initialization 
+
+Following the motivation in the previous section, we aim to initialize the LoRA matrices A and B
+
+such that the update ∆W = BA is initially aligned with a subspace that maximizes the impact on the forget set Df while minimizing the interference with the retain set Dr.Our key insight is to leverage the decomposabil-ity of representations (Zou et al., 2023) to guide the initialization of LoRA. This approach circumvents the issues of parameter polysemanticity caused by the superposition phenomenon (Elhage et al., 2022), which can be a potential limitation when di-rectly employing parameter importance to initialize LoRA matrices. We formalize our initialization strategy and its theoretical justification in the following theorem: 
+
+Theorem 1. Consider the distributions PF and PR
+
+of the output representation h = W0x for inputs x
+
+sampled from Df and Dr, respectively. Let Cov F
+
+and Cov R be their corresponding covariance ma-trices: 
+
+Cov F = Eh∼P F [hh ⊤], Cov R = Eh∼P R [hh ⊤].
+
+Define Cov ∆ as: 
+
+Cov ∆ = (1 − β) Cov F −β Cov R,
+
+where β ∈ [0 , 1] is a hyperparameter. When A, B 
+
+are initialized as Binit = Qr and Ainit = Q⊤ 
+
+> r
+
+W0,where Qr = [ q1, q 2, . . . , q r] is the matrix of the top-r eigenvectors of Cov ∆, Eq. 1 is maximized at initialization. 
+
+The proof of Theorem 1 is provided in Ap-pendix A. Intuitively, this theorem reveals that by constructing a balanced covariance matrix Cov ∆
+
+that contrasts the forget and retain sets, we can extract eigenvectors that capture the most discrim-inative directions. These eigenvectors define a subspace where the forget-set representations have high variance while the retain-set representations have low variance, naturally aligning with our goal of selective forgetting. In practice, since the true distributions PF and 
+
+PR are unknown, we estimate Cov F and Cov R
+
+empirically: feed a small number of samples from 
+
+Df and Dr through the pre-trained model, collect layer outputs Hf ∈ RNf ×d and Hr ∈ RNr ×d,and compute the sample covariances. Using these, build Cov ∆ and extract Qr to perform the initial-ization above. Appendix B presents a concentra-tion bound for empirical covariance estimation, showing that under bounded activations the em-pirical estimators converge in spectral norm at the rate O(M 2plog( d/δ )/N ), where M is an upper bound on the activation norm, d is the representa-tion dimension, N is the number of samples, and δ
+
+controls the confidence level of the bound. As a re-sult, the empirical balanced covariance remains close to Cov ∆, and its top-r eigenspace is sta-ble whenever the eigengap of Cov ∆ is sufficiently large. 43.2 Representation Orthogonal Loss: A Subspace-Controlled Regularization 
+
+To further ensure that the unlearning process main-tains performance on the retain set Dr, we intro-duce Representation Orthogonal Loss (ROL), a subspace-controlled regularization term in training loss. This loss is designed to constrain the output of the LoRA to be orthogonal to the retain set’s representations, thereby minimizing interference with the knowledge that should be preserved. We first identify the principal subspace of the representations for the retain set Dr. Let Hr =
+
+{hi}Ni=1 be the set of output representations h =
+
+W0x collected from a small subset of the retain set. We perform eigenvalue decomposition on the covariance matrix of Hr to obtain an orthonormal basis PB ∈ Rdout ×k, where k is a hyperparameter controls the strength of the regularization. This ma-trix PB captures the most critical directions in the representation space that represent the knowledge to be retained. During training, PB remains fixed. We define the ROL as: 
+
+LROL = ∥B⊤PB ∥2 
+
+> F
+
+, (2) where B ∈ Rdout ×r is the LoRA up-projection ma-trix and ∥ · ∥ F denotes the Frobenius norm. This loss function regularizes the orthogonality between every pair of columns of B and PB . Geometri-cally, this loss encourages that the LoRA update 
+
+∆h = B(Ax ) lies in the orthogonal complement of a subspace of the representations of retain set, thereby minimizing the interference with the origi-nal model’s behavior on Dr.
+
+3.3 Overall Algorithm 
+
+The final optimization objective for ReGLU is a weighted combination of the forget loss, the retain loss, and the orthogonal regularization: 
+
+Ltotal = Lforget (Df ) + γ Lretain (Dr) + λLROL ,
+
+where Lforget can be any of the objectives discussed in Section 2.3, and γ, λ are hyperparameters bal-ancing the different objectives. The overall unlearning process of ReGLU is summarized in Algorithm 1 in Appendix C. First, we collect a small number of samples from both the forget set Df and the retain set Dr to estimate the covariance matrices Cov F and Cov R. We then compute the balanced covariance matrix Cov ∆ and extract its top-r eigenvectors to initialize the LoRA matrices A and B as described in Section 4.2. Si-multaneously, we use Cov R to construct the orthog-onal basis PB . Finally, we optimize the LoRA pa-rameters by minimizing the total loss Ltotal , which balances unlearning effectiveness, retain set perfor-mance, and subspace-controlled regularization. 
+
+4 Experiments 
+
+4.1 Experimental Setup Benchmarks. We conduct experiments on two widely used LLM unlearning benchmarks: TOFU (Maini et al., 2024) and WMDP (Li et al., 2024). TOFU offers 200 diverse synthetic author profiles, each consisting of 20 question-answer pairs. Sub-sets of these profiles (1%, 5%, or 10%) serve as the forget set for unlearning. WMDP contains expert-written multiple-choice questions in biosecurity, cybersecurity, and chemistry domains. Following Li et al. (2024), we use the provided forget corpus and use Wikitext (Merity et al., 2016) as the retain set. We focus on biosecurity and cybersecurity do-mains, since the forget corpus for the chemistry domain is not publicly available. 
+
+Baselines. We compare our method with other LoRA-based unlearning methods, specifically FILA (Cha et al., 2025) and VILA (Kim et al., 2025), with two unlearning loss functions: GD (Liu et al., 2022) and IHL (Cha et al., 2025). We focus our evaluation on LoRA-based approaches to ensure a fair comparison within the parameter-efficient framework. This choice is motivated by findings in Cha et al. (2025), which demonstrate that LoRA-based unlearning can achieve perfor-mance on par with, or even superior to, full fine-tuning. 
+
+Models. We follow the default configurations for each benchmark. For TOFU, we evaluate unlearn-ing on Llama-2-7B (Touvron et al., 2023) and Phi-1.5B (Li et al., 2023). For WMDP, we use Zephyr-7B-beta (Tunstall et al., 2024). 
+
+Evaluation Metrics and Setting. We follow the standard evaluation protocols for each benchmark. For TOFU, we employ the Forget Quality (FQ) (Maini et al., 2024) to measure the extent of data removal, which is the statistical similarity between the unlearned model and an oracle retrained model. Note that FQ values reported in the results are log-scaled to facilitate visualization and compari-son across different magnitudes. The model util-ity is the harmonic mean of nine metrics (Maini 5Model Method Forget 1% ↑ Forget 5% ↑ Forget 10% ↑ AVG. ↑
+
+Phi-1.5B Original Model -2.5 -11.5 -16.9 -10.3 GD -2.5 -11.2 -17.3 -10.3 GD + FILA -1.8 -8.7 -11.9 -7.5 GD + VILA -2.5 -10.9 -14.4 -9.3 GD + ReGLU -0.8 -9.9 -11.2 -7.3 IHL -1.3 -11.5 -12.4 -8.4 IHL + FILA -2.5 -9.3 -10.3 -7.4 IHL + VILA -2.9 -10.2 -10.2 -7.8 IHL + ReGLU -0.1 -5.4 -7.7 -4.4 Llama-2-7B Original -2.9 -14.0 -16.9 -11.3 GD -3.3 -13.2 -13.8 -10.1 GD + FILA -1.3 -11.2 -16.6 -9.7 GD + VILA -2.5 -13.6 -14.7 -10.3 GD + ReGLU -0.6 -12.9 -13.3 -8.9 IHL -2.9 -14.3 -16.6 -11.3 IHL + FILA -2.2 -11.2 -7.5 -6.9 IHL + VILA -2.5 -8.2 -11.1 -7.2 IHL + ReGLU -0.7 -5.4 -1.1 -2.4 
+
+> Table 1: Main results on the TOFU benchmark. We report the log-scaled Forget Quality (FQ) for different forget set sizes (1%, 5%, and 10%) on Phi-1.5B and Llama-2-7B. Higher FQ indicates better unlearning performance, signifying that the unlearned model’s behavior is statistically closer to a model retrained from scratch. All methods maintain at least 95% of the original model’s utility.
+
+et al., 2024). For WMDP, we report the accuracy of WMDP-Bio and WMDP-Cyber to assess the efficacy of unlearning and evaluate model utility using MMLU accuracy (Hendrycks et al., 2021). To ensure a fair comparison, we search the hy-perparameters of all methods and only consider checkpoints that maintain at least 95% of the origi-nal model’s utility and select the one achieving the best unlearning performance. Since all methods demonstrate comparable utility under this criterion, we focus on reporting the forgetting performance in the subsequent results. 
+
+4.2 Main Results 
+
+We present the main unlearning results on the TOFU and WMDP benchmarks in Table 1 and Ta-ble 2, respectively. 
+
+Results on TOFU. As shown in Table 1, ReGLU consistently outperforms the baseline methods across different forget set sizes (1%, 5%, and 10%) and model architectures (Phi-1.5B and Llama-2-7B). When using GD as the loss function, ReGLU achieves an average FQ of -7.3 on Phi-1.5B and -8.9 on Llama-2-7B, surpassing both FILA and VILA. The performance gain is even more pro-nounced when combined with the IHL. Specifi-cally, IHL + ReGLU achieves the best overall per-formance, with an average FQ of -4.4 on Phi-1.5B and -2.4 on Llama-2-7B. This demonstrates that our ReGLU effectively complements different un-learning functions. 
+
+Results on WMDP. The results on the WMDP benchmark, summarized in Table 2, further vali-date the effectiveness of ReGLU. GD + ReGLU achieves the lowest average accuracy of 35.1% across the Bio and Cyber domains, which is a significant reduction from the original model’s 54.6% and outperforms GD + VILA (38.1%). Sim-ilarly, IHL + ReGLU (41.4%) shows a substan-tial improvement over IHL + FILA (48.8%) and IHL + VILA (51.0%). These results indicate that ReGLU can more aggressively suppress the forget-set knowledge without compromising the model’s general capabilities. 6Method Bio ↓ Cyber ↓ AVG. ↓
+
+Original Model 64.7 44.5 54.6 GD 58.0 37.3 47.7 GD + FILA 59.1 41.3 50.2 GD + VILA 49.3 26.9 38.1 GD + ReGLU 41.8 28.4 35.1 
+
+IHL 54.9 39.5 47.2 IHL + FILA 60.6 37.0 48.8 IHL + VILA 63.6 38.4 51.0 IHL + ReGLU 49.7 33.1 41.4 
+
+> Table 2: Main results on the WMDP benchmark. We report the accuracy (%) on WMDP-Bio and WMDP-Cyber. Lower accuracy indicates better unlearning per-formance. All reported checkpoints maintain at least 95% of the original model’s MMLU utility.
+
+Method Bio ↓ Cyber ↓ AVG. ↓
+
+GD 58.0 37.3 47.7 GD + RILA 54.0 25.8 39.9 GD + ROL 44.6 36.1 40.4 GD + ReGLU 41.8 28.4 35.1 
+
+IHL 54.9 39.5 47.2 IHL + RILA 51.2 36.7 44.0 IHL + ROL 54.0 36.1 45.0 IHL + ReGLU 49.7 33.1 41.4 
+
+> Table 3: Ablation results on the WMDP benchmark. We compare the full ReGLU framework with two vari-ants: RILA (representation-guided initialization only) and ROL (subspace regularization only). Lower values indicate better unlearning performance.
+
+4.3 Ablation Studies 
+
+To investigate the contribution of each compo-nent in ReGLU, we conduct ablation studies on the WMDP benchmark using both GD and IHL. We compare the full ReGLU framework with two variants: (1) RILA, which only employs the representation-guided initialization described in Section 3.1 without the subspace regularization loss ROL; and (2) ROL, which only applies the subspace regularization loss described in Section 3.2 while using standard LoRA initialization. As shown in Table 3, both the initialization and the regularization loss contribute to the overall per-formance. Specifically, RILA achieves better un-learning performance than the base GD and IHL, demonstrating that aligning the LoRA update with 
+
+Rank r Forget 10% ↑ WMDP Cyber ↓
+
+8 -3.3 30.5 16 -2.8 27.9 32 -1.4 28.4   
+
+> Table 4: Impact of LoRA rank ron TOFU and WMDP benchmarks.
+
+the forget-set-dominant subspace provides a strong starting point for unlearning. Similarly, ROL also shows improvements over the base methods, in-dicating that the subspace regularization loss ef-fectively guides the optimization process. Most importantly, the full ReGLU framework, which combines both components, achieves the best re-sults. This suggests a strong synergy between the geometric initialization and the structural regular-ization, where the initialization provides a well-aligned starting subspace and the regularization ensures that the subsequent updates remain within a safe region that minimizes interference with the retain set. 
+
+4.4 Analysis of Hyperparameters 
+
+In this section, we investigate the sensitivity of ReGLU to two key hyperparameters: the LoRA rank r and the balance parameter β in Eq. 1. We conduct experiments on TOFU-10% and WMDP-Cyber. 
+
+Impact of LoRA Rank r. The rank r determines the dimensionality of the low-rank update ∆W .As shown in Table 4, we evaluate the performance across different ranks. A higher rank provides more degrees of freedom to align the update with the forget-set subspace, potentially leading to more effective unlearning. However, excessively large ranks may increase the risk of interfering with the retain-set knowledge if the orthogonal regulariza-tion is not sufficiently strong. Our results indicate that a rank of r = 16 or r = 32 typically strikes a good balance between unlearning efficacy and utility preservation. 
+
+Impact of Balance Parameter β. The parame-ter β ∈ [0 , 1] in Eq. 1 regulates the trade-off be-tween maximizing forget-set variance and minimiz-ing retain-set interference during subspace identi-fication. We vary β while keeping other settings fixed, and report the resulting FQ on TOFU-10% and unlearning performance on WMDP-Cyber. Ta-ble 5 shows a clear “sweet spot” at β = 0.3,7β Forget 10% ↑ WMDP Cyber ↓
+
+0.1 -2.2 38.2 0.3 -2.1 30.1 0.5 -2.3 36.6 0.7 -3.5 42.6 0.9 -3.6 40.6 
+
+Table 5: Impact of the balance parameter β in Eq. 1. Darker colors indicate better performance. FILA VILA RILA 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Ef/Er
+> WMDP Cyber
+> TOFU forget 10%
+
+Figure 2: Comparison of activation norms at initial-ization. RILA (our proposed initialization) achieves a significantly higher forget-to-retain energy ratio com-pared to FILA and VILA. 
+
+which achieves the best trade-off across both bench-marks (highest FQ on TOFU-10% and lowest ac-curacy on WMDP-Cyber). When β is too small (e.g., 0.1), the objective over-emphasizes max-imizing forget-set variance, yielding a less sta-ble subspace for forgetting. Conversely, as β in-creases (e.g., β ≥ 0.7), the balanced covariance 
+
+Cov ∆ = (1 − β) Cov F −β Cov R becomes domi-nated by the retain term, leading to a subspace that is overly conservative and thus weakens forgetting. 
+
+4.5 Analysis of Mechanism 
+
+To understand the underlying mechanism of ReGLU, we analyze how the LoRA update inter-acts with the forget and retain sets at initialization and during training. Figure 2 shows that RILA achieves a signifi-cantly higher forget-to-retain energy ratio at initial-ization compared to FILA and VILA, indicating that RILA better aligns the LoRA update with the forget-set subspace while minimizing interference with the retain set. To analyze the subspace of LoRA outputs across different methods, we examine the angular distance between the columns of the LoRA B matrix and the columns of the PB matrix (detailed in Section 3.2), FILA VILA ReGLU w/o ROL ReGLU  
+
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> 1 s
+> 0.70
+> 0.82 0.82
+> 0.87
+
+Figure 3: Orthogonality analysis between LoRA B ma-trix and retain subspace PB . Higher values of 1 − s in-dicate greater orthogonality to the retain representation subspace, which is desirable for effective unlearning while preserving retain-set knowledge. 
+
+which measures the influence of LoRA outputs on the retain representation subspace. Specifically, we compute the average pairwise cosine similar-ity between columns of B and PB , denoted as 
+
+s = avg i,j cos 2(B[: , i ], P B [: , j ]) , and report 1 − s,which eliminates the effect of the B matrix’s scale. Higher values indicate greater orthogonality to the retain subspace, which is desirable for effective unlearning. We conduct experiments on Llama-2-7B with the Forget 5% setting. As shown in Figure 3, ReGLU achieves the highest orthogonal-ity score (0.87), substantially outperforming both FILA (0.70) and VILA (0.82). This demonstrates that our method more effectively maintains LoRA updates orthogonal to the retain representation sub-space. Furthermore, removing the ROL component (ReGLU - ROL, 0.82) results in a noticeable de-crease in orthogonality, confirming the effective-ness of our subspace-controlled regularization in constraining the LoRA outputs to remain orthogo-nal to the retain set’s principal directions. 
+
+4.6 Efficiency Analysis 
+
+Table 6 compares the initialization cost on the TOFU benchmark. On Llama2-7B, RILA demon-strates significantly faster initialization compared to FILA across all settings. Compared to VILA, RILA shows comparable efficiency on smaller for-get sets, but becomes faster on the Forget 10% setting (0.51 vs. 0.81 GPU hours). This scalabil-ity advantage stems from a fundamental difference in computational requirements: while FILA and VILA need to compute gradients to estimate param-eter importance maps, RILA only requires a for-ward pass over the forget set to collect layer outputs, 8Method Params Rand. SVD Forget 1% Forget 5% Forget 10% 
+
+FILA 7B – 0.71 3.13 23.32 VILA 7B – 0.09 0.38 0.81 RILA 7B × 0.50 0.50 0.51 RILA 7B ✓ 0.07 0.11 0.12 RILA 70B ✓ 0.19 0.27 0.29 
+
+> Table 6: Efficiency comparison on TOFU benchmark. Time is measured in GPU hours (lower is better). Randomized SVD enables efficient initialization even for 70B-scale models.
+
+followed by covariance computation and eigen-value decomposition. The most time-consuming operation is the eigenvalue decomposition, whose cost remains nearly constant regardless of dataset size. As a result, RILA’s efficiency advantage be-comes increasingly pronounced with larger forget sets. However, the eigenvalue decomposition cost de-pends on the layer dimension d, which grows with model size. This could become a bottleneck for larger models. Since RILA requires only the top-r
+
+eigenvectors, we can leverage randomized SVD to efficiently approximate the leading eigenvec-tors. Standard eigenvalue decomposition has com-plexity O(min( d2n, dn 2)) for an n × d activation matrix, whereas randomized SVD reduces this to 
+
+O(ndr + r2(n + d)) , where r ≪ min( n, d ) is the target rank. For typical LoRA configurations where r ≤ 64 and d ∼ 4096 , this represents a substantial speedup. As shown in Table 6, with ran-domized SVD, initialization on Llama2-7B drops to 0.07–0.12 GPU hours. Even on Llama2-70B, RILA maintains efficient initialization at 0.19–0.29 GPU hours, confirming its scalability to larger mod-els. 
+
+5 Conclusion 
+
+In this work, we introduced ReGLU, a novel LoRA-based method for LLM unlearning. By shifting the focus from parameter importance to representation subspaces, ReGLU effectively addresses the chal-lenges posed by the superposition phenomenon and parameter polysemanticity. Our approach lever-ages a balanced subspace initialization to align un-learning updates with forget-specific directions and an orthogonal regularization term to protect the principal directions of the retain set. Extensive ex-periments on the TOFU and WMDP benchmarks demonstrate that ReGLU consistently outperforms state-of-the-art baselines, achieving superior un-learning quality while maintaining high model util-ity. Our analysis further confirms that ReGLU suc-cessfully disentangles forget and retain representa-tions, providing a robust and precise solution for selective forgetting in large language models. 
+
+Limitations 
+
+Despite its effectiveness, ReGLU has several lim-itations. First, the method requires computing co-variance matrices and performing eigenvalue de-composition for each layer, which introduces a one-time computational overhead during initialization. While this cost is significantly lower than full fine-tuning, it may become non-trivial for extremely large models or high-dimensional representations. Second, the quality of the identified subspaces de-pends on the representativeness of the small subsets of forget and retain data used for covariance esti-mation. If these subsets do not accurately capture the underlying distributions, the initialization and regularization may be less effective. Third, our evaluation is primarily focused on the TOFU and WMDP benchmarks. While these are standard in the field, further investigation is needed to assess the generalizability of ReGLU across a broader range of domains and unlearning tasks. Finally, the performance of ReGLU is sensitive to hyperparam-eters such as the LoRA rank r and the regulariza-tion strength λ, which may require careful tuning for different model architectures and datasets. 
+
+References       
+
+> Emily M Bender, Timnit Gebru, Angelina McMillan-Major, and Shmargaret Shmitchell. 2021. On the dangers of stochastic parrots: Can language models be too big? In Proceedings of the 2021 ACM confer-ence on fairness, accountability, and transparency ,pages 610–623. Hannah Brown, Katherine Lee, Fatemehsadat Mireshghallah, Reza Shokri, and Florian Tramèr.
+
+92022. What does it mean for a language model to preserve privacy? In Proceedings of the 2022 ACM Conference on Fairness, Accountability, and Transparency , FAccT ’22, page 2280–2292, New York, NY, USA. Association for Computing Machinery. Yinzhi Cao and Junfeng Yang. 2015. Towards making systems forget with machine unlearning. In 2015 IEEE symposium on security and privacy , pages 463– 480. IEEE. Nicholas Carlini, Daphne Ippolito, Matthew Jagielski, Katherine Lee, Florian Tramer, and Chiyuan Zhang. 2022. Quantifying memorization across neural lan-guage models. arXiv preprint arXiv:2202.07646 .Sungmin Cha, Sungjun Cho, Dasol Hwang, and Moon-tae Lee. 2025. Towards robust and parameter-efficient knowledge unlearning for llms. In Inter-national Conference on Learning Representations .Nelson Elhage, Tristan Hume, Catherine Olsson, Nicholas Schiefer, Tom Henighan, Shauna Kravec, Zac Hatfield-Dodds, Robert Lasenby, Dawn Drain, Carol Chen, et al. 2022. Toy models of superposition. 
+
+arXiv preprint arXiv:2209.10652 .Chongyu Fan, Jiancheng Liu, Licong Lin, Jinghan Jia, Ruiqi Zhang, Song Mei, and Sijia Liu. 2024. Simplicity prevails: Rethinking negative preference optimization for llm unlearning. arXiv preprint arXiv:2410.07163 .Ronald A Fisher. 1922. On the mathematical founda-tions of theoretical statistics. Philosophical transac-tions of the Royal Society of London. Series A, con-taining papers of a mathematical or physical charac-ter , 222(594-604):309–368. Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Stein-hardt. 2021. Measuring massive multitask language understanding. Proceedings of the International Con-ference on Learning Representations (ICLR) .Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-rank adaptation of large language models. In International Conference on Learning Representations .Yejin Kim, Eunwon Kim, Buru Chang, and Junsuk Choe. 2025. Improving fisher information estimation and efficiency for lora-based llm unlearning. arXiv preprint arXiv:2508.21300 .Nathaniel Li, Alexander Pan, Anjali Gopal, Sum-mer Yue, Daniel Berrios, Alice Gatti, Justin D Li, Ann-Kathrin Dombrowski, Shashwat Goel, Gabriel Mukobi, et al. 2024. The wmdp benchmark: measur-ing and reducing malicious use with unlearning. In 
+
+Proceedings of the 41st International Conference on Machine Learning , pages 28525–28550. Yuanzhi Li, Sébastien Bubeck, Ronen Eldan, Allie Del Giorno, Suriya Gunasekar, and Yin Tat Lee. 2023. Textbooks are all you need ii: phi-1.5 technical report. 
+
+Preprint , arXiv:2309.05463. Bo Liu, Qiang Liu, and Peter Stone. 2022. Continual learning and private unlearning. In Conference on Lifelong Learning Agents , pages 243–254. PMLR. Minrui Luo, Fuhang Kuang, Yu Wang, Zirui Liu, and Tianxing He. 2025. Sc-lora: Balancing efficient fine-tuning and knowledge preservation via subspace-constrained lora. arXiv preprint arXiv:2505.23724 .Pratyush Maini, Zhili Feng, Avi Schwarzschild, Zachary Chase Lipton, and J Zico Kolter. 2024. TOFU: A task of fictitious unlearning for LLMs. In 
+
+First Conference on Language Modeling .Fanxu Meng, Zhaohui Wang, and Muhan Zhang. 2024. Pissa: Principal singular values and singular vectors adaptation of large language models. Advances in Neural Information Processing Systems , 37:121038– 121072. Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. 2016. Pointer sentinel mixture mod-els. Preprint , arXiv:1609.07843. Milad Nasr, Nicholas Carlini, Jonathan Hayase, Matthew Jagielski, A Feder Cooper, Daphne Ippolito, Christopher A Choquette-Choo, Eric Wallace, Flo-rian Tramèr, and Katherine Lee. 2023. Scalable ex-traction of training data from (production) language models. arXiv preprint arXiv:2311.17035 .Hugo Touvron, Louis Martin, Kevin Stone, Peter Al-bert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. 2023. Llama 2: Open founda-tion and fine-tuned chat models. arXiv preprint arXiv:2307.09288 .Joel A. Tropp. 2012. User-friendly tail bounds for sums of random matrices. Foundations of Computational Mathematics , 12(4):389–434. Lewis Tunstall, Edward Emanuel Beeching, Nathan Lambert, Nazneen Rajani, Kashif Rasul, Younes Belkada, Shengyi Huang, Leandro Von Werra, Clé-mentine Fourrier, Nathan Habib, Nathan Sarrazin, Omar Sanseviero, Alexander M Rush, and Thomas Wolf. 2024. Zephyr: Direct distillation of LM align-ment. In First Conference on Language Modeling .Hanqing Wang, Yixia Li, Shuo Wang, Guanhua Chen, and Yun Chen. 2025. MiLoRA: Harnessing minor singular components for parameter-efficient LLM finetuning. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Asso-ciation for Computational Linguistics: Human Lan-guage Technologies (Volume 1: Long Papers) , pages 4823–4836, Albuquerque, New Mexico. Association for Computational Linguistics. 
+
+10 Jason Wei, Yi Tay, Rishi Bommasani, Colin Raffel, Barret Zoph, Sebastian Borgeaud, Dani Yogatama, Maarten Bosma, Denny Zhou, Donald Metzler, Ed H. Chi, Tatsunori Hashimoto, Oriol Vinyals, Percy Liang, Jeff Dean, and William Fedus. 2022. Emer-gent abilities of large language models. Transactions on Machine Learning Research .Zeguan Xiao, Siqing Li, Yong Wang, Xuetao Wei, Jian Yang, Yun Chen, and Guanhua Chen. 2026. Model-ing llm unlearning as an asymmetric two-task learn-ing problem. arXiv preprint arXiv:2604.14808 .Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. 2024. Negative preference optimization: From catastrophic collapse to effective unlearning. In First Conference on Language Modeling .Andy Zou, Long Phan, Sarah Chen, James Campbell, Phillip Guo, Richard Ren, Alexander Pan, Xuwang Yin, Mantas Mazeika, Ann-Kathrin Dombrowski, et al. 2023. Representation engineering: A top-down approach to ai transparency. arXiv preprint arXiv:2310.01405 .
+
+A Proof of Theorem 1 
+
+The proof of Theorem 1 follows the mathemati-cal framework established in SC-LoRA (Luo et al., 2025). We adapt their Theorem 1 to the unlearn-ing problem by reinterpreting the positive task as the forget set and the negative task as the retain set. The key insight—that eigenvectors of the weighted covariance difference capture discrimina-tive directions—applies naturally to our objective of maximizing impact on Df while minimizing interference with Dr.To prove this theorem, we first introduce the concept of orthogonal projection operators. 
+
+Definition 1. Suppose S is a subspace of Rn of dimension r, and let {qi}i∈[r] be an orthonormal basis of S, then the orthogonal projection operator onto S, denoted ΠS , is defined as: 
+
+ΠS (x) = 
+
+> r
+
+X
+
+> i=1
+
+(q⊤ 
+
+> i
+
+x)qi =
+
+> r
+
+X
+
+> i=1
+
+(qiq⊤ 
+
+> i
+
+)x. (3) 
+
+Note: the selection of the orthonormal basis does not affect ΠS .Proof. We prove this theorem in three steps: (1) establish the relationship between ∥∆W x ∥22 and projection onto subspace S; (2) derive the expected projection energy in terms of covariance matrices; and (3) apply Ky Fan’s theorem to show that eigen-vectors of Cov ∆ maximize the objective. 
+
+Step 1: Projection operator representation. 
+
+Let ∆W = BA . At initialization, Binit = Qr
+
+and Ainit = Q⊤ 
+
+> r
+
+W0, so ∆W = QrQ⊤ 
+
+> r
+
+W0. For any input x, let h = W0x be the corresponding output representation. Since Qr is an orthonormal basis for the subspace S, we have QrQ⊤ 
+
+> r
+
+= Π S . Thus: 
+
+∆W x = QrQ⊤ 
+
+> r
+
+W0x = Π S (h).
+
+Therefore, ∥∆W x ∥22 = ∥ΠS (h)∥22.
+
+Step 2: Expected projection energy. Let 
+
+{vi}i∈[r] be any orthonormal basis that spans S,and denote ˜Ir = Pri=1 viv⊤ 
+
+> i
+
+. From the orthonor-mality of {vi}i∈[r], we have: 
+
+˜I⊤ 
+
+> r
+
+˜Ir =
+
+> r
+
+X
+
+> i=1
+> r
+
+X
+
+> j=1
+
+viv⊤ 
+
+> i
+
+vj v⊤
+
+> j
+
+=
+
+> r
+
+X
+
+> i=1
+> r
+
+X
+
+> j=1
+
+vi⟨vi, v j ⟩v⊤
+
+> j
+
+=
+
+> r
+
+X
+
+> i=1
+> r
+
+X
+
+> j=1
+
+δij viv⊤
+
+> j
+
+=
+
+> r
+
+X
+
+> i=1
+
+viv⊤ 
+
+> i
+
+= ˜Ir.
+
+For either distribution P ∈ {P F , PR} with co-variance Cov , we have: 
+
+Eh∼P 
+
+∥ΠS (h)∥22
+
+ = Eh∼P 
+
+h
+
+∥ ˜Irh∥22
+
+i
+
+= Eh∼P 
+
+h
+
+tr 
+
+
+
+h⊤ ˜I⊤ 
+
+> r
+
+˜Irh
+
+i 
+
+= Eh∼P 
+
+h
+
+tr 
+
+
+
+h⊤ ˜Irh
+
+i 
+
+= Eh∼P 
+
+h
+
+tr 
+
+ ˜Irhh ⊤i 
+
+= tr 
+
+ ˜IrEh∼P 
+
+h
+
+hh ⊤i 
+
+= tr 
+
+ ˜Ir Cov 
+
+
+
+.
+
+Substituting into Eq. 1, the reward function be-comes: 
+
+R(S) = (1 − β)Eh∼P F
+
+∥ΠS (h)∥22
+
+
+
+− βEh∼P R
+
+∥ΠS (h)∥22
+
+
+
+= (1 − β)tr 
+
+ ˜Ir Cov F
+
+
+
+− βtr 
+
+ ˜Ir Cov R
+
+
+
+= tr 
+
+ ˜Ir Cov ∆
+
+
+
+.
+
+Step 3: Optimality via spectral decomposition. 
+
+Suppose the spectral decomposition of Cov ∆ is 11 QΣQ⊤, where Q = ( q1, q 2, . . . , q dout ) is orthogo-nal and Σ is diagonal with eigenvalues in descend-ing order. Then: 
+
+R(S) = tr 
+
+ ˜IrQΣQ⊤
+
+=
+
+> r
+
+X
+
+> i=1
+
+tr 
+
+
+
+viv⊤ 
+
+> i
+
+QΣQ⊤
+
+=
+
+> r
+
+X
+
+> i=1
+
+v⊤ 
+
+> i
+
+QΣQ⊤vi.
+
+Extend {vi}i∈[r] to a complete orthonormal basis 
+
+{vi}dout  
+
+> i=1
+
+for Rdout , and denote ui = Q⊤vi. Since 
+
+Q is orthogonal, {ui}dout  
+
+> i=1
+
+is also orthonormal. By Ky Fan’s theorem, 
+
+max 
+
+> {vi}i∈[r]
+> r
+
+X
+
+> i=1
+
+v⊤ 
+
+> i
+
+QΣQ⊤vi =
+
+> r
+
+X
+
+> i=1
+
+Σii ,
+
+and this maximum is achieved when S =span( {q1, q 2, . . . , q r}), where qi are the top-r
+
+eigenvectors of Cov ∆. Therefore, initializing B =
+
+Qr and A = Q⊤ 
+
+> r
+
+W0 maximizes the objective in Eq. 1. 
+
+Uniqueness under eigenvalue gap. If the eigen-values of Σ satisfy λr > λ r+1 (a strict gap), then the maximizing subspace is unique and equals 
+
+span( {q1, . . . , q r}). Let V = ( v1, . . . , v r) collect an orthonormal basis of S and define U = Q⊤V .Using Q’s orthogonality, 
+
+R(S) = 
+
+> r
+
+X
+
+> i=1
+
+v⊤ 
+
+> i
+
+QΣQ⊤vi =
+
+> dout
+
+X
+
+> j=1
+
+Σjj rX
+
+> i=1
+
+U 2
+
+> ji
+
+.
+
+By orthogonality, 0 ≤ Pri=1 U 2 
+
+> ji
+
+≤ 1 and 
+
+Pdout 
+
+> j=1
+
+Pri=1 U 2 
+
+> ji
+
+= r. With a strict spectral gap, the maximum is attained if and only if 
+
+> r
+
+X
+
+> i=1
+
+U 2 
+
+> ji
+
+=
+
+(
+
+1, 1 ≤ j ≤ r, 
+
+0, r + 1 ≤ j ≤ dout ,
+
+which is equivalent to Pri=1 viv⊤ 
+
+> i
+
+= Pri=1 qiq⊤ 
+
+> i
+
+,hence S = span( {q1, . . . , q r}). When λr =
+
+λr+1 (no gap), any r-dimensional subspace within the top-eigenspace achieves the same maximum, matching SC-LoRA’s discussion. 
+
+B Concentration Bound for Empirical Covariance Estimation 
+
+This section provides a concentration bound for empirical covariance estimation, bridging the gap between the population-level covariance matrices used in Theorem 1 and the empirical estimators used in practice. Under a mild bounded-activation assumption, the empirical covariance matrices con-centrate sharply in spectral norm, and the balanced covariance used by RILA remains a stable approxi-mation to its population counterpart. 
+
+Theorem 2 (Spectral concentration of empirical covariance) . Let h ∈ Rd be a random represen-tation vector satisfying ∥h∥2 ≤ M almost surely, and define its covariance matrix 
+
+Σ = E[hh ⊤].
+
+Given i.i.d. samples {hi}Ni=1 , let 
+
+ˆΣ = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+hih⊤ 
+
+> i
+
+.
+
+Then for any δ ∈ (0 , 1) , with probability at least 
+
+1 − δ,
+
+∥ ˆΣ−Σ∥2 ≤ 4M 2 log(2 d/δ )3N +M 2
+
+r 2 log(2 d/δ )
+
+N .
+
+In particular, when N ≥ log(2 d/δ ), there exists an absolute constant C > 0 such that 
+
+∥ ˆΣ − Σ∥2 ≤ CM 2
+
+r log(2 d/δ )
+
+N .
+
+Proof. Define 
+
+Xi = 1
+
+N (hih⊤ 
+
+> i
+
+− Σ) .
+
+Then {Xi}Ni=1 are independent, zero-mean, sym-metric random matrices and 
+
+ˆΣ − Σ = 
+
+> N
+
+X
+
+> i=1
+
+Xi.
+
+We bound the two quantities required by the matrix Bernstein inequality (Tropp, 2012, Theorem 6.1). 
+
+Spectral norm bound. Since ∥hih⊤ 
+
+> i
+
+∥2 =
+
+∥hi∥22 ≤ M 2 and ∥Σ∥2 ≤ E∥h∥22 ≤ M 2, we have 
+
+∥Xi∥2 ≤ ∥hih⊤ 
+
+> i
+
+∥2 + ∥Σ∥2
+
+N ≤ 2M 2
+
+N .
+
+Hence the Bernstein radius is R = 2 M 2/N .12 Variance bound. Using E[hh ⊤] = Σ and 
+
+∥h∥22 ≤ M 2, we obtain 
+
+E[( hh ⊤ − Σ) 2] = E[∥h∥22hh ⊤] − Σ2 ⪯ M 2Σ.
+
+Therefore, 
+
+E[X2 
+
+> i
+
+] ⪯ M 2Σ
+
+N 2 ,σ2 := 
+
+> N
+
+X
+
+> i=1
+
+E[X2 
+
+> i
+
+]
+
+> 2
+
+≤ M 2∥Σ∥2
+
+N ≤ M 4
+
+N .
+
+Applying matrix Bernstein inequality gives, for any t > 0,
+
+Pr 
+
+" NX
+
+> i=1
+
+Xi
+
+> 2
+
+≥ t
+
+#
+
+≤ 2d exp 
+
+
+
+− t2/2
+
+σ2 + Rt/ 3
+
+
+
+.
+
+Set L = log(2 d/δ ) and choose 
+
+t = LR 
+
+3 +
+
+r L2R2
+
+9 + 2 Lσ 2 ≤ 2LR 
+
+3 + √2Lσ 2.
+
+Then the right-hand side is at most δ, and substitut-ing the bounds on R and σ2 yields 
+
+∥ ˆΣ−Σ∥2 ≤ 4M 2 log(2 d/δ )3N +M 2
+
+r 2 log(2 d/δ )
+
+N
+
+with probability at least 1 − δ. When N ≥
+
+log(2 d/δ ), the O(N −1) term is dominated by the 
+
+O(N −1/2) term up to a universal constant, giving the simplified bound. 
+
+Theorem 3 (Stability of the balanced covariance used by RILA) . Let ˆCov F and ˆCov R be empirical covariance estimators constructed from Nf forget samples and Nr retain samples, respectively, and define 
+
+ˆCov ∆ = (1 − β) ˆCov F − β ˆCov R.
+
+Assume the representations from both sets satisfy 
+
+∥h∥2 ≤ M almost surely. Then with probability at least 1 − δ,
+
+∥ ˆCov ∆ − Cov ∆ ∥2 ≤ (1 − β)ϵf + βϵ r,
+
+where 
+
+ϵf = 4M 2 log(4 d/δ )3Nf
+
++ M 2
+
+s
+
+2 log(4 d/δ )
+
+Nf
+
+,ϵr = 4M 2 log(4 d/δ )3Nr
+
++ M 2
+
+s
+
+2 log(4 d/δ )
+
+Nr
+
+.
+
+Consequently, if the eigengap 
+
+g = λr(Cov ∆) − λr+1 (Cov ∆)
+
+is strictly larger than (1 − β)ϵf + βϵ r, then the top-r eigenspace recovered from ˆCov ∆ is a stable perturbation of the population-optimal subspace, with principal-angle error controlled on the order of ∥ ˆCov ∆ − Cov ∆ ∥2/g by standard eigenspace perturbation arguments. Proof. Apply Theorem 2 to ˆCov F and ˆCov R sep-arately with failure probability δ/ 2 each, and take a union bound. On this event, define ∆F =ˆCov F − Cov F and ∆R = ˆCov R − Cov R. Then 
+
+∥ ˆCov ∆ − Cov ∆ ∥2 = ∥(1 − β)∆ F − β∆R∥2
+
+≤ (1 − β)∥∆F ∥2 + β∥∆R∥2
+
+≤ (1 − β)ϵf + βϵ r.
+
+The eigenspace stability statement then follows from standard perturbation bounds for symmet-ric matrices: once the perturbation magnitude is smaller than the spectral gap g, the leading eigenspace of ˆCov ∆ remains close to that of 
+
+Cov ∆.
+
+C Algorithm 
+
+We provide the complete algorithmic description of ReGLU in Algorithm 1. 
+
+D Implementation and Training Details 
+
+D.1 Hardware and Environment 
+
+Unless otherwise specified, all experiments were conducted on a single NVIDIA L20 GPU (48GB VRAM). Experiments on WMDP were conducted on a single NVIDIA A100 GPU (40GB VRAM). Our implementation is based on PyTorch 2.5.1 (CUDA 12.1) and the Hugging Face ecosystem, including Transformers 5.0.0.dev0, Tokenizers 0.22.1, and PEFT 0.17.1. We used DeepSpeed with ZeRO Stage 2 for memory optimization and launched runs via torchrun . All experiments were trained using BF16 precision by default. 
+
+D.2 Models and LoRA Configurations 
+
+We report results on three backbone models de-pending on the benchmark: Llama2-7B and Phi-1.5B for TOFU, and Zephyr-7B-β for WMDP. For parameter-efficient updates, we apply LoRA adapters to the following linear projections in ev-ery transformer block: { q_proj , k_proj , v_proj ,13 Algorithm 1 Representation Subspace-Controlled Unlearning (ReGLU) 
+
+Require: Pre-trained model M with parameters θ, forget set Df , retain set Dr, LoRA rank r, retain subspace dimension k, hyperparameters β, γ, λ  
+
+> 1:
+
+Phase 1: Initialization  
+
+> 2:
+
+Sample Nf examples from Df and Nr examples from Dr 
+
+> 3:
+
+for all trainable parameters in M do  
+
+> 4:
+
+Feed forget samples, collect outputs Hf = [ h(f )1 , h (f )2 , . . . , h (f ) 
+
+> Nf
+
+]⊤ ∈ RNf ×d 
+
+> 5:
+
+Feed retain samples, collect outputs Hr = [ h(r)1 , h (r)2 , . . . , h (r) 
+
+> Nr
+
+]⊤ ∈ RNr ×d 
+
+> 6:
+
+Compute Cov F ← 1 
+
+> Nf
+
+H⊤ 
+
+> f
+
+Hf 
+
+> 7:
+
+Compute Cov R ← 1 
+
+> Nr
+
+H⊤ 
+
+> r
+
+Hr 
+
+> 8:
+
+Compute Cov ∆ ← (1 − β) Cov F −β Cov R 
+
+> 9:
+
+Perform eigenvalue decomposition on Cov ∆ 
+
+> 10:
+
+Extract top-r eigenvectors Qr = ( q1, q 2, . . . , q r) 
+
+> 11:
+
+Initialize Binit ← Qr 
+
+> 12:
+
+Initialize Ainit ← Q⊤ 
+
+> r
+
+W0 
+
+> 13:
+
+Compute Wres ← W0 − Binit Ainit ▷ Residual weight; frozen during training  
+
+> 14:
+
+Perform eigenvalue decomposition on Cov R 
+
+> 15:
+
+Extract top-k eigenvectors PB = ( p1, p 2, . . . , p k) 
+
+> 16:
+
+end for  
+
+> 17:
+
+Phase 2: Training  
+
+> 18:
+
+for each training iteration do  
+
+> 19:
+
+Sample mini-batch from Df and Dr 
+
+> 20:
+
+Compute forget loss: Lforget ← L IHL (Df ) or LGA (Df ) 
+
+> 21:
+
+Compute retain loss: Lretain ← L CE (Dr) 
+
+> 22:
+
+Compute orthogonal loss: LROL ← ∥ B⊤PB ∥2 
+
+> F
+> 23:
+
+Compute total loss: Ltotal ← L forget + γLretain + λLROL  
+
+> 24:
+
+Update LoRA parameters {A, B } via gradient descent  
+
+> 25:
+
+end for  
+
+> 26:
+
+return Unlearned model M′ with updated LoRA adapters 14 o_proj , gate_proj , up_proj , down_proj }. Un-less otherwise stated, we use LoRA rank r = 32 
+
+and set the scaling factor to α = 2 r (thus α = 64 ). The LoRA dropout is set to 0.0 for TOFU and 0.05 for WMDP. 
+
+D.3 Hyperparameters Search Space 
+
+We performed a grid sweep over key hyperparame-ters. Across all experiments, we fix the retain loss weight γ = 1 .0 and the retain subspace dimension 
+
+k = 128 .
+
+TOFU. All TOFU runs were trained for 5 epochs with batch size 4 and gradient accumulation steps 8 (effective batch size 32), using weight decay 0.01. For Llama2-7B, we swept the learning rate over {1 × 10 −5, 5 × 10 −5, 1 × 10 −4}, and swept λ ∈ { 0.5, 0.7} and β ∈ { 0.5, 0.7}. For Phi-1.5B, we used the same grid, additionally in-cluding 2 × 10 −4 in the learning-rate sweep, i.e., 
+
+{1 × 10 −5, 5 × 10 −5, 1 × 10 −4, 2 × 10 −4}, and swept λ ∈ { 0.5, 0.7} and β ∈ { 0.5, 0.7}.
+
+WMDP. We swept the learning rate over 
+
+{1 × 10 −5, 3 × 10 −5, 5 × 10 −5} and λ ∈{0.1, 0.5, 0.7}, with max_steps =100. All WMDP experiments used LoRA rank r = 32 and α = 64 .
+
+D.4 Model Selection Criteria 
+
+For TOFU, we selected hyperparameters that yield a favorable trade-off between Forget Quality (FQ) and Model Utility (MU). For WMDP, we enforced a utility constraint based on MMLU, requiring MMLU to be at least 95% of the original model’s performance. Among feasible configurations, we selected those that minimize accuracy on the target corpora (bio/cyber) within the swept hyperparame-ter grid. 
+
+D.5 Best Configurations Reported for WMDP 
+
+For reproducibility, we report the exact best-performing configurations used in our main WMDP results. All configurations below are evalu-ated on checkpoints of steps=100. • GD + ReGLU (bio): r = 32 , α = 64 , lr 
+
+= 1 × 10 −5, β = 0 .7, λ = 0 .5.• GD + ReGLU (cyber): r = 32 , α = 64 , lr 
+
+= 3 × 10 −5, β = 0 .5, λ = 0 .5.• IHL + ReGLU (bio): r = 32 , α = 64 , lr 
+
+= 5 × 10 −5, β = 0 .5, λ = 0 .1.• IHL + ReGLU (cyber): r = 32 , α = 64 , lr 
+
+= 3 × 10 −5, β = 0 .5, λ = 0 .5.15

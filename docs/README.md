@@ -6,61 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-27
-- 运行时间：2026-04-27 20:11:17 UTC
+- 最新运行日期：2026-04-28
+- 运行时间：2026-04-28 20:28:59 UTC
 - 运行状态：成功
-- 本次总论文数：13
-- 精读区：2
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日聚焦联邦学习前沿，深度解析了无数据环境下的贡献度评估与无服务器架构下的梯度分片扩展技术。
-核心结论指出冯·诺依曼熵可实现精准的客户端贡献量化，而梯度分区则是突破大规模模型聚合瓶颈的关键。
-建议关注隐私保护下的 LLM 个性化方案，探索如何通过可组合适配器在保障安全的前提下实现模型定制。
-- 详情：[/202604/27/README](/202604/27/README)
+今日精选 17 篇前沿论文，深度聚焦联邦学习在隐私保护、通信效率及多模态数据处理上的关键突破。
+重点推荐结合自适应量化与差分隐私的非独立同分布优化方案，以及针对多模态缺失数据的条件填补技术。
+建议优先研读两篇高分精读论文，掌握在复杂异构环境下平衡模型精度与数据安全的核心策略。
+- 详情：[/202604/28/README](/202604/28/README)
 
 ### 精读区论文标签
-1. [Data-Free Contribution Estimation in Federated Learning using Gradient von Neumann Entropy](/202604/27/2604.22562v1-data-free-contribution-estimation-in-federated-learning-using-gradient-von-neumann-entropy)  
+1. [Enhanced Privacy and Communication Efficiency in Non-IID Federated Learning with Adaptive Quantization and Differential Privacy](/202604/28/2604.23426v1-enhanced-privacy-and-communication-efficiency-in-non-iid-federated-learning-with-adaptive-quantization-and-differential-privacy)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：在联邦学习中结合了差分隐私和自适应量化
+2. [Conditional Imputation for Within-Modality Missingness in Multi-Modal Federated Learning](/202604/28/2604.23112v1-conditional-imputation-for-within-modality-missingness-in-multi-modal-federated-learning)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：联邦学习中基于谱熵的隐私保护型客户端贡献评估
-2. [Shard the Gradient, Scale the Model: Serverless Federated Aggregation via Gradient Partitioning](/202604/27/2604.22072v1-shard-the-gradient-scale-the-model-serverless-federated-aggregation-via-gradient-partitioning)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：通过梯度分区实现无服务器联邦聚合以提高可扩展性
+   evidence：多模态联邦学习中的隐私保护协作训练
+3. [Scalable and Verifiable Federated Learning for Cross-Institution Financial Fraud Detection](/202604/28/2604.23437v1-scalable-and-verifiable-federated-learning-for-cross-institution-financial-fraud-detection)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：用于欺诈检测的可扩展且可验证的联邦学习
+4. [Rényi Pufferfish Privacy with Gaussian-based Priors: From Single Gaussian to Mixture Model](/202604/28/2604.23649v1-rnyi-pufferfish-privacy-with-gaussian-based-priors-from-single-gaussian-to-mixture-model)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：基于高斯分布的新型Rényi Pufferfish隐私机制
+5. [LLM-CEG: Extending the Classification Error Gauge Framework for Privacy Auditing of Large Language Models](/202604/28/2604.23795v1-llm-ceg-extending-the-classification-error-gauge-framework-for-privacy-auditing-of-large-language-models)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：在大型语言模型中使用 DP-SGD 衡量隐私与效用的权衡
+6. [FedSLoP: Memory-Efficient Federated Learning with Low-Rank Gradient Projection](/202604/28/2604.24012v1-fedslop-memory-efficient-federated-learning-with-low-rank-gradient-projection)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：资源受限环境下分布式机器学习的联邦优化算法
 
 ### 速读区论文标签
-1. [Potentials and Pitfalls of Applying Federated Learning in Hardware Assurance](/202604/27/2604.20020v1-potentials-and-pitfalls-of-applying-federated-learning-in-hardware-assurance)  
+1. [Fed-DLoRA: Efficient Wireless Federated Learning with Dynamic Low-Rank Adaptation](/202604/28/2604.24103v1-fed-dlora-efficient-wireless-federated-learning-with-dynamic-low-rank-adaptation)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：无线联邦学习的分布式机器学习框架
+2. [X-NegoBox: An Explainable Privacy-Budget Negotiation Framework for Secure Peer-to-Peer Energy Data Exchange](/202604/28/2604.24326v1-x-negobox-an-explainable-privacy-budget-negotiation-framework-for-secure-peer-to-peer-energy-data-exchange)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于点对点数据交换的差分隐私预算协商框架
+3. [Heterogeneous-Horizon Exact-Weight Local SGD](/202604/28/2604.24463v1-heterogeneous-horizon-exact-weight-local-sgd)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：针对异构本地SGD的分布式机器学习算法
+4. [A Survey on Split Learning for LLM Fine-Tuning: Models, Systems, and Privacy Optimizations](/202604/28/2604.24468v1-a-survey-on-split-learning-for-llm-fine-tuning-models-systems-and-privacy-optimizations)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：分布式大模型微调中拆分学习的隐私优化综述
+5. [A Convexified Eulerian Framework for Scalable Coordination of Massive DER Populations](/202604/28/2604.21259v1-a-convexified-eulerian-framework-for-scalable-coordination-of-massive-der-populations)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：应用联邦学习解决安全挑战
-2. [Differentially Private De-identification of Dutch Clinical Notes: A Comparative Evaluation](/202604/27/2604.21421v1-differentially-private-de-identification-of-dutch-clinical-notes-a-comparative-evaluation)  
+   evidence：具有聚合器端隐私保护的可扩展协调框架
+6. [Training Machine Learning Models on Encrypted Data: A Privacy-Preserving Framework using Homomorphic Encryption](/202604/28/2604.23245v1-training-machine-learning-models-on-encrypted-data-a-privacy-preserving-framework-using-homomorphic-encryption)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于临床文本去标识化的差分隐私机制
-3. [Separable Expert Architecture: Toward Privacy-Preserving LLM Personalization via Composable Adapters and Deletable User Proxies](/202604/27/2604.21571v1-separable-expert-architecture-toward-privacy-preserving-llm-personalization-via-composable-adapters-and-deletable-user-proxies)  
+   evidence：基于同态加密的隐私保护机器学习
+7. [A Taxonomy and Resolution Strategy for Client-Level Disagreements in Federated Learning](/202604/28/2604.23386v1-a-taxonomy-and-resolution-strategy-for-client-level-disagreements-in-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：通过将个人数据与共享权重解耦实现隐私保护的大模型个性化
-4. [Optimal e-variables under constraints](/202604/27/2604.21680v1-optimal-e-variables-under-constraints)  
+   evidence：联邦学习中的客户端冲突与排除机制
+8. [A Retraction-Free EXTRA Method for Decentralized Optimization on the Stiefel Manifold](/202604/28/2604.23754v1-a-retraction-free-extra-method-for-decentralized-optimization-on-the-stiefel-manifold)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：在e变量上施加差分隐私约束
-5. [FedSPDnet: Geometry-Aware Federated Deep Learning with SPDnet](/202604/27/2604.22494v1-fedspdnet-geometry-aware-federated-deep-learning-with-spdnet)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：针对SPDnet的联邦学习框架
-6. [Cloud-native and Distributed Systems for Efficient and Scalable Large Language Models -- A Research Agenda](/202604/27/2604.17227v1-cloud-native-and-distributed-systems-for-efficient-and-scalable-large-language-models----a-research-agenda)  
+   evidence：大规模学习的去中心化优化
+9. [Distributed Quantum Optimization for Large-Scale Higher-Order Problems with Dense Interactions](/202604/28/2604.20599v1-distributed-quantum-optimization-for-large-scale-higher-order-problems-with-dense-interactions)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：大语言模型的分布式系统
-7. [Chaos-Enhanced Prototypical Networks for Few-Shot Medical Image Classification](/202604/27/2604.17300v1-chaos-enhanced-prototypical-networks-for-few-shot-medical-image-classification)  
+   evidence：大规模问题的分布式优化框架
+10. [Behavioral Canaries: Auditing Private Retrieved Context Usage in RL Fine-Tuning](/202604/28/2604.22191v1-behavioral-canaries-auditing-private-retrieved-context-usage-in-rl-fine-tuning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：在训练过程中对支持特征注入受控扰动
-8. [Towards Energy Impact on AI-Powered 6G IoT Networks: Centralized vs. Decentralized](/202604/27/2604.19377v1-towards-energy-impact-on-ai-powered-6g-iot-networks-centralized-vs-decentralized)  
+   evidence：强化学习微调中私有数据使用的审计机制
+11. [Federated Cross-Modal Retrieval with Missing Modalities via Semantic Routing and Adapter Personalization](/202604/28/2604.22885v1-federated-cross-modal-retrieval-with-missing-modalities-via-semantic-routing-and-adapter-personalization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：分布式与集中式学习架构的分析
-9. [ZC-Swish: Stabilizing Deep BN-Free Networks for Edge and Micro-Batch Applications](/202604/27/2604.19453v1-zc-swish-stabilizing-deep-bn-free-networks-for-edge-and-micro-batch-applications)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：非独立同分布联邦学习稳定性
-10. [A Dual Perspective on Synthetic Trajectory Generators: Utility Framework and Privacy Vulnerabilities](/202604/27/2604.19653v1-a-dual-perspective-on-synthetic-trajectory-generators-utility-framework-and-privacy-vulnerabilities)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：合成轨迹生成中的隐私与效用权衡
-11. [Distributed Quantum-Enhanced Optimization: A Topographical Preconditioning Approach for High-Dimensional Search](/202604/27/2604.20639v1-distributed-quantum-enhanced-optimization-a-topographical-preconditioning-approach-for-high-dimensional-search)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：分布式量子增强优化框架
+   evidence：联邦跨模态检索框架
 
 
 <div class="dpr-home-promo-card">

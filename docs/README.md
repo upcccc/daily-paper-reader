@@ -6,47 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-29
-- 运行时间：2026-04-29 20:35:19 UTC
+- 最新运行日期：2026-04-30
+- 运行时间：2026-04-30 20:17:42 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：1
-- 速读区：7
+- 本次总论文数：17
+- 精读区：6
+- 速读区：11
 
 ### 今日简报（AI）
-- 今日共生成 8 篇推荐（精读 1 篇，速读 7 篇）
-- 精读：《Large-Sample Bayesian Approximations for Privatized Data》（8.0/10）
-- 速读：《A Retraction-Free EXTRA Method for Decentralized Optimization on the Stiefel Manifold》（7.0/10）, 《FED-FSTQ: Fisher-Guided Token Quantization for Communication-Efficient Federated Fine-Tuning of LLMs on Edge Devices》（7.0/10）, 《Distributed adaptive estimation for stochastic large regression models》（7.0/10）
-- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
-- 详情：[/202604/29/README](/202604/29/README)
+今日精选 17 篇前沿论文，深度聚焦联邦学习在化工优化及对比学习中的隐私保护突破。
+重点关注两篇满分佳作：分布式化工流程的隐私框架，以及通过限制组级贡献实现的差分隐私对比学习。
+建议优先研读高分论文，掌握如何在高维工业场景与医疗图像失衡环境下构建安全的协作模型。
+- 详情：[/202604/30/README](/202604/30/README)
 
 ### 精读区论文标签
-1. [Large-Sample Bayesian Approximations for Privatized Data](/202604/29/2604.24817v1-large-sample-bayesian-approximations-for-privatized-data)  
+1. [Privacy-Preserving Federated Learning Framework for Distributed Chemical Process Optimization](/202604/30/2604.26073v1-privacy-preserving-federated-learning-framework-for-distributed-chemical-process-optimization)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：用于分布式优化的隐私保护联邦学习
+2. [Differentially Private Contrastive Learning via Bounding Group-level Contribution](/202604/30/2604.26467v1-differentially-private-contrastive-learning-via-bounding-group-level-contribution)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：差分隐私对比学习框架
+3. [SplitFT: An Adaptive Federated Split Learning System For LLMs Fine-Tuning](/202604/30/2604.26388v1-splitft-an-adaptive-federated-split-learning-system-for-llms-fine-tuning)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：用于大语言模型微调的联邦拆分学习
+4. [Meta-Learning and Targeted Differential Privacy to Improve the Accuracy-Privacy Trade-off in Recommendations](/202604/30/2604.26390v1-meta-learning-and-targeted-differential-privacy-to-improve-the-accuracy-privacy-trade-off-in-recommendations)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：针对性差分隐私以改善准确性与隐私的权衡
+5. [Heterogeneous-Horizon Exact-Weight Local SGD](/202604/30/2604.24463v2-heterogeneous-horizon-exact-weight-local-sgd)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：差分隐私数据的贝叶斯近似
+   evidence：分布式优化中异构本地SGD的自适应聚合
+6. [Sample Selection Using Multi-Task Autoencoders in Federated Learning with Non-IID Data](/202604/30/2604.26116v1-sample-selection-using-multi-task-autoencoders-in-federated-learning-with-non-iid-data)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：确保数据隐私的联邦学习
 
 ### 速读区论文标签
-1. [A Retraction-Free EXTRA Method for Decentralized Optimization on the Stiefel Manifold](/202604/29/2604.23754v2-a-retraction-free-extra-method-for-decentralized-optimization-on-the-stiefel-manifold)  
+1. [Federated Medical Image Classification under Class and Domain Imbalance exploiting Synthetic Sample Generation](/202604/30/2604.26324v1-federated-medical-image-classification-under-class-and-domain-imbalance-exploiting-synthetic-sample-generation)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：医疗影像隐私约束下的联邦学习框架
+2. [On the Capacity of Hierarchical Secure Aggregation with Groupwise Keys](/202604/30/2604.26344v1-on-the-capacity-of-hierarchical-secure-aggregation-with-groupwise-keys)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：隐私保护分布式输入的层级安全聚合
+3. [CO-EVO: Co-evolving Semantic Anchoring and Style Diversification for Federated DG-ReID](/202604/30/2604.26363v1-co-evo-co-evolving-semantic-anchoring-and-style-diversification-for-federated-dg-reid)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：跨去中心化域的联邦学习
+4. [Multi-Server Secure Aggregation with Arbitrary Collusion and Heterogeneous Security Constraints](/202604/30/2604.26391v1-multi-server-secure-aggregation-with-arbitrary-collusion-and-heterogeneous-security-constraints)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于隐私保护联邦学习的多服务器安全聚合
+5. [Beyond Local vs. External: A Game-Theoretic Framework for Trustworthy Knowledge Acquisition](/202604/30/2604.23413v1-beyond-local-vs-external-a-game-theoretic-framework-for-trustworthy-knowledge-acquisition)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：针对分布式数据的分布式优化与大规模学习框架
-2. [FED-FSTQ: Fisher-Guided Token Quantization for Communication-Efficient Federated Fine-Tuning of LLMs on Edge Devices](/202604/29/2604.25421v1-fed-fstq-fisher-guided-token-quantization-for-communication-efficient-federated-fine-tuning-of-llms-on-edge-devices)  
+   evidence：大模型查询中知识效用与隐私的权衡
+6. [Privacy-preserving Meta-analysis through Low-Rank Basis Hunting](/202604/30/2604.23847v1-privacy-preserving-meta-analysis-through-low-rank-basis-hunting)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：用于联邦微调的分布式机器学习框架
-3. [Distributed adaptive estimation for stochastic large regression models](/202604/29/2604.25468v1-distributed-adaptive-estimation-for-stochastic-large-regression-models)  
+   evidence：隐私保护元分析方法
+7. [MatchRDMA: A Segmented and Rate-Matched Long-Haul RDMA Scheme for Geo-distributed LLM Training over OTN](/202604/30/2604.23932v1-matchrdma-a-segmented-and-rate-matched-long-haul-rdma-scheme-for-geo-distributed-llm-training-over-otn)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：针对大型回归模型的分布式递归最小二乘算法
-4. [Enhancing SignSGD: Small-Batch Convergence Analysis and a Hybrid Switching Strategy](/202604/29/2604.25550v1-enhancing-signsgd-small-batch-convergence-analysis-and-a-hybrid-switching-strategy)  
+   evidence：跨地域光传送网的大模型分布式训练
+8. [FlashOverlap: Minimizing Tail Latency in Communication Overlap for Distributed LLM Training](/202604/30/2604.24013v1-flashoverlap-minimizing-tail-latency-in-communication-overlap-for-distributed-llm-training)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式梯度压缩中的噪声注入与抖动机制
-5. [Diverse Image Priors for Black-box Data-free Knowledge Distillation](/202604/29/2604.25794v1-diverse-image-priors-for-black-box-data-free-knowledge-distillation)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：去中心化生态系统中的隐私保护知识蒸馏
-6. [FreeScale: Distributed Training for Sequence Recommendation Models with Minimal Scaling Cost](/202604/29/2604.24073v1-freescale-distributed-training-for-sequence-recommendation-models-with-minimal-scaling-cost)  
+   evidence：分布式大模型训练框架与通信重叠优化
+9. [ADMM-Based Distributed Kalman-like Observer with Applications to Cooperative Localization](/202604/30/2604.21608v1-admm-based-distributed-kalman-like-observer-with-applications-to-cooperative-localization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：大规模推荐模型的分布式训练
-7. [Subspace Optimization for Efficient Federated Learning under Heterogeneous Data](/202604/29/2604.25467v1-subspace-optimization-for-efficient-federated-learning-under-heterogeneous-data)  
+   evidence：基于ADMM的多智能体系统分布式状态估计
+10. [PrivUn: Unveiling Latent Ripple Effects and Shallow Forgetting in Privacy Unlearning](/202604/30/2604.22076v1-privun-unveiling-latent-ripple-effects-and-shallow-forgetting-in-privacy-unlearning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于高效联邦学习的子空间优化
+   evidence：隐私遗忘及针对隐私攻击的评估
+11. [Well-Conditioned Oblivious Perturbations in Linear Space](/202604/30/2604.23193v1-well-conditioned-oblivious-perturbations-in-linear-space)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：矩阵算法的高效噪声注入策略
 
 
 <div class="dpr-home-promo-card">

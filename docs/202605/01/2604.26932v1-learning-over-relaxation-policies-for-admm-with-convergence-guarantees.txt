@@ -1,0 +1,696 @@
+Title: Learning Over-Relaxation Policies for ADMM with Convergence Guarantees
+
+URL Source: https://arxiv.org/pdf/2604.26932v1
+
+Published Time: Thu, 30 Apr 2026 01:12:53 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Learning Over-Relaxation Policies for ADMM with Convergence Guarantees 
+
+Junan Lin, Paul J. Goulart, Luca Furieri 
+
+Abstract — The Alternating Direction Method of Multipliers (ADMM) is a widely used method for structured convex optimization, and its practical performance depends strongly on the choice of penalty and relaxation parameters. Motivated by settings such as Model Predictive Control (MPC), where one repeatedly solves related optimization problems with fixed structure and changing parameter values, we propose learn-ing online updates of the relaxation parameter to improve performance on problem classes of interest. This choice is computationally attractive in OSQP-like architectures, since adapting relaxation does not trigger the matrix refactorizations associated with penalty updates. We establish convergence guar-antees for ADMM with time-varying penalty and relaxation parameters under mild assumptions, and show on benchmark quadratic programs that the resulting learned policies improve both iteration count and wall-clock time over baseline OSQP. 
+
+I. I NTRODUCTION 
+
+The Alternating Direction Method of Multipliers (ADMM) is one of the most widely used first-order methods for structured convex optimization. It combines inexpensive it-erations, scalability to large problem dimensions, and broad applicability across signal processing, machine learning, con-trol, and embedded optimization [1], [2]. For problems with favorable structure, ADMM often provides an attractive com-promise between per-iteration cost and practical accuracy, and has therefore become a standard computational primitive in many repeated-solve applications [1], [3]. Consider the convex optimization problem 
+
+min  
+
+> x,z
+
+f (x) + g(z)
+
+s.t. Ax + Bz = c, (1) where x ∈ Rn, z ∈ Rm, A ∈ Rp×n, B ∈ Rp×m, c ∈ Rp,and f and g are closed proper convex functions. In its basic form, ADMM generates iterates 
+
+xk+1 ∈ arg min  
+
+> x
+
+f (x) + ρk
+
+2 ∥Ax +Bz k −c+uk∥22, (2a) 
+
+zk+1 ∈ arg min  
+
+> z
+
+g(z) + ρk
+
+2 ∥Ax k+1 +Bz −c+uk∥22, (2b) 
+
+uk+1 = uk + Ax k+1 + Bz k+1 − c, (2c) where ρk > 0 is the penalty parameter and u is the scaled dual variable [1]. A standard extension is relaxed ADMM, in which the following term 
+
+˜xk+1 = αkAx k+1 + (1 − αk)( c − Bz k), (2d) is computed immediately after (2a), and ˜xk+1 is used in place of Ax k+1 in (2b) and (2c). The parameter αk ∈ (0 , 2) is the          
+
+> The authors are with the Department of Engineering Science, Uni-versity of Oxford, OX1 3PJ Oxford, UK. Emails: {junan.lin, paul.goulart, luca.furieri }@eng.ox.ac.uk
+
+relaxation parameter , and the combined choice of ρk and 
+
+αk can have a major impact on practical convergence speed [2], [4]. The sensitivity of the algorithm performance to these hy-perparameters is particularly important in applications where one repeatedly solves a family of related optimization prob-lems with similar structure. A standard example is Model Predictive Control (MPC), where the same optimization problem is solved online for changing initial conditions. In such settings, the relevant performance criterion is often not the average behavior over a broad class of problems, but rather the performance on the narrower distribution of instances induced by the application. This motivates adapting the solver to the specific class of problems of interest. This observation has motivated adaptive ADMM schemes. Adaptive ADMM (AADMM) updates the penalty parameter using spectral rules derived from local curvature estimates [5]. Adaptive Relaxed ADMM (ARADMM) extends this idea to jointly adapt scalar penalty and relaxation parameters [6]. More recently, superADMM proposed constraint-wise penalty adaptation for quadratic programs [7]. These meth-ods show that adaptive hyperparameter updates can yield substantial performance gains. Most of the effort in this direction has focused on adapta-tion of the penalty parameter ρ, which brings computational disadvantages. Most notably, OSQP [3] is built around re-peated solution of a linear system that is parametric in ρ. Up-dating ρ modifies this linear system and can trigger a costly refactorization, which limits how frequently one should adapt it in practice. In contrast, updating the relaxation parameter α
+
+does not modify this factorization and can be done online at negligible additional cost. This makes α an attractive target for adaptation, especially in repeated-solve settings where wall-clock time matters as much as iteration count. More broadly, hyperparameter adaptation is aligned with the success of recent approaches based on learning-to-optimize (L2O). L2O seeks to improve algorithmic perfor-mance on a distribution of problems of interest by exploiting data from representative instances [8]–[15]. In the context of ADMM and related fixed-point methods, learning can substantially improve performance on optimization problem families arising in control [11], [14]. At the same time, learned modifications must remain compatible with solver structure and convergence guarantees. In particular, learning high-dimensional perturbations of the iteration map can be difficult to train and may not generalize reliably [13]–[15], whereas learning a low-dimensional solver parameter as per the RLQP approach of [16] can offer lighter-weight compu-
+
+> arXiv:2604.26932v1 [math.OC] 29 Apr 2026
+
+tations and higher transferability to new problem instances. Motivated by these considerations, in this paper we inves-tigate online adaptation of the ADMM relaxation parameter. We first derive convergence guarantees for ADMM with time-varying hyperparameters vectors (different parameters 
+
+ρik and αik for each row of A in (2a)-(2d)) for a general class of convex optimization problems under mild assumptions. We then demonstrate the practical potential of this idea on quadratic programs solved in OSQP-style form, where policies trained on representative problem instances map solver-state features to constraint-wise values of αik. In this implementation, adapting the over-relaxation parameters in-curs negligible computational overhead and can be combined naturally with existing ρ-adaptation strategies. 
+
+Contributions. Our contribution is twofold. First, we prove asymptotic convergence of ADMM with time-varying diagonal penalty and relaxation matrices, including the case where both parameters are adapted independently across con-straints. Second, we develop a learning-to-optimize pipeline for online adaptation of the ADMM relaxation parameter in OSQP. The resulting learned policy can improve itera-tion count and wall-clock time on representative problem families, while preserving the solver structure and avoiding the factorization overhead caused by frequent ρ updates. Our experiments show that learned adaptation of ADMM relaxation parameters can outperform baseline OSQP across several benchmark families. In particular, noticeable wall-clock time reduction can be obtained even with fixed ρ, since adapting α improves convergence behavior without changing the linear system factorization. II. M AIN RESULTS 
+
+We first present the theoretical result that supports the adaptive scheme proposed in this paper. Our goal is to adapt the ADMM relaxation parameter online while preserving convergence guarantees, even in the presence of updates for penalty parameter. Existing results do not cover the setting in which both parameters vary across iterations and constraints, while the result established in this section shows that per-constraint adaptation of αk in (2) is compatible with existing adaptive penalty rules such as the one in OSQP [3]. Asymptotic convergence is then guaranteed provided that relaxation and penalty parameter sequences satisfy suitable summable-change conditions. We make the following assumptions throughout: 
+
+Assumption 1: The functions f : Rn → R ∪ { +∞} and 
+
+g : Rm → R ∪ { +∞} are closed, proper, convex functions. 
+
+Assumption 2: The Lagrangian function 
+
+L0(x, z, λ ) = f (x) + g(z) + λ⊤(Ax + Bz − c)
+
+has a saddle point (x⋆, z ⋆, λ ⋆), that is, 
+
+L0(x⋆, z ⋆, λ ) ≤ L0(x⋆, z ⋆, λ ⋆) ≤ L0(x, z, λ ⋆)
+
+for all (x, z, λ ).Under Assumption 2, the pair (x⋆, z ⋆) is an optimal solution of (1), and the optimal value is given by 
+
+p⋆ := f (x⋆) + g(z⋆).
+
+To state our main result, it is convenient to write the relaxed ADMM iterations using matrix-valued penalty and relaxation parameters. Specifically, we replace the scalar parameters ρk and αk by diagonal matrices Rk and Γk,respectively, whose diagonal entries represent parameters assigned separately to each constraint. The resulting relaxed ADMM iteration is 
+
+xk+1 ∈ arg min  
+
+> x
+
+f (x)+ 12 Ax +Bz k −c+R−1 
+
+> k
+
+λk
+
+> 2
+> Rk
+
+, (3a) 
+
+˜xk+1 := Γ kAx k+1 − (I − Γk)( Bz k − c), (3b) 
+
+zk+1 ∈ arg min  
+
+> z
+
+g(z)+ 12 ˜xk+1 +Bz −c+R−1 
+
+> k
+
+λk
+
+> 2
+> Rk
+
+, (3c) 
+
+λk+1 := λk + Rk
+
+ ˜xk+1 + Bz k+1 − c. (3d) When Rk = ρkI and Γk = αkI, (3) reduces to the standard scalar-parameter relaxed ADMM iteration. Based on these iterations, we state an additional assumption on well-posedness of (3a) and (3c). 
+
+Assumption 3: For every k, the ADMM subproblems (3a) and (3c) admit at least one minimizer in Rn and Rm,respectively. Assumption 3 is fairly mild, and it is satisfied whenever the sublevel sets of the cost functionals in (3a) and (3c) are bounded. Our main result is the following: 
+
+Theorem 1: Consider problem (1) under Assumptions 1– 3, and let {xk, z k, λ k} be generated by the matrix-valued relaxed ADMM iteration (3). Assume that Rk and Γk are positive definite diagonal matrices satisfying 
+
+ρmin I ⪯ Rk ⪯ ρmax I, αmin I ⪯ Γk ⪯ αmax I
+
+for all k, where 0 < ρ min ≤ ρmax < ∞ and 0 < α min ≤
+
+αmax < 2. Further assume that there exist nonnegative sequences {ηk}, {ηk}, {ξk}, and {ξk}, such that ηk < 1
+
+and ξk < 1 for all k, and 
+
+(1 − ηk)Rk ⪯ Rk+1 ⪯ (1 + ηk)Rk, (4) 
+
+(1 − ξk)Γ k ⪯ Γk+1 ⪯ (1 + ξk)Γ k (5) for all k, and that, with 
+
+θRk := max 
+
+n ηk
+
+1 − ηk
+
+, η k
+
+o
+
+, θΓ 
+
+> k
+
+:= max 
+
+n ξk
+
+1 − ξk
+
+, ξ k
+
+o
+
+,
+
+one has P∞
+
+> k=0
+
+(θRk + θΓ 
+
+> k
+
+) < ∞. Then: 1) the primal residual rk+1 := Ax k+1 + Bz k+1 − c
+
+satisfies lim k→∞ rk+1 = 0 ;2) the dual residual sk+1 := A⊤RkB(zk+1 −zk) satisfies 
+
+lim k→∞ sk+1 = 0 ;3) the objective value satisfies lim k→∞ pk = p⋆ ,where pk := f (xk) + g(zk) and p⋆ := f (x⋆) + g(z⋆).Before proving Theorem 1 we require several intermediate results. Section II-A rewrites ADMM as a relaxed Douglas– Rachford iteration with a perturbation induced by the metric update; Section II-B establishes a one-step descent estimate for the relaxed map; and Section II-C shows that both the the relaxed Douglas–Rachford step and the metric-induced perturbation vanish asymptotically. These results are then combined in Section II-D to prove Theorem 1. A. ADMM as relaxed Douglas–Rachford splitting 
+
+We can rewrite the matrix-valued relaxed ADMM iteration (3) as a relaxed Douglas–Rachford splitting applied to the dual problem. This representation isolates the effect of the relaxation matrix Γk from the effect of the time variation of the penalty matrix Rk, and will be the starting point for the descent estimate in the next subsection. Let σk := c − Bz k.We introduce the state variables 
+
+yk+1 := λk+1 +Rk+1 σk+1 , ˜yk+1 := λk+1 +Rkσk+1 . (6) The vector ˜yk+1 is the state produced by one relaxed Douglas–Rachford step in the current metric Rk [17], while 
+
+yk+1 is the actual successor state after the metric is updated from Rk to Rk+1 .Following [18], [19], define the convex dual functions 
+
+˜f (λ) := f ⋆(−A⊤λ), ˜g(λ) := g⋆(−B⊤λ) + c⊤λ, 
+
+and the corresponding maximal monotone operators 
+
+A := ∂ ˜f , B := ∂˜g, 
+
+where ∂ denotes the subdifferential. The dual optimality condition can then be written as 0 ∈ A (λ) + B(λ). For each 
+
+Rk ≻ 0, define the associated resolvents 
+
+JRk A := ( I + RkA)−1, JRk B := ( I + RkB)−1,
+
+and the Douglas–Rachford operator 
+
+Tk(y) := JRk A
+
+ 2JRk B(y) − y + y − JRk B(y). (7) When Γk = I, one iteration of (3) is equivalent to applying the Douglas–Rachford operator Tk once to the dual inclusion above [18], [19]. When Γk is not necessarily the identity, a direct calculation using (3b)–(3d), together with the commutativity of the diagonal matrices Γk and Rk, yields 
+
+˜yk+1 = ( I − Γk)yk + Γ kTk(yk) =: Sk(yk), (8) where Sk denotes the relaxed Douglas–Rachford operator. We then have 
+
+˜yk+1 − yk = H−1 
+
+> k
+
+ek+1 , (9) 
+
+yk+1 − ˜yk+1 = Ek σk+1 , (10) where Hk := Γ −1 
+
+> k
+
+R−1 
+
+> k
+
+, ek+1 := Ax k+1 + Bz k − c, and 
+
+Ek := Rk+1 − Rk.Equations (8) and (10) show that the transition from yk
+
+to yk+1 can be decomposed into two stages, as in [19]. First, the current state yk is mapped through the relaxed Douglas–Rachford operator Sk, producing the intermediate point ˜yk+1 . Second, the penalty matrix is updated from Rk to 
+
+Rk+1 , which introduces the perturbation term Ekσk+1 and yields the actual next state yk+1 .
+
+B. One-step descent for the relaxed DRS map 
+
+We now derive the one-step descent estimate for the relaxed Douglas–Rachford map Sk. The estimate shows that one application of Sk decreases the distance to a reference fixed point by an amount controlled by the step ˜yk+1 − yk.Since A and B are maximal monotone, it follows from [19, Lemma 2.2] that JRk A, JRk B, and Tk are firmly non-expansive in the norm ∥ · ∥ R−1
+
+> k
+
+. Since the saddle point need not be unique, we fix an arbitrary saddle point (x⋆, z ⋆, λ ⋆)
+
+of L0 and define 
+
+Hk := Γ −1 
+
+> k
+
+R−1 
+
+> k
+
+, σ⋆ := c−Bz ⋆ = Ax ⋆, y⋆Rk := λ⋆+Rkσ⋆.
+
+By the saddle-point condition, it holds that y⋆Rk ∈ Fix( Tk),where Fix( T ) denotes the set of fixed points for an operator 
+
+T . By direct calculation through (8) we can derive Fix( Sk) = Fix( Tk), and therefore y⋆Rk ∈ Fix( Sk).
+
+Remark 1: The convergence claim in Theorem 1 is stated only in terms of the primal residual, dual residual, and objective value, since (x⋆, z ⋆, λ ⋆) need not be unique. In particular, we do not claim that yk, ˜yk, or y⋆Rk converges to a specific value. 
+
+Lemma 1: For each k, it holds that 
+
+∥˜yk+1 − y⋆Rk ∥2 
+
+> Hk
+
+≤ ∥ yk − y⋆Rk ∥2 
+
+> Hk
+
+− κ ∥˜yk+1 − yk∥2 
+
+> Hk
+
+(11) with κ := (2 /α max − 1) > 0.
+
+Proof: The proof adapts the one-step descent argument from [19, Lemma 2.2 and Lemma 2.5] to the relaxed setting with per-constraint relaxation parameters. Write Qk = R−1 
+
+> k
+
+.Since Rk and Γk are diagonal, HkΓk = Qk. Let Fk := 
+
+I − Tk. Since Tk is firmly nonexpansive in ∥ · ∥ Qk , so is Fk,i.e. 
+
+∥Fk(x) − Fk(y)∥2 
+
+> Qk
+
+≤ ⟨ x − y, F k(x) − Fk(y)⟩Qk
+
+for all x, y . Let u := x − y and d := Fk(x) − Fk(y). Since 
+
+Sk = I − ΓkFk,
+
+∥Sk(x) − Sk(y)∥2 
+
+> Hk
+
+= ∥u − Γkd∥2
+
+> Hk
+
+= ∥u∥2 
+
+> Hk
+
++ ∥Γkd∥2 
+
+> Hk
+
+− 2⟨u, Γkd⟩Hk .
+
+Using HkΓk = Qk and Γk ⪯ αmax I, we obtain 
+
+∥Γkd∥2 
+
+> Hk
+
+= d⊤QkΓkd ≤ αmax ∥d∥2 
+
+> Qk
+
+.
+
+Using firm nonexpansiveness of Fk, we also have 
+
+⟨u, Γkd⟩Hk = ⟨u, d ⟩Qk ≥ ∥ d∥2 
+
+> Qk
+
+≥ α−1max ∥Γkd∥2 
+
+> Hk
+
+.
+
+Substituting these bounds yields 
+
+∥Sk(x) − Sk(y)∥2 
+
+> Hk
+
+≤ ∥ x − y∥2
+
+> Hk
+
+− κ ∥(I − Sk)( x) − (I − Sk)( y)∥2 
+
+> Hk
+
+,
+
+with κ = 2 /α max − 1. Applying this inequality with x = yk
+
+and y = y⋆Rk ∈ Fix( Sk) gives (11). Lemma 1 gives a one-step descent estimate for the relaxed Douglas–Rachford map with the metric and reference point frozen at iteration k. The remaining issue is that both quantities vary with k through Rk and Γk.C. Asymptotic regularity and vanishing perturbation 
+
+We next show that both the iterate difference (9) and the perturbation (10) vanish asymptotically. 
+
+Lemma 2: The iteration (9) is asymptotically regular and the perturbation (10) is vanishing, in the sense that 
+
+∥˜yk+1 − yk∥Hk → 0, yk+1 − ˜yk+1 = Ekσk+1 → 0. (12) 
+
+Proof: Define ak := ∥yk −y⋆Rk ∥2 
+
+> Hk
+
+and bk := κ∥˜yk+1 −
+
+yk∥2 
+
+> Hk
+
+. From (10), we obtain 
+
+yk+1 − y⋆Rk+1 = (˜ yk+1 − y⋆Rk ) + Ek(σk+1 − σ⋆). (13) From the z-optimality condition of (3c) it holds that 
+
+σk+1 ∈ B (λk+1 ), so ˜yk+1 = λk+1 + Rkσk+1 gives λk+1 =
+
+JRk B(˜ yk+1 ). Similarly, from the saddle-point conditions, 
+
+σ⋆ ∈ B (λ⋆) gives λ⋆ = JRk B(y⋆Rk ).Since JRk B is firmly nonexpansive in ∥ · ∥ R−1
+
+> k
+
+, so is 
+
+(I − JRk B). Noting (I − JRk B)(˜ yk+1 ) = Rkσk+1 and 
+
+(I − JRk B)( y⋆Rk ) = Rkσ⋆, we get 
+
+∥σk+1 − σ⋆∥Rk = ∥Rk(σk+1 − σ⋆)∥R−1
+
+> k
+
+≤ √αmax ∥˜yk+1 − y⋆Rk ∥Hk , (14) where the inequality uses firm nonexpansiveness of (I −
+
+JRk B) and R−1 
+
+> k
+
+= Γ kHk ⪯ αmax Hk.Since Ek satisfies −θRk Rk ⪯ Ek ⪯ θRk Rk, with (13) and (14) we derive 
+
+∥yk+1 − y⋆Rk+1 ∥Hk ≤ ∥ ˜yk+1 − y⋆Rk ∥Hk + ∥Ek(σk+1 − σ⋆)∥Hk
+
+≤ (1 + c1θRk ) ∥˜yk+1 − y⋆Rk ∥Hk ,
+
+(15) with c1 = pαmax /α min . From (4) and (5), we have 
+
+R−1 
+
+> k+1
+
+⪯ 11 − ηk
+
+R−1 
+
+> k
+
+⪯ (1 + θRk )R−1 
+
+> k
+
+,
+
+Γ−1 
+
+> k+1
+
+⪯ 11 − ξk
+
+Γ−1 
+
+> k
+
+⪯ (1 + θΓ 
+
+> k
+
+)Γ −1 
+
+> k
+
+.
+
+Since Rk and Γk are diagonal, all of these matrices commute. Hence 
+
+Hk+1 ⪯ (1 + δk)Hk, (16) where δk := θRk + θΓ 
+
+> k
+
++ θRk θΓ 
+
+> k
+
+is nonnegative and summable. Combining Lemma 1, (15), and (16), we can prove: 
+
+ak+1 ≤ (1 + δk)(1 + ωk)( ak − bk) ≤ (1 + εk)ak − bk,
+
+where ωk := 2 c1θRk + c21(θRk )2 and εk := ωk + δk + ωkδk
+
+are nonnegative and summable. Define β0 := 1 , βk+1 := βk/(1 + εk), and wk := βkak.Then wk+1 ≤ wk − βk+1 bk, so {wk} is nonincreasing and bounded, where {wk} denotes the sequence of values wt for each t ∈ N.Since {εk} is nonnegative and summable, {βk} is lower bounded by a positive number, and therfore P 
+
+> k
+
+bk < ∞ and 
+
+bk → 0. From the definition of bk, we get ∥˜yk+1 − yk∥Hk →
+
+0. This proves the first claim of the lemma. Because {βk} is lower bounded by a positive number and 
+
+{wk} is bounded, {ak} is bounded. Note that we cannot ensure convergence of {ak}. Then Lemma 1 gives ∥˜yk+1 −
+
+y⋆Rk ∥2 
+
+> Hk
+
+≤ ak, so {˜yk+1 } is bounded. Together with (14), we get {σk+1 } is bounded. From −θRk Rk ⪯ Ek ⪯ θRk Rk
+
+with Rk ⪯ ρmax I, we have 
+
+∥Ek∥ ≤ θRk ∥Rk∥ ≤ ρmax θRk → 0.
+
+Since {σk+1 } is bounded and yk+1 − ˜yk+1 = Ekσk+1 , it follows that 
+
+yk+1 − ˜yk+1 → 0.
+
+This proves the second claim. 
+
+D. Proof of Theorem 1 
+
+We now combine the reformulation from Section II-A, the descent estimate from Section II-B, and the asymptotic regularity and vanishing perturbation results from Section II-C to prove our main result: 
+
+Proof: [Theorem 1] The proof is adapted from [1, Appendix A]. We first prove convergence of the primal and dual residuals, and then of the objective value. Define 
+
+dk := σk − σk+1 , so that 
+
+rk+1 = Ax k+1 + Bz k+1 − c = ek+1 + dk.
+
+From (9) and Lemma 2, we have ∥ek+1 ∥Γk Rk → 0. Since 
+
+ΓkRk ⪰ αmin ρmin I, it follows that ek+1 → 0.We next show that dk → 0. The optimality conditions of (3c) give −B⊤λk+1 ∈ ∂g (zk+1 ) and −B⊤λk ∈ ∂g (zk). By monotonicity of ∂g ,
+
+⟨zk+1 − zk, −B⊤(λk+1 − λk)⟩ ≥ 0,
+
+that is, ⟨dk, λ k+1 −λk⟩ ≤ 0. Using (3d), namely λk+1 −λk =
+
+Rk(Γ kek+1 + dk), we obtain 
+
+∥dk∥2 
+
+> Rk
+
+≤ −⟨ dk, Γkek+1 ⟩Rk ≤ ∥ dk∥Rk ∥Γkek+1 ∥Rk
+
+≤ αmax ∥dk∥Rk ∥ek+1 ∥Rk ,
+
+where the last inequality uses Γk ⪯ αmax I. Hence ∥dk∥Rk ≤
+
+αmax ∥ek+1 ∥Rk → 0, and since Rk ⪰ ρmin I, we conclude that dk → 0. Therefore rk+1 = ek+1 + dk → 0, and the dual residual sk+1 = A⊤Rkdk → 0 because {Rk} is uniformly bounded. We now prove convergence of the objective value. By the saddle-point inequality, 
+
+p⋆ ≤ L0(xk+1 , z k+1 , λ ⋆) = pk+1 + ⟨λ⋆, r k+1 ⟩.
+
+Since rk+1 → 0, this gives 
+
+lim inf pk+1 ≥ p⋆. (17) For the upper bound, the optimality condition of (3a) reads 
+
+0 ∈ ∂f (xk+1 ) + A⊤(λk + Rkek+1 ). Using again (3d), this becomes 0 ∈ ∂f (xk+1 ) + A⊤λk+1 + A⊤μk+1 , where 
+
+μk+1 := Rk
+
+ (I − Γk)ek+1 − dk
+
+ → 0.
+
+The optimality condition of (3c) gives 0 ∈ ∂g (zk+1 ) + 
+
+B⊤λk+1 . By convexity of f and g,
+
+f (xk+1 ) − f (x⋆) ≤ −⟨ λk+1 + μk+1 , Ax k+1 − Ax ⋆⟩,g(zk+1 ) − g(z⋆) ≤ −⟨ λk+1 , Bz k+1 − Bz ⋆⟩.Adding and using Ax ⋆ + Bz ⋆ = c yields 
+
+pk+1 − p⋆ ≤ −⟨ λk+1 , r k+1 ⟩ − ⟨ μk+1 , Ax k+1 − Ax ⋆⟩. (18) It remains to show that the right-hand side vanishes asymptotically. From the proof of Lemma 2, the sequence 
+
+{σk} is bounded. Since λk = yk − Rkσk and {Rk} is uniformly bounded, {λk} is bounded. Also, Ax k+1 = σk +
+
+ek+1 , so {Ax k+1 } is bounded because {σk} is bounded and 
+
+ek+1 → 0. Therefore, using rk+1 → 0 and μk+1 → 0 in (18), we obtain lim sup pk+1 ≤ p⋆. Together with (17), this proves that pk+1 → p⋆.III. L EARNING OVER -RELAXATION FOR OSQP We now turn to designing time-varying per-constraint over-relaxation parameters with the goal of enhancing the performance of OSQP [3] – a well-established algorithm that solves convex quadratic programs by reformulating them as a consensus problem and applying ADMM. Specifically, the OSQP iteration is an instance of the matrix-valued relaxed ADMM (3a)–(3d) in which f encodes the quadratic objective together with a linear-equality constraint via an indicator function, g is the indicator of a convex constraint set C,
+
+A = I, and B = −I. The penalty matrix Rk is diagonal with entries determined by a scalar parameter ρk that OSQP updates only when a heuristic triggering condition is met. The relaxation matrix Γk is instead not chosen adaptively, and it is set equal to 1.6I.Since changing the penalty matrix Rk triggers a costly matrix refactorization, in this paper we focus on designing the relaxation matrix Γk. Updating Γk at every iteration does not require additional matrix factorizations and can therefore be performed online at negligible additional cost. Inspired by L2O approaches [9], we propose learning the sequence of over-relaxation parameters by learning a policy that, at each iteration k, maps a set of observed features to a chosen over-relaxation matrix Γk.Specifically, we propose a supervised-learning procedure, where for each quadratic program in the example set the primal-dual optimal pair (x⋆, λ ⋆) is known and used for training. At the current iteration k ∈ N, a neural-network policy determines a relaxation matrix Γk based on a set of features, whose content we detail later. This choice of Γk is kept fixed for the next t iterations of ADMM, when a new relaxation matrix Γk+t is chosen by the policy. In order to evaluate the performance of our algorithm for a given choice of policy parameters, and then backpropagate through such parameters, we define the loss incurred by the algorithm at iteration k as 
+
+ℓk = ψ log 
+
+s
+
+∥xk+t − x⋆∥22 + ∥λk+t − λ⋆∥22 + ε
+
+∥xk − x⋆∥22 + ∥λk − λ⋆∥22 + ε
+
+!
+
+,
+
+(19) The relaxation policy is then designed to choose a sequence of Γk that minimizes the cumulative loss over a finite-horizon, on average over the set of example quadratic pro-grams. In (19), the shaping function 
+
+ψ(r) = softplus( r + 0 .5) − 0.5 (20) behaves as ψ(r) ≈ 0 when r ≪ 0 and ψ(r) ≈ r when r > 0,thereby saturating the loss when convergence is already rapid and preserving full penalization when residuals increase. Each training batch is cold-started from x = z = λ = 0 ,which is the same as the default strategy of OSQP. To stabilize learning, feature normalization statistics are esti-mated once from short baseline rollouts with the default OSQP relaxation parameter and then frozen for training and inference. We consider the training of two variants of relaxation policies. The first variant, which we denote as scalar policy ,predicts a matrix in the form 
+
+Γk = αk(ϕk, θ )I . 
+
+Here, αk : Rd ×RD 7 → R is a trainable policy that outputs a scalar relaxation parameter based on a set of learnable parameters θ ∈ RD and a vector of observed features ϕk ∈
+
+Rd defined as 
+
+ϕk =
+
+
+
+log ∥r∥∞, log ∥s∥∞,
+
+log ∥r∥∞ 
+
+> ∥r−∥∞+ε
+
+, log ∥s∥∞ 
+
+> ∥s−∥∞+ε
+
+, log ∥r∥∞ 
+
+> ∥s∥∞+ε
+
+, log ρ
+
+⊤
+
+.
+
+Above, r and s denote the current primal and dual residuals at iteration k, ρ denotes the penalty parameter at iteration k, while r− and s− denote the corresponding residuals t iterations before, and ϵ > 0 is a small value. The second variant, which we denote as vector policy ,predicts instead a general diagonal matrix in the form 
+
+Γk = diag( ⃗α k(ϕk, ϕ ′
+
+> k
+
+, φ )) ,
+
+where ⃗α k : Rd × Rd2 × RE 7 → Rp is a vector-valued policy, 
+
+φ ∈ RE is a set of trainable parameters, and ϕ′ 
+
+> k
+
+is an additional set of per-constraint features defined as 
+
+ϕ′ 
+
+> k
+
+=
+
+
+
+log( zi−li), log( ui−zi), log |ri|, sign( ri),
+
+log |λi|, log |ri||ri, −|+ε , log ρi, ∥Ai∥∞
+
+⊤
+
+,
+
+where l and u denote the lower and upper bounds at iteration 
+
+k, z denotes the auxiliary variable at iteration k, and Ai
+
+denotes the i-th row of the constraint matrix. All logarithmic features are clamped to [−6, 6] before feature normalization. Since OSQP’s diagonal penalty entries take only two values— ρ for inequality constraints and 10 3ρ for equality constraints—the global scalar ρ is the natural summary feature for the scalar policy. In the vector policy, however, per-constraint log ρi is already encoded in ϕ′
+
+> k
+
+, which makes 
+
+log ρ in ϕk redundant and we therefore drop it. Both variants of the relaxation policy use the same mul-tilayer perceptron (MLP). Each hidden layer is followed by Layer Normalization and use Exponential Linear Unit (ELU) as the activation function. The linear output layer is connected to a sigmoid function to map the output in [αmin , α max ]. We impose (αmin + αmax )/2 = 1 .6 and ini-tialize the output layer near zero so that the initial prediction is close to α = 1 .6, matching the default OSQP relaxation parameter and providing a stable starting point for training. By sharing the weights across rows, the vector policy is row-equivariant, and therefore both policies are compatible with varying numbers of constraints and different problem sizes. IV. E XPERIMENTS 
+
+We evaluated the proposed adaptive over-relaxation scheme in (i) benchmark quadratic program families from the OSQP benchmark suite, where we trained on small problem instances and assessed generalization to larger ones, and (ii) a Model Predictive Control (MPC) benchmark, with fixed parameters and changing initial states. In both settings, the key practical advantage is that updating Γk at every iteration is refactorization-free, so the learned policy can react to the solver state online at negligible cost. The end-to-end computational overhead then depends only on evaluating the output of the neural-network relaxation policy, which is lightweight for the scalar variant and modest for the vector variant. 
+
+A. Experimental setup 
+
+In our experiments, we trained the proposed over-relaxation policies in Multi Layer Perceptron (MLP) form for ADMM under several configurations: 1) Scalar policy with adaptive ρ: the proposed trained scalar policy combined with OSQP’s adaptive-ρ heuris-tic. 2) Vector policy with adaptive ρ: the proposed trained vector policy combined with OSQP’s adaptive-ρ
+
+heuristic. 3) Scalar policy without adaptive ρ: the proposed trained scalar policy with fixed ρ = 0 .1.4) Vector policy without adaptive ρ: the proposed trained vector policy with fixed ρ = 0 .1.We benchmarked these configurations against standard OSQP, where the default relaxation matrix Γk = 1 .6I is used, considering both cases in which ρ is chosen adaptively and is kept fixed as ρ = 0 .1.We trained a separate policy for each problem family. The scalar and vector policies share the same MLP architecture described in Section III, with two hidden layers of 64 neurons each, and differ only in input dimension. Both predict Γk
+
+in [αmin , α max ] = [1 .25 , 1.95] . We trained for 1000 epochs using differentiable unrolled OSQP with stage length t = 10 .For the benchmark-suite experiments we used batch size 16, while for the MPC experiment we used batch size 10. We used AdamW [20] with learning rate 5 × 10 −5 and cosine decay. Feature normalization statistics were computed once from short baseline rollouts with Γk = 1 .6I for all k and held fixed thereafter. Training was carried out on the University of Oxford Advanced Research Computing (ARC) facility [21], and benchmarking was performed on a MacBook Pro with an Apple M4 CPU and 16 GB memory. For models trained with adaptive ρ, we saved two check-points based on validation-set performance: one selected by the lowest mean iteration count, and one selected by the lowest mean number of ρ updates. This is useful because a method with fewer OSQP iterations does not necessarily achieve lower wall-clock time when Γk updates trigger more 
+
+ρ updates and additional refactorizations. In all experiments, we ran all policies with the same low-precision tolerances 
+
+ϵabs = ϵrel = 10 −3,
+
+with the stopping-tolerance definitions following OSQP [3]. All problem instances were successfully solved to this pre-scribed accuracy. The learned policy is queried once every t = 10 OSQP iterations, consistent with the interval used for training. To satisfy the summable-change requirement underlying the convergence result in Section II, we disabled further Γk
+
+updates after 500 OSQP iterations and kept the last predicted value fixed for the remainder of the solve. For each test in-stance, we recorded both the total number of OSQP iterations and the wall-clock runtime, which includes policy inference and all solver overhead. 
+
+B. Benchmark-suite experiments 
+
+First, we evaluated the over-relaxation policy on paramet-ric quadratic program families from the OSQP benchmark suite 1. In this benchmark-suite study, we assessed transfer across problem dimensions within a fixed problem family. Accordingly, for this part only, training and validation used a fixed size for each family, while testing used larger instances from the same family. We report results on: Random QP, Portfolio Optimiza-tion, Lasso, Support Vector Machine (SVM), and Control benchmark QPs. These problem families are representative of repeated parametric optimization settings and are also used in prior work on learned acceleration of OSQP-style solvers [3], [16]. For training and validation, we used a fixed size for each family: 250 for Random QP, 20 for Portfolio, Lasso, and SVM, and 100 for the Control benchmark family, with 160 instances for training and 80 instances for validation per family. For testing, we used larger instances: sizes (500, 501, 503, 507, 515, 531, 562, 625, 750, 999) for Random QP, sizes (200, 201, 203, 205, 210, 219, 235, 262, 311, 399) for the Control benchmark family, and sizes (50, 51, 52, 54, 58, 63, 72, 87, 110, 149) for Portfolio, Lasso, and SVM, with 10 test instances per size and 100 test instances per problem family. Table I reports mean OSQP iterations and wall-clock runtime (in seconds) across 100 test instances per family for the benchmark-suite setting. With fixed ρ, the over-relaxation policies consistently outperform baseline OSQP across all five families in both iteration count and wall-clock time, with iteration reductions   
+
+> 1https://github.com/osqp/osqp_benchmarks TABLE I BENCHMARK -SUITE RESULTS :MEAN ITERATIONS AND RUNTIME (SECONDS ).
+
+ρ adaptation Policy Random QP Portfolio Lasso SVM Control No ρ
+
+adaptation OSQP 321.53 (0.803) 454.64 (1.981) 203.39 (1.972) 654.10 (6.715) 1331.41 (7.350) Scalar policy 263.34 (0.653) 372.95 (1.721) 172.64 (1.667) 547.07 (6.000) 1096.20 (6.043) 
+
+Vector policy 269.56 (0.748) 373.13 (1.886) 172.44 (1.761) 545.49 (6.332) 1092.95 (6.196) With ρ
+
+adaptation OSQP 321.53 (0.808) 272.30 (1.645) 175.58 (3.644) 346.32 (7.959) 127.48 (1.518) 
+
+Scalar policy (iter) 262.92 (0.662) 233.58 (1.468) 175.62 (3.847) 341.45 (7.949) 126.86 (1.551) Scalar policy ( ρ) 262.92 (0.666) 324.26 (1.858) 179.96 (7.042) 462.78 (7.059) 261.26 (2.438) Vector policy (iter) 268.41 (0.755) 251.16 (1.595) 180.09 (3.654) 343.53 (7.642) 140.13 (1.657) Vector policy ( ρ) 265.65 (0.736) 366.33 (2.038) 174.76 (1.772) 425.22 (7.836) 218.13 (2.100) OSQP: unmodified baseline. Scalar policy: Γk = αk I. Vector policy: Γk = diag( ⃗α k ). (iter) / ( ρ): checkpoint selected by lowest mean iteration count / fewest ρ updates. Bold marks the best result per column within each ρ-adaptation group. The learned policies improve iteration count over the baseline in every family and ρ-adaptation setting. TABLE II MPC RESULTS : M EAN ITERATIONS AND RUNTIME (SECONDS ). 
+
+ρ adaptation Policy MPC with varying x0
+
+No ρ
+
+adaptation OSQP 890.7 (0.745) Scalar policy 733.4 (0.621) 
+
+Vector policy 730.9 (0.691) With ρ
+
+adaptation OSQP 141.4 (0.169) Scalar policy (iter) 133.5 (0.168) 
+
+Scalar policy ( ρ) 139.7 (0.176) Vector policy (iter) 126.5 (0.174) Vector policy ( ρ) 125.8 (0.183) 
+
+of 15–18%. Because Γk updates are refactorization-free, the iteration savings translate directly into runtime gains. The scalar policy achieves the best runtime on every family; the vector policy occasionally yields marginally fewer iterations (e.g. Lasso, SVM, Control), but its per-row inference over-head can offset this advantage in wall-clock time. With adaptive ρ, the over-relaxation policies still reduce iteration counts on most families—most notably Random QP and Portfolio. Runtime gains are more nuanced: changes in the Γk trajectory can alter the heuristic ρ rule, triggering additional refactorizations. Different checkpoint strategies show this trade-off: the iteration-selected checkpoint (iter) minimizes iterations but may incur more ρ updates, while the ρ-selected checkpoint ( ρ) sacrifices iteration count for fewer refactorizations. A striking example is Lasso, where the vector policy with the ρ-selected checkpoint halves the runtime relative to baseline OSQP (1.772 s vs. 3.644 s) at a comparable iteration count, demonstrating that a learned over-relaxation policy can implicitly regularize the ρ-update frequency. In summary, across all five families, learning over-relaxation policies reliably reduces iteration counts compared to standard OSQP. The clearest runtime gains arise when ρ
+
+is fixed, since Γk adaptation is entirely refactorization-free. With adaptive ρ, iteration improvements persist, and careful checkpoint selection can convert them into runtime gains by controlling the interaction with OSQP’s ρ-update heuristic. 
+
+C. MPC with varying initial states 
+
+Next, we evaluated the learned policies on an MPC exper-iment that more directly reflects the repeated-solve setting motivating this work. In MPC, the same system dynamics, cost matrices, and constraints are fixed across solves and thus can be learned from examples, while only the initial state x0
+
+varies. Accordingly, all instances in this experiment share the same randomly generated linear dynamics A and B with state dimension nx = 100 and input dimension nu = 50 , the same quadratic cost matrices Q, R, QT , the same horizon length T = 10 , and the same state/input box constraints 
+
+xmin , x max , u min , u max . Only the initial state x0 varies from instance to instance. We used 160 training instances, 80 validation instances, and 100 test instances generated from disjoint random seeds. Table II reports the corresponding results. With fixed ρ, over-relaxation policies reduce the mean iteration count by 18% and the best runtime by 17%. As in the benchmark suite, the refactorization-free nature of Γk
+
+updates ensures that iteration savings translate directly into wall-clock gains. With adaptive ρ, the baseline is already strong, yet over-relaxation policies still reduce iterations by up to 11%. Runtime differences are small in this regime. The scalar policy matches the baseline wall-clock time while the vector policy trades a slight runtime increase for a larger iteration reduction, consistent with the per-row inference overhead observed in the benchmark-suite experiments. To conclude, the over-relaxation policies are effective in the repeated-solve MPC regime as well. When ρ is fixed, the learned policies yield substantial gains in both iterations and runtime. Under adaptive ρ, they consistently improve iteration counts, with wall-clock differences that are small and policy-dependent. V. C ONCLUSION 
+
+We studied how to accelerate ADMM for parametric con-vex programs by learning to adapt the relaxation parameter α
+
+online. The main insight is that α is an especially attractive adaptation target: in OSQP-like implementations, updating 
+
+α does not trigger the matrix refactorizations required by penalty updates, so it can be adapted frequently at negligible solver-side cost. Our convergence result showed that such time-varying per-constraint adaptation of both α and ρ is compatible with asymptotic convergence guarantees, and our experiments confirmed that the learned policies consis-tently reduce iteration counts, with the clearest wall-clock gains arising when refactorization overhead is eliminated entirely. Future work includes jointly learning coordinated adaptation policies for both ρ and α, benchmarking the framework beyond quadratic programs to broader classes of structured convex problems, and investigating applications in large-scale distributed optimization, where ADMM remains a central computational tool and low-overhead parameter adaptation could be especially valuable. VI. ACKNOWLEDGMENTS The authors would like to acknowledge the use of the University of Oxford Advanced Research Computing (ARC) (https://doi.org/10.5281/zenodo.22558) facility in carrying out this work. REFERENCES [1] B. Stephen, P. Neal, C. Eric, P. Borja, and E. Jonathan, “Distributed op-timization and statistical learning via the alternating direction method of multipliers,” Foundations and Trends® in Machine learning , vol. 3, no. 1, pp. 1–122, 2011. [2] R. Nishihara, L. Lessard, B. Recht, A. Packard, and M. Jordan, “A general analysis of the convergence of ADMM,” in International conference on machine learning . PMLR, 2015, pp. 343–352. [3] B. Stellato, G. Banjac, P. Goulart, A. Bemporad, and S. Boyd, “OSQP: An operator splitting solver for quadratic programs,” Mathematical Programming Computation , vol. 12, no. 4, pp. 637–672, 2020. [4] W. Deng and W. Yin, “On the global and linear convergence of the generalized alternating direction method of multipliers,” Journal of Scientific Computing , vol. 66, no. 3, pp. 889–916, 2016. [5] Z. Xu, M. Figueiredo, and T. Goldstein, “Adaptive ADMM with spectral penalty parameter selection,” in Artificial Intelligence and Statistics . PMLR, 2017, pp. 718–727. [6] Z. Xu, M. A. Figueiredo, X. Yuan, C. Studer, and T. Goldstein, “Adaptive relaxed ADMM: Convergence theory and practical imple-mentation,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2017, pp. 7389–7398. [7] P. Verheijen, D. Goswami, and M. Lazar, “SuperADMM: Solving quadratic programs faster with dynamic weighting ADMM,” in 2025 29th International Conference on System Theory, Control and Com-puting (ICSTCC) . IEEE, 2025, pp. 569–575. [8] M. Andrychowicz, M. Denil, S. Gomez, M. W. Hoffman, D. Pfau, T. Schaul, B. Shillingford, and N. De Freitas, “Learning to learn by gradient descent by gradient descent,” Advances in neural information processing systems , vol. 29, 2016. [9] T. Chen, X. Chen, W. Chen, H. Heaton, J. Liu, Z. Wang, and W. Yin, “Learning to optimize: A primer and a benchmark,” Journal of Machine Learning Research , vol. 23, no. 189, pp. 1–59, 2022. [10] R. Sambharya and B. Stellato, “Learning algorithm hyperparam-eters for fast parametric convex optimization,” arXiv preprint arXiv:2411.15717 , 2024. [11] ——, “Data-driven performance guarantees for classical and learned optimizers,” Journal of Machine Learning Research , vol. 26, no. 171, pp. 1–49, 2025. [12] R. Sambharya, G. Hall, B. Amos, and B. Stellato, “Learning to warm-start fixed-point optimization algorithms,” Journal of Machine Learning Research , vol. 25, no. 166, pp. 1–46, 2024. [13] A. Martin and L. Furieri, “Learning to optimize with convergence guarantees using nonlinear system theory,” IEEE Control Systems Letters , vol. 8, pp. 1355–1360, 2024. [14] A. Martin, I. R. Manchester, and L. Furieri, “Learning to optimize with guarantees: a complete characterization of linearly convergent algorithms,” arXiv preprint arXiv:2508.00775 , 2025. [15] A. Martin and G. Belgioioso, “Learning to accelerate Krasnosel’skii-Mann fixed-point iterations with guarantees,” arXiv preprint arXiv:2601.07665 , 2026. [16] J. Ichnowski, P. Jain, B. Stellato, G. Banjac, M. Luo, F. Borrelli, J. E. Gonzalez, I. Stoica, and K. Goldberg, “Accelerating quadratic optimization with reinforcement learning,” Advances in Neural Infor-mation Processing Systems , vol. 34, pp. 21 043–21 055, 2021. [17] P. Giselsson and S. Boyd, “Linear convergence and metric selection for Douglas-Rachford splitting and ADMM,” IEEE Transactions on Automatic Control , vol. 62, no. 2, pp. 532–544, 2016. [18] J. Eckstein and D. P. Bertsekas, “On the Douglas—Rachford splitting method and the proximal point algorithm for maximal monotone operators,” Mathematical programming , vol. 55, no. 1, pp. 293–318, 1992. [19] D. A. Lorenz, J. Marquardt, and E. Naldi, “The degenerate variable metric proximal point algorithm and adaptive stepsizes for primal– dual Douglas–Rachford,” Optimization , vol. 74, no. 6, pp. 1355–1381, 2025. [20] I. Loshchilov and F. Hutter, “Decoupled weight decay regularization,” 
+
+arXiv preprint arXiv:1711.05101 , 2017. [21] A. Richards, “University of Oxford Advanced Research Computing Facility,” https://doi.org/10.5281/zenodo.22558, Aug. 2015.

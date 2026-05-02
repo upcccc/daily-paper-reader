@@ -1,0 +1,475 @@
+Title: Asynchronous Federated Unlearning with Invariance Calibration for Medical Imaging
+
+URL Source: https://arxiv.org/pdf/2604.26809v1
+
+Published Time: Thu, 30 Apr 2026 01:03:05 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Asynchronous Federated Unlearning with Invariance Calibration for Medical Imaging 
+
+Zhaoyuan Cai 
+
+School of Computer Science and Engineering South China University of Technology 
+
+Guangzhou, China cszycai@mail.scut.edu.cn 
+
+Xinglin Zhang 
+
+School of Computer Science and Engineering South China University of Technology 
+
+Guangzhou, China csxlzhang@scut.edu.cn 
+
+Abstract —Federated Unlearning (FU) is an emerging paradigm in Federated Learning (FL) that enables participating clients to fully remove their contributions from a trained global model, driven by data protection regulations that mandate the right to be forgotten. However, existing FU methods mostly rely on synchronous coordination. This requirement forces the entire federation to halt and wait for stragglers to complete erasure, cre-ating significant delays due to device heterogeneity. Furthermore, these methods often face the problem that the influence of erased data is merely suppressed temporarily and resurfaces during subsequent training, rather than being genuinely removed. To overcome these limitations, this paper proposes Asynchronous Federated Unlearning with Invariance Calibration (AFU-IC), a novel framework for medical imaging that decouples the erasure process from the global training workflow. This enables the target client to perform unlearning asynchronously without interrupting global training. Meanwhile, a server-side invariance calibration mechanism prevents the model from relearning the erased data. Extensive experiments on three medical benchmarks demonstrate that AFU-IC achieves unlearning efficacy and model fidelity comparable to gold-standard retraining while significantly reducing wall-clock latency compared to synchronous baselines. AFU-IC ensures efficient, compliant and reliable FL in cross-silo medical environments. 
+
+Index Terms —Asynchronous Federated Unlearning, Invariance Calibration, Medical Imaging 
+
+I. I NTRODUCTION 
+
+Federated Learning (FL) has become a key enabling tech-nology for collaborative medical image analysis, allowing distinct medical institutions to jointly train a robust global model without sharing raw patient data [1]–[3]. However, once a global model has been trained, it becomes difficult to remove the contribution of a specific client, which conflicts with data protection regulations—such as GDPR [4] and CCPA [5]—that mandate the right to be forgotten. In clinical practice, a hospital may revoke data usage rights due to expired consent or data correction, necessitating the complete removal of its contribution from the global model. To address this issue, Federated Unlearning (FU) has recently emerged as a new paradigm that enables the selective erasure of specific clients’ data contributions from trained federated models [6]. Existing FU methods generally fall into partition-based, model-manipulation, and optimization-based categories [7]– [11]. However, applying these approaches to medical feder-ations faces two critical challenges: 1) Synchronous Bottleneck. Most unlearning protocols operate within a synchronous FL framework, requiring the server to aggregate updates from all clients simulta-neously. In medical environments with varying hardware capabilities, this mechanism forces all retained clients to pause their normal operations and wait for the target client to complete its erasure. If the target client is a straggler, this effectively blocks the entire system, resulting in unacceptable service downtime. While re-cent works like KNOT [12] introduce asynchrony to mitigate this global waiting, they rely on a clustered retraining mechanism. By restricting the rollback-and-retrain process to local clusters, KNOT still imposes high computational costs on the affected clients, failing to achieve low-latency erasure. 2) Non-genuine Erasure. Optimization-based methods, such as Projected Gradient Ascent (PGA) [10], primarily focus on maximizing the loss on target data. However, this objective often induces a masking effect: the model tends to superficially shift its decision boundary to misclassify target samples, rather than eliminating the underlying feature representations. Consequently, the model parameters remain structurally trapped within the original optimization basin. When subsequently updated by retained clients, these latent, suppressed features are easily reactivated, leading to the model reverting [13]. These challenges give rise to a critical question: How to design an FU mechanism that overcomes the efficiency bottle-necks of synchronization-based schemes, while ensuring that deleted information cannot be recovered during subsequent training, thus enabling genuine unlearning? To address this problem, we propose a novel Asynchronous Federated Unlearning Framework with Invariance Cali-bration (AFU-IC) . We adapt the reference-model constraint from previous work [10] to a fully asynchronous setting, allowing the target client to execute erasure independently without blocking the federation, thereby eliminating the wait-ing time for retained clients. Crucially, to overcome the model reverting issue of PGA-based methods, we introduce a server-side invariance calibration mechanism. Instead of merely breaking the model’s performance on target data, we enforce 
+
+> arXiv:2604.26809v1 [cs.LG] 29 Apr 2026
+
+feature-level unlearning by minimizing the KL-divergence be-tween clean and triggered predictions. This aligns the model’s behavior with that of a robustly retrained oracle, ensuring that the erasure is deep and persistent. Our main contributions are summarized as follows:  
+
+> •
+
+To the best of our knowledge, we are the first to introduce an asynchronous paradigm to medical FU. By resolving the latency constraints of synchronous aggregation, our protocol allows for non-blocking, on-demand erasure ex-ecution suitable for heterogeneous medical environments.  
+
+> •
+
+We address the structural inadequacy of standard gradient ascent, where erased information is merely suppressed rather than removed. To resolve this, we integrate a server-side invariance calibration mechanism. This KL-based objective acts as a structural regularizer, forcing the model to mathematically decouple its decision logic from the specific feature correlations of the target client. This ensures that the erasure is permanent and robust against the recovering effects of future updates.  
+
+> •
+
+Extensive experiments on medical datasets demonstrate that our approach achieves superior unlearning efficacy comparable to gold-standard retraining while maintaining high fidelity on the retained data distributions [14], [15]. Crucially, it significantly outperforms synchronous base-lines in wall-clock efficiency and ensures a stable, deep erasure that effectively resists model reverting during subsequent training phases. II. R ELATED WORK 
+
+A. Federated Learning in Healthcare 
+
+The classical FL algorithm FedAvg [1] relies on syn-chronized aggregation across participating clients, with ag-gregation weights determined exclusively by local dataset sizes. Although effective under ideal independent and iden-tically distributed (IID) conditions, its performance deteri-orates markedly in temporally evolving and non-IID data distributions. While advancements like FedProx [16] address optimization in non-IID settings, they focus on the learning phase. How to effectively unlearn a specific client’s contri-bution in such highly heterogeneous and cross-silo medical environments remains an open problem, as the distinct data distribution of the target client leaves a strong imprint on the global model. 
+
+B. Federated Unlearning 
+
+FU aims to remove specific clients or data samples from a trained global model. Recent comprehensive surveys [17], [18] provide a structured overview of existing FU strate-gies. FedEraser [7] adopts a storage-intensive strategy by caching historical parameter updates and calibrating them to approximate retraining. While theoretically precise, the storage overhead is often prohibitive for large medical models. Model manipulation approaches leverage techniques such as Knowledge Distillation (KD) [8], [19]–[21] to transfer retained knowledge to a sanitized student model, or employ parameter pruning [9] to nullify weights associated with specific classes. Optimization-based methods, specifically PGA proposed by Halimi et al. [10], directly maximize the loss on target data. Similarly, FedOSD [13] employs orthogonal steepest descent to mitigate gradient conflicts. However, these methods suffer from a fundamental limitation: they predominantly rely on synchronous aggregation. In heterogeneous medical cross-silo settings, this dependency dictates that the unlearning process is bounded by the slowest client, creating a severe “straggler bottleneck.” Our work addresses this critical efficiency gap by introducing a fully asynchronous protocol that decouples the unlearning execution from the global synchronization barrier. 
+
+C. Asynchronous Federated Learning 
+
+Asynchronous Federated Learning (AFL) is developed to address the straggler problem in cross-device and cross-silo training. FedAsync [22] allows the server to update the global model immediately upon receiving a local update, using a staleness-aware weighting function. Other works like [23] have further optimized AFL for non-IID data and resource-constrained devices. Crucially, these works focus on the training phase (learning). In contrast, our work addresses the unlearning phase (erasing), which is fundamentally different. Unlearning is inherently more unstable than training, as it involves disrupting the model’s converged knowledge struc-ture. For instance, methods relying on gradient ascent push parameters away from the local optimum, which can easily trigger catastrophic forgetting [24]. Applying AFL techniques directly to unlearning without regularization often leads to model collapse. Our work bridges this gap by tailoring asyn-chronous mechanisms specifically for the unlearning objective. 
+
+D. Knowledge Erasure and Preservation 
+
+To prevent catastrophic forgetting of the main task dur-ing unlearning while ensuring the target influence is truly removed, regularization techniques are essential. EWC [24] and its variants constrain parameter updates based on Fisher Information to retain old tasks. In the context of unlearning, methods like FedRecover [25] and FedQUIT [26] utilize KD primarily to align the unlearned model with the original model’s behavior on retained data. However, existing works largely neglect the structural sta-bility of the erasure itself. Our work repurposes KD as a dual-purpose mechanism: invariance calibration. By enforcing consistency between original samples and their transformed views (containing specific non-robust features), our regular-ization forces the model to ignore the specific correlations targeted for unlearning. This mechanism not only preserves utility on the retained distribution but also enforces structural unlearning, preventing the model from simply shifting to an invalid parameter space and ensuring convergence towards the theoretically retrained oracle. III. M ETHODOLOGY 
+
+In this section, we introduce our proposed AFU-IC. We for-mulate the unlearning problem as a constrained optimization Server                              
+
+> Receive 𝑤 𝑢𝑛𝑙𝑒𝑎𝑟𝑛
+> Target Client
+> Invariance calibration
+> Sample inputs x
+> Generate x′=ϕ(x)
+> 𝑤 ←𝑤 −η𝑐𝑎𝑙𝑖𝑏 ▽𝐷 𝐾𝐿 (
+> P(∙│ x)││
+> P(∙│ x′))
+> Compute 𝑤 ref
+> Local PGA
+> 𝑤 ←𝑤 +η𝑎𝑠𝑐 ▽𝐿 𝐶𝐸
+> 𝑤 ←𝑃𝑟𝑜𝑗 δ（𝑤 ,𝑤 ref )
+> Retained Clients
+> ……
+> Update global model 𝑤 g
+> t+1
+> Client 1
+> Client 2
+> Client N-1
+> Remain
+> Broadcast new global model 𝑤 g
+> t+1
+> Asynchronous upload
+> Local Training
+
+Fig. 1: Overview of the AFU-IC framework. task aimed at approximating the retraining oracle. As illus-trated in Figure 1, our method adopts a dual-phase strategy, separating the local erasure performed by the target client from a server-side structural calibration, ensuring both process efficiency and erasure robustness. 
+
+A. Problem Formulation 
+
+Consider an FL system with N clients, collectively optimiz-ing a global objective defined as: 
+
+w∗ = arg min 
+
+> wN
+
+X
+
+> k=1
+
+L(w; Dk). (1) Let wg be the converged global model parameters contain-ing information from the entire distributed dataset D =SNk=1 Dk. A target client u requests to unlearn its spe-cific local subset Du. The theoretical goal is to obtain an unlearned model wunlearn that perfectly approximates the retrained model, wretrain , which is defined as the model trained from scratch on the retained datasets, i.e., 
+
+wretrain = arg min w
+
+P  
+
+> k̸=u
+
+L(w; Dk). Mathematically, the converged global model wg has deviated from the optimal solution of wretrain due to the specific influence of Du.Our objective is to rectify this parameter shift and realign the model’s optimization trajectory with that of the retained distribution Dretain = D \ D u.
+
+B. Asynchronous Reference Approximation 
+
+To prevent catastrophic forgetting of retained knowledge during the unlearning process, we first construct a reference model wref to anchor the optimization. Following the strategy in [10], wref is designed to serve as a proxy for the aggregate knowledge of the retained federation. Ideally, wref is the aver-age of models from all clients excluding the target. This can be derived efficiently by the target client locally, without server coordination, by subtracting its own accumulated contribution from the current global model state: 
+
+wref = NN − Nu
+
+wtg − Nu
+
+N − Nu
+
+wt−1 
+
+> u
+
+, (2) where Nu is the target client count, and wt−1 
+
+> u
+
+represents the cached local model update of client u from the previous round t − 1. This wref serves as the center of an L2-norm ball constraint during optimization, preventing the model from drifting into invalid parameter spaces. 
+
+C. Phase I: Local Asynchronous Gradient Ascent 
+
+This phase aims to erase the influence of the target client’s data through a computationally efficient, asynchronous proto-col. From an optimization perspective, the model wg resides in a local minimum with respect to L(w; Du). To approximate 
+
+wretrain , which theoretically exhibits higher loss on Du, we must push the parameters out of this specific optimization basin. We employ PGA locally on the target client. Upon receiving an unlearning request, the target client Cu performs the following optimization on the current global model snapshot 
+
+wtg , independently of the ongoing training of other clients: 
+
+w(τ +1)  
+
+> u
+
+= Proj δ
+
+
+
+w(τ ) 
+
+> u
+
++ ηasc ∇L (w(τ ) 
+
+> u
+
+; Du)
+
+
+
+, (3) where w(0)  
+
+> u
+
+= wref , and the projection Proj δ (·) constrains the parameters within the ball B(wref , δ ).Asynchronous Protocol: Crucially, this process is decoupled from the global synchronization barrier. Unlike synchronous approaches that freeze the federation, AFU-IC allows retained clients to continue standard training concurrently. Once the local unlearning converges to wunlearn , it is transmitted to the server. Instead of waiting for a weighted aggregation, the server immediately adopts these parameters as the global ini-tialization for the subsequent communication round, formally 
+
+wt+1  
+
+> g
+
+← wunlearn . This ensures the “forgetting” is enforced globally while the computational burden remains strictly local. 
+
+D. Phase II: Server-Side Invariance Calibration 
+
+Merely maximizing loss on Du during the local phase often leads to a masking effect, where the model superficially shifts its decision boundary without removing the underlying feature representations, leading to model reverting. To ensure the model structurally decouples from the unlearned features and achieves permanent erasure, we introduce a server-side invariance calibration phase. 
+
+1) Theoretical Motivation: To foster deep structural era-sure, we draw inspiration from the principles of robust learn-ing and invariant risk minimization [27]. In heterogeneous federated settings, deep models often tend to rely on client-specific non-robust features, rather than learning universally robust causal features. The ideal retraining oracle, wretrain ,having never observed Du, does not rely on these specific shortcuts. Thus, theoretically approximating the oracle can be framed as aligning the model’s behavior to ignore these non-robust features. 
+
+2) Calibration Objective: To achieve this structural invari-ance, we need to enforce prediction consistency between the original inputs x and their perturbation-augmented counter-parts x′ = Φ( x). Since the model outputs are probability distributions, the KL divergence serves as the natural metric to quantify the informational discrepancy between the model’s behavior on x and x′. Therefore, to mathematically enforce the consistency constraint discussed above, we formulate the cal-ibration objective as minimizing the expected KL divergence over the available samples: 
+
+min  
+
+> w
+
+Lcalib (w) = Ex [DKL (P (·| x; w) ∥ P (·| x′; w))] . (4) This objective functions as a structural regularization term. By forcing the distribution P (·| x′; w) to align with P (·| x; w),we effectively penalize the model for being sensitive to the non-causal variations introduced by Φ( ·).
+
+Mechanism of Structural Erasure. Minimizing the objective in Eq. 4 directly leads to two critical effects that ensure the robustness of the unlearning:  
+
+> •
+
+Fidelity Preservation: The objective anchors the model’s predictions on augmented data to match its predictions on clean data. This regularization prevents the parameters from drifting too far into random space, thereby maintain-ing smooth decision boundaries on retained knowledge similar to a robustly trained oracle.  
+
+> •
+
+Feature Decoupling: Since the transformation Φ( ·) sim-ulates non-causal variations, minimizing the divergence forces the model to ignore these specific features. This mathematically decouples the decision logic from the unlearned, non-robust correlations, ensuring the erasure is permanent rather than superficial. The complete procedure is summarized in Algorithm 1. First, the target client initiates the unlearning process and computes a reference model wref to initialize its local parameters (Lines 3-4). Crucially, this execution is parallel to the ongoing operations of retained clients, introducing zero blocking time. During the asynchronous phase, the model is updated via gradient ascent (Line 6) and immediately projected into a 
+
+wref -centered constraint ball (Line 7). Upon receiving the uploaded wunlearn (Line 9), the server immediately triggers structural calibration (Line 10). Over Tcalib epochs, the server utilizes augmented views x′ (Lines 13-14) to minimize the KL divergence between predictions (Line 15), effectively decoupling non-robust features. Finally, the calibrated model is broadcast as the new global state wt+1  
+
+> g
+
+(Line 17). IV. E XPERIMENT 
+
+A. Experimental Setup 
+
+Implementation Details. We simulate a cross-silo federated learning setting with one central server and N clients. By default, we set the number of clients N = 5 , and vary N ∈{5, 10 , 15 , 20 } in the ablation study to evaluate scalability. For optimization, we employ a combination of SGD and Adam optimizers with a batch size of 128 .
+
+Datasets and FL Partitioning. To verify the generaliz-ability of our framework across diverse medical modalities, we evaluate AFU-IC on three heterogeneous benchmarks: 1) OASIS [14]: A dataset for dementia classification. 2) PathM-NIST [15]: A dataset containing histology slides for colon pathology classification. 3) OrganAMNIST [15]: A dataset with 2D abdominal CT scans. To simulate realistic cross-silo 
+
+Algorithm 1 AFU-IC 
+
+Require: Global model wtg ; Target client u with cache wt−1 
+
+> u
+
+;Target Dataset Du; Hyperparams ηasc , η calib , δ .
+
+Ensure: Unlearned global model wt+1  
+
+> g
+
+. 
+
+> 1:
+
+System State: Retained clients continue standard training tasks without interruption.  
+
+> 2:
+
+Target Client u executes unlearning independently:  
+
+> 3:
+
+Compute reference wref ← N w tg −Nuwt−1  
+
+> u
+> N−Nu
+> 4:
+
+Init w ← wref . 
+
+> 5:
+
+for epoch τ = 1 , . . . , T asc do  
+
+> 6:
+
+w ← w + ηasc ∇L CE (w; Du) 
+
+> 7:
+
+w ← Proj δ (w, w ref ) 
+
+> 8:
+
+end for  
+
+> 9:
+
+Asynchronously upload wunlearn ← w to Server.  
+
+> 10:
+
+Server triggers calibration upon receiving wunlearn : 
+
+> 11:
+
+Initialize w ← wunlearn . 
+
+> 12:
+
+for epoch τ = 1 , . . . , T calib do  
+
+> 13:
+
+Sample inputs x 
+
+> 14:
+
+Generate augmented view x′ ← Φ( x) 
+
+> 15:
+
+w ← w − ηcalib ∇DKL (P (·| x; w)∥P (·| x′; w))  
+
+> 16:
+
+end for  
+
+> 17:
+
+Update global model wt+1  
+
+> g
+
+← w and broadcast. heterogeneity, we partition these datasets among clients using a Dirichlet distribution Dir (α). We investigate two non-IID levels [28]: α = 1 .0 (moderate skew) and α = 0 .1 (strong skew, long-tailed). Unless specified otherwise, experiments use 
+
+α = 1 .0.
+
+Backdoor Configuration. To rigorously evaluate the unlearn-ing completeness, we adopt the backdoor injection strategy as a proxy [10]. The target client poisons a subset of its local dataset by overlaying a trigger and modifying the ground-truth labels to a specific target class. 
+
+Model and Baselines. We adopt a 4-layer CNN architecture. The model is composed of a feature extractor encompass-ing four stacked convolutional blocks and a projection head with two fully connected layers. This architecture effectively captures spatial dependencies in 128 × 128 medical im-ages while maintaining computational efficiency. We compare our proposed AFU-IC against the following five baselines: (1) Retrain, which retrains the model from scratch on the remaining datasets to provide the oracle performance; (2) PGA [10], which performs gradient ascent on the unlearning client’s data with weight projection; (3) FedRecovery [25], which utilizes historical gradient residuals to approximate the retrained model; (4) FedEraser [7], which reconstructs the global model by calibrating historical local updates; (5) FedOSD [13], which employs orthogonal steepest descent to mitigate gradient conflicts during erasure. 
+
+Evaluation Metrics. We assess the proposed framework from three critical dimensions:  
+
+> •
+
+Efficacy: We measure erasure success using both be-havioral and structural indicators: 1) Backdoor Accuracy (BA): The accuracy on the poisoned test set. A sharp TABLE I. C OMPARISON OF UNLEARNING EFFICIENCY , E FFICACY , AND FIDELITY ON THREE MEDICAL DATASETS .                                                                                                                  
+
+> Method OASIS PathMNIST OrganAMNIST Eff. Efficacy Fidelity Eff. Efficacy Fidelity Eff. Efficacy Fidelity Time(s) BA(%) Gap CA(%) Gap Time(s) BA(%) Gap CA(%) Gap Time(s) BA(%) Gap CA(%) Gap
+> Retrain 5,420 30.32 -75.10 -6,800 26.85 -89.03 -7,200 24.39 -83.88 -PGA 2,850 90.74 +60.42 78.23 +3.13 1,920 92.10 +65.25 88.42 -0.61 1,100 98.50 +74.11 90.23 +6.35 FedRecovery 1,280 88.52 +58.20 83.52 +8.42 1,550 96.57 +69.72 84.56 -4.47 1,720 72.88 +48.49 82.14 -1.74 FedEraser 2,150 25.59 -4.73 82.36 +7.26 2,500 34.28 +7.43 88.43 -0.60 2,900 23.83 -0.56 88.20 +4.32 FedOSD 1,180 23.80 -6.52 82.17 +7.07 1,450 32.19 +5.34 91.97 +2.94 1,600 21.97 -2.42 90.82 +6.94
+> AFU-IC 295 28.25 -2.07 83.91 +8.81 350 21.50 -5.35 90.81 +1.78 380 22.20 -2.19 93.62 +9.74
+
+TABLE II. A NALYSIS OF UNLEARNING STABILITY ON THE 
+
+OASIS DATASET . W E MONITOR BEHAVIORAL (BA, CA)   
+
+> AND STRUCTURAL
+
+(L2 DISTANCE TO RETRAIN MODEL )
+
+> CHANGES IMMEDIATELY AFTER ERASURE VERSUS AFTER
+
+10 POST -LEARNING ROUNDS .                                             
+
+> Method Post-Unlearn (Instant) Post-Recovery (10 Rnds) BA ↓CA ↑L2Dist ↓BA ↓CA ↑L2Dist ↓
+> Retrain (Oracle) 30.32 65.16 0.00 30.32 75.17 0.00 Projected-GA 35.53 82.22 25.57 90.74 82.23 72.30 FedRecovery 32.13 81.25 34.49 88.52 83.52 64.82 FedEraser 25.47 82.19 30.60 25.59 82.36 30.62 FedOSD 23.52 82.01 20.45 23.80 82.17 10.48
+> AFU-IC 28.24 83.85 30.35 28.25 83.91 7.36
+
+decline in BA implies the removal of the backdoor behavior. 2) Parameter Distance ( L2 Dist): The Euclidean distance between the unlearned model weights wunlearn 
+
+and the retrain oracle wretrain . Unlike BA, this structural metric detects the masking effect and ensures stability against reverting.  
+
+> •
+
+Fidelity: Measured by the Clean Accuracy (CA) on the test set of the retained clients, quantifying how well the model preserves main-task performance.  
+
+> •
+
+Efficiency: Evaluated by the total wall-clock time (s) required to complete the unlearning and post-learning process, accounting for both local computation and com-munication overhead. Unless stated otherwise, experiments use N = 5 clients and 
+
+α = 1 .0. Detailed ablation studies are deferred to Sec. IV-E. 
+
+B. Unlearning Completeness (Efficacy) 
+
+In this part, we evaluate the effectiveness of AFU-IC in eliminating the influence of the target client’s data. We rely on the backdoor trigger as a traceable fingerprint of the target client’s contribution. Successful unlearning should render the model behaviorally and structurally indistinguishable from a model that never observed the target data. We first evaluate the unlearning efficacy by comparing the BA. As shown in Figure 2, the retrain baseline (Cyan curve) defines the lower bound of BA, representing the model’s response to triggers when the target data is completely absent. Crucially, our unlearned model’s BA (Green curve) closely tracks the retrain baseline throughout the post-learning rounds, maintaining a small gap. This overlap indicates that our method has successfully scrubbed the specific patterns associated with the target client, reducing the trigger response to the same noise level as the clean baseline. Beyond behavioral outputs, we assess the internal model updates by measuring the L2 parameter distance between the unlearned model wunlearn and the retrained oracle wretrain .Experimental results presented in Table II show that our method achieves a significantly smaller L2 distance to the retrained model compared to baselines. This confirms that our AFU-IC method does not merely mask the backdoor behavior like shifting to a different local minimum but actively drives the global model parameters towards the optimization trajectory of the retrain oracle, thereby validating the true efficacy of unlearning. 
+
+C. Utility Preservation (Fidelity) 
+
+To assess the main-task utility, we focus on the CA on retained clients. Figure 3 demonstrates the temporal dynamics of utility. While the gradient ascent induces an expected transient drop in accuracy, the global model exhibits rapid recovery within limited communication rounds. The final CA matches the pre-unlearning performance, verifying that our KL-based regular-ization effectively isolates the “forgetting” to targeted param-eters without compromising the general feature extractor. Crucially, as compared in Figure 2, our unlearned model consistently maintains higher CA than the retrain baseline throughout the post-learning rounds. This result highlights a significant efficiency advantage: our method preserves the valid medical knowledge acquired during Phase I, thereby avoiding the computational overhead and performance insta-bility associated with relearning representations from random initialization. 
+
+D. Efficiency Analysis 
+
+As summarized in Table I, AFU-IC significantly outper-forms all synchronous baselines in total wall-clock time. On the OASIS dataset, AFU-IC completes the unlearning process in just 295 seconds, representing an 18 × speedup over retraining and a 4 × speedup over the fastest synchronous baseline, FedOSD. This substantial time reduction stems from our asynchronous design: 1) Zero Blocking for Retained Clients: Unlike syn-chronous protocols that freeze the federation, AFU-IC 1 2 3 4 5 6 7 8 9 10 
+
+> Training Rounds
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Accuracy (%)
+> OASIS : Retrain vs AFU-IC
+> UN-Clean Acc
+> UN-Backdoor Acc
+> Retrain-Clean Acc
+> Retrain-Backdoor Acc
+
+(a) OASIS 1 2 3 4 5 6 7 8 9 10  
+
+> Training Rounds
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Accuracy (%)
+> PathMNIST : Retrain vs AFU-IC
+> UN-Clean Acc
+> UN-Backdoor Acc
+> Retrain-Clean Acc
+> Retrain-Backdoor Acc
+
+(b) PathMNIST 1 2 3 4 5 6 7 8 9 10  
+
+> Training Rounds
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Accuracy (%)
+> OrganAMNIST : Retrain vs. AFU-IC
+> UN-Clean Acc
+> UN-Backdoor Acc
+> Retrain-Clean Acc
+> Retrain-Backdoor Acc
+
+(c) OrganAMNIST 
+
+Fig. 2: Clean accuracy and backdoor accuracy of the AFU-IC and fully retrained model with respect to the number of FL post-learning rounds in each dataset for N = 5 clients. TABLE III. C OMPREHENSIVE ABLATION STUDY ON THE OASIS DATASET . T HE DEFAULT SETTINGS (MARKED IN GRAY )
+
+ALIGN WITH THE UPDATED AFU-IC RESULTS .
+
+Ablation Aspect Variant / Setting Efficiency Efficacy Fidelity (Utility) Time (s) BA (%) ↓ CA (%) ↑
+
+1. Regularization 
+
+γcalib = 0 290 90.47 78.18 
+
+γcalib = 1 .0 (Ours) 300 28.24 83.92 
+
+γcalib = 5 .0 320 22.13 76.47 
+
+2. Mechanism Synchronous FL 1,250 28.18 84.14 Asynchronous 300 28.24 83.92 
+
+3. Heterogeneity α = 0 .1 330 35.46 80.53 
+
+α = 1 .0 300 28.24 83.92 
+
+4. Client Scale 
+
+N = 5 300 28.24 83.92 
+
+N = 10 350 26.88 84.25 
+
+N = 15 410 25.45 84.41 
+
+N = 20 460 24.57 84.54 0 5 10 15 20 25 30 35 40 
+
+> Training Rounds
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Clean Accuracy (%)
+> Clean Accuracy of Unlearn Branch Before and After Unlearning
+> Unlearn-Clean Acc (pre+post)
+> Unlearning event
+
+Fig. 3: Evolution of CA throughout the federated training process. eliminates the waiting time for retained clients, as they are exempted from the blocking synchronization barrier. 2) Decoupled Calibration: The server-side calibration ex-ecutes in parallel with ongoing local training, removing the communication bottlenecks in synchronous coordi-nation. This consistent efficiency advantage across all benchmarks po-sitions AFU-IC as a practical solution for real-time unlearning requests. 
+
+E. Ablation Study 
+
+We conduct an ablation study to verify the contribution of each component in AFU-IC. The quantitative results are summarized in Table III. 
+
+Necessity of Invariance Calibration. We first examine whether simple gradient ascent is sufficient for unlearning. As shown in the Regularization block, removing the calibration term ( γcalib = 0) fails to scrub the backdoor, yielding a BA comparable to the pre-unlearning state. This indicates that without structural constraints, the optimization falls into a masking effect—shifting parameters superficially without eliminating the underlying trigger mechanism. Incorporating the invariance constraint ( γcalib = 1.0) effectively breaks this dependency, significantly reducing BA while preserving the main task utility. However, an excessively large penalty (γcalib = 5.0) disturbs the feature extractor, leading to a noticeable drop in CA. Thus, a moderate weight provides the optimal trade-off between erasure completeness and utility preservation. 
+
+Efficiency of Asynchronous Mechanism. To isolate the efficiency gains, we compare our framework against a syn-chronous variant where the server waits for all clients to complete. In the presence of stragglers, the synchronous baseline is severely bottlenecked, as the system pace is dictated by the slowest client. In contrast, our asynchronous design decouples the unlearning client from the federation, achieving an approximate 4× speedup in wall-clock time. Crucially, this acceleration does not compromise performance—both erasure efficacy and model utility remain statistically consistent with the synchronous baseline, confirming that asynchrony is an optimization for this task. 
+
+Robustness to Heterogeneity and Scale. Finally, we evaluate the method’s resilience under varying data distributions and federation scales.  
+
+> •
+
+Data Heterogeneity: Under extreme non-IID settings (α = 0 .1), the unlearning task becomes more challenging due to class imbalance. While we observe a marginal increase in BA compared to the moderate setting, the method successfully maintains high utility, suggesting robust feature alignment even when local distributions diverge significantly from the global prior.  
+
+> •
+
+Federation Scale: We investigate scalability by varying the client size N . With more clients, the target’s rel-ative importance decreases, which naturally helps with unlearning but increases the communication time. Our results show that AFU-IC remains effective even when 
+
+N = 5 , where the target contributes a large portion of the data. This proves that our method is robust regardless of whether the target client is a major or minor contributor to the federation. V. C ONCLUSION 
+
+In this work, we propose AFU-IC, a novel framework designed to overcome the limitations of existing synchronous unlearning methods. We specifically addressed the bottleneck where the entire federation is forced to halt and wait for stragglers, causing significant delays. By decoupling the era-sure process from the global training workflow, our approach enables the target client to execute unlearning asynchronously without interrupting global training. Furthermore, we resolved the critical issue where the influence of erased data is merely suppressed temporarily and resurfaces during subsequent train-ing. Through a server-side invariance calibration mechanism, we effectively prevent the model from relearning the erased contributions. Extensive experiments on three medical bench-marks confirm that AFU-IC achieves unlearning efficacy and main-task fidelity comparable to gold-standard retraining while significantly reducing wall-clock latency, providing a genuine and efficient solution for federated unlearning. REFERENCES [1] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y Arcas, “Communication-efficient learning of deep networks from decentralized data,” in Artificial intelligence and statistics . PMLR, 2017, pp. 1273– 1282. [2] Y. Li, H. Zeng, F. Zhang, C. Yang, Y. Li, and W. Ding, “Efficient Med-ical Image Segmentation via Reinforcement Learning-Driven K-Space Sampling,” IEEE Transactions on Emerging Topics in Computational Intelligence , 2025. [3] Y. Li, Y. Li, K. Zhang, F. Zhang, C. Yang, Z. Guo, W. Ding, and T. Huang, “Achieving fair medical image segmentation in foundation models with adversarial visual prompt tuning,” Information Sciences , p. 122501, 2025. [4] P. Voigt and A. Von dem Bussche, The EU general data protection regulation (GDPR) . Springer, 2017. [5] S. L. Pardau, “The california consumer privacy act: Towards a european-style privacy regime in the united states,” J. Tech. L. & Pol’y , vol. 23, p. 68, 2018. [6] T. T. Nguyen, T. T. Huynh, Z. Ren, P. L. Nguyen, A. W.-C. Liew, H. Yin, and Q. V. H. Nguyen, “A survey of machine unlearning,” ACM Transactions on Intelligent Systems and Technology , vol. 16, no. 5, pp. 1–46, 2025. [7] G. Liu, X. Ma, Y. Yang, C. Wang, and J. Liu, “Federaser: Enabling efficient client-level data removal from federated learning models,” in 
+
+2021 IEEE/ACM 29th International Symposium on Quality of Service (IWQOS) . IEEE, 2021, pp. 1–10. [8] C. Wu, S. Zhu, and P. Mitra, “Federated unlearning with knowledge distillation,” arXiv preprint arXiv:2201.09441 , 2022. [9] J. Wang, S. Guo, X. Xie, and H. Qi, “Federated unlearning via class-discriminative pruning,” in Proceedings of the ACM web conference 2022 , 2022, pp. 622–632. [10] A. Halimi, S. Kadhe, A. Rawat, and N. Baracaldo, “Federated un-learning: How to efficiently erase a client in fl?” arXiv preprint arXiv:2207.05521 , 2022. [11] H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan, and Q. Yang, “Unlearning during learning: An efficient federated machine unlearning method,” arXiv preprint arXiv:2405.15474 , 2024. [12] N. Su and B. Li, “Asynchronous federated unlearning,” in IEEE IN-FOCOM 2023-IEEE conference on computer communications . IEEE, 2023, pp. 1–10. [13] Z. Pan, Z. Wang, C. Li, K. Zheng, B. Wang, X. Tang, and J. Zhao, “Federated unlearning with gradient descent and conflict mitigation,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 19, 2025, pp. 19 804–19 812. [14] N. Daithal, “Oasis alzheimer’s detection,” Kaggle, 2023, https://www.kaggle.com/datasets/ninadaithal/imagesoasis. [15] J. Yang, R. Shi, D. Wei, Z. Liu, L. Zhao, B. Ke, H. Pfister, and B. Ni, “Medmnist v2-a large-scale lightweight benchmark for 2d and 3d biomedical image classification,” SCIENTIFIC DATA , 2023. [16] T. Li, A. K. Sahu, A. Talwalkar, and V. Smith, “Federated learning: Challenges, methods, and future directions,” IEEE signal processing magazine , vol. 37, no. 3, pp. 50–60, 2020. [17] N. Romandini, A. Mora, C. Mazzocca, R. Montanari, and P. Bellav-ista, “Federated unlearning: A survey on methods, design guidelines, and evaluation metrics,” IEEE Transactions on Neural Networks and Learning Systems , 2024. [18] Z. Liu, Y. Jiang, J. Shen, M. Peng, K.-Y. Lam, X. Yuan, and X. Liu, “A survey on federated unlearning: Challenges, methods, and future directions,” ACM Computing Surveys , vol. 57, no. 1, pp. 1–38, 2024. [19] Y. Li, C. Yang, H. Zeng, Z. Dong, Z. An, Y. Xu, Y. Tian, and H. Wu, “Frequency-aligned knowledge distillation for lightweight spa-tiotemporal forecasting,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 7262–7272. [20] Y. Li, J. Dong, Z. Dong, C. Yang, Z. An, and Y. Xu, “Srkd: Towards efficient 3d point cloud segmentation via structure-and relation-aware knowledge distillation,” arXiv preprint arXiv:2506.17290 , 2025. [21] Y. Li, J. Dong, C. Yang, S. Wen, P. Koniusz, T. Huang, Y. Tian, and Y.-S. Ong, “Mmt-ard: Multimodal multi-teacher adversarial distillation for robust vision-language models,” arXiv preprint arXiv:2511.17448 ,2025. [22] C. Xie, S. Koyejo, and I. Gupta, “Asynchronous federated optimization,” in arXiv preprint arXiv:1903.03934 , 2019. [23] Y. Chen, Y. Ning, M. Slawski, and H. Rangwala, “Asynchronous online federated learning for edge devices with non-iid data,” in 2020 IEEE International Conference on Big Data (Big Data) . IEEE, 2020, pp. 15–24. [24] J. Kirkpatrick, R. Pascanu, N. Rabinowitz, J. Veness, G. Desjardins, A. A. Rusu, K. Milan, J. Quan, T. Ramalho, A. Grabska-Barwinska 
+
+et al. , “Overcoming catastrophic forgetting in neural networks,” Pro-ceedings of the national academy of sciences , vol. 114, no. 13, pp. 3521–3526, 2017. [25] L. Zhang, T. Zhu, H. Zhang, P. Xiong, and W. Zhou, “Fedrecov-ery: Differentially private machine unlearning for federated learning frameworks,” IEEE Transactions on Information Forensics and Security ,vol. 18, pp. 4732–4746, 2023. [26] A. Mora, L. Valerio, P. Bellavista, and A. Passarella, “Fedquit: On-device federated unlearning via a quasi-competent virtual teacher,” arXiv preprint arXiv:2408.07587 , 2024. [27] M. Arjovsky, L. Bottou, I. Gulrajani, and D. Lopez-Paz, “Invariant risk minimization,” arXiv preprint arXiv:1907.02893 , 2019. [28] T.-M. H. Hsu, H. Qi, and M. Brown, “Measuring the effects of non-identical data distribution for federated visual classification,” arXiv preprint arXiv:1909.06335 , 2019.

@@ -1,0 +1,661 @@
+Title: SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods
+
+URL Source: https://arxiv.org/pdf/2604.23979v1
+
+Published Time: Tue, 28 Apr 2026 01:23:57 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods 
+
+# Shaofeng Yang 
+
+Institute of Computing Technology, Chinese Academy of Science Beijing, China yangshaofeng@ncic.ac.cn 
+
+# Yunting Wang 
+
+Institute of Computing Technology, Chinese Academy of Science Beijing, China wangyunting@ncic.ac.cn 
+
+# Yingying Cheng 
+
+Theory Lab, Huawei Technologies Co., Ltd. Beijing, China cheng.yingying1@huawei.com 
+
+# Fan Zhang 
+
+Theory Lab, Huawei Technologies Co., Ltd. Hong Kong, China zhang.fan2@huawei.com 
+
+# Xin He 
+
+Institute of Computing Technology, Chinese Academy of Science Beijing, China hexin2016@ncic.ac.cn 
+
+# Guangming Tan 
+
+Institute of Computing Technology, Chinese Academy of Science Beijing, China tgm@ncic.ac.cn 
+
+## Abstract 
+
+The solution of sparse linear systems constitutes the dominant com-putational bottleneck in interior point methods (IPMs), frequently consuming over 70% of the total solution time. As optimization problems scale to millions of variables, direct solvers encounter prohibitive fill-in, excessive memory consumption, and limited parallel scalability. We present SDSL-Solver, a scalable distributed sparse linear solver framework designed for IPMs. SDSL-Solver employs Krylov subspace methods, combined with numerics-based sparse filtering and diagonal correction techniques that produce high-quality preconditioners. To accommodate diverse problem characteristics, SDSL-Solver offers two complementary distributed parallel methods: Block Jacobi for well-conditioned, diagonally dominant systems, and Bordered Block Diagonal (BBD) for ill-conditioned problems requiring globally coupled preconditioning via Schur complement techniques. A preconditioner reuse strategy further amortizes construction costs across consecutive IPMs it-erations. We evaluate SDSL-Solver on benchmark problems with matrix dimensions ranging from tens of thousands to over five million on multi-node clusters equipped with X86 processors. The experimental results show that under the Block Jacobi and BBD distributed methods, SDSL-Solver on a four-node configuration achieves average speedups of 6.23 × and 7.77 ×, respectively, com-pared to PETSc running on the same number of nodes. Relative to the single-node PARDISO, the average speedups reach 97 .54 × and 
+
+5.85 ×, respectively. 
+
+## Keywords 
+
+Krylov subspace method, Sparse linear solver, Interior point method, Distributed parallel computing 
+
+## 1 Introduction 
+
+Interior point methods (IPMs) constitute one of the most effective al-gorithmic frameworks for solving large-scale linear programming (LP), quadratic programming, and general convex optimization problems [ 11 , 18 ]. At each iteration, the dominant computational cost resides in solving a sequence of sparse linear systems of the form 𝐴𝑥 = 𝑏 , which typically accounts for over 70% of the total solution time [ 5 ]. As optimization problems arising from real-world 
+
+Figure 1: Workflow of an interior point method. The sparse linear system solve (highlighted in blue) dominates the total computation time, accounting for over 70% of each iteration. 
+
+applications, including network flow, logistics, machine learning, and engineering design, scale to millions of variables and con-straints, the efficient and robust solution of these linear systems becomes the critical bottleneck governing the overall scalability of IPMs, as illustrated in Figure 1. 
+
+> 1
+> arXiv:2604.23979v1 [cs.DC] 27 Apr 2026 Shaofeng Yang, Yunting Wang, Yingying Cheng, Fan Zhang, Xin He, and Guangming Tan
+
+In the standard IPMs formulation, the coefficient matrix 𝐴 ex-hibits a structured block form amenable to reduction via Schur complement techniques, yielding a smaller system involving the matrix 𝑆 . While this reduction is effective in many cases, the pres-ence of dense columns in the constraint matrix can render the Schur complement 𝑆 nearly dense, thereby negating the computational benefits of the reduction. Moreover, as the IPMs progresses toward optimality, the diagonal scaling matrices introduce increasingly ex-treme values, causing the condition number of 𝑆 to grow by several orders of magnitude. This progressive ill-conditioning poses severe challenges for both the accuracy and convergence of the underlying linear solver. Direct methods, exemplified by LU and Cholesky factorizations [ 2], represent the traditional approach for solving these systems. Al-though they provide broad applicability and strong numerical stabil-ity, direct methods incur significant fill-in during the factorization of sparse matrices, resulting in prohibitive memory consumption and computational cost at large scale. Furthermore, the inherently sequential nature of triangular solves constrains the parallel scala-bility of direct methods on modern multi-node architectures. For matrices with millions of rows, the fill-in can exceed the repre-sentable range of standard integer indexing, rendering direct solvers entirely inapplicable. Krylov subspace iterative methods [ 13 ], such as the Conjugate Gradient (CG) [ 6 ], GMRES [ 14 ], BiCGSTAB [ 17 ], and the General-ized Conjugate Residual (GCR) [ 4] method, provide a compelling alternative for large-scale sparse systems. These methods construct approximate solutions within expanding Krylov subspaces and rely primarily on sparse matrix-vector products and inner products, op-erations that are highly amenable to parallelization. However, for the ill-conditioned systems encountered in IPMs, unpreconditioned Krylov methods often exhibit unacceptably slow convergence or may fail to converge entirely. Effective preconditioning is therefore indispensable, yet constructing preconditioners that simultaneously offer high approximation quality, low application cost, and good parallel scalability remains an open challenge. Existing parallel sparse solvers, such as PETSc [ 1 ] with Block Ja-cobi preconditioning [ 13 ], provide a natural distributed framework by partitioning the matrix across processors and applying local preconditioners independently. Although conceptually straightfor-ward and scalable, this approach neglects the coupling between off-diagonal blocks, leading to degraded convergence as the number of processors increases, a critical limitation for difficult, ill-conditioned problems. Conversely, direct parallel solvers such as PARDISO [ 15 ]deliver high accuracy but encounter the aforementioned scalability barriers for truly large-scale systems. In this paper, we present SDSL-Solver, a comprehensive dis-tributed parallel framework for solving the sparse linear systems arising in IPMs. Figure 2 illustrates the overall architecture of SDSL-Solver, which unifies an advanced Krylov solver, adaptive precon-ditioning techniques, and two complementary distributed parallel methods within a single framework. Our approach addresses the limitations of existing methods through the following synergistic contributions: 
+
+• We design and implement two complementary distributed parallel methods: a Block Jacobi method for diagonally dom-inant, well-conditioned systems that offers straightforward scalability, and a Bordered Block Diagonal (BBD) method for difficult, ill-conditioned problems that preserves global coupling information through a shared interface system solved via Schur complement techniques. An adaptive se-lection strategy automatically transitions between the two methods based on runtime solver diagnostics. 
+
+• We propose a numerics-based sparse filtering algorithm that constructs high-quality preconditioners by selectively drop-ping small off-diagonal entries relative to the diagonal, cou-pled with a diagonal correction technique that strengthens diagonal dominance to further improve conditioning. To-gether, these methods enable the use of incomplete factor-ization preconditioners (ILU/IC) while maintaining suffi-cient accuracy for IPMs convergence. 
+
+• We further introduce a preconditioner reuse strategy that exploits the slow variation of coefficient matrices across consecutive IPMs iterations, amortizing the cost of precon-ditioner construction over multiple solves. We conduct an extensive evaluation on a diverse set of bench-mark problems with matrix dimensions ranging from tens of thou-sands to over five million. Experiments on X86 multi-node clusters show that on a four-node configuration, SDSL-Solver achieves aver-age speedups of 6.23 × and 7.77 × over PETSc under the Block Jacobi and BBD methods, respectively, and average speedups of 97 .54 ×
+
+and 5.85 × over the single-node PARDISO. Moreover, the solver remains numerically robust on ill-conditioned problems where direct methods fail to converge. These results establish that the synergy of carefully designed Krylov methods, adaptive precondi-tioning strategies, and architecture-aware parallel decomposition can effectively unlock the scalability of IPMs for industrial-scale optimization problems. 
+
+## 2 Background 2.1 Interior Point Method 
+
+Consider the standard-form linear programming problem: 
+
+min  
+
+> 𝑥
+
+𝑐 𝑇 𝑥 s.t. 𝐵𝑥 = 𝑏, 𝑥 ≥ 0, (1) where 𝐵 ∈ R𝑚 ×𝑛 is the constraint matrix, 𝑐 ∈ R𝑛 is the cost vector, and 𝑏 ∈ R𝑚 is the right-hand side. Primal-dual interior point meth-ods solve (1) by applying Newton’s method to a perturbed system of the Karush–Kuhn–Tucker (KKT) optimality conditions [18]: 
+
+©«
+
+𝐵 𝑇 𝜆 + 𝑠 − 𝑐 𝐵𝑥 − 𝑏 𝑋𝑆𝑒 − 𝜇𝑒 
+
+ª®¬
+
+= 0, (2) where 𝜆 ∈ R𝑚 is the dual variable, 𝑠 ∈ R𝑛 is the slack variable, 
+
+𝑋 = diag (𝑥 ), 𝑆 = diag (𝑠 ), 𝑒 is the all-ones vector, and 𝜇 > 0 is a barrier parameter that is driven toward zero as the algorithm progresses. 
+
+> 2SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods
+
+Figure 2: Architecture of SDSL-Solver. The framework receives the reduced linear system from the IPMs system and selects between Block Jacobi (for well-conditioned problems) and BBD (for ill-conditioned problems) distributed methods, both built on adaptive preconditioning with sparse filtering, diagonal correction, and preconditioner reuse. 
+
+Linearizing (2) at each iteration yields the augmented system :
+
+−𝐷 𝐵 𝑇 
+
+𝐵 0
+
+| {z }
+
+> 𝐴
+
+Δ𝑥 
+
+Δ𝜆 
+
+
+
+=
+
+𝑟 1
+
+𝑟 2
+
+
+
+, (3) where 𝐷 = 𝑋 −1𝑆 is a positive diagonal matrix. Because 𝐷 is diago-nal, the system (3) can be reduced via Schur complement elimination to the normal equation system (also called the reduced system): 
+
+(𝐵𝐷 −1𝐵 𝑇 )
+
+| {z }
+
+> 𝑆 r
+
+Δ𝜆 = 𝑟 2 + 𝐵𝐷 −1𝑟 1, (4) after which Δ𝑥 is recovered by back-substitution. The matrix 𝑆 r
+
+is symmetric positive definite and typically much smaller than 𝐴 ,making it the preferred target for linear solvers. However, two practical difficulties arise during the IPMs itera-tion. First, when the constraint matrix 𝐵 contains dense columns, the Schur complement 𝑆 r can become nearly dense, resulting in ex-cessive fill-in and memory consumption. In practice, dense columns in 𝐵 are relocated to form a bordered structure to mitigate this ef-fect [ 5]. Second, and more critically, as 𝜇 → 0, the diagonal entries of 𝐷 span an increasingly wide range: elements corresponding to variables approaching their bounds grow toward infinity while others shrink toward zero. This causes the condition number of 
+
+𝑆 r to deteriorate dramatically, often by many orders of magnitude across the IPMs iterations. The progressive ill-conditioning poses the central numerical challenge for the linear solver: early iterations may be well-conditioned and easy to solve, while later iterations demand high-precision solvers that are robust to extreme spectral properties. Since the linear system solver accounts for over 70% of the to-tal IPMs computation time, the choice of solver and its parallel scalability directly determine the practical applicability of IPMs to large-scale optimization problems. 
+
+## 2.2 Krylov Subspace Method 
+
+Krylov subspace methods constitute a prominent class of iterative algorithms for solving large-scale linear systems 𝐴𝑥 = 𝑏 , where 
+
+𝐴 ∈ R𝑛 ×𝑛 is typically large and sparse. The 𝑘 -th Krylov subspace is defined as: 
+
+K𝑘 (𝐴, 𝑟 0) = span {𝑟 0, 𝐴𝑟 0, 𝐴 2𝑟 0, . . . , 𝐴 𝑘 −1𝑟 0 } (5) where 𝑟 0 = 𝑏 − 𝐴𝑥 0 denotes the initial residual. The objective is to construct an approximate solution 𝑥 𝑘 ∈ 𝑥 0 + K 𝑘 (𝐴, 𝑟 0) satisfying a prescribed optimality condition, such as minimizing the residual norm or the error in a suitable norm. Representative Krylov meth-ods, including CG [ 6 ], GMRES [ 14 ], BiCGSTAB [ 17 ], GCR( 𝑚 ) [ 4], and MINRES [ 12 ] are extensively employed for large sparse linear systems arising in structural analysis, partial differential equations, computational fluid dynamics, circuit simulation, and saddle-point problems. These methods rely primarily on matrix-vector products and vector operations, both of which are inherently amenable to parallelization. For ill-conditioned or stiff problems, the convergence of unpre-conditioned Krylov methods may be unacceptably slow or may fail entirely. To accelerate convergence, Krylov methods are typically combined with preconditioning techniques [ 16 ], which transform the original linear system into an equivalent system possessing more favorable spectral properties. The fundamental idea is to in-troduce a nonsingular matrix 𝑀 , termed the preconditioner, such 
+
+> 3Shaofeng Yang, Yunting Wang, Yingying Cheng, Fan Zhang, Xin He, and Guangming Tan
+
+that 𝑀 ≈ 𝐴 and 𝑀 −1 is computationally inexpensive to apply. Three standard preconditioning forms exist: left preconditioning, right preconditioning, and two-sided (split) preconditioning, formulated as (6), (7), and (8), respectively. 
+
+𝑀 −1𝐴𝑥 = 𝑀 −1𝑏 (6) 
+
+𝐴𝑀 −1𝑦 = 𝑏, 𝑥 = 𝑀 −1𝑦 (7) 
+
+𝑀 −11 𝐴𝑀 −12 𝑦 = 𝑀 −11 𝑏, 𝑥 = 𝑀 −12 𝑦 (8) The choice of preconditioning form depends on the specific problem characteristics and the Krylov method employed. For GMRES, right preconditioning is generally preferred as it minimizes the norm of the true residual [ 13 ]. In this work, we adopt right preconditioning throughout. We employ the ILU factorization as the preconditioner in SDSL-Solver. Unlike geometry-based preconditioners (e.g., domain decom-position methods), ILU depends solely on the algebraic structure of the matrix 𝐴 , making it well-suited to the black-box nature of interior point solvers. Moreover, since the sparsity structure of 𝐴 
+
+remains invariant across IPMs iterations, ILU can reuse symbolic analysis results and update only the numerical values, thereby re-ducing the amortized construction cost. Although approximate inverse preconditioners such as SPAI offer superior parallelism, ILU with static pivoting provides more effective conditioning for the indefinite systems arising in IPMs, leading to faster Krylov convergence. 
+
+## 2.3 Block Jacobi Distributed Parallel Method 
+
+The Block Jacobi distributed method constitutes a natural paral-lelization strategy for Krylov subspace methods, based on the prin-ciple of divide and conquer : the global linear system is partitioned into smaller sub-problems that are distributed across processors and solved concurrently. Given 𝑁 available processors, the coefficient matrix 𝐴 is par-titioned row-wise into 𝑁 sub-blocks. Each processor 𝑖 receives a row block 𝐴 𝑖 , corresponding to a contiguous set of rows of the global matrix 𝐴 , together with the corresponding segments of the right-hand side vector 𝑏 𝑖 and solution vector 𝑥 𝑖 :
+
+𝐴 =
+
+©«
+
+𝐴 1
+
+𝐴 2
+
+...𝐴 𝑁 
+
+ª®®®®¬
+
+, 𝑏 =
+
+©«
+
+𝑏 1
+
+𝑏 2
+
+...𝑏 𝑁 
+
+ª®®®®¬
+
+, (9) where each 𝐴 𝑖 is a rectangular sub-matrix consisting of the rows assigned to processor 𝑖 .Within the Krylov iteration (e.g., BiCGSTAB or IGCR), the key operations are executed in a distributed manner: 
+
+• Sparse matrix-vector product (SpMV): Each processor 𝑖 
+
+computes the local product 𝐴 𝑖 𝑝 . To handle dependencies on vector entries owned by neighboring processors, ghost cell 
+
+data is exchanged via point-to-point MPI communication, forming a distributed SpMV operation. 
+
+• Inner products: Each processor computes a local par-tial inner product, and a global result is obtained through 
+
+MPI_Allreduce , ensuring all processors hold identical scalar parameters (e.g., step lengths, residual norms). 
+
+• Vector updates: Operations such as 𝑥 ← 𝑥 + 𝛼𝑝 are per-formed entirely locally without communication. The Block Jacobi preconditioner is the natural choice for this parallel method. The global preconditioner 𝑀 is defined as the block diagonal of 𝐴 :
+
+𝑀 =
+
+©«
+
+𝐴 11 
+
+𝐴 22 
+
+. . .𝐴 𝑁 𝑁 
+
+ª®®®®¬
+
+, (10) where 𝐴 𝑖𝑖 is the diagonal block of 𝐴 corresponding to processor 
+
+𝑖 . Since 𝑀 is block diagonal, its inverse can be applied in parallel by independently solving the local systems on each processor. In SDSL-Solver, each local block is preconditioned using ILU(0) or IC(0) factorization. The Block Jacobi distributes both computation and memory uni-formly across processors, enabling the solution of problems that exceed single-node capacity. It is conceptually straightforward, amenable to implementation within the MPI programming model, and admits flexible substitution of local solvers. However, a fun-damental limitation is that the preconditioner (10) neglects the off-diagonal coupling between blocks. As the number of processors increases, each local block diminishes in size, and the discarded coupling becomes increasingly significant, potentially inflating the number of Krylov iterations required for convergence. This limi-tation is particularly pronounced for ill-conditioned problems, for which SDSL-Solver provides the BBD described in the following subsection. 
+
+## 2.4 Parallel Bordered Block Diagonal (BBD) Distributed Parallel Method 
+
+The Bordered Block Diagonal (BBD) method, also referred to as the arrowhead or block staircase decomposition, is a distributed par-allel strategy that preserves global coupling information through a shared interface system. In contrast to Block Jacobi, which dis-cards inter-block connections, BBD explicitly retains a “border” that captures the coupling between sub-domains. Through graph partitioning (e.g., via METIS or ParMETIS) and subsequent variable reordering, the coefficient matrix 𝐴 and the corresponding solution and right-hand-side vectors are permuted into the following bordered block diagonal form: 
+
+©«
+
+𝐴 11 𝐵 1
+
+𝐴 22 𝐵 2
+
+. . . ...𝐶 1 𝐶 2 · · · 𝐷 
+
+ª®®®®¬©«
+
+𝑥 1
+
+𝑥 2
+
+...𝑥 Γ
+
+ª®®®®¬
+
+=
+
+©«
+
+𝑏 1
+
+𝑏 2
+
+...𝑏 Γ
+
+ª®®®®¬
+
+, (11) where 𝐴 𝑖𝑖 are nonsingular diagonal block matrices representing each sub-domain’s interior, 𝐵 𝑖 and 𝐶 𝑖 are the border coupling blocks describing the connection between sub-domains and the global interface, 𝐷 is the interface block representing the internal coupling of the global boundary, and 𝑥 Γ is the shared interface variable vector. The BBD method follows a divide-and-coordinate strategy that proceeds in two stages: 
+
+Stage 1: Parallel Local Factorization. Each processor 𝑖 inde-pendently factorizes its local diagonal block 𝐴 𝑖𝑖 using a designated 
+
+> 4SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods
+
+preconditioner. Since the interface portion (corresponding to the coupling blocks 𝐵 𝑖 and 𝐶 𝑖 ) is likewise distributed, each processor computes its local contribution to the Schur complement: 
+
+𝑆 𝑖 = 𝐷 𝑖 − 𝐶 𝑖 𝐴 −1 
+
+> 𝑖𝑖
+
+𝐵 𝑖 , (12) where 𝐷 𝑖 is the local portion of the interface block. 
+
+Stage 2: Global Interface Solve. The local Schur complement contributions are aggregated via MPI_Reduce to form the global Schur complement matrix 𝑆 Γ = Í𝑖 𝑆 𝑖 . The root processor (rank 0) factorizes 𝑆 Γ and broadcasts the resulting factors. With both the local block factors and the global Schur complement factor available, the complete forward and backward substitution can be performed across all processors through coordinated inter-process communication. Compared to the Block Jacobi method, BBD preserves all nonzero entries in the preconditioner, allowing it to capture the full coupling structure of the original matrix. This makes BBD particularly effec-tive for ill-conditioned problems where Block Jacobi’s convergence degrades. However, when the interface size (the dimension of 𝑆 Γ )is large, the Schur complement solve on the root processor can become a bottleneck, since 𝑆 Γ is typically dense. In SDSL-Solver, sparse filtering can be applied to 𝑆 Γ to alleviate this cost when needed. 
+
+## 3 SDSL-Solver 
+
+This section presents the four key techniques in SDSL-Solver: two distributed parallel methods (Block Jacobi and BBD) and two precon-ditioning enhancement strategies (numerics-based sparse filtering and diagonal correction). Together with the preconditioner reuse mechanism, these techniques form a comprehensive framework for efficiently solving the sparse linear systems in IPMs. 
+
+## 3.1 Self-Adaptive Parallel Framework 
+
+While the Block Jacobi method offers superior parallelism, its re-tention of only diagonal block information and discarding of off-diagonal coupling leads to a degradation in preconditioning quality, particularly for ill-conditioned matrices, often resulting in solver divergence. The BBD method, by contrast, decomposes the global matrix into independent sub-blocks while preserving inter-block adjacency relationships, thereby yielding higher preconditioning quality at the expense of additional global communication required to coordinate the interface system. In view of these complementary trade-offs, SDSL-Solver adap-tively selects between Block Jacobi and BBD based on the prob-lem characteristics: Block Jacobi is preferred for diagonally dom-inant, well-conditioned systems (e.g., PageRank-type problems), while BBD is employed for ill-conditioned problems (e.g., LP and Instance-class problems) that demand high-fidelity preconditioning. Algorithm 1 presents the adaptive selection strategy. The adaptive strategy initially employs the Block Jacobi method at the onset of the IPMs computation. Upon detecting a solver fail-ure, it automatically transitions to the BBD method, which remains fixed for all subsequent IPMs iterations. SDSL-Solver supports multiple preconditioning options, includ-ing ILU(0), ILUT, and complete LU factorization. In accordance with 
+
+Algorithm 1 Adaptive Parallel Selection Strategy for Interior-Point Method 
+
+Require: Linear system 𝐴𝑥 = 𝑏 at each interior-point iteration 
+
+Ensure: Solution 𝑥  
+
+> 1:
+
+method ← BlockJacobi  
+
+> 2:
+
+switched ← false  
+
+> 3:
+
+for each interior-point iteration 𝑘 = 1, 2, . . . do  
+
+> 4:
+
+loop  
+
+> 5:
+
+Solve 𝐴𝑥 = 𝑏 using method  
+
+> 6:
+
+if solver succeeds then  
+
+> 7:
+
+break  
+
+> 8:
+
+else  
+
+> 9:
+
+if not switched then  
+
+> 10:
+
+method ← BBD  
+
+> 11:
+
+switched ← true  
+
+> 12:
+
+else  
+
+> 13:
+
+Report solver failure and terminate  
+
+> 14:
+
+end if  
+
+> 15:
+
+end if  
+
+> 16:
+
+end loop  
+
+> 17:
+
+if converged then  
+
+> 18:
+
+break  
+
+> 19:
+
+end if  
+
+> 20:
+
+end for  
+
+> 21:
+
+return 𝑥 
+
+the characteristics of each parallel method, ILU(0) is typically em-ployed within the Block Jacobi framework, whereas complete LU factorization is adopted within the BBD method to ensure sufficient preconditioning quality for ill-conditioned systems. 
+
+## 3.2 Numerics-Based Sparse Filtering Algorithm 
+
+In the large-scale sparse matrices arising from IPMs, a substan-tial proportion of off-diagonal entries exhibit very small absolute values relative to the diagonal. For instance, in the L2CTA3D bench-mark, over 90% of the nonzero entries possess small absolute values that contribute minimally to the matrix’s spectral properties. The numerics-based sparse filtering algorithm exploits this observation to construct sparser preconditioners that are significantly cheaper to factorize and apply, while retaining sufficient accuracy for effec-tive preconditioning. Given the coefficient matrix 𝐴 , the filtering algorithm constructs a sparsified matrix ˜𝐴 by dropping entries whose absolute values are small relative to both their row and column diagonal elements. Specifically, an off-diagonal entry 𝑎 𝑖 𝑗 (𝑖 ≠ 𝑗 ) is dropped if it satisfies: 
+
+|𝑎 𝑖 𝑗 | < 𝜏 · | 𝑎 𝑖𝑖 | and |𝑎 𝑖 𝑗 | < 𝜏 · | 𝑎 𝑗 𝑗 |, (13) where 𝜏 > 0 is a user-specified filtering threshold. All diagonal entries are unconditionally retained. The filtered matrix ˜𝐴 is then used as the preconditioner: 
+
+𝑃 = ˜𝐴. (14) The rationale behind this approach is twofold. First, entries sat-isfying (13) have negligible influence on the dominant eigenvalues and eigenvectors of 𝐴 , so ˜𝐴 preserves the essential spectral prop-erties of 𝐴 . Second, the reduction in nonzero entries dramatically decreases both the factorization time and the triangular solve time 
+
+> 5Shaofeng Yang, Yunting Wang, Yingying Cheng, Fan Zhang, Xin He, and Guangming Tan
+
+of the preconditioner. For matrices where 90% or more of the entries are small, the filtered preconditioner can be orders of magnitude cheaper to compute. Since the filtering introduces a discrepancy between 𝐴 and ˜𝐴 ,SDSL-Solver uses a complete Cholesky factorization (via MKL PAR-DISO) on the filtered matrix ˜𝐴 rather than an incomplete factor-ization, thereby minimizing additional precision loss during the factorization phase. The complete solution procedure is shown in Algorithm 2: 
+
+Algorithm 2 Construction of the filtering-based preconditioner 
+
+Require: Coefficient matrix 𝐴 , filtering threshold 𝜏 > 0
+
+Ensure: Preconditioner 𝑃 = ˜𝐿 ˜𝐿 𝑇  
+
+> 1:
+
+for each off-diagonal entry 𝑎 𝑖 𝑗 (𝑖 ≠ 𝑗 ) do  
+
+> 2:
+
+if |𝑎 𝑖 𝑗 | < 𝜏 · | 𝑎 𝑖𝑖 | and |𝑎 𝑖 𝑗 | < 𝜏 · | 𝑎 𝑗 𝑗 | then  
+
+> 3:
+
+discard 𝑎 𝑖 𝑗 (set to 0) 
+
+> 4:
+
+else  
+
+> 5:
+
+retain 𝑎 𝑖 𝑗  
+
+> 6:
+
+end if  
+
+> 7:
+
+end for  
+
+> 8:
+
+Keep all diagonal entries 𝑎 𝑖𝑖 unchanged  
+
+> 9:
+
+Compute complete Cholesky factorization: ˜𝐴 = ˜𝐿 ˜𝐿 𝑇 (via MKL PARDISO)  
+
+> 10:
+
+Set preconditioner 𝑃 = ˜𝐿 ˜𝐿 𝑇  
+
+> 11:
+
+return 𝑃 = ˜𝐿 ˜𝐿 𝑇 
+
+The filtering threshold 𝜏 controls the trade-off between precondi-tioner quality and computational cost. In our experiments, 𝜏 = 10 −3
+
+provides a good balance for the tested benchmarks, achieving sub-stantial speedups without compromising IPMs convergence. 
+
+## 3.3 Diagonal correction algorithm 
+
+As the IPMs iterates toward optimality, the diagonal scaling matrix 
+
+𝐷 = 𝑋 −1𝑆 introduces increasingly extreme values, causing the condition number of the reduced system 𝑆 red to grow by many orders of magnitude. Even after applying MC64 reordering and scaling [ 3, 7 ], which permutes and scales the matrix to maximize diagonal dominance and normalize diagonal entries to unit absolute value, the condition number may remain too large for an accurate iterative solution. The diagonal correction technique provides a complementary approach to further improve conditioning. The method operates on the preconditioner matrix 𝑃 (which may already have been processed by MC64) by adding a small positive constant 𝛿 to the absolute value of each diagonal entry: 
+
+ˆ𝑝 𝑖𝑖 = 𝑝 𝑖𝑖 + 𝛿 · sign (𝑝 𝑖𝑖 ), (15) where 𝛿 > 0 is a prescribed correction value. This modification strengthens the diagonal dominance of the preconditioner without altering the original coefficient matrix 𝐴 used in the Krylov iter-ation. The corrected matrix ˆ𝑃 is then factorized and used as the preconditioner. The diagonal correction is applied only to the preconditioner , not to the coefficient matrix itself. This is a deliberate design choice: modifying the preconditioner affects only the convergence rate of the Krylov iteration, whereas modifying the coefficient matrix would alter the solution. Since the Krylov method still operates on the original system 𝐴𝑥 = 𝑏 , the converged solution retains the accuracy determined by the convergence tolerance, regardless of the perturbation in the preconditioner. In practice, SDSL -Solver combines MC64 reordering and scaling with diagonal correction, as shown in Algorithm 3. In step 1, the MC64 algorithm is applied to obtain a reordered and scaled ma-trix 𝐴 ′ = 𝑃 𝑟 𝐴𝑄 𝑐 , where 𝑃 𝑟 and 𝑄 𝑐 are the row and column scaling matrices, and the permutation is embedded. In step 2, the precondi-tioner is constructed as 𝑃 = 𝐴 ′. If the sparse filtering is also applied, 
+
+𝑃 = ˜𝐴 ′. In step 3, diagonal correction (15) is applied to 𝑃 to obtain 
+
+ˆ𝑃 . The value of 𝛿 is chosen empirically, typically as 10 −12 . In step 4, ˆ𝑃 is factorized and used within the Krylov subspace method. Importantly, in the Krylov subspace method, the right-hand side of the preconditioned system must be properly permuted and scaled using 𝑅 𝑟 and 𝑅 𝑐 .
+
+Algorithm 3 Diagonal Correction Applied to Preconditioner 
+
+Require: Original coefficient matrix 𝐴 , diagonal correction param-eter 𝛿 > 0
+
+Ensure: Preconditioner ˆ𝑃  
+
+> 1:
+
+Step 1: MC64 reordering and scaling  
+
+> 2:
+
+Apply MC64 algorithm to matrix 𝐴  
+
+> 3:
+
+Obtain 𝑃 𝑟 , 𝑄 𝑐 from MC64  
+
+> 4:
+
+𝐴 ′ = 𝑃 𝑟 𝐴𝑄 𝑐  
+
+> 5:
+
+Step 2: Preconditioner construction  
+
+> 6:
+
+if filter is applied then  
+
+> 7:
+
+˜𝐴 ′ = filter (𝐴 ′) 
+
+> 8:
+
+Set 𝑃 = ˜𝐴 ′ 
+
+> 9:
+
+else  
+
+> 10:
+
+Set 𝑃 = 𝐴 ′ 
+
+> 11:
+
+end if  
+
+> 12:
+
+Step 3: Diagonal correction  
+
+> 13:
+
+for each diagonal entry 𝑝 𝑖𝑖 in 𝑃 do  
+
+> 14:
+
+ˆ𝑝 𝑖𝑖 = 𝑝 𝑖𝑖 + 𝛿 · sign (𝑝 𝑖𝑖 ) 
+
+> 15:
+
+end for  
+
+> 16:
+
+Step 4: Factorization  
+
+> 17:
+
+( ˆ𝐿, ˆ𝑈 ) = Factorize ( ˆ𝑃 ) 
+
+> 18:
+
+return ˆ𝑃 = ˆ𝐿 ˆ𝑈 
+
+This combined strategy has proven particularly effective for the Instance-class benchmarks, where direct solvers (including MKL PARDISO with Cholesky) fail to converge due to extreme ill-conditioning, but SDSL-Solver with MC64 plus diagonal correction achieves stable IPMs convergence. 
+
+## 3.4 Preconditioner Reuse 
+
+In IPMs, the coefficient matrix 𝑆 red changes at every nonlinear it-eration due to the updated diagonal scaling 𝐷 . However, between consecutive iterations, the changes in 𝑆 r are often small, particularly during the middle iterations of the IPMs where the barrier parame-ter 𝜇 decreases gradually. This observation motivates a precondi-tioner reuse strategy that amortizes the expensive preconditioner construction across multiple IPMs iterations. The strategy works as follows. At IPMs iteration 𝑘 , SDSL-Solver constructs and factorizes a preconditioner 𝑃 (𝑘 ) from the current matrix 𝑆 (𝑘 ) 
+
+> r
+
+. At the next iteration 𝑘 + 1, rather than rebuilding the preconditioner from scratch, SDSL-Solver reuses the symbolic 
+
+> 6SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods
+
+factorization from iteration 𝑘 and performs only the numerical factorization with the updated matrix values (or, in the most aggres-sive mode, reuses both the symbolic and numerical factorization entirely). This process continues for a configurable number of iter-ations or until the Krylov solver detects convergence degradation. Preconditioner reuse is applicable to instances that employ di-rect LU factorization as the preconditioner and can be categorized into two cases. First, for problems exhibiting poor convergence, the preconditioning matrix undergoes MC64 reordering and diago-nal correction prior to direct LU factorization. In this setting, the reordering and symbolic analysis phases (ordering, fill-in predic-tion, and memory allocation) are performed once and amortized over subsequent IPMs iterations. Second, for well-conditioned prob-lems without the need for numerical filtering, one may periodically perform symbolic and numerical factorizations within the IPMs iterations, reuse each factorization for several steps, and repeat this process until convergence For benchmarks including NetworkPlan_6 and L1_sixm250obs, preconditioner reuse yields 3.5× and 1.35 × additional speedup over the already-optimized iterative solver, respectively. Notably, for NetworkPlan_6, this strategy also improves convergence behavior: the slight perturbation introduced by a stale preconditioner can serve as implicit regularization, mitigating the tendency of the solver to be destabilized by the increasingly ill-conditioned late-stage systems. 
+
+## 4 Experiment 4.1 Experimental setup 
+
+Hardware platforms. We evaluate SDSL-Solver on two cluster configurations to demonstrate cross-architecture portability: 
+
+• X86 cluster: 4 nodes, each equipped with CPUs at 2.6 GHz, 
+
+4 × 13 = 52 cores per node, and 730 GB memory. 
+
+• Kunpeng cluster: 4 nodes, each equipped with Kunpeng-920 CPUs at 2.6 GHz, 4 × 32 = 128 cores per node, and 521 GB memory. 
+
+IPM solver framework. All experiments are conducted within Huawei’s OptVerse interior point method solver [ 8], which by de-fault invokes Intel MKL PARDISO as its sparse linear solver at every IPM iteration. To evaluate SDSL-Solver under realistic end-to-end conditions, we replace this internal sparse-solve module with SDSL-Solver while keeping the remainder of the OptVerse IPM pipeline (KKT system assembly, step-length computation, con-vergence checking, etc.) unchanged. 
+
+Baseline solvers. We compare SDSL-Solver against two estab-lished baselines: 
+
+• Intel MKL PARDISO [ 15 ]: A shared-memory direct solver employing Cholesky or LU factorization with multi-threaded parallelism, serving as the single-node baseline (and also the default sparse solver inside OptVerse). 
+
+• PETSc [ 1]: A widely adopted distributed iterative solver framework that partitions the matrix via a row-wise decom-position strategy and employs Block Jacobi preconditioning with ILU(0) local solvers, serving as the multi-node baseline. 
+
+Benchmarks. We use two categories of test problems, summa-rized in Table 1: 
+
+• Block Jacobi benchmarks (well-conditioned): PageRank_1m, PageRank_5m, com-youtube, cit-patents, L2CTA3D, thk_48, and thk_63. These are LP problems from PageRank bench-mark [ 9] and Hans Mittelmann benchmark [ 10 ] with diag-onally dominant reduced matrices. 
+
+• BBD benchmarks (ill-conditioned): These are LP prob-lems whose reduced matrices are highly ill-conditioned and require precise preconditioning. The sources include LP formulations of network planning problems (Huawei’s proprietary dataset), LP relaxations of Security-Constrained Unit Commitment (SCUC) problems (Huawei’s proprietary dataset), MIPLIB 2017 benchmark and Hans Mittelmann benchmark. 
+
+Experimental design. Our evaluation is organized into two complementary groups of experiments: 
+
+• Single-node experiments (Section 4.2): Conducted on a single X86 node, these experiments isolate the contribution of each optimization technique in SDSL-Solver from the effects of inter-node communication and distributed paral-lelism. The baseline is Intel MKL PARDISO, which is also the default sparse solver inside the OptVerse. 
+
+• Multi-node experiments (Section 4.3): Conducted on up to 4 nodes of both the X86 and Kunpeng clusters, these experiments assess the distributed parallel efficiency of SDSL-Solver in both single-solve and end-to-end IPM set-tings. Here SDSL-Solver is compared against PETSc and PARDISO, to demonstrate the advantages of SDSL-Solver at scale and across heterogeneous architectures. In short, the single-node experiments serve as an ablation study of SDSL-Solver’s algorithmic components, whereas the multi-node experiments quantify its real-world benefit when integrated into OptVerse as a drop-in replacement for MKL PARDISO. 
+
+Table 1: Summary of benchmark problems. 𝑛 is the dimension of the reduced matrix 𝑆 red , and nnz 𝐿 is the number of nonzeros in its lower triangle.                                                                                                  
+
+> Category Problem Abbr. 𝑛 nnz 𝐿 Type Block Jacobi PageRank_1m pg1m 1,000,000 62,999,999 PageRank PageRank_5m Pg5m 5,000,000 314,999,999 PageRank com-youtube comy 1,134,890 5,975,248 PageRank cit-patents citp 3,774,768 20,258,734 PageRank L2CTA3D L2C 80,224 2,380,640 Hans Mittelmann thk_48 th48 1,224,309 17,068,753 Hans Mittelmann thk_63 th63 1,891,095 26,397,063 Hans Mittelmann BBD NetworkPlan_2 net2 1,267,995 7,069,833 proprietary NetworkPlan_3 net2 1,298,478 7,348,226 proprietary NetworkPlan_6 net6 487,999 3,050,273 proprietary NetworkPlan_7 net7 1,066,725 7,141,981 proprietary NetworkPlan_8 net8 1,413,175 8,191,812 proprietary NetworkPlan_9 net9 4,582,382 25,748,800 proprietary NetworkPlan_10 net10 3,379,888 21,271,365 proprietary NetworkPlan_11 net11 7,613,064 42,183,414 proprietary NetworkPlan_18 net18 361,815 2,332,710 proprietary ScucRelax_1 scu1 46,430 1,283,378 proprietary ScucRelax_3 scu3 81,575 3,271,595 proprietary ScucRelax_6 scu6 63,066 3,856,612 proprietary ScucRelax_7 scu7 82,268 3,085,073 proprietary BuildingEnergy buie 221,348 1539,614 MIPLIB 2017 fome13 fo13 3,898 39,306 Hans Mittelmann L1_sixm250obs l1si 66,077 364,998 Hans Mittelmann
+> 7Shaofeng Yang, Yunting Wang, Yingying Cheng, Fan Zhang, Xin He, and Guangming Tan
+
+## 4.2 Single-node Performance 
+
+To isolate the contribution of each optimization technique from hardware-specific effects, all experiments in this subsection are conducted on a single X86 node. SDSL-Solver employs IGCR( 𝑚 ) as the Krylov solver with a relative residual tolerance of 10 −8.
+
+Table 2: Per-step solution time statistics with sparse filtering applied to the L2CTA3D benchmark.                                                                           
+
+> IPMs_Step 𝜏 nnz 𝐿 nnz 𝐿
+> nnz 0
+> 𝐿
+> IGCR_Iter time(s) 0024216405 100% 1110 1024216405 100% 160 2024216405 100% 163 31e-3 6223363 26% 323 41e-3 5506971 23% 322 51e-3 3775742 16% 316 61e-3 1956206 8% 414 71e-5 1795021 7% 313 81e-5 1653438 7% 310 91e-5 1112597 5% 310 10 1e-6 1059397 5% 310 11 1e-8 1400258 6% 210 12 1e-8 980210 4% 2813 1e-8 857933 4% 48
+
+4.2.1 Numerics-based Sparse Filtering. For matrices whose entry magnitudes vary widely across IPM iterations, such as L2CTA3D, numerical filtering can dramatically reduce the nonzero count of the preconditioning matrix and hence the factorization cost. Ta-ble 2 traces the filtering behavior over the 13 IPM iterations re-quired for L2CTA3D to converge. As the optimization progresses, the disparity in entry magnitudes grows monotonically, enabling increasingly aggressive filtering thresholds to be applied starting from the early iterations. When the resulting preconditioner quality degrades below an acceptable level, the filter is temporarily relaxed and re-applied at a subsequent iteration with a refined threshold. Compared with PARDISO LDL 𝑇 without preprocessing (916 s), SDSL-Solver with sparse filtering reduces the total IPM solution time to 377 s, yielding a 2.43 × speedup. 
+
+4.2.2 Diagonal Correction. Diagonal correction lowers the effec-tive condition number of the preconditioner, thereby accelerat-ing iterative convergence and improving numerical robustness. As shown in Table 3, PARDISO LDL 𝑇 encounters numerical break-downs and fails to converge for all 15 benchmarks, whereas SDSL-Solver with diagonal correction ( 𝛿 = 10 −12 ) successfully converges to the optimal solution in every case. 
+
+4.2.3 Preconditioner Reuse. We evaluate the preconditioner reuse strategy described in Section 3.4. Table 4 compares the total IPM solution time with and without reuse on the X86 cluster. By amortiz-ing the cost of symbolic analysis and numerical factorization across consecutive IPM iterations, the reuse strategy yields substantial speedups. For NetworkPlan_6, the IPM converges in 60 steps. MC64 re-ordering and symbolic factorization are performed once in the first step and reused from the 2nd through the 58th iteration; only the final two iterations require recomputation, while numerical fac-torization is updated at every step. This reuse strategy not only 
+
+Table 3: Comparison of SDSL-Solver (with 𝛿 = 10 −12 diagonal correction) vs. PARDISO LDL 𝑇 for end-to-end IPMs conver-gence. "Numerical Issues Detected" is an error status indicat-ing solver failure within the IPMs framework.                                                                  
+
+> PARDISOLDL SDSL-Solver
+> Case Iteration Status Iteration Status net2 52 Numerical Issues Detected 57 Optimal net3 27 Numerical Issues Detected 35 Optimal net6 50 Numerical Issues Detected 60 Optimal net7 69 Numerical Issues Detected 82 Optimal net8 66 Numerical Issues Detected 73 Optimal net9 81 Numerical Issues Detected 92 Optimal net10 53 Numerical Issues Detected 52 Optimal net11 61 Numerical Issues Detected 94 Optimal net18 54 Numerical Issues Detected 62 Optimal scu1 72 Numerical Issues Detected 35 Optimal scu3 100 Numerical Issues Detected 35 Optimal scu6 29 Numerical Issues Detected 50 Optimal scu7 107 Numerical Issues Detected 66 Optimal buie 36 Numerical Issues Detected 56 Optimal fo13 20 Numerical Issues Detected 35 Optimal
+
+Table 4: Effect of preconditioner reuse on total IPMs solution time (seconds) on the X86 cluster.                 
+
+> Problem Without Reuse With Reuse Speedup IPMs_Step Time IPMs_Step Time net6 60 441.32 60 125.3 3.53 l1si 53 27.94 28 20.70 1.35
+
+reduces the per-step computation time but also yields a 3.53 × over-all speedup. For L1_sixm250obs, the matrix structure remains invariant through-out the solve, so symbolic factorization is performed only once. Numerical factorization is likewise computed at the first step and reused for the subsequent 10 steps, after which it is refreshed at every iteration. Notably, the slight perturbation introduced by the stale preconditioner acts as implicit regularization for the increas-ingly ill-conditioned late-stage systems, reducing the total IPM step count from 53 to 28 and delivering a 1.35 × speedup. 
+
+## 4.3 Multi-node Performance 
+
+We evaluate distributed performance along two axes: single-solve 
+
+performance, which measures the wall-clock time of an individual linear system solve, and end-to-end performance, which captures the total execution time from IPM initialization to termination. Single-solve experiments on the X86 platform compare SDSL-Solver against PETSc and PARDISO LDL 𝑇 ; end-to-end experiments are conducted on both the X86 and Kunpeng platforms. For each solver, we report the best wall-clock time across all tested process/thread configurations. Note that, unlike PETSc, which employs a pure MPI model, SDSL-Solver adopts a hybrid MPI+OpenMP execution model combining inter-node message passing with intra-node multi-threading. Because the IPM computations for the NetworkPlan-class prob-lems fail to converge under both PARDISO LDL 𝑇 and PETSc, we 
+
+> 8SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods
+
+Table 5: Single-solve speedup of SDSL-Solver(Block Jacobi) over PETSc and PARDISOLDL (abbreviated as PDS) up to 4 nodes of the X86 clusters. Step denotes the IPMs step, and Iter denotes the Bicgstab iteration.                                                                                                             
+
+> Problem Step SDSL_Solver PETSc PARDISLDL Speedup Iter Time Iter Time Time vs.PETSc vs.PDS pg1m 115 2.31 15 6.69 –2.90 ×–pg5m 115 13.63 16 44.86 –3.29 ×–comy 119 20.65 17 1099.86 –53 .27 ×–citp 125 8.10 31 16.14 –2.35 ×–L2C 170.41 70.85 80.49 2.09 ×198 .25 ×
+> 515 0.51 15 1.05 162.87 2.06 ×319 .35 ×
+> 10 244 2.26 225 6.62 166.05 2.74 ×73 .47 ×
+> th63 1877 8.38 888 15.89 66.55 1.90 ×7.94 ×
+> 5733 7.96 729 13.06 121.02 1.64 ×15 .20 ×
+> 10 812 8.77 749 13.06 119.30 1.49 ×13 .60 ×
+> 15 1401 14.14 1544 22.65 120.61 1.60 ×8.53 ×
+> th48 1170 6.20 156 19.64 1221.75 3.17 ×197 .09 ×
+> 5738 27.23 596 68.93 1209.67 2.53 ×44 .42 ×
+> Average 6.23 ×97 .54 ×
+
+restrict the evaluation on these benchmarks to single-solve perfor-mance at selected IPM steps and omit end-to-end comparisons. SDSL-Solver pairs BiCGSTAB with the Block Jacobi framework for well-conditioned problems and IGCR( 𝑚 ) with the BBD frame-work for ill-conditioned problems, both using a relative residual tolerance of 10 −8.
+
+4.3.1 Single-solve Performance of Block Jacobi Method. Table 5 reports the single-solve speedup of SDSL-Solver over PETSc (4 nodes) and PARDISO LDL 𝑇 (1 node) for the Block Jacobi bench-marks on the X86 cluster. SDSL-Solver consistently outperforms PETSc across all benchmarks, primarily due to its sparse filtering optimization ( 𝜏 = 10 −3). The gains over PARDISO LDL 𝑇 are even more pronounced: beyond the additional computational resources available to the distributed solver, PARDISO LDL 𝑇 suffers from massive nonzero fill-in during factorization, which dominates its execution time. On up to four compute nodes, SDSL-Solver achieves speedups of up to 53 .27 × over PETSc, with a geometric mean of 6.23 ×. Relative to single-node PARDISO LDL 𝑇 , the speedups reach 198 .25 × with a geometric mean of 97 .54 ×. Notably, PARDISO LDL 𝑇 fails entirely on PageRank_1m, PageRank_5m, com-youtube, and cit-patents because the fill-in volume exceeds the 32-bit integer indexing limit. 
+
+4.3.2 Single-solve Performance of BBD Method. For the ill-conditioned NetworkPlan-class benchmarks, we evaluate SDSL-Solver with the BBD framework against PETSc and PARDISO LDL 𝑇 . Because the condition numbers of these matrices vary substantially across IPM iterations, we report results at multiple representative steps. Table 6 summarizes the single-solve speedups on the X86 cluster (4 nodes). Against PETSc, SDSL-Solver achieves speedups ranging from 
+
+2.69 × to 14 .39 ×, with a geometric mean of 7.77 ×. The primary contributor is the combination of diagonal correction and direct LU factorization in the preconditioner, which yields a higher-quality preconditioner and sharply reduces the IGCR iteration count. Against PARDISO LDL 𝑇 , SDSL-Solver achieves a geometric mean speedup of 5.85 × (up to 12 .23 ×). Although the direct LU factoriza-tion in SDSL-Solver is more expensive per process than PARDISO’s LDL 𝑇 factorization, the BBD parallel framework distributes the 
+
+Table 6: Single-solve speedup of SDSL-Solver(BBD) over PETSc and PARDISOLDL (abbreviated as PDS) up to 4 nodes of the X86 clusters. Step denotes the IPMs step, and Iter de-notes the Bicgstab iteration.                                                                                                        
+
+> Problem Step SDSL_Solver PETSc PARDISLDL Speedup Iter Time Iter Time Time vs.PETSc vs.PDS net2 130.36 193 5.18 1.42 14 .39 ×3.94 ×
+> 10 30.34 272 2.97 1.22 8.21 ×3.59 ×
+> net3 130.39 139 3.84 2.58 9.85 ×6.62 ×
+> 10 30.39 227 2.56 2.09 6.56 ×5.36 ×
+> net7 130.38 103 2.70 1.91 6.84 ×5.03 ×
+> 10 30.39 111 0.86 2.02 2.69 ×5.18 ×
+> net8 130.39 187 4.87 1.59 12 .49 ×4.08 ×
+> 10 30.39 267 2.35 1.90 6.03 ×4.87 ×
+> net9 131.40 207 20.00 6.90 9.40 ×4.93 ×
+> 10 31.40 278 11.52 6.52 8.23 ×4.66 ×
+> net10 120.35 81.47 4.28 4.20 ×12 .23 ×
+> 10 20.37 91.60 3.58 4.32 ×9.68 ×
+> Average 7.77 ×5.85 ×
+
+Table 7: End-to-end IPMs solve time (seconds) on the X86 cluster. 
+
+Problem X86 kunpeng 
+
+𝜏 Steps Time 𝜏 Steps Time pg1m 10 −3 19 316.8 10 −3 19 523.5 citp 10 −3 40 1,566.3 10 −3 39 2,210.4 comy 10 −3/10 −2 33 2,351.0 10 −3/10 −2 33 5,216.1 pg5m 10 −3/10 −2 31 4,088.0 10 −3/10 −2 31 9,989.0 L2C 10 −3 12 176.0 10 −3 12 382.6 th48 10 −3/10 −2 31 3,780.1 – – –th63 10 −3 21 1,589.0 – – –
+
+workload across multiple MPI processes with intra-process multi-threading, effectively offsetting the higher per-process cost. We note that Table 6 includes only instances for which PETSc achieves a relative residual below 10 −8; cases where PETSc fails to converge are excluded. 
+
+4.3.3 End-to-end IPMs Performance. We evaluate end-to-end IPM solution time on both the X86 and Kunpeng clusters with up to 4 nodes. Table 7 reports the total wall-clock time for SDSL-Solver. PETSc is excluded from this comparison because it has not yet been integrated into the IPM framework for end-to-end evaluation. For comy, pg5m, and th48, we adopt a two-phase filtering strat-egy: as the IPM progresses, the coefficient matrix entries evolve continuously, making a single threshold 𝜏 insufficient for the entire solve. Accordingly, 𝜏 is set to 10 −3 for the first 24 steps and relaxed to 10 −2 thereafter. For the large-scale PageRank-type problems, PARDISO is inap-plicable because the fill-in during factorization exceeds the 32-bit integer indexing limit. To put this in perspective, PARDISO requires 14,630 s for a single IPM iteration on the substantially smaller PageR-ank_200k ( 𝑛 =200 ,000 ), whereas SDSL-Solver completes the entire 
+
+end-to-end solve for the 5× larger PageRank_1m in only 316.8 s. This comparison highlights the fundamental scalability advantage of the distributed iterative approach over direct methods. On the Hans Mittelmann benchmarks (L2CTA3D, thk_48, thk_63), SDSL-Solver achieves end-to-end speedups of 9.09 ×, 6.83 ×, and 
+
+> 9Shaofeng Yang, Yunting Wang, Yingying Cheng, Fan Zhang, Xin He, and Guangming Tan
+
+Figure 3: Strong scaling of SDSL-Solver on X86 cluster. The dashed line indicates ideal linear speedup. 
+
+1.32 × over single-node PARDISO on the X86 platform, consistent with the cumulative single-solve improvements across all IPM itera-tions. On the Kunpeng platform, thk_48 and thk_63 fail to converge to optimality. We attribute this to the progressive ill-conditioning of the coefficient matrix in later IPM iterations, compounded by the accumulation of floating-point rounding errors when computation is distributed across a larger number of cores, which collectively destabilize iterative convergence. 
+
+## 4.4 Scalability Analysis 
+
+Figure 3 presents the strong scaling of SDSL-Solver on large-scale well-conditioned benchmarks from 1 to 4 nodes on the X86 cluster, with end-to-end IPM wall-clock time as the evaluation metric. Be-cause SDSL-Solver adopts a hybrid two-level MPI+OpenMP parallel model, the performance at a fixed core count can vary with the process/thread configuration. To ensure a fair comparison, for each node count we sweep over all feasible process/thread combinations and report the configuration that minimizes end-to-end runtime. As shown in Figure 3, the speedup (normalized to single-node runtime) grows consistently with the node count. The citp bench-mark exhibits the best scaling, reaching 2.80 × on 4 nodes, while pagerank1m scales the worst, owing to its comparatively small problem size: as more resources are added, communication and task-distribution overheads cease to be amortized by sufficient com-putation. Moreover, non-solver components of the IPM pipeline are inherently difficult to parallelize. These two effects jointly erode parallel efficiency at higher node counts. 
+
+## 5 Conclusion 
+
+We have presented SDSL-Solver, a scalable distributed sparse linear solver framework tailored to the large-scale, ill-conditioned sys-tems that arise in interior point methods. SDSL-Solver couples the IGCR( 𝑚 ) Krylov solver with four complementary optimizations: (i) a numerics-based sparse filtering scheme that exploits the magni-tude distribution of IPM matrix entries to yield sparser yet effective preconditioners; (ii) a diagonal correction technique that improves conditioning for the extremely ill-conditioned systems encountered in late-stage IPM iterations; (iii) two distributed parallel frame-works, Block Jacobi for well-conditioned problems and Bordered Block Diagonal for ill-conditioned problems, that together cover the full spectrum of matrix difficulty in practical IPMs; and (iv) a preconditioner reuse strategy that amortizes factorization costs across consecutive IPM iterations. Extensive experiments on multi-node clusters equipped with X86 and Kunpeng-920 processors show that SDSL-Solver delivers speedups of up to 53 × over PETSc and more than 300 × over Intel MKL PARDISO on matrices with millions of rows, while also sub-stantially improving numerical robustness on benchmarks where direct solvers fail to converge. These results demonstrate that the synergy of advanced Krylov methods, adaptive preconditioning, and architecture-aware parallel decomposition can effectively un-lock the scalability of IPMs for industrial-scale optimization. Future work will proceed along three directions: (i) GPU/NPU acceleration of the SpMV and preconditioner-application kernels to exploit heterogeneous architectures; (ii) adaptive threshold selec-tion for sparse filtering, thereby reducing manual parameter tuning; and (iii) extending SDSL-Solver to support second-order cone and semidefinite programming problems. 
+
+## References

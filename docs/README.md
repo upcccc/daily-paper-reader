@@ -6,67 +6,41 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-02
-- 运行时间：2026-05-02 19:48:35 UTC
+- 最新运行日期：2026-05-03
+- 运行时间：2026-05-03 19:49:00 UTC
 - 运行状态：成功
-- 本次总论文数：15
-- 精读区：4
-- 速读区：11
+- 本次总论文数：6
+- 精读区：0
+- 速读区：6
 
 ### 今日简报（AI）
-今日深挖 15 篇前沿成果，重点攻克联邦多标签学习中的异构关联与隐私保护下的均值估计难题。
-核心突破在于 FedHarmony 对复杂标签相关性的调和，以及洗牌机制在私有向量优化中的高效应用。
-建议关注联邦学习在医疗影像卸载及无线边缘网络调度中的最新工程实践。
-- 详情：[/202605/02/README](/202605/02/README)
+今日速览 6 篇前沿论文，重点聚焦 Transformer 显存优化与基因数据安全生成。
+推荐关注折叠张量并行技术对大模型训练效率的提升，以及跨机构基因组数据合成的安全新方案。
+建议开发者优先研读显存优化策略，理论研究者可关注随机梯度采样的最新数学证明。
+- 详情：[/202605/03/README](/202605/03/README)
 
 ### 精读区论文标签
-1. [FedHarmony: Harmonizing Heterogeneous Label Correlations in Federated Multi-Label Learning](/202605/02/2604.28024v1-fedharmony-harmonizing-heterogeneous-label-correlations-in-federated-multi-label-learning)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：隐私约束下的联邦多标签学习
-2. [Shuffling-Aware Optimization for Private Vector Mean Estimation](/202605/02/2604.28032v1-shuffling-aware-optimization-for-private-vector-mean-estimation)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：单消息洗牌模型与本地差分隐私
-3. [FedSLoP: Memory-Efficient Federated Learning with Low-Rank Gradient Projection](/202605/02/2604.24012v2-fedslop-memory-efficient-federated-learning-with-low-rank-gradient-projection)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：用于分布式机器学习的联邦优化算法
-4. [Perfectly Private Over-the-Air Computation](/202605/02/2604.28080v1-perfectly-private-over-the-air-computation)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：分布式系统中空中计算的完美隐私保护
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods](/202605/02/2604.23979v1-sdsl-solver-scalable-distributed-sparse-linear-solvers-for-large-scale-interior-point-methods)  
+1. [Folding Tensor and Sequence Parallelism for Memory-Efficient Transformer Training & Inference](/202605/03/2604.26294v1-folding-tensor-and-sequence-parallelism-for-memory-efficient-transformer-training--inference)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：可扩展分布式稀疏线性求解器框架
-2. [Application-Aware Twin-in-the-Loop Planning for Federated Split Learning over Wireless Edge Networks](/202605/02/2604.26105v1-application-aware-twin-in-the-loop-planning-for-federated-split-learning-over-wireless-edge-networks)  
+   evidence：Transformer训练的分布式执行策略
+2. [Secure Cross-Silo Synthetic Genomic Data Generation](/202605/03/2604.27456v1-secure-cross-silo-synthetic-genomic-data-generation)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：无线边缘网络上的联邦拆分学习
-3. [Asynchronous Federated Unlearning with Invariance Calibration for Medical Imaging](/202605/02/2604.26809v1-asynchronous-federated-unlearning-with-invariance-calibration-for-medical-imaging)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：联邦遗忘学习与数据保护法规
-4. [GreenDyGNN: Runtime-Adaptive Energy-Efficient Communication for Distributed GNN Training](/202605/02/2604.23139v1-greendygnn-runtime-adaptive-energy-efficient-communication-for-distributed-gnn-training)  
+   evidence：跨孤岛隐私保护合成数据生成
+3. [Theoretical guarantees for stochastic gradient sampling methods via Gaussian convolution inequalities](/202605/03/2604.24632v1-theoretical-guarantees-for-stochastic-gradient-sampling-methods-via-gaussian-convolution-inequalities)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：分布式图神经网络训练
-5. [Identity-Decoupled Anonymization for Visual Evidence in Multi-modal Retrieval-Augmented Generation](/202605/02/2604.23584v1-identity-decoupled-anonymization-for-visual-evidence-in-multi-modal-retrieval-augmented-generation)  
+   evidence：随机梯度噪声与高斯卷积
+4. [DiffAnon: Diffusion-based Prosody Control for Voice Anonymization](/202605/03/2604.26281v1-diffanon-diffusion-based-prosody-control-for-voice-anonymization)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：多模态检索的隐私保护匿名化
-6. [SDSL-Solver: Scalable Distributed Sparse Linear Solvers for Large-Scale Interior Point Methods](/202605/02/2604.23979v2-sdsl-solver-scalable-distributed-sparse-linear-solvers-for-large-scale-interior-point-methods)  
+   evidence：语音匿名化中隐私与效用的权衡
+5. [Who Trains Matters: Federated Learning under Enrollment and Participation Selection Biases](/202605/03/2604.26604v1-who-trains-matters-federated-learning-under-enrollment-and-participation-selection-biases)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：大规模优化的分布式稀疏线性求解器
-7. [CommFuse: Hiding Tail Latency via Communication Decomposition and Fusion for Distributed LLM Training](/202605/02/2604.24013v2-commfuse-hiding-tail-latency-via-communication-decomposition-and-fusion-for-distributed-llm-training)  
+   evidence：存在注册和参与选择偏差的联邦学习
+6. [TRUST: A Framework for Decentralized AI Service v.0.1](/202605/03/2604.27132v1-trust-a-framework-for-decentralized-ai-service-v01)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：分布式大模型训练与通信计算重叠
-8. [TACO: Efficient Communication Compression of Intermediate Tensors for Scalable Tensor-Parallel LLM Training](/202605/02/2604.24088v1-taco-efficient-communication-compression-of-intermediate-tensors-for-scalable-tensor-parallel-llm-training)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：可扩展张量并行大模型训练与通信压缩
-9. [Information-Theoretic Distributed Point Functions with Shorter Keys](/202605/02/2604.24385v1-information-theoretic-distributed-point-functions-with-shorter-keys)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：用于隐私保护的信息论分布式点函数
-10. [GradMAP: Gradient-Based Multi-Agent Proximal Learning for Grid-Edge Flexibility](/202605/02/2604.24549v1-gradmap-gradient-based-multi-agent-proximal-learning-for-grid-edge-flexibility)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：完全去中心化学习方法与多智能体学习
-11. [Data-Driven Privacy-Preserving Modeling and Frequency Regulation with Aggregated Electric Vehicles via Bilinear Hidden Markov Model](/202605/02/2604.24724v1-data-driven-privacy-preserving-modeling-and-frequency-regulation-with-aggregated-electric-vehicles-via-bilinear-hidden-markov-model)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：隐私保护建模与控制框架
+   evidence：用于可信AI和隐私的去中心化框架
 
 
 <div class="dpr-home-promo-card">

@@ -1,0 +1,2345 @@
+Title: EASE: Federated Multimodal Unlearning via Entanglement-Aware Anchor Closure
+
+URL Source: https://arxiv.org/pdf/2605.00733v1
+
+Published Time: Mon, 04 May 2026 01:06:13 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+# EASE : Federated Multimodal Unlearning via Entanglement-Aware Anchor Closure 
+
+Zihao Ding Beining Wu Jun Huang 
+
+Department of Electrical Engineering and Computer Science South Dakota State University Brookings, SD 57007, USA 
+
+{Zihao.Ding, Wu.Beining}@jacks.sdstate.edu Jun.Huang@sdstate.edu 
+
+Abstract 
+
+Federated Multimodal Learning (FML) trains multimodal models across decentral-ized clients while keeping their image-text pairs private. However, joint embedding training entangles forgotten knowledge across both modalities and client gradient subspaces, hindering federated unlearning. Previous federated unlearning ap-proaches neither sever the cross-modal reconstruction channel mediated by bilinear coupling nor separate forget-exclusive update directions from those shared with re-tained clients. We identify an Anchor Principle for federated multimodal contrastive unlearning: forgotten alignments persist through three residual anchors arising from bilinear cross-modal coupling, principal-angle subspace entanglement, and continued federated updates. At the modality level, we show that bilateral displace-ment of both visual and language branches closes the cross-modal reconstruction channel. Correspondingly, our method addresses subspace entanglement through Cosine–Sine decomposition of client-update subspaces, isolating forget-exclusive directions from retain support. Moreover, we propose a direction-selective Forget Lock that bounds residual drift across rounds. Combining these strategies, we present EASE , an Entanglement-Aware Subspace Excision framework that closes all three anchor channels under a unified design. EASE demonstrates consistent superiority across multiple datasets and unlearning scenarios, for instance, match-ing the retrain reference to within 0.2 and 4.2 R@1 points on the forget and retain sides under client unlearning on Flickr30K with CLIP-B/32. 
+
+1 Introduction 
+
+Federated Learning (FL) [ 29 , 25 , 51 , 48 , 9, 49 , 34 ] allows multiple clients to jointly train a shared model while keeping their raw data private, establishing itself as a key paradigm in distributed machine learning [ 18 , 55 , 50 ]. Recent advances integrate FL with multimodal models through parameter-efficient Low-Rank Adaptation (LoRA) [ 15 ] adapters, forming Federated Multimodal Learning (FML) [ 6, 57 , 46 , 8]. The server never observes raw image-text pairs; it only coordinates client updates and later continues FedAvg with the remaining clients. When deployed in regulated domains, FML inherits the right to be forgotten [ 40 ]: once a client withdraws, a target concept becomes obsolete, or harmful content surfaces, the system must approximate the retain-only retrain model without centralizing the removed pairs, a task referred to as Federated Unlearning [ 27 , 14 , 41 , 10 , 54 , 47 , 43 ]. We review related work in Appendix A. As illustrated in Figure 1, while federated unlearning has drawn growing interest [ 27 , 44 , 14 , 53 , 12 ,52 , 16 , 30 , 9 , 45 ], extending it to multimodal models remains open: client-update-only access, the bilinear coupling of the alignment loss, and continued FedAvg jointly create failure modes absent from 
+
+> Preprint.
+> arXiv:2605.00733v1 [cs.NI] 1 May 2026
+
+single-modality unlearning. We use anchor to denote a residual mechanism that keeps a forgotten image-text alignment reconstructible after an unlearning request, and identify three such mechanisms in this regime, a failure pattern we call an Anchor Principle for federated multimodal contrastive unlearning. The first arises because joint embedding training entangles forgotten knowledge across both modalities through the bilinear similarity, so the gradient with respect to one modality depends on the embeddings produced by the other. Excising parameters from one branch alone leaves the other as a cross-modal anchor that drives the alignment gradient back toward the original pairing, raising a first question: I) How can we close this Modality Anchor while keeping each branch’s representation faithful enough to support retrieval over the retained image-text pairs? Compounding this, federated training entangles client gradient subspaces along a continuous spectrum, mixing directions exclusive to the forget set with directions shared with retained clients. Existing methods treat the forget set’s contribution as an indivisible block, conflating removable anchors with retain support, and as we confirm in Section 2 they consistently suffer a forget–retain trade-off, motivating a second question: 
+
+II) How can we identify and excise only the removable Unique-Subspace Anchors while sparing the retain-support directions whose deletion would degrade retained knowledge across clients? "A brown and white dog is running through the snow." "A dog running by snow." "A dog is running in the snow"  
+
+> Client 1 Client 2 Client 3 Client K
+> CLIP
+> Image Text
+> Embedding
+> Drag Back
+> One-sided Cut
+> Clients
+> Client 1 Unlearning Client 2 Retaining Server-side Embedding
+> Clinets Share
+> (I) (II) (III)
+> Unlearning
+> Recall
+> Success Failure
+> Clients
+> Share Space
+> Entangled
+
+Figure 1: Problem Illustration. Three residual an-chors in federated multimodal unlearning. I) Modality Anchor: the intact branch preserves forgotten align-ments after one-sided excision. II) Unique-Subspace Anchor: forget-exclusive directions mix with retain support across client subspaces. III) Temporal Re-anchoring: continued aggregation rewrites the removed directions during subsequent FedAvg training rounds. Even after the first two anchors are closed at the moment of unlearning, each client’s local SGD follows an alignment gradient with non-zero components along the re-moved directions. Without a persistent safeguard, every subsequent round of fed-erated training rewrites a fraction of the cut anchors back and gradually undoes the un-learning, raising a third question: III) How can we prevent Temporal Re-anchoring across continued rounds while leaving di-rections outside the forget channel free to recover retained knowledge? 
+
+We address all three challenges with 
+
+EASE : an Entanglement-Aware Subspace 
+
+Excision framework for federated mul-timodal unlearning, built on lightweight LoRA adapters and projection operators over a frozen multimodal backbone. For challenge I) , we establish Bilateral Knowl-edge Excision (BKE) to close the Modal-ity Anchor by displacing the image and text branches simultaneously, so the bilin-ear similarity can no longer reconstruct the removed pairing through the untouched modality. This bilateral principle has no counterpart in single-modality unlearning. For challenge II) , we develop Gradient Subspace Decomposition (GSD) . Reusing client updates already transmitted during FedAvg, the server extracts per-client subspace bases via SVD and measures their pairwise principal angles; directions nearly orthogonal to the retain subspace are treated as forget-exclusive anchors, while directions shared with retained clients are preserved as retain support. This replaces the binary erase-or-preserve decision with a per-direction operation adapted to the actual client-subspace entanglement. For challenge III) ,we devise Projection with Forget Lock (PFL) . At each unlearning round the server projects the parameter displacement onto the complement of the unique subspace, while a client-side Forget Lock penalizes drift back along the identified unique directions during local SGD, leaving the orthogonal complement unconstrained for retained knowledge recovery. The projection closes the anchor at the unlearning round, and the lock keeps it closed across continued training, with drift bounded inversely by the regularization strength. Our main contributions are: 
+
+❶ Anchor Principle. We identify and formalize an Anchor Principle for federated multimodal contrastive unlearning: forgotten knowledge persists through three principal anchor locations in this regime, the Modality Anchor (bilinear cross-modal coupling), the Unique-Subspace Anchor (principal-angle subspace entanglement), and Temporal Re-anchoring (residual alignment gradient 2field); empirically, closing any strict subset of the three leaves a measurable reconstruction path. The principle is verified across three practical scenarios: client, class, and sample unlearning. 
+
+❷ Anchor Closure Framework. We introduce EASE , realizing the Anchor Principle through three coordinated mechanisms: BKE shuts the Modality Anchor by displacing both branches simultane-ously, GSD separates removable anchors from retain support via the Cosine–Sine decomposition of the forget–retain subspace pair, and PFL prevents Temporal Re-anchoring through a server-side projection and a direction-selective client-side penalty. We back the framework with conditional geometric guarantees on unique-subspace excision and retain-direction preservation. 
+
+❸ Empirical Verification. Experiments on Flickr30K, COCO, and TextCaps with three multimodal backbones across three unlearning scenarios show that EASE most consistently narrows the gap to the retrain reference on both forget and retain sides among nine federated and centralized baselines, with retrieval, alignment-residual, and shadow/LiRA membership-inference metrics confirming closure at the embedding and inference levels. An anchor-by-anchor ablation confirms that disabling any single closure reopens a distinct failure mode predicted by the principle. 
+
+2 Preliminaries 
+
+Federated multimodal learning. We consider a federated system with one central server and K
+
+clients. Each client k holds a private multimodal dataset Dk of Nk image-text pairs (xv , x t), where subscripts v and t denote the visual and textual modalities throughout, and data never leaves the client. The model consists of frozen pretrained encoders and lightweight trainable modules, namely Low-Rank Adaptation (LoRA) adapters and projectors. We denote the visual and language trainable parameters by wv and wt, and write w = [ wv ; wt] for the joint parameter vector. A complete notation table covering all symbols used in this paper is provided in Appendix B.1. 
+
+Contrastive alignment objective. The visual and language encoders map each input into a shared embedding space, producing m-dimensional representations zv and zt. The system is trained via Federated Averaging (FedAvg) with the symmetric InfoNCE alignment loss: 
+
+La(w; D) = − 12N
+
+> N
+
+X
+
+> i=1
+
+"
+
+log exp( z⊤ 
+
+> i,v
+
+zi,t /γ )
+
+PNj=1 exp( z⊤ 
+
+> i,v
+
+zj,t /γ ) + log exp( z⊤ 
+
+> i,v
+
+zi,t /γ )
+
+PNj=1 exp( z⊤ 
+
+> j,v
+
+zi,t /γ )
+
+#
+
+, (1) where γ is the temperature and D = SK−1 
+
+> k=0
+
+Dk; the two terms correspond to the visual-to-text and text-to-visual retrieval directions. A key structural property of this loss is that the gradient with respect to one modality depends on the embeddings of the other: ∇wv La depends on all textual embeddings 
+
+zt,j , and vice versa. As we show in Section 3.2, this cross-modal coupling is the mechanism behind the first anchor channel of our principle, the Modality Anchor. 
+
+Unlearning problem. Given an unlearning request, we partition D into a forget set Df and a retain set Dr = D \ D f . We consider three practical scenarios: client unlearning, where one or more clients request complete data withdrawal; class unlearning, where all samples matching a target class must be forgotten across the federation; and sample unlearning, where designated samples across all clients must be removed. Since the caption-retrieval datasets we use do not provide ground-truth semantic class labels, we instantiate class unlearning via KMeans pseudo-class clusters in the pretrained image-text embedding space (Appendix B.2). In all three scenarios, the request is issued by a participating client and the server executes the unlearning on the global model. We let wn denote the model after standard federated training and ˜w the retrain model obtained by rerunning the full training pipeline on Dr from scratch. 
+
+Desiderata. The goal is to produce an unlearned model w∗ satisfying three criteria: (i) unlearning completeness, the retrieval behavior of w∗ on Df matches that of ˜w; (ii) retention integrity, the performance of w∗ on Dr matches that of ˜w; and (iii) efficiency, the cost is substantially lower than full retraining. Existing methods attempt to satisfy these criteria by erasing the forget data’s influence from w as a whole, treating the forget gradient subspace as an indivisible block. This blind erasure cannot distinguish forget-exclusive directions, the removable anchors, from directions shared with retain, the retain support; nor does it address the bilinear cross-modal coupling that makes the untouched modality act as a Modality Anchor, as we analyze in Section 3.2. These challenges motivate the entanglement-aware excision framework in Section 3. 3Observation 1: Existing federated unlearning methods exhibit a forget–retain trade-off, indicat-ing that at least one anchor channel remains open in every baseline. Ferrari  
+
+> FedOSD
+> NoT
+> SoUL
+> Retrain
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Forget R@1 (%) ↓
+> Client
+> Class
+> Sample
+> (a) Unlearning completeness. Ferrari
+> FedOSD
+> NoT
+> SoUL
+> Retrain
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Retain R@1 (%) ↑
+> Client
+> Class
+> Sample (b) Retention integrity.
+
+Figure 2: Forget and retain trade-off of federated un-learning baselines on CLIP-B32 with Flickr30K. We evaluate four federated unlearning base-lines, Ferrari [ 28 ], FedOSD [ 31 ], NoT [ 20 ], and SoUL [ 17 ], on CLIP-B32 fine-tuned on Flickr30K under three unlearning scenar-ios. We report Forget R@1, where lower indicates more thorough erasure on the for-get set, and Retain R@1, where higher indi-cates better preservation of retained knowl-edge. Figure 2b shows that most baselines preserve Retain R@1 close to the Retrain reference, suggesting retained knowledge survives the unlearning procedure. Fig-ure 2a, however, reveals a sharp failure mode: only sample unlearning is effective, while client and class requests leave the forget set largely intact. NoT is the exception that erases more aggressively, but at the cost of a lower Retain, while the remaining baselines under-erase. These observations expose a tension in current federated multimodal unlearning, motivating a finer treatment of how forget-side anchors and retain support coexist within client gradient updates. 
+
+Observation 2: Client gradient subspaces in federated multimodal training are partially en-tangled, and their overlap admits a continuous principal-angle spectrum from retain-aligned support to forget-exclusive anchors. C0 C1 C2 C3 C7 C8 C9 C5 C4 C6 C0 C1 C2 C3 C7 C8 C9 C5 C4 C6 -1 -0.5 00.5 1          
+
+> (a) Subspace similarity. 12345678910
+> Canonical Direction
+> 0
+> 20
+> 40
+> 60
+> 80
+> Principal Angle / °
+> High High-Med Medium Med-Low Low (b) Principal angle spectrum.
+
+Figure 3: Gradient subspace entanglement in federated multimodal training on Flickr30K with 10 clients. The trade-off in Observation 1 stems from the entangled structure of client gradi-ent updates: the forget gradient subspace mixes removable anchors (forget-exclusive directions) with retain support (directions shared with retained clients), and blind era-sure conflates the two. To validate this, we train a CLIP-B/32 projector on Flickr30K distributed across 10 clients via FedAvg for 30 rounds, collect per-round parame-ter updates, and extract each client’s top-10 update directions via SVD. As shown in Figure 3a, pairwise subspace similarity varies widely with an off-diagonal mean of 0.49, confirming that client gradient subspaces are neither fully shared nor fully orthogonal. Figure 3b decomposes five representative pairs by their principal angles: in all cases, the angles increase monotonically from small values for shared directions to large values for unique directions. These findings motivate an entanglement-aware decomposition that erases only the forget-exclusive Unique-Subspace Anchors while leaving the retain support intact. 
+
+3 Methodology 
+
+3.1 Framework Overview 
+
+Motivated by Observations 1–2, our framework closes the three anchor channels in turn (Figure 4): I) 
+
+Bilateral Knowledge Excision (BKE, Section 3.2) shuts the Modality Anchor by displacing both visual and language branches simultaneously; II) Gradient Subspace Decomposition (GSD, Section 3.3) separates removable Unique-Subspace Anchors from retain support via Cosine–Sine decomposition of the forget–retain subspace pair; III) Projection with Forget Lock (PFL, Section 3.4) prevents Temporal Re-anchoring through a server-side projection and a direction-selective client-side penalty. Disabling any single component reopens a distinct failure mode (Table 2). 4Client 1 Client 2 Client I 
+
+Client 1 Client 2 Client J 
+
+Client K = I + J Server 
+
+Request Unlearning 
+
+FedAvg 
+
+> Three Types Unlearning Request
+
+Client Class Sample  
+
+> Client 1
+> Client 3 Client 2
+> Erase Client 1
+> Dog Ship
+> Erase specific samples
+> "Dogs running outdoors.", "Dogs playing outside.", "Dogs running outside.", "Dogs in action outdoors."
+> Pseudo-class
+> "Dogs running outdoors.", "Dogs playing outside.", "Dogs running outside.",
+
+Forget Clients Retain Clients   
+
+> Image Encoder Text Encoder
+> LoRA Adapters LoRA Adapters Projector Projector
+> Projector MLP Update
+> Request Unlearning
+> Server-side
+> Stack Gradients
+> SVD
+> Forget Subspace Retain Subspace
+> Subspace Splitting
+> Geometric Constraint
+> Retain Subspace
+> Forget Subspace
+> Subspace Decomposition
+> Threshold Splitting
+> Orthogonal Projection
+> Forget Lock
+> Retain Subspace Forget Subspace
+> Orthogonal Basis Extraction
+
+Server  
+
+> Success Failure Unlearn Clients Entangled
+> Lock Gradient direction
+> Server Side
+
+Figure 4: Overview of EASE . BKE displaces both visual and language branches simultaneously to close the cross-modal reconstruction channel. GSD separates forget-exclusive directions from retain support via principal-angle decomposition. PFL projects the server displacement off the unique subspace and locks each client’s drift along it during continued training. 
+
+3.2 Closing the Modality Anchor (BKE) The Modality Anchor. In multimodal models with a bilinear similarity (e.g., InfoNCE), each modality’s gradient depends on the other modality’s embedding. Excising parameter directions on one branch alone leaves the unmodified branch as a memory of the original alignment, and the alignment gradient exploits this memory as an anchor that reconstructs the erased pairing. We term this residual encoding the Modality Anchor of the forget set. BKE closes it by displacing both branches simultaneously. 
+
+Anchor mechanism. The cross-modal alignment depends on both the visual and language pa-rameters through the bilinear similarity in Eq. (1) . To see why unilateral excision fails, consider a forget-set pair (xv,i , x t,i ). The InfoNCE gradient with respect to wv decomposes as: 
+
+∇wv La = 1
+
+γ Jv (wv )⊤
+
+
+
+NX
+
+j=1 
+
+exp  z⊤
+
+v,i zt,j /γ P
+
+l exp  z⊤
+
+v,i zt,l /γ  zt,j (wt) − zt,i (wt)
+
+ , (2) where Jv denotes the Jacobian ∂z v /∂w v . The gradient direction with respect to wv is determined by the textual embeddings zt,j , and vice versa. This cross-modal dependence is the physical seat of the Modality Anchor: if we remove forget-unique directions from wv only, leaving wt at the pre-unlearning value wn,t , the visual representation is displaced, yet the textual embedding zt,i (wn,t )
+
+still encodes the original pairing. Since this intact embedding dominates the softmax weights in the contrastive loss, the gradient evaluated at the excised point reduces to: 
+
+∇wv La w∗ 
+
+> v
+
+, w n,t 
+
+∝ Jv (w∗
+
+v )⊤ zt,i (wn,t ). (3) The unchanged textual embedding zt,i (wn,t ) is the Modality Anchor: it encodes the semantic content of the erased pair and continuously drives the alignment gradient to re-align wv with the original pairing during retraining. 5Alignment residual. We quantify the open Modality Anchor by the normalized gap between the unlearned model w∗ and the retrain reference ˜w:
+
+ρ = zv (w∗ 
+
+> v
+
+)⊤zt(w∗ 
+
+> t
+
+) − zv ( ˜ wv )⊤zt( ˜ wt)
+
+zv (wn,v )⊤zt(wn,t ) − zv ( ˜ wv )⊤zt( ˜ wt) + ϵ , (4) with wn the pre-unlearning model and ϵ a stability constant. ρ ≈ 0 indicates the anchor is closed; 
+
+ρ ≈ 1 that it remains fully open. 
+
+Comparison of excision strategies. (i) Visual-only excision on wv leaves zt(wn,t ) as the Modality Anchor that re-pulls zv toward the forgotten alignment, yielding ρ > 0; (ii) by symmetry, language-only excision also yields ρ > 0; (iii) bilateral excision (ours) displaces both embeddings, and with GSD and PFL holding the unique directions closed across rounds, ρ ≈ 0. Appendix C.8 formalizes this contrast under Assumptions A1–A4 (Appendix C.1). 
+
+3.3 Closing the Unique-Subspace Anchor (GSD) Removable anchors versus retain support. BKE tells us to operate on both modalities, but how much should we erase from each? In federated non-IID training, the forget client’s parameter updates share directions with retained clients along a continuous principal-angle spectrum. We need to decompose the forget subspace into removable Unique-Subspace Anchors (forget-exclusive directions, safe to erase) and retain support (directions shared with retain, must preserve). 
+
+Gradient history collection. Over the initial R1 FedAvg rounds, each sampled client’s per-round update ∆wk[t] (its post-local-SGD parameter delta relative to the broadcast global model) is already transmitted to the server, so storing it as a per-client history Hk adds no extra communication for client unlearning. Sample and class unlearning (Appendix B.2) require one additional request-specific round for clients holding matching data to upload forget-specific gradients. The global model wn
+
+after R1 rounds serves as the unlearning reference. 
+
+Forget and retain subspace extraction. We construct a forget gradient matrix Gf ∈ Rd×nf by column-stacking the updates associated with the forget set Df . The column space of Gf captures the principal directions along which the forget data has shaped the model parameters. The construction of 
+
+Gf depends on the unlearning scenario. For client unlearning, Gf collects the full history of updates from the requesting client: 
+
+Gf = ∆wk∗ [t1], . . . , ∆wk∗ [t|Hk∗ |], (5) where t1, . . . , t |Hk∗ | are the rounds in which k∗ participated. For sample and class unlearning, the forget targets are generally distributed across multiple clients. The server broadcasts a target descriptor (a set of sample identifiers for sample unlearning, or a textual descriptor for class unlearning), and every client that holds matching data performs one epoch of training on its local forget subset and uploads the resulting gradient; Gf is column-stacked from these per-client contributions. A retain gradient matrix Gr is constructed analogously from each client’s remaining non-forget data (see Appendix B.5 for details). We apply Singular Value Decomposition (SVD) to Gf and retain the top-p left singular vectors that capture at least a fraction τe of the total energy: 
+
+p = min 
+
+n
+
+j ∈ { 1, . . . , rank( Gf )} :
+
+Pji=1 σ2
+
+> i
+
+∥Gf ∥2
+
+> F
+
+≥ τe
+
+o
+
+, (6) This energy-based criterion adapts p to the spectral decay of Gf . The resulting forget subspace basis is Φf ∈ Rd×p, whose columns are the top-p left singular vectors of Gf . The same procedure applied to Gr yields the retain subspace basis Φr ∈ Rd×q . We denote the column spaces of Φf and Φr by 
+
+Sf and Sr , respectively. 
+
+Entanglement spectrum. Not all directions inside Sf behave the same way: a direction lying entirely within Sr is fully retain-aligned and serves as retain support, since erasing it destroys retained knowledge; a direction orthogonal to Sr is forget-exclusive and constitutes a removable anchor. To quantify this overlap for every forget-side canonical direction, we introduce the entanglement 6spectrum of Sf with respect to Sr . We compute the cross-correlation matrix M = Φ ⊤ 
+
+> f
+
+Φr and take its full SVD: 
+
+M = Uf Σ V ⊤ 
+
+> f
+
+, Uf ∈ Rp×p, Vf ∈ Rq×q , r = min( p, q ), (7) where the rectangular diagonal of Σ has entries cos φ1, . . . , cos φr , the cosines of the principal angles. If p > q , the remaining p − q columns of Uf span directions in Sf that are orthogonal to Sr ; we assign them entanglement coefficient 0. Thus for every i ∈ { 1, . . . , p } we define κi = cos φi for 
+
+i ≤ r and κi = 0 for i > r . The rotated basis vectors ci = (Φ f Uf )·,i are the canonical directions of Sf relative to Sr : a coefficient near 1 indicates retain-aligned (retain support); near 0 indicates forget-exclusive (removable anchor). We partition using a threshold δ ∈ [0 , 1] into unique (anchor) and entangled (support) basis matrices, where a larger δ classifies more directions as removable anchors; we analyze the sensitivity to this threshold in Section 4: 
+
+Bu = ci
+
+ 
+
+> κi≤δ
+
+∈ Rd×|U| , Be = ci
+
+ 
+
+> κi>δ
+
+∈ Rd×|E| . (8) The unique subspace U = col( Bu) spans forget-exclusive removable anchors (collectively Unique-Subspace Anchor) and the entangled subspace E = col( Be) spans retain support, with Sf = U ⊕ E .The decomposition is intrinsic to the subspace pair (Sf , Sr ), which distinguishes anchor identification from single-subspace projection methods that erase Sf as a block. Applying it independently to each LoRA layer and projector within both modalities yields per-group bases Blu,μ and Ble,μ ; the theorems in Section 3.4 apply per block, and global guarantees follow by summing across blocks. 
+
+3.4 Preventing Temporal Re-anchoring (PFL) Scope of theoretical guarantees. Our guarantees are geometric, not a certified data-deletion proof: given a faithful Uμ, projection removes its displacement (Theorem C.7), collateral energy on Sr
+
+is bounded by δ2∥∆r ∥22 (Theorem C.8), and the Forget Lock contracts unique-subspace drift to 
+
+Gu/(2 α) (Theorem C.10). Operational claims about membership leakage rely on the empirical proxies ρ, raincloud distributions, and LiRA TPR, evaluated in Section 4 and Appendices B.7, E. 
+
+Temporal Re-anchoring. A one-time projection excises the Unique-Subspace Anchor at t=0 ,but retain-data SGD still has nonzero components gu(t) := Π u,μ ∇wμ La(w(t)) along Uμ, since the unique subspace is only partially orthogonal to the retain gradient field. Letting d(t) := Π u,μ (wμ(t)−
+
+wn,μ ), a single SGD step under the combined objective gives the recurrence 
+
+d(t+1) = (1 − 2ηlr α) d(t) − ηlr gu(t), (9) where gu(t) is the residual alignment gradient surviving along Uμ after BKE has suppressed the Modality Anchor’s leading component. Without persistent constraint ( α = 0 ), gu(t) accumulates across rounds and rewrites the cut anchors, the third anchor channel. 
+
+Direction-selective lock. PFL constrains drift along Uμ while leaving U⊥ 
+
+> μ
+
+unconstrained, an asymmetry that neither per-round server projection alone nor axis-aligned importance regularizers can enforce (Appendix B.8). The construction pairs a server-side projection that pulls each global modality μ ∈ { v, t } back to Mμ with a client-side quadratic penalty supported on Uμ:
+
+wg,μ ← wg,μ − Πu,μ (wg,μ − wn,μ ), Πu,μ := Bu,μ B⊤
+
+> u,μ
+
+, (10) 
+
+Lf (w) = X
+
+> μ∈{ v,t }
+
+B⊤
+
+> u,μ
+
+(wμ − wn,μ ) 22. (11) Each client trains on the retained data D′ 
+
+> k
+
+= Dk \ D f with the combined objective 
+
+L(w; D′
+
+> k
+
+) = La(w; D′
+
+> k
+
+) + α · L f (w), (12) where α > 0 is the lock strength. The recurrence Eq. (9) then becomes a contraction with factor 
+
+1 − 2ηlr α < 1 (Theorem C.10), bounding unique-subspace drift by Gu/(2 α) regardless of round count, while U⊥ 
+
+> μ
+
+(including the entangled retain support from GSD) stays unconstrained so retained knowledge recovers. The bases Bu,v , Bu,t and reference wn are broadcast with the global model, so 
+
+Lf is local with no extra communication. After R2 excision rounds the server runs R3 stabilization rounds without projection; the lock remains active. The two thresholds therefore control complementary failure modes: smaller δ leaves anchors partially open while larger δ misclassifies retain support, and larger α tightens re-anchoring durability while leaving U⊥ 
+
+> μ
+
+free for recovery (Appendices C.4–C.7; α=0 ablation in Section 4). 74 Experiments 
+
+4.1 Experimental Setup Datasets. We evaluate on three benchmark image-text datasets: Flickr30K [ 56 ], MS COCO [ 26 ], and TextCaps [ 38 ], covering standard caption retrieval and scene-text retrieval. We use three backbones: CLIP-B/32 [ 35 ], CLIP-L/14, and SigLIP [ 59 ]. Dataset splits are detailed in Appendix B.2; imple-mentation details and hyperparameters are in Appendix B.5. Since these datasets lack ground-truth class labels, class unlearning uses pseudo-class clusters in the pretrained backbone embedding space. 
+
+Counterparts. We compare our method against nine baselines from two categories. Federated unlearning methods: (1) FedEraser [ 27 ], (2) FedRecover [ 3], (3) Ferrari [ 28 ], (4) FedOSD [31 ], (5) NoT [ 20 ], (6) SoUL [ 17 ], (7) FFMU [ 5], (8) FUSED [ 60 ]; centralized unlearning adapted to the federated setting: (9) GradAscent [ 39 ]; and the retrain reference ˜w. Detailed descriptions of all counterparts are provided in Appendix B.3. 
+
+Evaluation metrics. We evaluate four metrics: Recall@ k [ 19 ] with k ∈ { 1, 5, 10 } for cross-modal retrieval, a shadow-model membership inference attack (MIA) [ 37 ] score for aggre-gate privacy verification, the likelihood-ratio attack true-positive rate at 1% false-positive rate (LiRA TPR@FPR=1% ) [ 4] for low-FPR privacy auditing, and communication cost [ 18 ] in megabytes. Full metric definitions are in Appendix B.4. With this setup, three research questions structure the remainder of the section: Q1 (Superiority), Q2 (Effectiveness), and Q3 (Sensitivity). 
+
+4.2 Superiority (Q1) 
+
+For Q1 , we test whether w∗ matches the retrain reference ˜w on the forget set ¯Df and the retain set ¯Dr .Table 1 gives the comparison on Flickr30K with CLIP-B/32; eight dataset–backbone combinations are in Appendix F. Figure 5 summarizes per-metric performance across scenarios. Table 1: Main comparison on Flickr30K with CLIP-B/32 across three unlearning scenarios. The top sub-table reports forget-side metrics ( F -R@k) and membership inference (MIA); the bottom sub-table reports retain-side metrics ( R-R@k) and communication cost ( Comm. , MB). For F -R@k
+
+and R-R@k, parenthetical values give the absolute gap to the retrain reference with (↑green) closer to ideal and (↓red) farther; for MIA and Comm. , ( val) is the absolute difference to retrain. Best in red ,runner-up in blue among baselines and our method; Retrain does not participate in ranking. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 69.8 (↓69.7) 90.9 (↓89.4) 95.2 (↓92.9) 48.9 ( 32.2) 38.8 (↓38.6) 68.2 (↓67.5) 79.2 (↓77.8) 64.0 ( 39.8) 0.3 (↓0.2) 2.4 (↓1.3) 5.8 (↓3.4) 16.7 FedRecover 57.9 (↓57.8) 81.2 (↓79.7) 87.7 (↓85.4) 47.2 ( 30.5) 41.6 (↓41.4) 72.0 (↓71.3) 83.5 (↓82.1) 41.7 ( 17.5) 0.5 (↓0.4) 2.8 (↓1.7) 6.2 (↓3.8) 16.9 ( 0.2) 
+
+Ferrari 84.5 (↓84.4) 98.7 (↓97.2) 99.6 (↓97.3) 52.7 ( 36.0) 62.7 (↓62.5) 92.7 (↓92.0) 97.1 (↓95.7) 60.3 ( 36.1) 0.4 (↓0.3) 2.5 (↓1.4) 5.9 (↓3.5) 16.7 FedOSD 83.3 (↓83.2) 97.7 (↓96.2) 99.4 (↓97.1) 54.0 ( 37.3) 60.2 (↓60.0) 89.6 (↓88.9) 95.3 (↓93.9) 58.7 ( 34.5) 0.3 (↓0.2) 2.4 (↓1.3) 5.7 (↓3.3) 16.7 NoT 60.9 (↓60.8) 88.1 (↓86.6) 93.6 (↓91.3) 50.1 ( 33.4) 24.5 (↓24.3) 60.4 (↓59.7) 74.1 (↓72.7) 48.9 ( 24.7) 0.6 (↓0.5) 3.0 (↓1.9) 6.5 (↓4.1) 16.9 ( 0.2) 
+
+SoUL 77.9 (↓77.8) 97.1 (↓95.6) 98.9 (↓96.6) 50.4 ( 33.7) 53.5 (↓53.3) 84.1 (↓83.4) 91.4 (↓90.0) 51.5 ( 27.3) 0.5 (↓0.4) 2.9 (↓1.8) 6.3 (↓3.9) 16.7 FFMU 39.9 (↓39.8) 69.8 (↓68.3) 80.9 (↓78.6) 52.1 ( 35.4) 14.7 (↓14.5) 35.9 (↓35.2) 48.4 (↓47.0) 43.9 ( 19.7) 0.3 (↓0.2) 2.5 (↓1.4) 5.8 (↓3.4) 17.3 ( 0.6) 
+
+FUSED 82.1 (↓82.0) 97.5 (↓96.0) 99.4 (↓97.1) 52.1 ( 35.4) 56.5 (↓56.3) 87.3 (↓86.6) 93.9 (↓92.5) 58.9 ( 34.7) 0.4 (↓0.3) 2.7 (↓1.6) 6.0 (↓3.6) 16.7 GradAscent 1.8 (↓1.7) 7.2 (↓5.7) 14.1 (↓11.8) 54.5 ( 37.8) 15.9 (↓15.7) 39.4 (↓38.7) 53.7 (↓52.3) 46.5 ( 22.3) 0.3 (↓0.2) 2.4 (↓1.3) 5.7 (↓3.3) 16.8 ( 0.1) 
+
+EASE 0.3 (↓0.2) 1.0 (↑0.5) 2.2 (↑0.1) 16.9 ( 0.2) 0.3 (↓0.1) 1.5 (↓0.8) 2.6 (↓1.2) 25.4 ( 1.2) 0.1 2.2 (↓1.1) 5.5 (↓3.1) 16.7 
+
+Retrain 0.1 1.5 2.3 16.7 0.2 0.7 1.4 24.2 0.1 1.1 2.4 16.7 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 85.1 (↓5.6) 98.7 (↓1.2) 99.5 (↓0.5) 262.5 78.8 (↓10.6) 96.0 (↓3.9) 98.9 (↓1.1) 196.9 78.3 (↓2.3) 96.9 (↓0.8) 99.0 (↓0.4) 196.9 FedRecover 73.6 (↓17.1) 94.9 (↓5.0) 97.2 (↓2.8) 47.2 ( 215.3) 76.8 (↓12.6) 93.0 (↓6.9) 94.6 (↓5.4) 35.4 ( 161.5) 58.8 (↓21.8) 81.6 (↓16.1) 87.4 (↓12.0) 35.4 ( 161.5) 
+
+Ferrari 84.7 (↓6.0) 98.9 (↓1.0) 99.5 (↓0.5) 72.2 ( 190.3) 80.3 (↓9.1) 96.4 (↓3.5) 99.1 (↓0.9) 59.1 ( 137.8) 77.9 (↓2.7) 96.8 (↓0.9) 99.0 (↓0.4) 59.1 ( 137.8) 
+
+FedOSD 85.5 (↓5.2) 99.0 (↓0.9) 99.6 (↓0.4) 105.0 ( 157.5) 79.8 (↓9.6) 96.0 (↓3.9) 98.9 (↓1.1) 78.8 ( 118.1) 74.5 (↓6.1) 95.9 (↓1.8) 98.4 (↓1.0) 78.8 ( 118.1) 
+
+NoT 66.9 (↓23.8) 92.3 (↓7.6) 96.8 (↓3.2) 52.5 ( 210.0) 70.9 (↓18.5) 93.9 (↓6.0) 98.1 (↓1.9) 39.4 ( 157.5) 69.6 (↓11.0) 93.9 (↓3.8) 97.8 (↓1.6) 39.4 ( 157.5) 
+
+SoUL 82.1 (↓8.6) 98.3 (↓1.6) 99.1 (↓0.9) 52.5 ( 210.0) 79.1 (↓10.3) 95.8 (↓4.1) 98.8 (↓1.2) 39.4 ( 157.5) 78.5 (↓2.1) 97.3 (↓0.4) 99.0 (↓0.4) 39.4 ( 157.5) 
+
+FFMU 44.5 (↓46.2) 75.0 (↓24.9) 83.5 (↓16.5) 105.0 ( 157.5) 48.9 (↓40.5) 80.7 (↓19.2) 89.1 (↓10.9) 78.8 ( 118.1) 40.5 (↓40.1) 74.1 (↓23.6) 82.5 (↓16.9) 78.8 ( 118.1) 
+
+FUSED 86.2 (↓4.5) 99.1 (↓0.8) 99.7 (↓0.3) 105.0 ( 157.5) 80.5 (↓8.9) 96.4 (↓3.5) 99.2 (↓0.8) 78.8 ( 118.1) 79.0 (↓1.6) 97.5 (↓0.2) 99.1 (↓0.3) 78.8 ( 118.1) 
+
+GradAscent 1.6 (↓89.1) 7.8 (↓92.1) 13.1 (↓86.9) 72.2 ( 190.3) 36.7 (↓52.7) 66.2 (↓33.7) 79.6 (↓20.4) 59.1 ( 137.8) 76.6 (↓4.0) 96.0 (↓1.7) 98.7 (↓0.7) 59.1 ( 137.8) 
+
+EASE 86.5 (↓4.2) 99.2 (↓0.7) 99.8 (↓0.2) 52.5 ( 210.0) 80.8 (↓8.6) 96.6 (↓3.3) 99.3 (↓0.7) 47.2 ( 149.7) 79.4 (↓1.2) 97.7 99.2 (↓0.2) 39.4 ( 157.5) 
+
+Retrain 90.7 99.9 100.0 262.5 89.4 99.9 100.0 196.9 80.6 97.7 99.4 196.9 Across nine dataset/backbone combinations in Table 1 and Appendix F, EASE most consistently narrows both F -R@k and R-R@k to retrain. GradAscent erases thoroughly but collapses retain by conflating anchors with support; Ferrari and FUSED preserve retain but under-erase by leaving the Modality Anchor open. Raincloud plots in Appendix B.7 confirm this at the embedding level. 
+
+4.3 Effectiveness (Q2) 
+
+For Q2 , each row of Table 2 removes exactly one component from the full method on CLIP-B/32 with Flickr30K across all three unlearning scenarios. BKE and GSD are load-bearing: removing 884.5 83.3 60.9 77.9 39.9 98.7 97.7 88.1 97.1 69.8 99.6 99.4 93.6 98.9 80.9 84.7 85.5 66.9 82.1 44.5 86.5 98.9 99 92.3 98.3 75 99.2 99.5 99.6 96.8 99.1 83.5 99.8 52.7 54 50.1 50.4 52.1 16.9 72.2 105 52.5 52.5 105 52.5 F-R@1F-R@5F-R@10R-R@1R-R @5R-R@10MIAComm.Client Unlearning      
+
+> Ferrari FedOSD NoT SoUL FFMU Ours
+
+(a) Client Unlearning 62.7 60.2 24.5 53.5 14.7 92.7 89.6 60.4 84.1 35.9 97.1 95.3 74.1 91.4 48.4 80.3 79.8 70.9 79.1 48.9 80.8 96.4 96 93.9 95.8 80.7 96.6 99.1 98.9 98.1 98.8 89.1 99.3 60.3 58.7 48.9 51.5 43.9 25.4 59.1 78.8 39.4 39.4 78.8 47.2 F-R@1F-R@5F-R@10R-R@1R -R@5R-R@10MIAComm.Class Unlearning       
+
+> Ferrari FedOSD NoT SoUL FFMU Ours
+
+(b) Class Unlearning 77.9 74.5 69.6 78.5 40.5 79.4 96.8 95.9 93.9 97.3 74.1 97.7 99 98.4 97.8 99 82.5 99.2 16.7 16.7 16.9 16.7 17.3 16.7 59.1 78.8 39.4 39.4 78.8 39.4 F-R@1F-R@5F-R@10R-R@1R-R@5R-R@10MIAComm.Sample Unlearning       
+
+> Ferrari FedOSD NoT SoUL FFMU Ours
+
+(c) Sample Unlearning 
+
+Figure 5: Per-metric comparison on CLIP-B/32 / Flickr30K under three unlearning scenarios. Each sector represents one metric; bars extend outward proportional to the metric value. Our method achieves the lowest Forget R@k while maintaining competitive Retain R@k across all scenarios. Table 2: Ablation on CLIP-B/32 / Flickr30K across three unlearning scenarios (mean over three seeds). Top: forget-side metrics and MIA; bottom: retain-side metrics and alignment residual ρ
+
+(Section 3.2; ρ=0 matches retrain). For F -R@k, R-R@k, ρ, parentheticals give absolute gap to retrain with (↑green) closer and (↓red) farther; for MIA, ( val) is the gap to retrain. Best in red , runner-up in blue among variants. †visual-only, ‡text-only. 
+
+Variant Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+EASE 0.3 (↓0.2) 1.0 (↑0.5) 2.2 (↑0.1) 16.9 ( 0.2) 0.3 (↓0.1) 1.5 (↓0.8) 2.6 (↓1.2) 25.4 ( 1.2) 0.1 2.2 (↓1.1) 5.5 (↓3.1) 16.7 w/o BKE † 28.5 (↓28.4) 52.4 (↓50.9) 65.8 (↓63.5) 36.8 ( 20.1) 24.8 (↓24.6) 46.2 (↓45.5) 58.7 (↓57.3) 43.2 ( 19.0) 22.6 (↓22.5) 44.3 (↓43.2) 57.2 (↓54.8) 32.5 ( 15.8) 
+
+w/o BKE ‡ 35.7 (↓35.6) 62.5 (↓61.0) 74.8 (↓72.5) 38.5 ( 21.8) 30.5 (↓30.3) 55.8 (↓55.1) 68.5 (↓67.1) 45.6 ( 21.4) 28.4 (↓28.3) 53.6 (↓52.5) 66.4 (↓64.0) 34.1 ( 17.4) 
+
+w/o GSD 18.4 (↓18.3) 42.5 (↓41.0) 56.3 (↓54.0) 32.4 ( 15.7) 15.6 (↓15.4) 35.8 (↓35.1) 49.2 (↓47.8) 40.8 ( 16.6) 14.2 (↓14.1) 32.5 (↓31.4) 45.8 (↓43.4) 30.6 ( 13.9) 
+
+w/o Lock 4.2 (↓4.1) 9.8 (↓8.3) 15.6 (↓13.3) 19.5 ( 2.8) 3.5 (↓3.3) 7.8 (↓7.1) 12.4 (↓11.0) 27.8 ( 3.6) 2.8 (↓2.7) 6.5 (↓5.4) 10.8 (↓8.4) 18.6 ( 1.9) 
+
+Retrain 0.1 1.5 2.3 16.7 0.2 0.7 1.4 24.2 0.1 1.1 2.4 16.7 
+
+Variant R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ ρ ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ ρ ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ ρ ↓
+
+EASE 86.5 (↓4.2) 99.2 (↓0.7) 99.8 (↓0.2) 0.08 (↓0.08) 80.8 (↓8.6) 96.6 (↓3.3) 99.3 (↓0.7) 0.07 (↓0.07) 79.4 (↓1.2) 97.7 99.2 (↓0.2) 0.06 (↓0.06) 
+
+w/o BKE † 65.2 (↓25.5) 89.4 (↓10.5) 94.1 (↓5.9) 0.65 (↓0.65) 74.5 (↓14.9) 93.8 (↓6.1) 97.6 (↓2.4) 0.62 (↓0.62) 71.5 (↓9.1) 94.8 (↓2.9) 98.0 (↓1.4) 0.58 (↓0.58) 
+
+w/o BKE ‡ 63.8 (↓26.9) 88.1 (↓11.8) 93.2 (↓6.8) 0.72 (↓0.72) 73.1 (↓16.3) 92.7 (↓7.2) 96.9 (↓3.1) 0.69 (↓0.69) 70.2 (↓10.4) 93.9 (↓3.8) 97.3 (↓2.1) 0.65 (↓0.65) 
+
+w/o GSD 24.6 (↓66.1) 52.3 (↓47.6) 68.9 (↓31.1) 0.68 (↓0.68) 32.4 (↓57.0) 62.5 (↓37.4) 78.3 (↓21.7) 0.65 (↓0.65) 38.6 (↓42.0) 68.4 (↓29.3) 82.5 (↓16.9) 0.61 (↓0.61) 
+
+w/o Lock 69.8 (↓20.9) 93.3 (↓6.6) 96.5 (↓3.5) 0.22 (↓0.22) 80.0 (↓9.4) 96.3 (↓3.6) 99.0 (↓1.0) 0.20 (↓0.20) 78.6 (↓2.0) 97.2 (↓0.5) 98.8 (↓0.6) 0.18 (↓0.18) 
+
+Retrain 90.7 99.9 100.0 0 89.4 99.9 100.0 0 80.6 97.7 99.4 0BKE reopens the Modality Anchor (Eq. 3, with text-side excision worse than visual-side due to a denser forget fingerprint in the language branch), and removing GSD conflates Unique-Subspace Anchors with retain support so over-erasure hits retain (Theorem C.8). Removing the Forget Lock admits a milder Temporal Re-anchoring drift since BKE and GSD still close the first two channels at 
+
+t=0 ; only the full method closes the gap on both axes. 
+
+4.4 Sensitivity (Q3) 
+
+We sweep δ, α, K, and β on Flickr30K/CLIP-B/32 (full curves: Figure 6). The δ plateau gives a stable anchor/support boundary, the monotone α response confirms re-anchoring closure without aggressive lock tuning, and K/β sweeps verify robustness to federation scale and heterogeneity. 
+
+5 Conclusion 
+
+We studied federated multimodal unlearning, identifying three reconstruction anchors (cross-modal coupling, forget-exclusive directions, post-unlearning FedAvg drift) and closing them through EASE ’s bilateral excision, subspace decomposition, and direction-selective Forget Lock; EASE moves forget/retain closer to retrain than evaluated baselines. The Anchor Principle is articulated for image-text dual-encoder retrieval (CLIP/SigLIP-style); late-fusion, generative, and multimodal-LLM extensions remain future work. 9Acknowledgments and Disclosure of Funding References 
+
+[1] Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny, Marcus Rohrbach, and Tinne Tuyte-laars. Memory Aware Synapses: Learning What (not) to Forget. In Proceedings of the European Conference on Computer Vision , pages 144–161, 2018. doi: 10.1007/978-3-030-01219-9_9. [2] Lucas Bourtoule, Varun Chandrasekaran, Christopher A. Choquette-Choo, Hengrui Jia, Adelin Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. Machine Unlearning. In IEEE Symposium on Security and Privacy , pages 141–159, 2021. doi: 10.1109/SP40001.2021.00019. [3] Xiaoyu Cao, Jinyuan Jia, Zaixi Zhang, and Neil Zhenqiang Gong. FedRecover: Recovering from Poisoning Attacks in Federated Learning using Historical Information. In IEEE Symposium on Security and Privacy , pages 1366–1383, 2023. doi: 10.1109/SP46215.2023.10179336. [4] Nicholas Carlini, Steve Chien, Milad Nasr, Shuang Song, Andreas Terzis, and Florian Tramer. Membership Inference Attacks From First Principles. In IEEE Symposium on Security and Privacy , pages 1897–1914, 2022. doi: 10.1109/SP46214.2022.9833649. [5] Tianshi Che, Yang Zhou, Zijie Zhang, Lingjuan Lyu, Ji Liu, Da Yan, Dejing Dou, and Jun Huan. Fast Federated Machine Unlearning with Nonlinear Functional Theory. In Proceedings of the International Conference on Machine Learning , 2023. [6] Haokun Chen, Yao Zhang, Denis Krompass, Jindong Gu, and Volker Tresp. FedDAT: An Approach for Foundation Model Finetuning in Multi-Modal Heterogeneous Federated Learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pages 11285– 11293, 2024. doi: 10.1609/aaai.v38i10.29007. [7] Xinlei Chen, Hao Fang, Tsung-Yi Lin, Ramakrishna Vedantam, Saurabh Gupta, Piotr Dollár, and C. Lawrence Zitnick. Microsoft COCO Captions: Data Collection and Evaluation Server. arXiv preprint arXiv:1504.00325, 2015. [8] Zihao Ding, Jun Huang, Qiang Duan, Cheng Zhang, Yanxiao Zhao, and Shuyang Gu. A Dual-Level Game-Theoretic Approach for Collaborative Learning in UAV-Assisted Heterogeneous Vehicle Networks. In 2025 IEEE International Performance, Computing, and Communications Conference (IPCCC) , pages 1–8. IEEE, 2025. [9] Zihao Ding, Jun Huang, and Junjian Qi. Learning to Defend: A Multi-Agent Reinforcement Learning Framework for Stackelberg Security Game in Mobile Edge Computing. In Interna-tional Conference on Computing, Networking and Communications (ICNC) , Honolulu, Hawaii, USA, February 2026. IEEE. [10] Zihao Ding, Beining Wu, and Jun Huang. SCALE: Sensitivity-Aware Federated Unlearning with Information Freshness Optimization for Mobile Edge Computing. In Proceedings of the IEEE International Conference on Distributed Computing Systems (ICDCS) , 2026. [11] Mehrdad Farajtabar, Navid Azizan, Alex Mott, and Ang Li. Orthogonal Gradient Descent for Continual Learning. In Proceedings of the International Conference on Artificial Intelligence and Statistics , pages 3762–3773, 2020. [12] Xiangshan Gao, Xingjun Ma, Jingyi Wang, Youcheng Sun, Bo Li, Shouling Ji, Peng Cheng, and Jiming Chen. VeriFi: Towards Verifiable Federated Unlearning. IEEE Transactions on Dependable and Secure Computing , 21(6):5720–5736, 2024. doi: 10.1109/TDSC.2024. 3382321. [13] Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal Sunshine of the Spotless Net: Selective Forgetting in Deep Networks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9304–9312, 2020. doi: 10.1109/CVPR42600. 2020.00932. [14] Anisa Halimi, Swanand Kadhe, Ambrish Rawat, and Nathalie Baracaldo. Federated Unlearning: How to Efficiently Erase a Client in FL? arXiv preprint arXiv:2207.05521, 2022. 10 [15] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. LoRA: Low-Rank Adaptation of Large Language Models. In 
+
+International Conference on Learning Representations , 2022. [16] Jun Huang, Beining Wu, Qiang Duan, Liang Dong, and Shui Yu. A Fast UAV Trajectory Planning Framework in RIS-Assisted Communication Systems With Accelerated Learning via Multithreading and Federating. IEEE Transactions on Mobile Computing , pages 1–16, 2025. doi: 10.1109/TMC.2025.3544903. [17] Jinghan Jia, Yihua Zhang, Yimeng Zhang, Jiancheng Liu, Bharat Runwal, James Diffenderfer, Bhavya Kailkhura, and Sijia Liu. SOUL: Unlocking the Power of Second-Order Optimization for LLM Unlearning. In Proceedings of the Conference on Empirical Methods in Natural Language Processing , pages 4276–4292, 2024. doi: 10.18653/v1/2024.emnlp-main.245. [18] Peter Kairouz, H. Brendan McMahan, Brendan Avent, Aurélien Bellet, Mehdi Bennis, Ar-jun Nitin Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, et al. Advances and Open Problems in Federated Learning. Foundations and Trends in Machine Learning , 14(1–2):1–210, 2021. doi: 10.1561/2200000083. [19] Andrej Karpathy and Li Fei-Fei. Deep Visual-Semantic Alignments for Generating Image Descriptions. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3128–3137, 2015. doi: 10.1109/CVPR.2015.7298932. [20] Yasser H. Khalil, Leo Maxime Brunswic, Soufiane Lamghari, Xu Li, Mahdi Beitollahi, and Xi Chen. NoT: Federated Unlearning via Weight Negation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 25759–25769, 2025. doi: 10.1109/CVPR52734.2025.02399. [21] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, An-drei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, and Raia Hadsell. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences , 114(13): 3521–3526, 2017. doi: 10.1073/pnas.1611835114. [22] Pang Wei Koh and Percy Liang. Understanding Black-box Predictions via Influence Functions. In Proceedings of the International Conference on Machine Learning , pages 1885–1894, 2017. [23] Meghdad Kurmanji, Peter Triantafillou, Jamie Hayes, and Eleni Triantafillou. Towards Un-bounded Machine Unlearning. In Advances in Neural Information Processing Systems , vol-ume 36, pages 1957–1987, 2023. [24] Kunhao Li, Weiwei Li, Di Wu, Lei Yang, Jun Bai, and Ju Jia. Cross-Modal Unlearning via Influential Neuron Path Editing in Multimodal Large Language Models. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pages 35589–35597, 2026. doi: 10.1609/aaai.v40i42.40870. [25] Tian Li, Anit Kumar Sahu, Ameet Talwalkar, and Virginia Smith. Federated Learning: Chal-lenges, Methods, and Future Directions. IEEE Signal Processing Magazine , 37(3):50–60, 2020. doi: 10.1109/MSP.2020.2975749. [26] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C. Lawrence Zitnick. Microsoft COCO: Common Objects in Context. In 
+
+Proceedings of the European Conference on Computer Vision , pages 740–755, 2014. doi: 10.1007/978-3-319-10602-1_48. [27] Gaoyang Liu, Xiaoqiang Ma, Yang Yang, Chen Wang, and Jiangchuan Liu. FedEraser: En-abling Efficient Client-Level Data Removal from Federated Learning Models. In IEEE/ACM International Symposium on Quality of Service , pages 1–10, 2021. doi: 10.1109/IWQOS52092. 2021.9521274. [28] Hanlin Liu, Peng Xiong, Tianqing Zhu, and Philip S. Yu. Ferrari: Federated Feature Unlearning via Optimizing Feature Sensitivity. In Proceedings of the International Conference on Machine Learning , 2024. 11 [29] Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Agüera y Arcas. Communication-Efficient Learning of Deep Networks from Decentralized Data. In Proceedings of the International Conference on Artificial Intelligence and Statistics , pages 1273–1282, 2017. [30] Dong Pan, Bei-Ning Wu, Yi-Liu Sun, and Yi-Peng Xu. A Fault-Tolerant and Energy-Efficient Design of a Network Switch Based on a Quantum-Based Nano-Communication Technique. 
+
+Sustainable Computing: Informatics and Systems , 37:100827, 2023. [31] Zibin Pan, Zhichao Wang, Chi Li, Kaiyan Zheng, Boqi Wang, Xiaoying Tang, and Junhua Zhao. Federated Unlearning with Gradient Descent and Conflict Mitigation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 19804–19812, 2025. doi: 10.1609/aaai.v39i19.34181. [32] Samuele Poppi, Tobia Poppi, Federico Cocchi, Marcella Cornia, Lorenzo Baraldi, and Rita Cucchiara. Safe-CLIP: Removing NSFW Concepts from Vision-and-Language Models. In 
+
+Proceedings of the European Conference on Computer Vision , pages 340–356, 2024. doi: 10.1007/978-3-031-73668-1_20. [33] Samuele Poppi, Sara Sarto, Marcella Cornia, Lorenzo Baraldi, and Rita Cucchiara. Un-learning Vision Transformers Without Retaining Data via Low-Rank Decompositions. In 
+
+Proceedings of the European Conference on Computer Vision , pages 147–163, 2024. doi: 10.1007/978-3-031-78122-3_10. [34] Ujjwal Pudasaini, Zihao Ding, and Jun Huang. Securing Smart Agriculture with Communication-Efficient Federated Unlearning. In 2026 IEEE International Conference on High Performance Switching and Routing (HPSR) , pages 1–8. IEEE, 2026. [35] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agar-wal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning Transferable Visual Models From Natural Language Supervision. In 
+
+Proceedings of the International Conference on Machine Learning , pages 8748–8763, 2021. [36] Gobinda Saha, Isha Garg, and Kaushik Roy. Gradient Projection Memory for Continual Learning. In International Conference on Learning Representations , 2021. [37] Reza Shokri, Marco Stronati, Congzheng Song, and Vitaly Shmatikov. Membership Inference Attacks Against Machine Learning Models. In IEEE Symposium on Security and Privacy , pages 3–18, 2017. doi: 10.1109/SP.2017.41. [38] Oleksii Sidorov, Ronghang Hu, Marcus Rohrbach, and Amanpreet Singh. TextCaps: A Dataset for Image Captioning with Reading Comprehension. In Proceedings of the European Conference on Computer Vision , pages 742–758, 2020. doi: 10.1007/978-3-030-58536-5_44. [39] Anvith Thudi, Hengrui Jia, Ilia Shumailov, and Nicolas Papernot. On the Necessity of Auditable Algorithmic Definitions for Machine Unlearning. In USENIX Security Symposium , pages 4007–4022, 2022. [40] Paul Voigt and Axel von dem Bussche. The EU General Data Protection Regulation (GDPR): A Practical Guide . Springer International Publishing, 2017. doi: 10.1007/978-3-319-57959-7. [41] Junxiao Wang, Song Guo, Xin Xie, and Heng Qi. Federated Unlearning via Class-Discriminative Pruning. In Proceedings of the ACM Web Conference , pages 622–632, 2022. doi: 10.1145/ 3485447.3512222. [42] Shipeng Wang, Xiaorong Li, Jian Sun, and Zongben Xu. Training Networks in Null Space of Feature Covariance for Continual Learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 184–193, 2021. doi: 10.1109/CVPR46437. 2021.00025. [43] Beining Wu and Jun Huang. Lifecycle-Aware Federated Continual Learning in Mobile Au-tonomous Systems. arXiv preprint arXiv:2604.20745, 2026. 12 [44] Beining Wu and Wei Wu. Model-Free Cooperative Optimal Output Regulation for Linear Discrete-Time Multi-Agent Systems Using Reinforcement Learning. Mathematical Problems in Engineering , 2023(1):6350647, 2023. [45] Beining Wu, Zhengkun Cai, Wei Wu, and Xiaobin Yin. AoI-Aware Resource Management for Smart Health via Deep Reinforcement Learning. IEEE Access , 2023. [46] Beining Wu, Jun Huang, and Qiang Duan. Real-Time Intelligent Healthcare Enabled by Federated Digital Twins With AoI Optimization. IEEE Network , 40(2):184–191, 2025. doi: 10.1109/MNET.2025.3565977. [47] Beining Wu, Jun Huang, and Qiang Duan. FedTD3: An Accelerated Learning Approach for UAV Trajectory Planning. In International Conference on Wireless Artificial Intelligent Computing Systems and Applications (WASA) , pages 13–24. Springer, 2025. [48] Beining Wu, Jun Huang, Qiang Duan, Liang Dong, and Zhipeng Cai. Enhancing Vehicular Pla-tooning With Wireless Federated Learning: A Resource-Aware Control Framework. IEEE/ACM Transactions on Networking , pages 1–1, 2025. doi: 10.1109/TON.2025.3625084. [49] Beining Wu, Zihao Ding, and Jun Huang. RELIEF: Turning Missing Modalities into Training Acceleration for Federated Learning on Heterogeneous IoT Edge. arXiv preprint arXiv:2604.04243, 2026. [50] Beining Wu, Zihao Ding, and Jun Huang. A Review of Continual Learning in Edge AI. IEEE Transactions on Network Science and Engineering , 13:6571–6588, 2026. doi: 10.1109/TNSE. 2026.3657652. [51] Beining Wu, Jun Huang, and Shui Yu. “X of Information” Continuum: A Survey on AI-Driven Multi-Dimensional Metrics for Next-Generation Networked Systems. IEEE Communications Surveys & Tutorials , 28:5307–5344, 2026. doi: 10.1109/COMST.2026.3670279. [52] Beining Wu, Jun Huang, and Yanxiao Zhao. From Alpha to Omega: Lifecycle-Aware Forgetting Defense in Federated Continual Learning for Planetary Exploration. In Proceedings of the IEEE International Conference on Distributed Computing Systems (ICDCS) , 2026. [53] Chen Wu, Sencun Zhu, and Prasenjit Mitra. Federated Unlearning with Knowledge Distillation. arXiv preprint arXiv:2201.09441, 2022. [54] Cong-Cong Xing, Zihao Ding, and Jun Huang. A Stochastic Geometry-Based Analysis of SWIPT-Assisted Underlaid Device-to-Device Energy Harvesting. SIGAPP Appl. Comput. Rev. , 25(4):18–34, January 2026. ISSN 1559-6915. doi: 10.1145/3787594.3787596. URL 
+
+https://doi.org/10.1145/3787594.3787596 .[55] Qiang Yang, Yang Liu, Tianjian Chen, and Yongxin Tong. Federated Machine Learning: Concept and Applications. ACM Transactions on Intelligent Systems and Technology , 10(2): 12:1–12:19, 2019. doi: 10.1145/3298981. [56] Peter Young, Alice Lai, Micah Hodosh, and Julia Hockenmaier. From image descriptions to visual denotations: New similarity metrics for semantic inference over event descriptions. 
+
+Transactions of the Association for Computational Linguistics , 2:67–78, 2014. doi: 10.1162/ tacl_a_00166. [57] Qiying Yu, Yang Liu, Yimu Wang, Ke Xu, and Jingjing Liu. Multimodal Federated Learning via Contrastive Representation Ensemble. In International Conference on Learning Representations ,2023. [58] Friedemann Zenke, Ben Poole, and Surya Ganguli. Continual Learning Through Synaptic Intelligence. In Proceedings of the International Conference on Machine Learning , pages 3987–3995, 2017. [59] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid Loss for Language Image Pre-Training. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 11941–11952, 2023. doi: 10.1109/ICCV51070.2023.01100. 13 [60] Zhengyi Zhong, Weidong Bao, Ji Wang, Shuai Zhang, Jingxuan Zhou, Lingjuan Lyu, and Wei Yang Bryan Lim. Unlearning through Knowledge Overwriting: Reversible Federated Unlearning via Selective Sparse Adapter. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 30661–30670, 2025. doi: 10.1109/CVPR52734.2025.02855. 14 Appendix Contents 
+
+A Related Work 16 B Technical Appendix 16 
+
+B.1 Notation Table . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.2 Dataset Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.3 Baseline Descriptions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17 B.4 Evaluation Metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18 B.5 Implementation Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 B.6 Hyperparameter Sensitivity . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 B.7 Visualization of Unlearning Effect . . . . . . . . . . . . . . . . . . . . . . . . . . 21 B.8 Alternative Lock Designs . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22 B.9 Algorithm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22 
+
+C Proofs of Theoretical Results 23 
+
+C.1 Assumptions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 C.2 Properties of the Unlearning Projector . . . . . . . . . . . . . . . . . . . . . . . . 25 C.3 Forget Lock Characterization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 C.4 Proof of Theorem C.7 (Unlearning Completeness) . . . . . . . . . . . . . . . . . . 26 C.5 Proof of Theorem C.8 (Retention Integrity) . . . . . . . . . . . . . . . . . . . . . 27 C.6 Completeness–Integrity Trade-off Analysis . . . . . . . . . . . . . . . . . . . . . 27 C.7 Proof of Theorem C.10 (Unlearning Durability) . . . . . . . . . . . . . . . . . . . 28 C.8 Proof of Theorem C.11 (Anchor Reconstruction Tendency under Unilateral Excision) 28 
+
+D Compute-Matched Retrain Comparison 30 E Likelihood-Ratio Attack at Low False-Positive Rate 30 F Full Comparison Results 32 
+
+15 A Related Work 
+
+Federated Unlearning. Federated unlearning reconstructs the influence of a withdrawn client with-out retraining. Historical reconstruction calibrates remaining clients’ updates [ 27 , 3 , 28 ]; curvature-and direction-based approaches localize the forget contribution via second-order signals (SoUL [ 17 ]) or orthogonal subspace projection (FedOSD [ 31 ]); task-vector methods (NoT [ 20 ]) subtract a di-rectional vector of the forget client’s accumulated update; recent extensions reduce cost through nonlinear functional refinement (FFMU [ 5 ]) or sparse-adapter overwriting (FUSED [ 60 ]); and verification-oriented studies [ 12 , 14 , 41 , 53 ] provide complementary auditing tools. However, these methods assume a single-modality loss and a one-shot view of unlearning, and thus do not address the cross-modal reconstruction channel or continued-training drift in federated multimodal settings. 
+
+Centralized Machine Unlearning. Centralized methods assume a trusted curator with full data access. Exact approaches retrain affected data shards [ 2 ]; approximate approaches edit a trained model via gradient ascent on the forget loss [ 39 , 13 ], influence-function subtraction [ 22 ], distillation from a retain-only teacher [ 23 ], or importance-weighted regularization on parameter coordinates [ 21 , 58 , 1]. However, none of these methods is designed for unlearning that must remain valid under continued training over heterogeneous clients. 
+
+Multimodal Unlearning. A small but growing body of work targets unlearning in multimodal contrastive models. CLIP-specific erasers [ 32 , 33 ] remove undesired image-text associations via fine-tuning on a designated forget set, and recent multimodal unlearners [ 24 ] acknowledge cross-modal coupling by issuing dual-branch updates. However, all these efforts are centralized and assume unrestricted access to raw pairs, so they do not transfer to the federated regime where the server only sees gradient summaries. 
+
+Gradient Subspace and Importance-weighted Regularization. Two long-standing families in continual learning are closely related to our subspace and lock components. Gradient subspace meth-ods (GPM [ 36 ], Adam-NSCL [ 42 ], OGD [ 11 ]) confine new updates to the orthogonal complement of a single past-task subspace, while importance-weighted regularizers (EWC [ 21 ], SI [ 58 ]) weight a quadratic drift penalty by per-parameter importance scores. However, both families were conceived for centralized continual learning rather than unlearning, and neither separates forget-exclusive directions from retain-shared directions inside a forget subspace nor remains valid under continued federated training. 
+
+B Technical Appendix 
+
+B.1 Notation Table 
+
+We summarize the commonly used notation throughout this paper in Table 3. 
+
+B.2 Dataset Details 
+
+We evaluate on three standard image-text retrieval benchmarks. 
+
+Flickr30K [TACL’14] [ 56 ]. Flickr30K contains 31 ,783 images collected from Flickr, each annotated with five human-written English captions, for a total of 158 ,915 image-text pairs. Following the Karpathy split [ 19 ], we use 29 ,000 images for training, 1,014 for validation, and 1,000 for the test set used to compute Recall@ k; the remaining 769 images are not assigned to any split and are omitted from our evaluation, consistent with prior retrieval work using this split. The captions cover diverse everyday scenes, making Flickr30K a standard benchmark for general-purpose cross-modal retrieval. 
+
+MS COCO Captions [ECCV’14] [ 26 , 7]. MS COCO is a large-scale dataset comprising 123 ,287 
+
+images of common objects in context, each paired with five human-written captions. We again adopt the Karpathy split, using 113 ,287 training images, 5,000 validation images, and the 5,000 -image test split for retrieval evaluation. Compared with Flickr30K, MSCOCO covers a broader object taxonomy and a wider caption style, and stresses retrieval on a larger candidate pool. 16 Table 3: Notation and Definitions. 
+
+Notation Definition 
+
+K The number of clients. 
+
+Dk The private multimodal dataset for the k-th client. 
+
+Nk The number of image-text pairs for the k-th client. 
+
+(xv , x t) An image-text pair in Dk.
+
+wv , w t The trainable parameters for the visual and language branches. 
+
+w The joint parameter vector [wv ; wt].
+
+zv , z t The visual and textual embeddings in the shared space. 
+
+m The dimension of the embedding space. 
+
+γ The temperature in the InfoNCE loss. 
+
+La The symmetric InfoNCE alignment loss. 
+
+Jv , J t The Jacobians ∂z v /∂w v and ∂z t/∂w t.
+
+Df The forget set whose influence is to be removed. 
+
+Dr The retain set D \ D f .
+
+wn The model after standard federated training. 
+
+˜w The retrain model obtained by training from scratch on Dr .
+
+w∗ The unlearned model. 
+
+ρ Alignment residual, computed per forget pair and reported as the median over Df .
+
+∆wk[t] The parameter update of client k at round t.
+
+Hk The gradient update history of client k.
+
+Gf , G r The forget and retain gradient matrices. 
+
+Φf , Φr The orthonormal bases of Sf and Sr .
+
+Sf , Sr The forget and retain subspaces. 
+
+p, q The dimensions of Sf and Sr .
+
+τe The energy threshold for SVD truncation. 
+
+M The cross-correlation matrix Φ⊤ 
+
+> f
+
+Φr .
+
+cos φi The entanglement coefficient of the i-th canonical direction. 
+
+ci The i-th canonical direction of Sf .
+
+δ The threshold separating removable anchor directions from retain support directions. 
+
+Bu, B e The unique (anchor) and entangled (support) basis matrices. 
+
+U, E The subspaces spanned by removable anchor directions and retain support directions. 
+
+Πu,μ The orthogonal projector onto the unique subspace Uμ, defined as Bu,μ (Bu,μ )⊤.
+
+Lf The Forget Lock regularizer. 
+
+α The Forget Lock regularization strength. 
+
+ηlr The learning rate. 
+
+Gu The uniform upper bound on the projected alignment gradient ∥Πu,μ ∇wμ La∥2.
+
+TextCaps [ECCV’20] [ 38 ]. TextCaps extends the MSCOCO-style caption format with scene-text understanding: each of the 28 ,408 images contains visible textual content (signs, logos, product labels), and captions are written to reference this text where appropriate. We use the official splits of 21 ,953 training, 3,166 validation, and 3,289 test images. TextCaps complements the other two datasets by stressing fine-grained alignment between language and visual text, a regime where forget-set leakage is particularly sensitive to bilateral closure of the Modality Anchor. 
+
+Federated partition. For every dataset, training images (together with their captions) are dis-tributed across K clients via a Dirichlet partition with concentration parameter β over pseudo-cluster labels obtained by KMeans on concatenated visual-textual embeddings of the pretrained backbone (Section B.5). The default configuration is K=10 and β=0 .5, yielding moderately non-IID client shards; we sweep both parameters in Figure 7. Forget sets are constructed on top of this partition according to the unlearning scenario, as described in Appendix B.5. 
+
+B.3 Baseline Descriptions 
+
+This section provides a comprehensive overview of the nine counterparts employed in our experiments. We group them by methodological category. 17 Federated unlearning methods. 
+
+• FedEraser [IWQOS’21] [27 ]. FedEraser is one of the earliest federated unlearning methods. It reconstructs an approximation of the retrained model by combining cached historical parameter updates from the remaining clients, replaying them through a calibrated aggregation procedure. This avoids the cost of full retraining while producing a model that behaves similarly to one never trained on the forget client’s data. • FedRecover [S&P’23] [3]. FedRecover originally targets recovery from poisoning attacks but is naturally adapted to federated unlearning. It stores per-round gradient and model information, then uses this history to estimate what the global model would have looked like if the forget client had been absent, applying a low-cost correction instead of rerunning training from scratch. • Ferrari [ICML’24] [ 28 ]. Ferrari performs rapid approximate retraining guided by cached client gra-dients. The server constructs a compact representation of each client’s contribution and selectively reverses the forget client’s influence, achieving significantly lower wall-clock time than retrain while preserving retrieval accuracy on the retain set. • FedOSD [AAAI’25] [31 ]. FedOSD applies orthogonal subspace decomposition to client update directions. It identifies the subspace spanned by the forget client’s updates and projects the global model away from that subspace, selectively removing the forget component. The method is close in spirit to ours, but operates on single-modality models and does not separate removable anchor directions from retain support directions inside the forget subspace. • NoT [CVPR’25] [ 20 ]. NoT treats each client’s historical contribution as a task vector and performs unlearning by subtracting the forget client’s task vector from the global model. This yields aggressive erasure on the forget set but frequently damages retained knowledge, since the task vector subtraction is applied uniformly without separating shared and unique components. • SoUL [EMNLP’24] [ 17 ]. SoUL employs second-order curvature information to localize the forget contribution. Using approximate Hessian or Fisher-information-based signals, it estimates which parameters are most relevant to the forget data and perturbs only those. While more targeted than gradient-based baselines, it incurs nontrivial computational cost due to second-order estimation. • FFMU [ICML’23] [5]. FFMU accelerates federated unlearning by modeling local unlearning models as output functions of a Nemytskii operator and leveraging nonlinear functional analysis to refine them. It achieves competitive unlearning quality with reduced computation, but operates on single-modality models and does not address the Modality Anchor present in multimodal architectures. • FUSED [CVPR’25] [60 ]. FUSED performs reversible federated unlearning by training independent sparse adapters that overwrite forget-specific knowledge. It identifies the most affected layers through sensitivity analysis and retrains only sparse adapters on those layers, reducing unlearning cost while keeping the process reversible. Like other federated unlearning methods, it operates on single-modality models. 
+
+Centralized unlearning methods adapted to the federated setting. 
+
+• GradAscent [USENIX Security’22] [ 39 ]. Gradient ascent is a simple and widely used unlearning baseline that performs gradient updates on the forget set using the negative of the original training loss. We adapt it to the federated setting by running localized gradient ascent on the forget client followed by standard federated aggregation on the remaining clients. Although straightforward to implement, it often overshoots and degrades retain-set performance. 
+
+B.4 Evaluation Metrics 
+
+We report four groups of metrics to capture unlearning completeness, retention integrity, privacy leakage, and efficiency. 
+
+Retrieval accuracy (Recall@ k) [CVPR’15] [ 19 ]. Recall@ k is the standard metric for cross-modal retrieval. Given a query from one modality, it measures whether the ground-truth match in the other modality is ranked within the top-k retrieved items. We report Recall@ k for k ∈ { 1, 5, 10 },averaged over both image-to-text and text-to-image directions. Three splits are evaluated: (i) the forget set ¯Df for unlearning completeness, where lower values indicate that the model has forgotten 18 the target pairs; (ii) the retain set ¯Dr for retention integrity, where higher values indicate that retained knowledge is preserved; and (iii) the held-out test set for generalization, where higher values indicate that unlearning does not harm out-of-sample performance. 
+
+Membership inference attack (MIA) [S&P’17] [37 ]. We adopt the shadow-model MIA protocol of Shokri et al.: for each target configuration, we independently train multiple shadow models with the same architecture, training recipe, and data distribution as the target, on disjoint random splits with known member/non-member labels. Per-sample loss and logit statistics from shadow models are used to train a binary attack classifier, which is then applied to the target unlearned model to predict whether each forget-set sample was an original training member. The reported MIA score is the attack’s true-positive rate on the forget set, i.e., the fraction of forget samples that the classifier labels as members. A well-unlearned model maps forget samples into the loss/logit regime of non-members, so its MIA score moves toward the retrain reference; larger values indicate residual memorization that an attacker can exploit. We therefore measure privacy leakage by the gap |MIA method − MIA retrain |,with a small gap meaning the unlearned model is close to a model that never saw the forget data under this attack. Absolute MIA values can fall below 50% because the shadow-model classifier inherits the class prior and loss-distribution skew of the training pool; the operationally meaningful quantity is the gap to the retrain reference, not the distance to 50% .
+
+LiRA true-positive rate at 1% false-positive rate [S&P’22] [ 4]. Aggregate MIA accuracy can hide worst-case leakage because an attacker usually cares about confidently identifying a small fraction of training members rather than performing well on average. We therefore also report the likelihood-ratio attack (LiRA) of Carlini et al. evaluated on the same shadow-model pool. For each candidate sample, LiRA computes a per-example likelihood-ratio statistic between two Gaussian distributions fitted over shadow-model logits (one for models that contain the sample, one for models that do not); the threshold is calibrated so that the false-positive rate on held-out non-members equals 
+
+1% , and we report the resulting true-positive rate ( TPR@FPR=1% ) on the forget set. Values near the 1% random-guess line indicate that forget samples are close to non-members under a targeted low-FPR attacker, while larger values indicate residual memorization that the aggregate MIA score can underestimate. 
+
+Communication cost [ 18 ]. We measure the total payload transmitted between clients and the server during the unlearning procedure, in megabytes. This includes model broadcasts, client updates, and any auxiliary tensors such as unique-subspace bases Bu,v and Bu,t . Lower values indicate lower bandwidth overhead for deployment. 
+
+B.5 Implementation Details Model architecture. We use frozen pretrained multimodal encoders in bf16 as the backbone. Two types of trainable modules are added in fp32: (1) LoRA adapters inserted into the attention layers of each encoder, and (2) two-layer MLP projectors that map each encoder’s output to a shared 256-dimensional embedding space (one projector per modality). 
+
+Gradient delta construction. The per-round update ∆wk[t] is computed differently for the two module types. For the projectors, we directly compute the parameter difference between the local and global states. For LoRA layers, each adapter contributes a low-rank modification BA to the frozen weight; we compute the effective weight delta as the difference in the low-rank product before and after local training, rather than differencing B and A separately, since only the product has a well-defined interpretation in the full parameter space. These deltas are then column-stacked to form the gradient matrices Gf and Gr (Section 3.3). 
+
+Unlearning scenario setup. For client unlearning, a designated client k∗ withdraws from the federation; all its historical updates form Gf , and k∗ does not participate in subsequent rounds. For sample unlearning, the server specifies a global forget set Df whose samples typically span multiple clients (we partition Df uniformly across clients at data-splitting time); each client with overlapping samples performs one epoch of training on its local forget subset and uploads the resulting gradient, which is column-stacked into Gf , and every client subsequently continues training on Dk \ D f . For class unlearning, since image-text retrieval datasets (Flickr30K, COCO) lack categorical labels, we pre-compute pseudo-class assignments by running KMeans on concatenated 19 visual-textual embeddings of the pretrained backbone and distribute each pseudo-class uniformly across clients; the server specifies the target cluster via a textual descriptor matched to the nearest cluster centroid, every client that holds samples in that cluster contributes a per-client gradient to form Gf , and all clients exclude the target-cluster samples from subsequent training. 
+
+B.6 Hyperparameter Sensitivity 
+
+We sweep the entanglement threshold δ and the Forget Lock strength α on Flickr30K with CLIP-B/32 across the three unlearning scenarios. For each configuration we run three independent trials with different random seeds and report mean and standard deviation; the resulting curves are shown in Figure 6. Forget R@1 ↓ Forget R@5 ↓ Forget R@10 ↓ Retain R@1 ↑ Retain R@5 ↑ Retain R@10 ↑ MIA ↓ 0.1 0.3 0.5 0.7 0.9  
+
+> Threshold δ
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(a) Client / δ sweep 0.1 0.3 0.5 0.7 0.9   
+
+> Threshold δ
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(b) Class / δ sweep 0.1 0.3 0.5 0.7 0.9   
+
+> Threshold δ
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(c) Sample / δ sweep 0 0.1 0.3 0.5 1 2 5 
+
+> Forget Lock strength α
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(d) Client / α sweep 0 0.1 0.3 0.5 1 2 5  
+
+> Forget Lock strength α
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(e) Class / α sweep 0 0.1 0.3 0.5 1 2 5  
+
+> Forget Lock strength α
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(f) Sample / α sweep 
+
+Figure 6: Sensitivity of EASE to the entanglement threshold δ (top row) and the Forget Lock strength 
+
+α (bottom row) on Flickr30K with CLIP-B/32 across three unlearning scenarios. Each point is the mean over three independent runs with different random seeds; error bars indicate the standard deviation. 
+
+Findings on δ (top row). The δ sweep exhibits a wide plateau where Forget R@ k is already low while Retain R@ k stays close to the retrain reference, with noticeable Retain degradation only at the very high end of δ. This plateau empirically matches the δ2-controlled collateral energy in Theorem C.8 and indicates that the anchor/support boundary remains stable across a broad operating regime: small δ leaves Unique-Subspace Anchors partially open, while excessive δ misclassifies retain support as anchor and degrades retention. 
+
+Findings on α (bottom row). The Forget Lock strength exhibits a clearer trade-off. The projection alone already achieves substantial closure, so a moderate Lock suppresses Temporal Re-anchoring at negligible Retain cost; pushing α too high over-constrains legitimate updates in U⊥ 
+
+> μ
+
+and degrades Retain. This matches the durability bound of Theorem C.10, and shows that the Temporal Re-anchoring closure is delivered by a broad band of α values rather than a single operating point. 
+
+Findings on K and β (federated configuration). Forget R@ k remains low across the swept K
+
+and β ranges, consistent with bilateral projection suppressing the Modality Anchor under different federation sizes and heterogeneity levels. Retain R@ k varies modestly but remains stable across both sweeps, suggesting limited sensitivity to these federated configuration choices in our setting. 20 Forget R@1 ↓ Forget R@5 ↓ Forget R@10 ↓ Retain R@1 ↑ Retain R@5 ↑ Retain R@10 ↑ MIA ↓ 10 20 30 40 50 60 70 80 90 100  
+
+> Number of clients K
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(a) Client / K sweep 10 20 30 40 50 60 70 80 90 100   
+
+> Number of clients K
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(b) Class / K sweep 10 20 30 40 50 60 70 80 90 100   
+
+> Number of clients K
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(c) Sample / K sweep 0.1 0.2 0.3 0.4 0.5 0.6 0.7  
+
+> Dirichlet concentration β
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(d) Client / β sweep 0.1 0.2 0.3 0.4 0.5 0.6 0.7   
+
+> Dirichlet concentration β
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(e) Class / β sweep 0.1 0.2 0.3 0.4 0.5 0.6 0.7   
+
+> Dirichlet concentration β
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(f) Sample / β sweep 
+
+Figure 7: Sensitivity of EASE to the federation size K (top row) and the Dirichlet concentration β
+
+(bottom row) on Flickr30K with CLIP-B/32, evaluated under three unlearning scenarios. Each point reports the mean over three independent runs with different random seeds; error bars indicate the standard deviation. 
+
+Backbone transfer. To check whether the δ plateau and the α stable band are specific to a single backbone, we repeat both sweeps with CLIP-L/14 on Flickr30K. Figure 8 shows the same qualitative behaviour observed on CLIP-B/32: Forget R@ k remains low across the swept ranges while Retain R@ k stays close to the retrain reference, with degradation only at the high end of δ and α.
+
+Class scenario asymmetry on CLIP-L/14. The class panels in Figure 8 collapse only at δ ≥ 0.7,while client and sample already reach the floor at small δ. Two effects compound. First, class unlearning aggregates the gradient signal of an entire target cluster, so the empirical forget covariance has higher effective rank and a flatter energy spectrum than per-client or per-sample targets, and a larger δ is needed to cover the same fraction of cluster-correlated energy as removable anchor directions. Second, CLIP-L/14’s wider feature space, 768 versus 512 channels, distributes cluster-correlated alignment across more redundant directions, so a small-δ truncation captures only the dominant pathway and leaves residual alignment that still supports R@5 and R@10 retrieval. Client and sample targets are intrinsically low-rank subspaces and therefore remain less sensitive to either factor across backbones. 
+
+B.7 Visualization of Unlearning Effect 
+
+We visualize per-pair cosine similarity distributions under the original model wn, our method w∗,and the retrain reference ˜w in Figure 9. For each image-text pair, we compute cos( ziv , z it ) between the visual and textual embeddings on the shared projector output; higher values indicate stronger cross-modal alignment, and an unlearned model is expected to produce similarities close to those of the retrain reference on forget pairs and close to the original on retain pairs. We report these per-pair similarities for three unlearning scenarios and two data splits. Each panel combines a half-violin, a strip plot, and a box plot, so the reader sees the overall shape, the individual pair values, and the median with quartiles in a single view. Two patterns emerge. First, on forget pairs, the original model places most pairs at high similarity, reflecting the alignment learned during standard federated training; our method shifts this distribution 21 Forget R@1 ↓ Forget R@5 ↓ Forget R@10 ↓ Retain R@1 ↑ Retain R@5 ↑ Retain R@10 ↑ MIA ↓ 0.1 0.3 0.5 0.7 0.9  
+
+> Threshold δ
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(a) Client / δ sweep 0.1 0.3 0.5 0.7 0.9   
+
+> Threshold δ
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(b) Class / δ sweep 0.1 0.3 0.5 0.7 0.9   
+
+> Threshold δ
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(c) Sample / δ sweep 0 0.1 0.3 0.5 1 2 5 
+
+> Forget Lock strength α
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(d) Client / α sweep 0 0.1 0.3 0.5 1 2 5  
+
+> Forget Lock strength α
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(e) Class / α sweep 0 0.1 0.3 0.5 1 2 5  
+
+> Forget Lock strength α
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Recall@ k / MIA (%)
+
+(f) Sample / α sweep 
+
+Figure 8: Sensitivity of EASE to the entanglement threshold δ (top row) and the Forget Lock strength 
+
+α (bottom row) on Flickr30K with CLIP-L/14 across three unlearning scenarios. Each point reports the mean over three independent runs with different random seeds; error bars indicate the standard deviation. leftward toward the retrain reference across client, class, and sample scenarios, meaning that the cross-modal alignment between forget image-text pairs is reduced toward the level of a model trained from scratch without those pairs. Second, on retain pairs, the distribution under our method remains close to the retrain reference, indicating that bilateral projection and the Forget Lock preserve much of the unrelated knowledge. These two patterns provide a direct visual counterpart to the quantitative results in Section 4.2 and Section 4.3: the Modality Anchor closure moves forget pairs toward retrain levels, and the direction-selective Forget Lock keeps retain pairs close to the retrain reference. 
+
+B.8 Alternative Lock Designs 
+
+This section justifies the direction-selective Forget Lock used in PFL (Section 3.4) by ruling out two natural alternatives. (i) Per-round server projection alone. Re-projecting the global model onto the affine submanifold Mμ = wn,μ + U⊥ 
+
+> μ
+
+at every round closes d(t) at the start of each round but leaves the within-round trajectory unconstrained: clients still drift along Uμ during their local SGD, and the drift is recovered by aggregation only after the damage is done. (ii) Parameter-importance regularizers (EWC, SI, MAS). These penalize drift on axis-aligned parameter coordinates weighted by importance scores. The unique subspace Uμ is generally an oblique subspace of parameter space, not aligned with any coordinate axis, so an axis-aligned penalty cannot express the constraint that drift is bounded only along Uμ: tuning the penalty large enough to suppress gu(t) over-constrains U⊥
+
+> μ
+
+and crushes retain support, while tuning it small leaves gu(t) unbounded. PFL’s quadratic penalty Lf
+
+is supported on Uμ and therefore enforces the asymmetry that neither alternative can express. 
+
+B.9 Algorithm 
+
+The three unlearning scenarios share the pipeline in Algorithm 1; they differ only in how Gf , Gr are constructed (Section 3.3) and in the participant and data configurations across phases (Section 3.4). 22 Original Our Method Retrain −0.2 −0.1 0.0 0.1 0.2 0.3 0.4 
+
+> Forget Pair Similarity
+
+(a) client forget Original Our Method Retrain −0.2 0.0 0.2 0.4  
+
+> Forget Pair Similarity
+
+(b) class forget Original Our Method Retrain −0.2 0.0 0.2 0.4 0.6  
+
+> Forget Pair Similarity
+
+(c) sample forget Original Our Method Retrain 0.0 0.2 0.4 0.6 0.8 
+
+> Retain Pair Similarity
+
+(d) client retain Original Our Method Retrain 0.2 0.4 0.6 0.8  
+
+> Retain Pair Similarity
+
+(e) class retain Original Our Method Retrain 0.2 0.4 0.6 0.8  
+
+> Retain Pair Similarity
+
+(f) sample retain 
+
+Figure 9: Per-pair image–text cosine similarity under the original, our method, and retrain. Top: forget pairs, where our method shifts toward the retrain reference. Bottom: retain pairs, where the three distributions overlap. 
+
+C Proofs of Theoretical Results 
+
+Throughout this section, we use standard properties of orthogonal projectors (idempotency, self-adjointness, range/kernel characterization), quadratic forms induced by positive semidefinite matrices, and the inner product differentiation rule. The entanglement coefficients introduced in Section 3.3 are computed as the cosines of the principal angles between subspaces. 
+
+C.1 Assumptions 
+
+The theorems in Section 3 rely on the following assumptions; each theorem statement indicates the subset it uses. 
+
+Assumption C.1 (A1: Smoothness and bounded Jacobians) . The alignment loss La(w; D) is L-smooth in w, i.e., ∥∇L a(w) − ∇L a(w′)∥2 ≤ L∥w − w′∥2 for every w, w ′ encountered during training. The encoder Jacobians Jμ = ∂z μ/∂w μ are bounded in operator norm, ∥Jμ(wμ)∥op ≤ M
+
+for both μ ∈ { v, t } and all wμ within the training region. 
+
+Assumption C.2 (A2: Local linearization) . There exists a radius r > 0 around the pre-unlearning point wn such that, for ∥wμ − wn,μ ∥2 ≤ r, the encoder embedding admits a first-order Taylor expansion zμ(wμ) = zμ(wn,μ ) + Jμ(wn,μ )( wμ − wn,μ ) + O(∥wμ − wn,μ ∥22) with a uniformly bounded second-order residual. 
+
+Assumption C.3 (A3: Anchor residual after bilateral excision, verifiable form) . After applying bilateral excision to both modalities, producing w∗ = ( w∗ 
+
+> v
+
+, w ∗ 
+
+> t
+
+) with Πu,μ (w∗ 
+
+> μ
+
+− wn,μ ) = 0 for both 
+
+μ ∈ { v, t }, the residual Modality Anchor signal along unique directions is bounded: for a small constant ϵanchor ≥ 0,
+
+Πu,μ ∇wμ La(w∗ 
+
+> v
+
+, w ∗ 
+
+> t
+
+) 2 ≤ ϵanchor , μ ∈ { v, t }. (13) We treat A3 as an explicit local condition, not as a consequence of the theorem. Since ϵanchor is a projected gradient norm whereas the alignment residual ρ is an embedding-similarity residual, ρ does not upper-bound ϵanchor ; instead, the small ρ values on the EASE row of Table 2 ( 0.06 –0.08 across scenarios) provide an empirical proxy that the dominant modality-anchor term has been suppressed. 23 Algorithm 1 EASE : Entanglement-Aware Subspace Excision 
+
+Input: Trained model wn, client gradient histories {Hk}Kk=1 , forget specification, thresholds δ, τe,lock strength α, excision rounds R2, stabilization rounds R3. 
+
+> 1:
+
+▷ Phase I: Gradient Subspace Decomposition  
+
+> 2:
+
+Construct Gf , Gr from {Hk} based on unlearning scenario ▷ Eq. (5)  
+
+> 3:
+
+for each modality μ ∈ { v, t } do  
+
+> 4:
+
+Φf,μ ← SVD of Gf,μ , retain directions covering τe energy ▷ Eq. (6)  
+
+> 5:
+
+Φr,μ ← SVD of Gr,μ , retain directions covering τe energy  
+
+> 6:
+
+Compute Mμ ← Φ⊤
+
+> f,μ
+
+Φr,μ ; SVD to get principal angles {φi} ▷ Eq. (7)  
+
+> 7:
+
+Partition into removable anchor and retain support: Bu,μ ← [ci]cos φi≤δ ; Πu,μ ← Bu,μ B⊤
+
+> u,μ
+
+▷ Eq. (8)  
+
+> 8:
+
+end for  
+
+> 9:
+
+for round t = 1 , 2, . . . , R 2 + R3 do  
+
+> 10:
+
+if t ≤ R2 then  
+
+> 11:
+
+▷ Phase II: Bilateral Knowledge Excision  
+
+> 12:
+
+for μ ∈ { v, t } do  
+
+> 13:
+
+wg,μ ← wg,μ − Πu,μ (wg,μ − wn,μ ) ▷ Remove anchor component, Eq. (10)  
+
+> 14:
+
+end for  
+
+> 15:
+
+Broadcast projected wg , unique bases {Bu,μ }, anchor reference wn to clients  
+
+> 16:
+
+for each client k in parallel do  
+
+> 17:
+
+Compute alignment loss La(w; D′
+
+> k
+
+) on retain data ▷ Eq. (1)  
+
+> 18:
+
+Compute Forget Lock penalty Lf (w) = P 
+
+> μ
+
+∥B⊤
+
+> u,μ
+
+(wμ − wn,μ )∥22 ▷ Eq. (11)  
+
+> 19:
+
+Update wk via local SGD on La + α · L f ▷ Eq. (12)  
+
+> 20:
+
+Upload wk to server  
+
+> 21:
+
+end for  
+
+> 22:
+
+else  
+
+> 23:
+
+▷ Phase III: Stabilization under Forget Lock  
+
+> 24:
+
+Broadcast wg , {Bu,μ }, wn to clients ▷ No projection in this phase  
+
+> 25:
+
+for each client k in parallel do  
+
+> 26:
+
+Update wk via local SGD on La + α · L f ▷ Lock suppresses Temporal Re-anchoring  
+
+> 27:
+
+Upload wk to server  
+
+> 28:
+
+end for  
+
+> 29:
+
+end if  
+
+> 30:
+
+wg ← 1
+
+> |C [t]|
+
+P 
+
+> k∈C [t]
+
+wk ▷ Server aggregation  
+
+> 31:
+
+end for  
+
+> 32:
+
+return Unlearned model w∗ ← wg
+
+The structural reason A3 can hold is geometric: bilateral excision displaces both zv (w∗ 
+
+> v
+
+) and zt(w∗ 
+
+> t
+
+)
+
+off the original alignment, removing the leading modality-anchor term in ∇wμ La; what remains absorbs retain-support residuals and second-order embedding terms. 
+
+Assumption C.4 (A4: Directional alignment for unilateral dynamics) . For the unilateral excision case, the retain-objective gradient along the unique subspace remains sign-aligned with its initial direction over k local SGD steps within the linearization radius of Assumption A2. Formally, writing g(k) := −Πu,μ ∇wμ La(wμ(k), w n, ¯μ), we have ∥g(k)∥2 ≥ g0 − 2L∥d(k)∥2 where d(k) = Πu,μ (wμ(k) − wn,μ ). A4 is a local sign-alignment condition standard in linearized SGD analyses of subspace-constrained dynamics; it is required only for the multi-step lower bound in Theorem C.11 (ii). Theorem C.11 (i), (iii) and the one-step lower bound do not require A4. The condition is restricted to the linearization radius of A2 and is consistent with the empirical drift behavior observed in the 
+
+α = 0 ablation row of Table 2 ( w/o Lock ). The completeness and retention results (Theorems C.7, C.8) are purely geometric and require no assumptions beyond standard projector properties. The durability result (Theorem C.10) uses A1. The anchor reconstruction result (Theorem C.11) uses A1–A2 for claim (i) and the one-step version of (ii), additionally A4 for the multi-step recurrence in (ii), and A3 for the bilateral suppression claim (iii). 24 C.2 Properties of the Unlearning Projector Proposition C.5 (Properties of the Unlearning Projector) . Let Πu,μ = Bu,μ (Bu,μ )⊤ ∈ Rdμ×dμ
+
+denote the orthogonal projector onto Uμ = col( Bu,μ ). Then Πu,μ is idempotent ( Π2 
+
+> u,μ
+
+= Π u,μ ) and self-adjoint ( Π⊤ 
+
+> u,μ
+
+= Π u,μ ). Its range is im(Π u,μ ) = Uμ and its kernel is ker(Π u,μ ) = U⊥ 
+
+> μ
+
+. The complementary projector preserves all directions outside Uμ: (Idμ − Πu,μ )v = v for every v ∈ U ⊥ 
+
+> μ
+
+.Proof. Let Bu,μ ∈ Rdμ×pu with orthonormal columns, i.e., (Bu,μ )⊤Bu,μ = Ipu , and Πu,μ =
+
+Bu,μ (Bu,μ )⊤. For idempotency, we compute 
+
+Π2 
+
+> u,μ
+
+= Bu,μ (Bu,μ )⊤ · Bu,μ (Bu,μ )⊤
+
+= Bu,μ 
+
+(Bu,μ )⊤Bu,μ 
+
+(Bu,μ )⊤
+
+= Bu,μ Ipu (Bu,μ )⊤ = Π u,μ ,
+
+(14) Self-adjointness follows directly: 
+
+Π⊤ 
+
+> u,μ
+
+=  Bu,μ (Bu,μ )⊤⊤ = Bu,μ (Bu,μ )⊤ = Π u,μ . (15) For the range, take any v = Bu,μ α ∈ U μ. Then 
+
+Πu,μ v = Bu,μ 
+
+(Bu,μ )⊤Bu,μ 
+
+α = Bu,μ Ipu α = Bu,μ α = v, (16) so Uμ ⊆ im(Π u,μ ). Conversely, for any w ∈ Rdμ , Πu,μ w = Bu,μ 
+
+ (Bu,μ )⊤w ∈ U μ, giving 
+
+im(Π u,μ ) = Uμ. For the kernel, the equivalence chain 
+
+Πu,μ v = 0 ⇐⇒ Bu,μ (Bu,μ )⊤v = 0 ⇐⇒ (Bu,μ )⊤v = 0 ⇐⇒ v ⊥ U μ (17) establishes ker(Π u,μ ) = U⊥ 
+
+> μ
+
+. Finally, for any v ∈ U ⊥ 
+
+> μ
+
+,
+
+(Idμ − Πu,μ ) v = v − Πu,μ v = v − 0 = v, (18) so the complementary projector preserves all directions outside Uμ. Since Eμ ⊆ U ⊥ 
+
+> μ
+
+by orthogonality of the principal-angle coordinate system, this includes all retain support and retain-only directions. 
+
+C.3 Forget Lock Characterization Proposition C.6 (Forget Lock Characterization) . Let Πu,μ = Bu,μ (Bu,μ )⊤ be the orthogonal projector onto Uμ. Then Lf (w) = 0 if and only if Πu,μ (wμ − wn,μ ) = 0 for both μ ∈ { v, t }.Moreover, ∇wμ Lf = 2Π u,μ (wμ − wn,μ ), which vanishes for displacements orthogonal to Uμ and points back toward wn,μ along Uμ otherwise. Proof. Since the two modalities contribute independently, it suffices to analyze a single modality μ.Let ∆μ = wμ − wn,μ . The μ-th summand of Lf can be expanded as 
+
+ℓμ = ∆ ⊤ 
+
+> μ
+
+Πu,μ ∆μ
+
+= ∆ ⊤ 
+
+> μ
+
+Bu,μ (Bu,μ )⊤∆μ
+
+= (Bu,μ )⊤∆μ 
+
+> 22
+
+≥ 0.
+
+(19) Therefore ℓμ = 0 if and only if 
+
+(Bu,μ )⊤∆μ = 0 ⇐⇒ ∆μ ∈ U ⊥ 
+
+> μ
+
+⇐⇒ Πu,μ ∆μ = 0 . (20) Summing over both modalities, Lf (w) = 0 iff Πu,μ (wμ − wn,μ ) = 0 for both μ ∈ { v, t }. Since 
+
+Πu,μ is symmetric and wn,μ is constant, the standard identity ∇x(x⊤A x ) = 2 A x gives 
+
+∇wμ Lf = ∇wμ
+
+∆⊤ 
+
+> μ
+
+Πu,μ ∆μ
+
+
+
+= 2 Π u,μ ∆μ
+
+= 2 Π u,μ (wμ − wn,μ ).
+
+(21) This gradient lies in Uμ = im(Π u,μ ) and vanishes iff ∆μ ∈ U ⊥ 
+
+> μ
+
+.25 C.4 Proof of Theorem C.7 (Unlearning Completeness) Theorem C.7 (Unlearning Completeness) . Let w∗ 
+
+> μ
+
+denote the projected parameters and ∆μ =
+
+wμ − wn,μ the pre-projection displacement. Then: (i) Exact erasure: Πu,μ (w∗ 
+
+> μ
+
+− wn,μ ) = 0 , i.e., the projected displacement has zero component along Uμ.(ii) Energy removal: The energy removed equals ∥Πu,μ ∆μ∥22. For any ∆μ ∈ S f expressed in the canonical basis as ∆μ = Ppi=1 αici, this equals P  
+
+> i:cos φi≤δ
+
+α2 
+
+> i
+
+.(iii) Forget energy ratio: ηf (δ) = ∥B⊤
+
+> u,μ
+
+Gf,μ ∥2 
+
+> F
+
+/∥Gf,μ ∥2 
+
+> F
+
+is monotonically non-decreasing in δ and satisfies ηf (1) ≥ τe (equality only when the truncation exactly meets the energy threshold). Proof. We work with a single modality μ throughout; the argument applies identically to both branches. Let ∆μ = wμ − wn,μ denote the pre-projection displacement. We begin by establishing exact erasure. By Eq. (10) , the projected parameters satisfy w∗ 
+
+> μ
+
+= wμ −
+
+Πu,μ ∆μ. Subtracting wn,μ from both sides and applying Πu,μ :
+
+Πu,μ (w∗ 
+
+> μ
+
+− wn,μ ) = Π u,μ 
+
+∆μ − Πu,μ ∆μ
+
+
+
+= Π u,μ (Idμ − Πu,μ ) ∆ μ
+
+= (Π u,μ − Π2
+
+> u,μ
+
+) ∆ μ
+
+= (Π u,μ − Πu,μ ) ∆ μ = 0 ,
+
+(22) where the last line uses idempotency Π2 
+
+> u,μ
+
+= Π u,μ (Proposition C.5). Next, we quantify the energy removed by the projection. The squared norm of the removed component is 
+
+∥∆μ − (w∗ 
+
+> μ
+
+− wn,μ )∥22 = ∥∆μ − (Idμ − Πu,μ )∆ μ∥22
+
+= ∥Πu,μ ∆μ∥22. (23) Now suppose ∆μ ∈ S f and write ∆μ = Ppi=1 αi ui in the canonical basis {ui}pi=1 = {(Φ f U )·,i }pi=1 .Since {ui} are orthonormal and Πu,μ projects onto span {ui : cos φi ≤ δ}, we have Πu,μ ui = ui if 
+
+cos φi ≤ δ and Πu,μ ui = 0 otherwise. Therefore 
+
+∥Πu,μ ∆μ∥22 = Πu,μ pX
+
+> i=1
+
+αi ui
+
+> 22
+
+= X 
+
+> i: cos φi≤δ
+
+αi ui
+
+> 22
+
+= X 
+
+> i: cos φi≤δ
+
+α2 
+
+> i
+
+.
+
+(24) Finally, we analyze the monotonicity of the forget energy ratio ηf (δ) = ∥B⊤
+
+> u,μ
+
+Gf,μ ∥2 
+
+> F
+
+/∥Gf,μ ∥2 
+
+> F
+
+.As δ increases, the index set Iu(δ) = {i : cos φi ≤ δ} can only grow, so Bu,μ gains columns and 
+
+∥B⊤
+
+> u,μ
+
+Gf,μ ∥2 
+
+> F
+
+is non-decreasing in δ. At δ = 1 , all p canonical directions are classified as removable anchor directions, so Bu,μ = Φ f U . The boundary value evaluates as 
+
+ηf (1) = ∥B⊤
+
+> u,μ
+
+Gf,μ ∥2
+
+> F
+
+∥Gf,μ ∥2
+
+> F
+
+= ∥(Φ f U )⊤Gf,μ ∥2
+
+> F
+
+∥Gf,μ ∥2
+
+> F
+
+= ∥U ⊤Φ⊤ 
+
+> f
+
+Gf,μ ∥2
+
+> F
+
+∥Gf,μ ∥2
+
+> F
+
+= ∥Φ⊤ 
+
+> f
+
+Gf,μ ∥2
+
+> F
+
+∥Gf,μ ∥2
+
+> F
+
+=
+
+Ppi=1 σ2
+
+> i
+
+∥Gf,μ ∥2
+
+> F
+
+≥ τe,
+
+(25) where the fourth equality uses the orthogonality of U (which preserves the Frobenius norm), and the last inequality follows from the energy criterion (6) , which selects p as the smallest index whose cumulative energy already reaches τe. Equality holds only in special cases, e.g., when the truncation point exactly meets the threshold ( Ppi=1 σ2 
+
+> i
+
+/∥Gf,μ ∥2 
+
+> F
+
+= τe) or when the retained principal directions span the entire column space of Gf,μ (so that p = rank( Gf,μ ) and ηf (1) = 1 ). 26 C.5 Proof of Theorem C.8 (Retention Integrity) Theorem C.8 (Retention Integrity) . For any retain displacement ∆r ∈ S r , the collateral energy is bounded by 
+
+∥Πu,μ ∆r ∥22 ≤ δ2 ∥∆r ∥22. (26) 
+
+Proof. Let ∆r ∈ S r with ∥∆r ∥2 = 1 (the general case follows by homogeneity). Express ∆r in the canonical coordinate system of Sr :
+
+∆r =
+
+> q
+
+X
+
+> j=1
+
+βj vj + ∆ ⊥ 
+
+> r
+
+, (27) where vj = (Φ r V )·,j are the retain-side canonical directions, P 
+
+> j
+
+β2 
+
+> j
+
++ ∥∆⊥ 
+
+> r
+
+∥22 = 1 , and ∆⊥ 
+
+> r
+
+∈Sr ∩ span( v1, . . . , v min( p,q ))⊥.By the canonical-angle property, ⟨ui, v j ⟩ = δij cos φi for i ≤ min( p, q ), and ⟨ui, ∆⊥ 
+
+> r
+
+⟩ = 0 for all i since ∆⊥ 
+
+> r
+
+is orthogonal to all canonical directions that overlap with Sf . Therefore, for each removable anchor direction ui with cos φi ≤ δ:
+
+⟨ui, ∆r ⟩ =
+
+> q
+
+X
+
+> j=1
+
+βj ⟨ui, v j ⟩ + ⟨ui, ∆⊥ 
+
+> r
+
+⟩ = βi cos φi + 0 = βi cos φi. (28) Summing over all removable anchor directions yields 
+
+∥Πu,μ ∆r ∥22 = X 
+
+> i: cos φi≤δ
+
+⟨ui, ∆r ⟩2
+
+= X 
+
+> i: cos φi≤δ
+
+β2 
+
+> i
+
+cos 2 φi
+
+≤ δ2 X 
+
+> i: cos φi≤δ
+
+β2
+
+> i
+
+≤ δ2
+
+> q
+
+X
+
+> j=1
+
+β2
+
+> j
+
+≤ δ2 ∥∆r ∥22,
+
+(29) where the first inequality uses cos φi ≤ δ for each removable anchor direction, and the last inequality uses P 
+
+> j
+
+β2 
+
+> j
+
+≤ ∥ ∆r ∥22 = 1 .
+
+C.6 Completeness–Integrity Trade-off Analysis 
+
+The threshold δ simultaneously controls the unlearning completeness ratio ηf (δ) and the retention damage bound ηr (δ). We formalize their joint behavior. 
+
+Proposition C.9 (Monotonicity and Pareto Trade-off) . Let ηf (δ) = ∥B⊤
+
+> u,μ
+
+Gf,μ ∥2 
+
+> F
+
+/∥Gf,μ ∥2 
+
+> F
+
+and 
+
+ηr (δ) = max ∆r ∈S r \{ 0} ∥Πu,μ ∆r ∥22/∥∆r ∥22. Then both ηf (δ) and ηr (δ) are monotonically non-decreasing in δ ∈ [0 , 1] . Moreover, for any target unlearning ratio η∗ 
+
+> f
+
+∈ (0 , τ e], the smallest threshold achieving ηf (δ) ≥ η∗ 
+
+> f
+
+is δ∗ = cos φk∗ , where k∗ = min {k : ηf (cos φk) ≥ η∗ 
+
+> f
+
+} and φ1 ≤ · · · ≤ φp
+
+are the principal angles in non-decreasing order. This δ∗ simultaneously minimizes the retention damage bound (δ∗)2.Proof. We first establish monotonicity. For ηf , as δ increases, the index set Iu(δ) = {i : cos φi ≤ δ}
+
+can only grow. Since Bu,μ is formed by collecting the columns of Φf U indexed by Iu(δ), the projection B⊤
+
+> u,μ
+
+Gf,μ captures a non-decreasing share of the forget gradient energy: 
+
+δ′ > δ =⇒ I u(δ) ⊆ I u(δ′) = ⇒ ∥ Bu,μ (δ)⊤Gf,μ ∥2 
+
+> F
+
+≤ ∥ Bu,μ (δ′)⊤Gf,μ ∥2 
+
+> F
+
+, (30) so ηf (δ) is non-decreasing. For ηr : by Theorem C.8, ηr (δ) ≤ δ2, and the bound δ2 is strictly increasing. More precisely, 
+
+ηr (δ) = max  
+
+> i∈I u(δ)
+
+cos 2 φi, (31) 27 which is non-decreasing since Iu(δ) grows with δ.Turning to the optimal threshold, we observe that ηf is a step function that jumps only at the principal-angle cosines cos φ1, . . . , cos φp. Therefore, the smallest δ achieving ηf (δ) ≥ η∗ 
+
+> f
+
+must coincide with one of these cosines: 
+
+δ∗ = cos φk∗ , k∗ = min k : ηf (cos φk) ≥ η∗ 
+
+> f
+
+. (32) Among all δ satisfying the constraint, δ∗ is minimal by construction. Since ηr ≤ δ2 is increasing in 
+
+δ, this δ∗ simultaneously minimizes the retention damage bound (δ∗)2.
+
+C.7 Proof of Theorem C.10 (Unlearning Durability) Theorem C.10 (Unlearning Durability) . Suppose ∥Πu,μ ∇wμ La∥2 ≤ Gu for all w encountered during training and ηlr < 1/(2 α). The Temporal Re-anchoring drift after t steps from the projected point obeys 
+
+∥Πu,μ (wμ(t) − wn,μ )∥2 ≤ Gu
+
+2α
+
+1 − (1 − 2ηlr α)t ≤ Gu
+
+2α . (33) 
+
+Proof. Fix modality μ and let d(t) = Π u,μ (wμ(t) − wn,μ ) denote the unique-subspace displacement at step t. A single SGD step under the combined objective (12) updates: 
+
+wμ(t+1) = wμ(t) − ηlr 
+
+∇wμ La(w(t)) + 2 α Πu,μ (wμ(t) − wn,μ ). (34) Applying Πu,μ to both sides and writing gu(t) = Π u,μ ∇wμ La(w(t)) :
+
+d(t+1) = Π u,μ 
+
+wμ(t+1) − wn,μ 
+
+
+
+= Π u,μ (wμ(t) − wn,μ ) − ηlr Πu,μ ∇wμ La − 2ηlr α Π2
+
+> u,μ
+
+(wμ(t) − wn,μ )= d(t) − ηlr gu(t) − 2ηlr α d (t)= (1 − 2ηlr α) d(t) − ηlr gu(t),
+
+(35) where ∥gu(t)∥2 ≤ Gu by assumption. Taking norms and applying the triangle inequality: 
+
+∥d(t+1) ∥2 ≤ (1 − 2ηlr α) ∥d(t)∥2 + ηlr Gu. (36) Since ηlr < 1/(2 α), the contraction factor γ = 1 − 2ηlr α ∈ (0 , 1) . Starting from ∥d(0) ∥2 = 0 (exact erasure by Theorem C.7), unrolling the recurrence gives: 
+
+∥d(t)∥2 ≤ ηlr Gut−1X
+
+> s=0
+
+γs
+
+= ηlr Gu (1 − γt)1 − γ
+
+= Gu
+
+2α
+
+1 − (1 − 2ηlr α)t.
+
+(37) Since (1 − 2ηlr α)t ≥ 0, the bound is at most Gu/(2 α).
+
+C.8 Proof of Theorem C.11 (Anchor Reconstruction Tendency under Unilateral Excision) Theorem C.11 (Anchor Reconstruction Tendency under Unilateral Excision) . Under Assumptions A1–A4 (Appendix C.1), suppose excision is applied to modality μ only, producing w∗ 
+
+> μ
+
+with Πu,μ (w∗ 
+
+> μ
+
+−
+
+wn,μ ) = 0 , while w¯μ is held at wn, ¯μ. Define the Modality Anchor signal along the unique subspace at the excised point as g0 := ∥Πu,μ ∇wμ La(w∗
+
+> μ
+
+, w n, ¯μ)∥2. Then: (i) Anchor survives (A1–A2): g0 > 0 whenever the anchor embedding z¯μ(wn, ¯μ) has a non-zero component along the range of Jμ(w∗
+
+> μ
+
+)⊤ restricted to Uμ.(ii) Drift lower-bound tendency (A1–A2, A4): one local SGD step on the retain objective gives 
+
+∥Πu,μ (wμ(1) − wn,μ )∥2 ≥ ηlr g0. Under the alignment condition A4, for step ηlr < 1/(2 L)
+
+and k steps within the linearization radius, 
+
+∥Πu,μ (wμ(k) − wn,μ )∥2 ≥ ηlr g0
+
+2L
+
+1 − (1 − 2ηlr L)k, (38) 
+
+which grows monotonically and approaches g0/(2 L) geometrically. 
+
+28 (iii) Bilateral suppression (A3): applying excision to both μ ∈ { v, t } simultaneously suppresses the Modality Anchor signal along unique directions to a residual term bounded by ϵanchor ,so g0 ≤ ϵanchor and the drift in (38) is at most ϵanchor /(2 L).Proof. We analyze the gradient of the alignment loss La with respect to the parameters of a single modality, and show that unilateral unlearning leaves a Modality Anchor signal from the unmodified branch that drives ρ away from zero. The cross-modal similarity s(w) = zi,v (wv )⊤zj,t (wt) is an inner product of two vector-valued functions depending on disjoint parameter blocks. Let Jv (wv ) = ∂z i,v /∂w v ∈ Rm×dv and Jt(wt) = 
+
+∂z j,t /∂w t ∈ Rm×dt denote the Jacobians. By the inner product differentiation rule: 
+
+∇wv s(w) = ∇wv
+
+zi,v (wv )⊤zj,t (wt)
+
+= Jv (wv )⊤ zj,t (wt), (39) where the cross term vanishes because zj,t does not depend on wv . By symmetry: 
+
+∇wt s(w) = Jt(wt)⊤ zi,v (wv ). (40) Now consider the unilateral case where only wv is unlearned. Suppose the projection and Forget Lock are applied to wv only, producing w∗ 
+
+> v
+
+, while the language parameters remain at wn,t . At the unlearned point w∗ = ( w∗ 
+
+> v
+
+, w n,t ), the alignment gradient with respect to wv involves terms of the form 
+
+∇wv La ∝ Jv (w∗ 
+
+> v
+
+)⊤ zj,t (wn,t ), (41) where the proportionality absorbs the softmax weights from the InfoNCE loss. The critical observation is that zj,t (wn,t ) is the original textual embedding computed under the pre-unlearning parameters 
+
+wn,t , which encodes the full memory of the forgotten cross-modal alignment. This embedding acts as the Modality Anchor: during retraining, the gradient in Eq. (41) continuously pushes wv toward directions that re-align zi,v with the unchanged zj,t (wn,t ), thereby reconstructing the forgotten pairing and driving ρ away from zero. By an identical argument with the roles of v and t exchanged, if only wt is unlearned to w∗ 
+
+> t
+
+while wv
+
+remains at wn,v , the alignment gradient with respect to wt at the unlearned point w∗ = ( wn,v , w ∗ 
+
+> t
+
+)
+
+satisfies 
+
+∇wt La ∝ Jt(w∗ 
+
+> t
+
+)⊤ zi,v (wn,v ). (42) Here zi,v (wn,v ) is the original visual embedding, which serves as the Modality Anchor that pulls the language branch back toward the erased alignment during retraining, again yielding ρ > 0.Now suppose both modalities are unlearned simultaneously, producing w∗ = ( w∗ 
+
+> v
+
+, w ∗ 
+
+> t
+
+). The pro-jection in Eq. (10) removes the unique-subspace components from both wv and wt, displacing both embeddings away from the original alignment. At the bilateral unlearned point, the alignment gradients become 
+
+∇wv La ∝ Jv (w∗ 
+
+> v
+
+)⊤ zj,t (w∗ 
+
+> t
+
+), (43) 
+
+∇wt La ∝ Jt(w∗ 
+
+> t
+
+)⊤ zi,v (w∗ 
+
+> v
+
+). (44) Crucially, both zj,t (w∗ 
+
+> t
+
+) and zi,v (w∗ 
+
+> v
+
+) are now displaced embeddings that no longer encode the original cross-modal alignment. To formalize this, we verify that the projection removes the forget-specific components from both branches. For the visual side, Theorem C.7 gives: 
+
+Πu,v (w∗ 
+
+> v
+
+− wn,v ) = 0 , (45) and the Forget Lock (Proposition C.6) maintains this condition throughout retraining. An analogous condition holds for the language side: 
+
+Πu,t (w∗ 
+
+> t
+
+− wn,t ) = 0 . (46) Since the forget-specific knowledge resides in Uv and Ut, Eqs. (45) – (46) guarantee zero displacement along the forget-specific directions in both modalities. When only modality μ is excised, the alignment gradient retains the original embedding of the unmodified branch: 
+
+∇wμ La ∝ Jμ(w∗
+
+> μ
+
+)⊤ z¯μ(wn, ¯μ), (47) 29 which encodes the forgotten alignment and acts as a fixed Modality Anchor; whenever z¯μ(wn, ¯μ) has a non-zero component along the range of Jμ(w∗
+
+> μ
+
+)⊤ restricted to Uμ, one has g0 > 0, establishing claim (i). When both modalities are excised simultaneously, the gradient instead depends on the displaced embedding: 
+
+∇wμ La ∝ Jμ(w∗
+
+> μ
+
+)⊤ z¯μ(w∗
+
+> ¯μ
+
+). (48) Since Πu, ¯μ(w∗ 
+
+> ¯μ
+
+− wn, ¯μ) = 0 , the embedding z¯μ(w∗
+
+> ¯μ
+
+) no longer encodes the forgotten pairing, removing the dominant Modality Anchor signal along unique directions. By Assumption A3 (Ap-pendix C.1), the residual anchor gradient at the bilateral excised point is bounded by ϵanchor , i.e., 
+
+g0 ≤ ϵanchor , establishing claim (iii). 
+
+Drift lower-bound tendency (claim (ii)). For the unilateral case, let d(k) = Π u,μ (wμ(k) − wn,μ )
+
+denote the unique-subspace drift after k local SGD steps, with d(0) = 0 by the projec-tion. The SGD update projected onto Uμ satisfies d(k+1) = d(k) + ηlr g(k), where g(k) := 
+
+−Πu,μ ∇wμ La(wμ(k), w n, ¯μ). At k = 0 , g(0) = −Πu,μ ∇wμ La(w∗
+
+> μ
+
+, w n, ¯μ) with ∥g(0) ∥2 = g0,giving the one-step drift lower bound 
+
+∥d(1) ∥2 = ηlr ∥g(0) ∥2 = ηlr g0, (49) which requires only A1–A2. For k ≥ 2, we invoke Assumption A4 (directional alignment), which asserts that within the lin-earization radius the unique-subspace gradients remain sign-aligned with g(0) , so that ∥g(k)∥2 ≥
+
+g0 − 2L∥d(k)∥2 under A1 (the first term is the Modality Anchor signal at the excised point, and the 2L∥d(k)∥2 term accounts for first-order smoothness deviation as wμ drifts). Taking norms of 
+
+d(k+1) = d(k) + ηlr g(k) and applying this lower bound gives 
+
+∥d(k+1) ∥2 ≥ (1 − 2ηlr L) ∥d(k)∥2 + ηlr g0. (50) Since ηlr < 1/(2 L), the contraction factor γ := 1 − 2ηlr L ∈ (0 , 1) . Unrolling from d(0) = 0 :
+
+∥d(k)∥2 ≥ ηlr g0
+
+> k−1
+
+X
+
+> s=0
+
+γs = ηlr g0(1 − γk)1 − γ = g0
+
+2L
+
+1 − (1 − 2ηlr L)k, (51) which is Eq. (38) in the theorem statement. The drift grows monotonically in k and approaches 
+
+g0/(2 L) geometrically. Under bilateral excision, A3 forces g0 ≤ ϵanchor , so the lower-bound tendency in Eq. (38) is suppressed to the scale of ϵanchor /(2 L), removing the systematic reconstruction pressure present in the unilateral case. 
+
+D Compute-Matched Retrain Comparison 
+
+A natural reviewer concern is whether the efficiency gains of EASE simply reflect a smaller training budget relative to retrain. To isolate budget from algorithmic contribution, we compare our method against retrain early-stopped at 25% , 50% , and 75% of the full federated round count, alongside the full-budget retrain reference. The communication cost Comm. directly reflects the compute budget consumed, since per-round payload is constant within each scenario. Results on Flickr30K with CLIP-B/32 are reported in Table 4. 
+
+EASE uses less communication than Retrain-25% in every scenario (Table 4) yet improves R-R@1 
+
+by +24 .2, +19 .1, and +25 .2 points on the client, class, and sample scenarios, respectively, while keeping forget-side metrics near the full-budget retrain reference. Retrain-25% can also produce low forget recall, but its retain collapse indicates undertraining rather than targeted unlearning. EASE reaches retain quality close to Retrain-75% at only 20 –25% of the full communication budget. 
+
+E Likelihood-Ratio Attack at Low False-Positive Rate 
+
+We report LiRA TPR@FPR=1% , defined in Appendix B.4, across all nine (dataset, backbone) combinations and three unlearning scenarios in Figure 10, averaged over three seeds with standard-deviation error bars. 30 Table 4: Compute-matched retrain comparison on Flickr30K with CLIP-B/32. Retrain-α% denotes early-stopping retrain executed for α% of the full communication rounds; its budget is reflected by 
+
+Comm. The top sub-table reports forget-side metrics ( F -R@k) and membership inference (MIA); the bottom sub-table reports retain-side metrics ( R-R@k) and communication cost ( Comm. , MB). Parenthetical values give the absolute gap to the full-budget retrain reference with (↑green) closer to ideal and (↓red) farther; for MIA and Comm. , ( val) is the absolute difference to the full-budget retrain. 
+
+Retrain (Full) is the reference and does not participate in ranking. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+Retrain-25% 0.0 (↑0.1) 0.4 (↑1.1) 0.9 (↑1.4) 12.3 ( 4.4) 0.1 (↑0.1) 0.4 (↑0.3) 0.9 (↑0.5) 19.5 ( 4.7) 0.0 (↑0.1) 0.3 (↑0.8) 0.8 (↑1.6) 14.8 ( 1.9) 
+
+Retrain-50% 0.0 (↑0.1) 0.8 (↑0.7) 1.6 (↑0.7) 15.2 ( 1.5) 0.2 0.6 (↑0.1) 1.1 (↑0.3) 22.8 ( 1.4) 0.0 (↑0.1) 0.6 (↑0.5) 1.6 (↑0.8) 16.0 ( 0.7) 
+
+Retrain-75% 0.1 1.2 (↑0.3) 1.9 (↑0.4) 16.4 ( 0.3) 0.2 0.7 1.3 (↑0.1) 23.9 ( 0.3) 0.1 0.9 (↑0.2) 2.1 (↑0.3) 16.5 ( 0.2) 
+
+EASE 0.3 (↓0.2) 1.0 (↑0.5) 2.2 (↑0.1) 16.9 ( 0.2) 0.3 (↓0.1) 1.5 (↓0.8) 2.6 (↓1.2) 25.4 ( 1.2) 0.1 2.2 (↓1.1) 5.5 (↓3.1) 16.7 
+
+Retrain (Full) 0.1 1.5 2.3 16.7 0.2 0.7 1.4 24.2 0.1 1.1 2.4 16.7 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+Retrain-25% 62.3 (↓28.4) 88.5 (↓11.4) 94.7 (↓5.3) 65.6 ( 196.9) 61.7 (↓27.7) 87.5 (↓12.4) 93.9 (↓6.1) 49.2 ( 147.7) 54.2 (↓26.4) 83.1 (↓14.6) 90.5 (↓8.9) 49.2 ( 147.7) 
+
+Retrain-50% 79.8 (↓10.9) 97.1 (↓2.8) 99.0 (↓1.0) 131.3 ( 131.2) 78.0 (↓11.4) 95.6 (↓4.3) 98.3 (↓1.7) 98.5 ( 98.4) 69.2 (↓11.4) 92.6 (↓5.1) 96.8 (↓2.6) 98.5 ( 98.4) 
+
+Retrain-75% 87.1 (↓3.6) 99.3 (↓0.6) 99.8 (↓0.2) 196.9 ( 65.6) 85.1 (↓4.3) 98.5 (↓1.4) 99.5 (↓0.5) 147.7 ( 49.2) 76.8 (↓3.8) 96.4 (↓1.3) 98.5 (↓0.9) 147.7 ( 49.2) 
+
+EASE 86.5 (↓4.2) 99.2 (↓0.7) 99.8 (↓0.2) 52.5 ( 210.0) 80.8 (↓8.6) 96.6 (↓3.3) 99.3 (↓0.7) 47.2 ( 149.7) 79.4 (↓1.2) 97.7 99.2 (↓0.2) 39.4 ( 157.5) 
+
+Retrain (Full) 90.7 99.9 100.0 262.5 89.4 99.9 100.0 196.9 80.6 97.7 99.4 196.9 0   
+
+> 10
+> 20
+> 30
+> 40
+> 50
+> TPR @ FPR=1% (%)
+> Flickr30K
+> CLIP-B/32
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> CLIP-L/14
+> 0
+> 10
+> 20
+> 30
+> 40
+> SigLIP
+> 0
+> 10
+> 20
+> 30
+> 40
+> TPR @ FPR=1% (%)
+> MSCOCO
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 0
+> 10
+> 20
+> 30
+> 40
+> FedEraser
+> FedRecover
+> Ferrari
+> FedOSD
+> NoT
+> SoUL
+> FFMU
+> FUSED
+> GradAscent
+> EASE
+> Retrain 0
+> 10
+> 20
+> 30
+> 40
+> TPR @ FPR=1% (%)
+> TextCaps
+> FedEraser
+> FedRecover
+> Ferrari
+> FedOSD
+> NoT
+> SoUL
+> FFMU
+> FUSED
+> GradAscent
+> EASE
+> Retrain 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> FedEraser
+> FedRecover
+> Ferrari
+> FedOSD
+> NoT
+> SoUL
+> FFMU
+> FUSED
+> GradAscent
+> EASE
+> Retrain 0
+> 10
+> 20
+> 30
+> 40
+> Client Unlearning Class Unlearning Sample Unlearning Ideal (FPR=1%)
+
+Figure 10: TPR@FPR = 1% across three datasets (rows: Flickr30K, MSCOCO, TextCaps) and three backbones (columns: CLIP-B/32, CLIP-L/14, SigLIP). Lower is better; the dotted line marks the 1% random-guess reference for non-member-like behavior. Retrain is the non-participating reference. 
+
+Cross-dataset pattern. Across all nine combinations, EASE stays within 1.5 points of Retrain on every scenario, placing it consistently at the bottom of each subplot. In contrast, forget-reconstruction baselines such as Ferrari, FedOSD, and FUSED sit in the 25 –42 % range on the client and class scenarios, suggesting that their aggregate MIA values in Section 4.2 underestimate how much forget-side signal a targeted attacker can still recover. GradAscent produces the largest low-FPR leakage in the client scenario, consistent with the known instability of gradient-reversal updates on tightly coupled modalities. 
+
+Backbone sensitivity. The relative ordering is stable across CLIP-B/32, CLIP-L/14, and SigLIP; absolute values shift upward for larger encoders (CLIP-L/14) due to greater capacity for memorization, but the gap between EASE and baselines widens rather than shrinks. This is consistent with bilateral excision targeting the Modality Anchor that scales with encoder capacity, while per-modality baselines do not close this anchor regardless of backbone size. 31 Scenario dependence. The sample scenario produces uniformly lower TPR than client and class, because sample forget sets are sparsely distributed across clients and carry a weaker attacker signature in aggregate. Even so, our method approaches Retrain most closely in this regime, indicating that gains from bilateral excision persist even where the residual leakage is already small. 
+
+F Full Comparison Results 
+
+We report the remaining eight (dataset, backbone) combinations here, extending Table 1 in the main body. Each combination follows the same two-part layout and ranking convention: the top sub-table covers forget-side metrics ( F -R@k) and MIA, and the bottom sub-table covers retain-side metrics (R-R@k) and communication cost. Table 5: Main comparison on Flickr30K with CLIP-L/14 across three unlearning scenarios. Conven-tion follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 88.5 (↓88.4) 97.3 (↓96.2) 99.2 (↓97.2) 52.8 ( 36.1) 79.8 (↓79.6) 95.5 (↓95.0) 97.7 (↓96.2) 57.6 ( 40.8) 0.0 0.9 (↑0.5) 1.7 (↑0.3) 16.7 FedRecover 75.3 (↓75.2) 91.5 (↓90.4) 94.5 (↓92.5) 54.5 ( 37.8) 69.7 (↓69.5) 87.0 (↓86.5) 91.8 (↓90.3) 59.6 ( 42.8) 0.0 1.0 (↑0.4) 2.1 (↓0.1) 16.7 Ferrari 95.9 (↓95.8) 99.9 (↓98.8) 100.0 (↓98.0) 59.5 ( 42.8) 94.5 (↓94.3) 99.9 (↓99.4) 100.0 (↓98.5) 63.7 ( 46.9) 0.0 1.0 (↑0.4) 2.4 (↓0.4) 16.7 FedOSD 95.7 (↓95.6) 100.0 (↓98.9) 100.0 (↓98.0) 57.6 ( 40.9) 93.2 (↓93.0) 100.0 (↓99.5) 100.0 (↓98.5) 61.5 ( 44.7) 0.3 (↓0.3) 1.8 (↓0.4) 2.8 (↓0.8) 16.7 NoT 85.4 (↓85.3) 98.8 (↓97.7) 99.4 (↓97.4) 51.2 ( 34.5) 76.4 (↓76.2) 96.9 (↓96.4) 98.8 (↓97.3) 55.9 ( 39.1) 0.1 (↓0.1) 1.3 (↑0.1) 3.3 (↓1.3) 16.7 SoUL 93.6 (↓93.5) 99.8 (↓98.7) 100.0 (↓98.0) 53.6 ( 36.9) 91.2 (↓91.0) 99.4 (↓98.9) 99.9 (↓98.4) 59.7 ( 42.9) 0.1 (↓0.1) 0.9 (↑0.5) 2.0 16.7 FFMU 65.6 (↓65.5) 90.3 (↓89.2) 94.6 (↓92.6) 54.5 ( 37.8) 46.8 (↓46.6) 81.3 (↓80.8) 90.5 (↓89.0) 52.3 ( 35.5) 0.0 0.6 (↑0.8) 1.7 (↑0.3) 16.8 ( 0.1) 
+
+FUSED 94.6 (↓94.5) 99.8 (↓98.7) 100.0 (↓98.0) 59.2 ( 42.5) 92.9 (↓92.7) 99.8 (↓99.3) 100.0 (↓98.5) 63.5 ( 46.7) 0.2 (↓0.2) 0.8 (↑0.6) 2.1 (↓0.1) 16.7 GradAscent 6.4 (↓6.3) 18.1 (↓17.0) 28.0 (↓26.0) 50.0 ( 33.3) 2.2 (↓2.0) 9.2 (↓8.7) 15.2 (↓13.7) 47.1 ( 30.3) 0.0 1.0 (↑0.4) 1.9 (↑0.1) 16.7 
+
+EASE 0.2 (↓0.1) 1.1 2.3 (↓0.3) 16.7 0.1 (↑0.1) 1.4 (↓0.9) 4.0 (↓2.5) 16.8 0.4 (↓0.4) 4.0 (↓2.6) 7.5 (↓5.5) 16.7 
+
+Retrain 0.1 1.1 2.0 16.7 0.2 0.5 1.5 16.8 0.0 1.4 2.0 16.7 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 94.4 (↓5.2) 99.3 (↓0.7) 99.5 (↓0.5) 537.5 90.4 (↓6.5) 99.1 (↓0.9) 99.7 (↓0.3) 403.1 91.3 (↓7.4) 99.2 (↓0.8) 99.9 (↓0.1) 403.1 FedRecover 91.9 (↓7.7) 98.3 (↓1.7) 99.4 (↓0.6) 96.8 ( 440.7) 89.8 (↓7.1) 98.5 (↓1.5) 99.3 (↓0.7) 72.6 ( 330.5) 72.2 (↓26.5) 87.4 (↓12.6) 91.4 (↓8.6) 72.6 ( 330.5) 
+
+Ferrari 94.1 (↓5.5) 99.2 (↓0.8) 99.6 (↓0.4) 147.8 ( 389.7) 91.2 (↓5.7) 99.2 (↓0.8) 99.8 (↓0.2) 120.9 ( 282.2) 92.1 (↓6.6) 99.1 (↓0.9) 99.8 (↓0.2) 120.9 ( 282.2) 
+
+FedOSD 93.7 (↓5.9) 99.0 (↓1.0) 99.6 (↓0.4) 215.0 ( 322.5) 91.5 (↓5.4) 99.4 (↓0.6) 99.8 (↓0.2) 161.2 ( 241.9) 92.7 (↓6.0) 99.5 (↓0.5) 99.7 (↓0.3) 161.2 ( 241.9) 
+
+NoT 92.5 (↓7.1) 98.7 (↓1.3) 99.4 (↓0.6) 107.5 ( 430.0) 85.3 (↓11.6) 98.7 (↓1.3) 99.5 (↓0.5) 80.6 ( 322.5) 90.5 (↓8.2) 98.8 (↓1.2) 99.6 (↓0.4) 80.6 ( 322.5) 
+
+SoUL 93.3 (↓6.3) 99.1 (↓0.9) 99.6 (↓0.4) 107.5 ( 430.0) 90.8 (↓6.1) 99.1 (↓0.9) 99.7 (↓0.3) 80.6 ( 322.5) 91.7 (↓7.0) 99.2 (↓0.8) 99.8 (↓0.2) 80.6 ( 322.5) 
+
+FFMU 55.0 (↓44.6) 82.6 (↓17.4) 90.3 (↓9.7) 215.0 ( 322.5) 63.6 (↓33.3) 92.2 (↓7.8) 99.3 (↓0.7) 161.2 ( 241.9) 69.0 (↓29.7) 91.5 (↓8.5) 95.2 (↓4.8) 161.2 ( 241.9) 
+
+FUSED 94.1 (↓5.5) 99.1 (↓0.9) 99.7 (↓0.3) 215.0 ( 322.5) 90.8 (↓6.1) 99.0 (↓1.0) 99.8 (↓0.2) 161.2 ( 241.9) 91.7 (↓7.0) 99.4 (↓0.6) 99.9 (↓0.1) 161.2 ( 241.9) 
+
+GradAscent 7.1 (↓92.5) 19.5 (↓80.5) 28.4 (↓71.6) 147.8 ( 389.7) 3.6 (↓93.3) 12.1 (↓87.9) 21.6 (↓78.4) 120.9 ( 282.2) 69.9 (↓28.8) 89.2 (↓10.8) 94.9 (↓5.1) 120.9 ( 282.2) 
+
+EASE 95.1 (↓4.5) 99.5 (↓0.5) 99.8 (↓0.2) 107.5 ( 430.0) 92.2 (↓4.7) 99.5 (↓0.5) 99.9 (↓0.1) 96.8 ( 306.3) 93.1 (↓5.6) 99.6 (↓0.4) 100.0 80.6 ( 322.5) 
+
+Retrain 99.6 100.0 100.0 537.5 96.9 100.0 100.0 403.1 98.7 100.0 100.0 403.1 Table 6: Main comparison on Flickr30K with SigLIP across three unlearning scenarios. Convention follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 82.1 (↓81.7) 93.9 (↓92.6) 97.0 (↓94.9) 51.2 ( 34.5) 57.4 (↓57.3) 82.6 (↓81.4) 91.2 (↓89.1) 64.0 ( 45.7) 0.1 (↓0.1) 0.7 (↑0.2) 1.6 (↑0.1) 16.7 FedRecover 73.1 (↓72.7) 88.6 (↓87.3) 92.6 (↓90.5) 48.1 ( 31.4) 51.2 (↓51.1) 78.6 (↓77.4) 85.6 (↓83.5) 47.3 ( 29.0) 0.3 (↓0.3) 0.4 (↑0.5) 1.4 (↑0.3) 16.8 ( 0.1) 
+
+Ferrari 93.1 (↓92.7) 99.8 (↓98.5) 100.0 (↓97.9) 54.9 ( 38.2) 77.4 (↓77.3) 97.9 (↓96.7) 99.6 (↓97.5) 67.8 ( 49.5) 0.1 (↓0.1) 0.9 1.3 (↑0.4) 16.7 FedOSD 90.4 (↓90.0) 99.3 (↓98.0) 99.9 (↓97.8) 52.4 ( 35.7) 75.9 (↓75.8) 96.6 (↓95.4) 99.5 (↓97.4) 66.5 ( 48.2) 0.2 (↓0.2) 0.8 (↑0.1) 1.8 (↓0.1) 16.7 NoT 77.6 (↓77.2) 95.7 (↓94.4) 98.1 (↓96.0) 49.9 ( 33.2) 53.5 (↓53.4) 84.7 (↓83.5) 93.1 (↓91.0) 58.5 ( 40.2) 0.3 (↓0.3) 0.7 (↑0.2) 1.6 (↑0.1) 16.7 SoUL 89.7 (↓89.3) 98.4 (↓97.1) 99.5 (↓97.4) 52.8 ( 36.1) 70.3 (↓70.2) 94.7 (↓93.5) 98.4 (↓96.3) 62.5 ( 44.2) 0.2 (↓0.2) 0.6 (↑0.3) 1.7 16.7 FFMU 62.8 (↓62.4) 87.9 (↓86.6) 92.5 (↓90.4) 49.9 ( 33.2) 37.5 (↓37.4) 68.4 (↓67.2) 80.3 (↓78.2) 55.8 ( 37.5) 0.2 (↓0.2) 1.3 (↓0.4) 1.9 (↓0.2) 16.8 ( 0.1) 
+
+FUSED 93.3 (↓92.9) 99.8 (↓98.5) 100.0 (↓97.9) 54.0 ( 37.3) 74.8 (↓74.7) 96.1 (↓94.9) 98.6 (↓96.5) 67.2 ( 48.9) 0.0 1.0 (↓0.1) 1.6 (↑0.1) 16.7 GradAscent 91.1 (↓90.7) 99.4 (↓98.1) 99.7 (↓97.6) 54.5 ( 37.8) 73.3 (↓73.2) 95.8 (↓94.6) 99.1 (↓97.0) 62.3 ( 44.0) 0.1 (↓0.1) 0.9 1.2 (↑0.5) 16.7 
+
+EASE 0.6 (↓0.2) 1.8 (↓0.5) 3.1 (↓1.0) 16.7 0.1 0.9 (↑0.3) 2.4 (↓0.3) 18.7 ( 0.4) 0.8 (↓0.8) 3.7 (↓2.8) 9.2 (↓7.5) 16.8 ( 0.1) 
+
+Retrain 0.4 1.3 2.1 16.7 0.1 1.2 2.1 18.3 0.0 0.9 1.7 16.7 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 90.1 (↓9.1) 99.1 (↓0.9) 99.7 (↓0.3) 475.0 89.4 (↓8.4) 98.7 (↓1.3) 99.2 (↓0.8) 356.2 92.4 (↓5.9) 99.3 (↓0.7) 99.8 (↓0.2) 356.2 FedRecover 87.9 (↓11.3) 98.2 (↓1.8) 99.3 (↓0.7) 85.5 ( 389.5) 86.1 (↓11.7) 97.9 (↓2.1) 98.8 (↓1.2) 64.1 ( 292.1) 68.0 (↓30.3) 86.2 (↓13.8) 90.5 (↓9.5) 64.1 ( 292.1) 
+
+Ferrari 90.9 (↓8.3) 99.1 (↓0.9) 99.8 (↓0.2) 130.6 ( 344.4) 89.1 (↓8.7) 98.6 (↓1.4) 99.2 (↓0.8) 106.9 ( 249.3) 91.6 (↓6.7) 99.5 (↓0.5) 99.8 (↓0.2) 106.9 ( 249.3) 
+
+FedOSD 91.2 (↓8.0) 99.3 (↓0.7) 99.8 (↓0.2) 190.0 ( 285.0) 88.3 (↓9.5) 98.7 (↓1.3) 99.1 (↓0.9) 142.5 ( 213.7) 89.7 (↓8.6) 99.5 (↓0.5) 99.6 (↓0.4) 142.5 ( 213.7) 
+
+NoT 82.7 (↓16.5) 98.6 (↓1.4) 99.5 (↓0.5) 95.0 ( 380.0) 87.5 (↓10.3) 98.1 (↓1.9) 99.0 (↓1.0) 71.2 ( 285.0) 82.0 (↓16.3) 99.0 (↓1.0) 99.5 (↓0.5) 71.2 ( 285.0) 
+
+SoUL 90.5 (↓8.7) 99.0 (↓1.0) 99.7 (↓0.3) 95.0 ( 380.0) 88.7 (↓9.1) 98.5 (↓1.5) 99.2 (↓0.8) 71.2 ( 285.0) 92.0 (↓6.3) 99.4 (↓0.6) 99.7 (↓0.3) 71.2 ( 285.0) 
+
+FFMU 62.3 (↓36.9) 87.4 (↓12.6) 92.0 (↓8.0) 190.0 ( 285.0) 67.5 (↓30.3) 90.7 (↓9.3) 98.8 (↓1.2) 142.5 ( 213.7) 66.1 (↓32.2) 89.0 (↓11.0) 93.5 (↓6.5) 142.5 ( 213.7) 
+
+FUSED 90.5 (↓8.7) 98.9 (↓1.1) 99.8 (↓0.2) 190.0 ( 285.0) 89.1 (↓8.7) 98.4 (↓1.6) 99.3 (↓0.7) 142.5 ( 213.7) 93.3 (↓5.0) 99.7 (↓0.3) 99.8 (↓0.2) 142.5 ( 213.7) 
+
+GradAscent 88.7 (↓10.5) 98.4 (↓1.6) 99.4 (↓0.6) 130.6 ( 344.4) 86.9 (↓10.9) 97.9 (↓2.1) 98.9 (↓1.1) 106.9 ( 249.3) 90.2 (↓8.1) 98.8 (↓1.2) 99.4 (↓0.6) 106.9 ( 249.3) 
+
+EASE 91.9 (↓7.3) 99.4 (↓0.6) 99.9 (↓0.1) 95.0 ( 380.0) 90.1 (↓7.7) 98.9 (↓1.1) 99.4 (↓0.6) 85.5 ( 270.7) 93.4 (↓4.9) 99.8 (↓0.2) 99.9 (↓0.1) 71.2 ( 285.0) 
+
+Retrain 99.2 100.0 100.0 475.0 97.8 100.0 100.0 356.2 98.3 100.0 100.0 356.2 32 Table 7: Main comparison on MSCOCO with CLIP-B/32 across three unlearning scenarios. Conven-tion follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 39.5 (↓39.5) 69.9 (↓69.2) 81.4 (↓79.9) 50.1 ( 9.2) 38.5 (↓38.4) 68.7 (↓68.0) 82.5 (↓80.6) 53.2 ( 12.1) 0.1 (↓0.1) 0.7 (↓0.2) 1.8 (↓1.0) 40.9 FedRecover 32.6 (↓32.6) 58.4 (↓57.7) 71.4 (↓69.9) 49.9 ( 9.0) 42.5 (↓42.4) 74.0 (↓73.3) 83.2 (↓81.3) 49.7 ( 8.6) 0.6 (↓0.6) 1.0 (↓0.5) 1.5 (↓0.7) 41.1 ( 0.2) 
+
+Ferrari 54.2 (↓54.2) 85.0 (↓84.3) 92.5 (↓91.0) 50.8 ( 9.9) 56.4 (↓56.3) 86.4 (↓85.7) 94.6 (↓92.7) 55.7 ( 14.6) 0.3 (↓0.3) 1.0 (↓0.5) 1.6 (↓0.8) 40.9 FedOSD 49.4 (↓49.4) 80.9 (↓80.2) 89.9 (↓88.4) 51.0 ( 10.1) 55.6 (↓55.5) 85.4 (↓84.7) 93.5 (↓91.6) 55.1 ( 14.0) 0.2 (↓0.2) 0.9 (↓0.4) 1.8 (↓1.0) 40.9 NoT 39.6 (↓39.6) 70.4 (↓69.7) 82.5 (↓81.0) 50.2 ( 9.3) 35.1 (↓35.0) 68.4 (↓67.7) 78.8 (↓76.9) 47.9 ( 6.8) 0.4 (↓0.4) 1.1 (↓0.6) 1.5 (↓0.7) 41.0 ( 0.1) 
+
+SoUL 46.3 (↓46.3) 78.0 (↓77.3) 87.7 (↓86.2) 50.7 ( 9.8) 54.4 (↓54.3) 84.0 (↓83.3) 92.2 (↓90.3) 54.1 ( 13.0) 0.1 (↓0.1) 1.0 (↓0.5) 1.5 (↓0.7) 40.9 FFMU 29.6 (↓29.6) 59.3 (↓58.6) 72.2 (↓70.7) 50.4 ( 9.5) 27.3 (↓27.2) 55.9 (↓55.2) 70.0 (↓68.1) 49.3 ( 8.2) 0.3 (↓0.3) 1.0 (↓0.5) 1.2 (↓0.4) 40.9 FUSED 49.2 (↓49.2) 79.9 (↓79.2) 89.9 (↓88.4) 50.5 ( 9.6) 55.3 (↓55.2) 85.0 (↓84.3) 93.3 (↓91.4) 55.2 ( 14.1) 0.2 (↓0.2) 0.8 (↓0.3) 1.4 (↓0.6) 40.9 GradAscent 51.6 (↓51.6) 82.0 (↓81.3) 91.4 (↓89.9) 50.9 ( 10.0) 50.6 (↓50.5) 79.9 (↓79.2) 88.2 (↓86.3) 51.3 ( 10.2) 0.4 (↓0.4) 0.9 (↓0.4) 1.6 (↓0.8) 40.9 
+
+EASE 0.1 (↓0.1) 0.5 (↑0.2) 1.4 (↑0.1) 40.9 0.1 0.9 (↓0.2) 2.3 (↓0.4) 41.1 0.3 (↓0.3) 1.1 (↓0.6) 2.5 (↓1.7) 40.9 
+
+Retrain 0.0 0.7 1.5 40.9 0.1 0.7 1.9 41.1 0.0 0.5 0.8 40.9 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 59.8 (↓10.7) 90.1 (↓5.1) 95.5 (↓3.6) 262.5 65.1 (↓10.7) 95.1 (↓3.3) 98.4 (↓1.6) 196.9 49.9 (↓1.7) 84.6 (↓1.9) 93.2 (↓1.4) 196.9 FedRecover 56.8 (↓13.7) 89.7 (↓5.5) 95.3 (↓3.8) 47.2 ( 215.3) 62.1 (↓13.7) 94.4 (↓4.0) 98.2 (↓1.8) 35.4 ( 161.5) 27.4 (↓24.2) 53.3 (↓33.2) 64.4 (↓30.2) 35.4 ( 161.5) 
+
+Ferrari 59.8 (↓10.7) 90.1 (↓5.1) 95.5 (↓3.6) 72.2 ( 190.3) 64.3 (↓11.5) 95.1 (↓3.3) 98.4 (↓1.6) 59.1 ( 137.8) 48.8 (↓2.8) 84.8 (↓1.7) 93.2 (↓1.4) 59.1 ( 137.8) 
+
+FedOSD 60.1 (↓10.4) 90.2 (↓5.0) 95.6 (↓3.5) 105.0 ( 157.5) 65.7 (↓10.1) 95.0 (↓3.4) 98.5 (↓1.5) 78.8 ( 118.1) 43.5 (↓8.1) 76.8 (↓9.7) 87.1 (↓7.5) 78.8 ( 118.1) 
+
+NoT 47.8 (↓22.7) 81.5 (↓13.7) 91.9 (↓7.2) 52.5 ( 210.0) 63.5 (↓12.3) 94.6 (↓3.8) 98.2 (↓1.8) 39.4 ( 157.5) 38.0 (↓13.6) 68.6 (↓17.9) 81.3 (↓13.3) 39.4 ( 157.5) 
+
+SoUL 59.4 (↓11.1) 90.0 (↓5.2) 95.5 (↓3.6) 52.5 ( 210.0) 64.7 (↓11.1) 95.0 (↓3.4) 98.3 (↓1.7) 39.4 ( 157.5) 44.9 (↓6.7) 77.1 (↓9.4) 88.7 (↓5.9) 39.4 ( 157.5) 
+
+FFMU 33.7 (↓36.8) 67.2 (↓28.0) 79.7 (↓19.4) 105.0 ( 157.5) 51.4 (↓24.4) 86.4 (↓12.0) 98.0 (↓2.0) 78.8 ( 118.1) 25.6 (↓26.0) 50.9 (↓35.6) 66.6 (↓28.0) 78.8 ( 118.1) 
+
+FUSED 59.0 (↓11.5) 90.3 (↓4.9) 95.4 (↓3.7) 105.0 ( 157.5) 65.4 (↓10.4) 95.2 (↓3.2) 98.4 (↓1.6) 78.8 ( 118.1) 49.2 (↓2.4) 84.9 (↓1.6) 93.3 (↓1.3) 78.8 ( 118.1) 
+
+GradAscent 57.6 (↓12.9) 89.4 (↓5.8) 95.1 (↓4.0) 72.2 ( 190.3) 62.9 (↓12.9) 94.4 (↓4.0) 98.1 (↓1.9) 59.1 ( 137.8) 47.4 (↓4.2) 84.1 (↓2.4) 92.9 (↓1.7) 59.1 ( 137.8) 
+
+EASE 60.8 (↓9.7) 90.4 (↓4.8) 95.7 (↓3.4) 52.5 ( 210.0) 66.1 (↓9.7) 95.4 (↓3.0) 98.6 (↓1.4) 47.2 ( 149.7) 50.6 (↓1.0) 85.1 (↓1.4) 93.4 (↓1.2) 39.4 ( 157.5) 
+
+Retrain 70.5 95.2 99.1 262.5 75.8 98.4 100.0 196.9 51.6 86.5 94.6 196.9 Table 8: Main comparison on MSCOCO with CLIP-L/14 across three unlearning scenarios. Conven-tion follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 30.9 (↓30.6) 55.6 (↓54.7) 67.3 (↓65.7) 49.1 ( 8.2) 36.0 (↓35.9) 61.8 (↓61.2) 74.7 (↓72.5) 51.2 ( 10.1) 0.1 0.6 (↑0.5) 1.5 (↑0.5) 40.9 FedRecover 24.8 (↓24.5) 49.0 (↓48.1) 59.3 (↓57.7) 51.3 ( 10.4) 40.9 (↓40.8) 69.5 (↓68.9) 77.4 (↓75.2) 46.7 ( 5.6) 0.1 0.9 (↑0.2) 1.9 (↑0.1) 40.9 Ferrari 49.9 (↓49.6) 82.0 (↓81.1) 91.4 (↓89.8) 51.9 ( 11.0) 59.9 (↓59.8) 86.2 (↓85.6) 91.8 (↓89.6) 52.3 ( 11.2) 0.1 0.9 (↑0.2) 2.0 40.9 FedOSD 44.3 (↓44.0) 74.8 (↓73.9) 86.4 (↓84.8) 50.7 ( 9.8) 57.9 (↓57.8) 85.4 (↓84.8) 91.8 (↓89.6) 52.1 ( 11.0) 0.2 (↓0.1) 0.9 (↑0.2) 2.3 (↓0.3) 41.0 ( 0.1) 
+
+NoT 34.6 (↓34.3) 64.8 (↓63.9) 78.7 (↓77.1) 49.9 ( 9.0) 35.2 (↓35.1) 62.4 (↓61.8) 73.3 (↓71.1) 48.0 ( 6.9) 0.3 (↓0.2) 0.7 (↑0.4) 1.4 (↑0.6) 40.9 SoUL 42.4 (↓42.1) 72.9 (↓72.0) 85.5 (↓83.9) 50.3 ( 9.4) 54.9 (↓54.8) 83.2 (↓82.6) 89.2 (↓87.0) 51.3 ( 10.2) 0.2 (↓0.1) 1.1 1.6 (↑0.4) 40.9 FFMU 27.8 (↓27.5) 52.8 (↓51.9) 64.3 (↓62.7) 48.8 ( 7.9) 22.5 (↓22.4) 48.4 (↓47.8) 60.4 (↓58.2) 49.0 ( 7.9) 0.1 1.4 (↓0.3) 2.7 (↓0.7) 40.9 FUSED 44.6 (↓44.3) 76.0 (↓75.1) 87.2 (↓85.6) 50.5 ( 9.6) 55.8 (↓55.7) 83.8 (↓83.2) 91.0 (↓88.8) 52.0 ( 10.9) 0.2 (↓0.1) 1.0 (↑0.1) 2.0 40.9 GradAscent 43.1 (↓42.8) 74.1 (↓73.2) 85.8 (↓84.2) 50.8 ( 9.9) 50.0 (↓49.9) 80.3 (↓79.7) 87.7 (↓85.5) 50.2 ( 9.1) 0.1 0.8 (↑0.3) 2.1 (↓0.1) 40.9 
+
+EASE 0.4 (↓0.1) 1.4 (↓0.5) 2.1 (↓0.5) 40.9 0.3 (↓0.2) 1.2 (↓0.6) 2.6 (↓0.4) 41.1 0.1 1.8 (↓0.7) 3.8 (↓1.8) 40.9 
+
+Retrain 0.3 0.9 1.6 40.9 0.1 0.6 2.2 41.1 0.1 1.1 2.0 40.9 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 57.8 (↓14.9) 88.9 (↓7.8) 93.8 (↓5.5) 537.5 77.2 (↓10.3) 98.4 (↓1.3) 99.7 (↓0.3) 403.1 53.1 (↓7.9) 82.5 (↓7.7) 91.9 (↓4.7) 403.1 FedRecover 55.6 (↓17.1) 88.4 (↓8.3) 93.6 (↓5.7) 96.8 ( 440.7) 74.7 (↓12.8) 97.6 (↓2.1) 99.2 (↓0.8) 72.6 ( 330.5) 22.5 (↓38.5) 42.8 (↓47.4) 55.2 (↓41.4) 72.6 ( 330.5) 
+
+Ferrari 57.4 (↓15.3) 88.6 (↓8.1) 93.8 (↓5.5) 147.8 ( 389.7) 76.9 (↓10.6) 98.3 (↓1.4) 99.5 (↓0.5) 120.9 ( 282.2) 52.8 (↓8.2) 82.3 (↓7.9) 91.8 (↓4.8) 120.9 ( 282.2) 
+
+FedOSD 58.4 (↓14.3) 88.8 (↓7.9) 93.9 (↓5.4) 215.0 ( 322.5) 77.5 (↓10.0) 98.4 (↓1.3) 99.6 (↓0.4) 161.2 ( 241.9) 40.8 (↓20.2) 73.1 (↓17.1) 85.1 (↓11.5) 161.2 ( 241.9) 
+
+NoT 50.8 (↓21.9) 81.6 (↓15.1) 90.4 (↓8.9) 107.5 ( 430.0) 75.3 (↓12.2) 97.8 (↓1.9) 99.4 (↓0.6) 80.6 ( 322.5) 33.3 (↓27.7) 67.4 (↓22.8) 80.7 (↓15.9) 80.6 ( 322.5) 
+
+SoUL 57.4 (↓15.3) 88.7 (↓8.0) 93.8 (↓5.5) 107.5 ( 430.0) 76.5 (↓11.0) 98.2 (↓1.5) 99.6 (↓0.4) 80.6 ( 322.5) 44.2 (↓16.8) 76.5 (↓13.7) 88.2 (↓8.4) 80.6 ( 322.5) 
+
+FFMU 36.8 (↓35.9) 68.6 (↓28.1) 79.4 (↓19.9) 215.0 ( 322.5) 64.3 (↓23.2) 93.1 (↓6.6) 99.2 (↓0.8) 161.2 ( 241.9) 25.0 (↓36.0) 51.4 (↓38.8) 64.5 (↓32.1) 161.2 ( 241.9) 
+
+FUSED 57.0 (↓15.7) 89.0 (↓7.7) 93.7 (↓5.6) 215.0 ( 322.5) 76.1 (↓11.4) 98.1 (↓1.6) 99.6 (↓0.4) 161.2 ( 241.9) 52.0 (↓9.0) 82.6 (↓7.6) 91.9 (↓4.7) 161.2 ( 241.9) 
+
+GradAscent 54.8 (↓17.9) 88.1 (↓8.6) 93.5 (↓5.8) 147.8 ( 389.7) 73.9 (↓13.6) 97.6 (↓2.1) 99.3 (↓0.7) 120.9 ( 282.2) 42.8 (↓18.2) 73.4 (↓16.8) 85.7 (↓10.9) 120.9 ( 282.2) 
+
+EASE 58.8 (↓13.9) 89.1 (↓7.6) 94.0 (↓5.3) 107.5 ( 430.0) 77.9 (↓9.6) 98.6 (↓1.1) 99.8 (↓0.2) 96.8 ( 306.3) 53.8 (↓7.2) 82.7 (↓7.5) 92.0 (↓4.6) 80.6 ( 322.5) 
+
+Retrain 72.7 96.7 99.3 537.5 87.5 99.7 100.0 403.1 61.0 90.2 96.6 403.1 Table 9: Main comparison on MSCOCO with SigLIP across three unlearning scenarios. Convention follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 56.7 (↓56.5) 87.9 (↓87.3) 92.3 (↓90.7) 50.7 ( 9.8) 39.2 (↓39.2) 71.2 (↓70.7) 81.4 (↓80.4) 55.8 ( 14.8) 0.3 (↓0.1) 0.8 (↑0.4) 1.1 (↑1.3) 40.9 FedRecover 52.0 (↓51.8) 79.0 (↓78.4) 86.9 (↓85.3) 49.6 ( 8.7) 48.1 (↓48.1) 75.1 (↓74.6) 84.2 (↓83.2) 53.5 ( 12.5) 0.2 1.1 (↑0.1) 2.3 (↑0.1) 41.2 ( 0.3) 
+
+Ferrari 69.7 (↓69.5) 93.5 (↓92.9) 97.3 (↓95.7) 52.6 ( 11.7) 66.7 (↓66.7) 93.2 (↓92.7) 97.7 (↓96.7) 56.4 ( 15.4) 0.1 (↑0.1) 0.8 (↑0.4) 1.9 (↑0.5) 40.5 ( 0.4) 
+
+FedOSD 66.8 (↓66.6) 92.8 (↓92.2) 96.9 (↓95.3) 52.1 ( 11.2) 62.1 (↓62.1) 90.7 (↓90.2) 96.8 (↓95.8) 56.2 ( 15.2) 0.1 (↑0.1) 0.9 (↑0.3) 2.1 (↑0.3) 41.0 ( 0.1) 
+
+NoT 44.2 (↓44.0) 74.4 (↓73.8) 83.8 (↓82.2) 51.4 ( 10.5) 49.7 (↓49.7) 80.9 (↓80.4) 89.3 (↓88.3) 51.6 ( 10.6) 0.2 1.0 (↑0.2) 2.0 (↑0.4) 42.1 ( 1.2) 
+
+SoUL 63.0 (↓62.8) 87.7 (↓87.1) 93.8 (↓92.2) 51.5 ( 10.6) 63.1 (↓63.1) 89.8 (↓89.3) 95.5 (↓94.5) 53.9 ( 12.9) 0.1 (↑0.1) 0.7 (↑0.5) 1.8 (↑0.6) 40.3 ( 0.6) 
+
+FFMU 28.5 (↓28.3) 54.9 (↓54.3) 67.3 (↓65.7) 50.4 ( 9.5) 42.0 (↓42.0) 70.3 (↓69.8) 80.7 (↓79.7) 50.2 ( 9.2) 0.3 (↓0.1) 1.2 2.5 (↓0.1) 43.5 ( 2.6) 
+
+FUSED 69.0 (↓68.8) 92.7 (↓92.1) 96.9 (↓95.3) 52.5 ( 11.6) 64.7 (↓64.7) 91.5 (↓91.0) 96.4 (↓95.4) 56.0 ( 15.0) 0.1 (↑0.1) 0.8 (↑0.4) 1.7 (↑0.7) 40.7 ( 0.2) 
+
+GradAscent 65.4 (↓65.2) 92.7 (↓92.1) 97.0 (↓95.4) 51.1 ( 10.2) 12.7 (↓12.7) 30.6 (↓30.1) 43.3 (↓42.3) 51.2 ( 10.2) 0.1 (↑0.1) 0.7 (↑0.5) 1.6 (↑0.8) 40.9 
+
+EASE 0.0 (↑0.2) 0.6 2.2 (↓0.6) 40.9 0.0 0.7 (↓0.2) 1.7 (↓0.7) 40.9 ( 0.1) 0.6 (↓0.4) 2.6 (↓1.4) 6.1 (↓3.7) 40.9 
+
+Retrain 0.2 0.6 1.6 40.9 0.0 0.5 1.0 41.0 0.2 1.2 2.4 40.9 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 67.7 (↓4.8) 96.3 (↓1.9) 98.9 (↓0.6) 475.0 74.7 (↓11.4) 97.5 (↓1.9) 99.6 (↓0.4) 356.2 66.7 (↓1.5) 92.5 96.9 (↓1.2) 356.2 FedRecover 66.0 (↓6.5) 95.8 (↓2.4) 98.7 (↓0.8) 142.5 ( 332.5) 72.5 (↓13.6) 97.2 (↓2.2) 99.2 (↓0.8) 64.1 ( 292.1) 64.1 (↓4.1) 91.7 (↓0.8) 96.7 (↓1.4) 53.8 ( 302.4) 
+
+Ferrari 67.4 (↓5.1) 96.1 (↓2.1) 98.9 (↓0.6) 130.6 ( 344.4) 74.3 (↓11.8) 97.6 (↓1.8) 99.5 (↓0.5) 106.9 ( 249.3) 66.3 (↓1.9) 92.4 (↓0.1) 96.9 (↓1.2) 71.3 ( 284.9) 
+
+FedOSD 58.6 (↓13.9) 91.1 (↓7.1) 99.0 (↓0.5) 190.0 ( 285.0) 75.3 (↓10.8) 97.4 (↓2.0) 99.5 (↓0.5) 142.5 ( 213.7) 67.4 (↓0.8) 92.2 (↓0.3) 97.0 (↓1.1) 142.5 ( 213.7) 
+
+NoT 51.7 (↓20.8) 79.5 (↓18.7) 88.1 (↓11.4) 71.3 ( 403.7) 73.1 (↓13.0) 97.1 (↓2.3) 99.3 (↓0.7) 71.2 ( 285.0) 55.1 (↓13.1) 82.3 (↓10.2) 90.7 (↓7.4) 71.3 ( 284.9) 
+
+SoUL 67.0 (↓5.5) 91.6 (↓6.6) 98.9 (↓0.6) 71.3 ( 403.7) 74.3 (↓11.8) 97.5 (↓1.9) 99.4 (↓0.6) 71.2 ( 285.0) 66.7 (↓1.5) 92.3 (↓0.2) 96.8 (↓1.3) 71.3 ( 284.9) 
+
+FFMU 32.4 (↓40.1) 59.2 (↓39.0) 70.7 (↓28.8) 142.5 ( 332.5) 64.1 (↓22.0) 96.7 (↓2.7) 99.1 (↓0.9) 142.5 ( 213.7) 32.8 (↓35.4) 60.5 (↓32.0) 73.2 (↓24.9) 142.5 ( 213.7) 
+
+FUSED 67.0 (↓5.5) 96.2 (↓2.0) 99.0 (↓0.5) 190.0 ( 285.0) 73.9 (↓12.2) 97.8 (↓1.6) 99.6 (↓0.4) 142.5 ( 213.7) 67.7 (↓0.5) 92.4 (↓0.1) 97.0 (↓1.1) 142.5 ( 213.7) 
+
+GradAscent 65.2 (↓7.3) 95.3 (↓2.9) 98.5 (↓1.0) 130.6 ( 344.4) 46.3 (↓39.8) 84.7 (↓14.7) 94.8 (↓5.2) 106.9 ( 249.3) 64.9 (↓3.3) 91.7 (↓0.8) 96.6 (↓1.5) 106.9 ( 249.3) 
+
+EASE 68.4 (↓4.1) 96.5 (↓1.7) 99.1 (↓0.4) 95.0 ( 380.0) 75.7 (↓10.4) 97.9 (↓1.5) 99.7 (↓0.3) 85.5 ( 270.7) 68.1 (↓0.1) 92.7 (↑0.2) 97.1 (↓1.0) 71.2 ( 285.0) 
+
+Retrain 72.5 98.2 99.5 475.0 86.1 99.4 100.0 356.2 68.2 92.5 98.1 356.2 33 Table 10: Main comparison on TextCaps with CLIP-B/32 across three unlearning scenarios. Conven-tion follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 60.3 (↓60.1) 85.2 (↓84.7) 89.6 (↓88.1) 63.0 ( 13.7) 22.0 (↓22.0) 44.3 (↓42.4) 53.5 (↓50.3) 55.3 ( 3.6) 0.1 (↓0.1) 0.7 (↑0.5) 2.4 (↓0.4) 51.3 ( 2.6) 
+
+FedRecover 43.7 (↓43.5) 70.6 (↓70.1) 78.7 (↓77.2) 62.5 ( 13.2) 18.8 (↓18.8) 43.5 (↓41.6) 53.8 (↓50.6) 54.9 ( 3.2) 0.1 (↓0.1) 0.8 (↑0.4) 1.7 (↑0.3) 50.0 ( 1.3) 
+
+Ferrari 83.3 (↓83.1) 98.2 (↓97.7) 98.8 (↓97.3) 63.2 ( 13.9) 76.6 (↓76.6) 95.5 (↓93.6) 99.1 (↓95.9) 56.6 ( 4.9) 0.1 (↓0.1) 0.7 (↑0.5) 1.8 (↑0.2) 49.8 ( 1.1) 
+
+FedOSD 80.4 (↓80.2) 97.4 (↓96.9) 98.7 (↓97.2) 63.1 ( 13.8) 43.2 (↓43.2) 72.8 (↓70.9) 85.6 (↓82.4) 55.3 ( 3.6) 0.1 (↓0.1) 1.0 (↑0.2) 1.7 (↑0.3) 50.8 ( 2.1) 
+
+NoT 43.0 (↓42.8) 77.3 (↓76.8) 86.5 (↓85.0) 63.2 ( 13.9) 11.1 (↓11.1) 25.5 (↓23.6) 38.6 (↓35.4) 55.3 ( 3.6) 0.1 (↓0.1) 1.0 (↑0.2) 2.5 (↓0.5) 47.9 ( 0.8) 
+
+SoUL 73.5 (↓73.3) 93.9 (↓93.4) 97.8 (↓96.3) 63.2 ( 13.9) 30.7 (↓30.7) 61.7 (↓59.8) 73.6 (↓70.4) 55.3 ( 3.6) 0.0 0.8 (↑0.4) 1.8 (↑0.2) 49.4 ( 0.7) 
+
+FFMU 19.5 (↓19.3) 51.0 (↓50.5) 65.3 (↓63.8) 62.9 ( 13.6) 3.5 (↓3.5) 14.7 (↓12.8) 22.3 (↓19.1) 55.3 ( 3.6) 0.3 (↓0.3) 1.0 (↑0.2) 1.6 (↑0.4) 45.4 ( 3.3) 
+
+FUSED 78.3 (↓78.1) 97.1 (↓96.6) 98.4 (↓96.9) 63.2 ( 13.9) 40.8 (↓40.8) 72.0 (↓70.1) 85.3 (↓82.1) 55.3 ( 3.6) 0.1 (↓0.1) 0.6 (↑0.6) 1.5 (↑0.5) 49.9 ( 1.2) 
+
+GradAscent 1.7 (↓1.5) 8.6 (↓8.1) 14.7 (↓13.2) 60.9 ( 11.6) 39.9 (↓39.9) 71.5 (↓69.6) 81.3 (↓78.1) 56.6 ( 4.9) 0.2 (↓0.2) 0.8 (↑0.4) 2.2 (↓0.2) 49.9 ( 1.2) 
+
+EASE 0.2 0.9 (↓0.4) 1.9 (↓0.4) 51.9 ( 2.6) 0.0 1.7 (↑0.2) 3.0 (↑0.2) 53.5 ( 1.8) 0.2 (↓0.2) 1.4 (↓0.2) 2.3 (↓0.3) 49.2 ( 0.5) 
+
+Retrain 0.2 0.5 1.5 49.3 0.0 1.9 3.2 51.7 0.0 1.2 2.0 48.7 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 91.6 (↓4.9) 98.9 (↓1.1) 99.4 (↓0.6) 262.5 82.3 (↓10.0) 94.6 (↓5.4) 96.5 (↓3.5) 196.9 84.4 (↓2.4) 97.8 (↓1.2) 99.4 (↓0.4) 196.9 FedRecover 66.3 (↓30.2) 91.9 (↓8.1) 99.1 (↓0.9) 47.2 ( 215.3) 71.1 (↓21.2) 92.5 (↓7.5) 96.5 (↓3.5) 35.4 ( 161.5) 42.9 (↓43.9) 69.5 (↓29.5) 77.0 (↓22.8) 35.4 ( 161.5) 
+
+Ferrari 79.8 (↓16.7) 98.9 (↓1.1) 99.4 (↓0.6) 72.2 ( 190.3) 85.7 (↓6.6) 99.1 (↓0.9) 99.6 (↓0.4) 59.1 ( 137.8) 83.7 (↓3.1) 98.0 (↓1.0) 99.2 (↓0.6) 59.1 ( 137.8) 
+
+FedOSD 64.9 (↓31.6) 90.7 (↓9.3) 99.5 (↓0.5) 105.0 ( 157.5) 86.5 (↓5.8) 98.9 (↓1.1) 99.5 (↓0.5) 78.8 ( 118.1) 83.3 (↓3.5) 97.9 (↓1.1) 99.3 (↓0.5) 78.8 ( 118.1) 
+
+NoT 31.1 (↓65.4) 63.2 (↓36.8) 78.0 (↓22.0) 52.5 ( 210.0) 51.7 (↓40.6) 86.9 (↓13.1) 96.2 (↓3.8) 39.4 ( 157.5) 44.3 (↓42.5) 80.2 (↓18.8) 89.5 (↓10.3) 39.4 ( 157.5) 
+
+SoUL 66.5 (↓30.0) 91.9 (↓8.1) 96.4 (↓3.6) 52.5 ( 210.0) 86.1 (↓6.2) 99.0 (↓1.0) 99.6 (↓0.4) 39.4 ( 157.5) 83.7 (↓3.1) 97.9 (↓1.1) 99.3 (↓0.5) 39.4 ( 157.5) 
+
+FFMU 15.1 (↓81.4) 38.4 (↓61.6) 54.4 (↓45.6) 105.0 ( 157.5) 27.0 (↓65.3) 61.9 (↓38.1) 76.5 (↓23.5) 78.8 ( 118.1) 21.3 (↓65.5) 52.1 (↓46.9) 67.6 (↓32.2) 78.8 ( 118.1) 
+
+FUSED 90.5 (↓6.0) 98.8 (↓1.2) 99.5 (↓0.5) 105.0 ( 157.5) 86.1 (↓6.2) 99.1 (↓0.9) 99.7 (↓0.3) 78.8 ( 118.1) 84.7 (↓2.1) 98.2 (↓0.8) 99.3 (↓0.5) 78.8 ( 118.1) 
+
+GradAscent 1.9 (↓94.6) 6.8 (↓93.2) 13.2 (↓86.8) 72.2 ( 190.3) 62.5 (↓29.8) 89.8 (↓10.2) 95.1 (↓4.9) 59.1 ( 137.8) 3.1 (↓83.7) 10.0 (↓89.0) 17.3 (↓82.5) 59.1 ( 137.8) 
+
+EASE 92.3 (↓4.2) 99.2 (↓0.8) 99.6 (↓0.4) 52.5 ( 210.0) 87.5 (↓4.8) 99.4 (↓0.6) 99.8 (↓0.2) 47.2 ( 149.7) 85.1 (↓1.7) 98.3 (↓0.7) 99.5 (↓0.3) 39.4 ( 157.5) 
+
+Retrain 96.5 100.0 100.0 262.5 92.3 100.0 100.0 196.9 86.8 99.0 99.8 196.9 Table 11: Main comparison on TextCaps with CLIP-L/14 across three unlearning scenarios. Conven-tion follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 66.4 (↓66.4) 85.0 (↓84.3) 89.5 (↓87.8) 63.1 ( 12.8) 54.9 (↓54.6) 75.6 (↓74.0) 82.2 (↓79.9) 63.2 ( 1.9) 0.0 (↑0.3) 0.7 (↑0.9) 1.4 (↑0.8) 49.1 ( 3.1) 
+
+FedRecover 60.7 (↓60.7) 80.4 (↓79.7) 86.0 (↓84.3) 62.5 ( 12.2) 36.0 (↓35.7) 59.8 (↓58.2) 67.0 (↓64.7) 62.8 ( 1.5) 0.3 0.7 (↑0.9) 1.5 (↑0.7) 47.6 ( 4.6) 
+
+Ferrari 92.7 (↓92.7) 99.7 (↓99.0) 100.0 (↓98.3) 63.2 ( 12.9) 76.8 (↓76.5) 95.1 (↓93.5) 98.3 (↓96.0) 63.2 ( 1.9) 0.4 (↓0.1) 1.1 (↑0.5) 2.1 (↑0.1) 49.7 ( 2.5) 
+
+FedOSD 91.2 (↓91.2) 99.5 (↓98.8) 100.0 (↓98.3) 63.2 ( 12.9) 73.0 (↓72.7) 94.2 (↓92.6) 97.6 (↓95.3) 63.2 ( 1.9) 0.4 (↓0.1) 1.3 (↑0.3) 2.9 (↓0.7) 50.2 ( 2.0) 
+
+NoT 51.5 (↓51.5) 80.7 (↓80.0) 89.9 (↓88.2) 63.2 ( 12.9) 28.4 (↓28.1) 53.4 (↓51.8) 65.7 (↓63.4) 63.2 ( 1.9) 0.0 (↑0.3) 0.8 (↑0.8) 1.7 (↑0.5) 48.5 ( 3.7) 
+
+SoUL 84.4 (↓84.4) 96.9 (↓96.2) 98.8 (↓97.1) 63.2 ( 12.9) 64.4 (↓64.1) 86.8 (↓85.2) 93.7 (↓91.4) 63.2 ( 1.9) 0.6 (↓0.3) 1.4 (↑0.2) 2.3 (↓0.1) 50.4 ( 1.8) 
+
+FFMU 24.2 (↓24.2) 54.3 (↓53.6) 68.1 (↓66.4) 63.2 ( 12.9) 11.0 (↓10.7) 26.7 (↓25.1) 36.9 (↓34.6) 63.1 ( 1.8) 0.2 (↑0.1) 1.3 (↑0.3) 2.3 (↓0.1) 48.5 ( 3.7) 
+
+FUSED 89.4 (↓89.4) 98.6 (↓97.9) 99.9 (↓98.2) 63.2 ( 12.9) 70.2 (↓69.9) 92.2 (↓90.6) 96.5 (↓94.2) 63.2 ( 1.9) 0.4 (↓0.1) 1.2 (↑0.4) 2.4 (↓0.2) 49.7 ( 2.5) 
+
+GradAscent 0.5 (↓0.5) 3.9 (↓3.2) 7.5 (↓5.8) 63.0 ( 12.7) 0.7 (↓0.4) 2.7 (↓1.1) 5.3 (↓3.0) 61.7 ( 0.4) 0.0 (↑0.3) 0.8 (↑0.8) 1.7 (↑0.5) 47.0 ( 5.2) 
+
+EASE 0.3 (↓0.3) 1.9 (↓1.2) 3.9 (↓2.2) 53.3 ( 3.0) 0.7 (↓0.4) 1.8 (↓0.2) 3.4 (↓1.1) 62.0 ( 0.7) 0.5 (↓0.2) 1.9 (↓0.3) 2.6 (↓0.4) 52.8 ( 0.6) 
+
+Retrain 0.0 0.7 1.7 50.3 0.3 1.6 2.3 61.3 0.3 1.6 2.2 52.2 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 90.9 (↓5.1) 99.1 (↓0.9) 99.6 (↓0.4) 537.5 87.6 (↓10.9) 98.4 (↓1.6) 99.3 (↓0.7) 403.1 91.1 (↓2.8) 98.8 (↓0.7) 99.7 (↓0.2) 403.1 FedRecover 87.6 (↓8.4) 98.3 (↓1.7) 99.3 (↓0.7) 96.8 ( 440.7) 84.6 (↓13.9) 97.6 (↓2.4) 99.1 (↓0.9) 72.6 ( 330.5) 63.1 (↓30.8) 82.4 (↓17.1) 87.6 (↓12.3) 72.6 ( 330.5) 
+
+Ferrari 90.2 (↓5.8) 99.0 (↓1.0) 99.6 (↓0.4) 147.8 ( 389.7) 87.6 (↓10.9) 98.5 (↓1.5) 99.2 (↓0.8) 120.9 ( 282.2) 91.1 (↓2.8) 98.9 (↓0.6) 99.6 (↓0.3) 120.9 ( 282.2) 
+
+FedOSD 90.9 (↓5.1) 98.8 (↓1.2) 99.5 (↓0.5) 215.0 ( 322.5) 86.8 (↓11.7) 98.3 (↓1.7) 99.3 (↓0.7) 161.2 ( 241.9) 91.4 (↓2.5) 99.1 (↓0.4) 99.7 (↓0.2) 161.2 ( 241.9) 
+
+NoT 63.6 (↓32.4) 92.2 (↓7.8) 99.4 (↓0.6) 107.5 ( 430.0) 75.6 (↓22.9) 98.0 (↓2.0) 99.1 (↓0.9) 80.6 ( 322.5) 62.5 (↓31.4) 89.7 (↓9.8) 96.3 (↓3.6) 80.6 ( 322.5) 
+
+SoUL 90.2 (↓5.8) 98.9 (↓1.1) 99.6 (↓0.4) 107.5 ( 430.0) 87.2 (↓11.3) 98.4 (↓1.6) 99.3 (↓0.7) 80.6 ( 322.5) 90.7 (↓3.2) 98.7 (↓0.8) 99.6 (↓0.3) 80.6 ( 322.5) 
+
+FFMU 36.9 (↓59.1) 68.9 (↓31.1) 81.2 (↓18.8) 215.0 ( 322.5) 49.3 (↓49.2) 82.1 (↓17.9) 90.1 (↓9.9) 161.2 ( 241.9) 39.7 (↓54.2) 73.1 (↓26.4) 83.3 (↓16.6) 161.2 ( 241.9) 
+
+FUSED 90.6 (↓5.4) 99.2 (↓0.8) 99.6 (↓0.4) 215.0 ( 322.5) 87.2 (↓11.3) 98.7 (↓1.3) 99.4 (↓0.6) 161.2 ( 241.9) 90.3 (↓3.6) 99.0 (↓0.5) 99.5 (↓0.4) 161.2 ( 241.9) 
+
+GradAscent 0.7 (↓95.3) 4.0 (↓96.0) 7.2 (↓92.8) 147.8 ( 389.7) 1.1 (↓97.4) 4.2 (↓95.8) 10.7 (↓89.3) 120.9 ( 282.2) 9.9 (↓84.0) 26.1 (↓73.4) 40.9 (↓59.0) 120.9 ( 282.2) 
+
+EASE 91.6 (↓4.4) 99.3 (↓0.7) 99.8 (↓0.2) 107.5 ( 430.0) 88.6 (↓9.9) 98.8 (↓1.2) 99.5 (↓0.5) 96.8 ( 306.3) 92.1 (↓1.8) 99.2 (↓0.3) 99.8 (↓0.1) 80.6 ( 322.5) 
+
+Retrain 96.0 100.0 100.0 537.5 98.5 100.0 100.0 403.1 93.9 99.5 99.9 403.1 Table 12: Main comparison on TextCaps with SigLIP across three unlearning scenarios. Convention follows Table 1. 
+
+Method Client Unlearning Class Unlearning Sample Unlearning 
+
+F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA F -R@1 ↓ F -R@5 ↓ F -R@10 ↓ M IA 
+
+FedEraser 67.5 (↓67.5) 83.8 (↓82.9) 90.0 (↓88.1) 63.1 ( 13.2) 66.1 (↓66.0) 83.4 (↓82.0) 87.4 (↓84.8) 61.4 ( 5.7) 0.3 1.0 (↓0.2) 1.8 (↑0.2) 50.4 ( 0.6) 
+
+FedRecover 56.3 (↓56.3) 72.0 (↓71.1) 78.7 (↓76.8) 62.9 ( 13.0) 57.1 (↓57.0) 74.6 (↓73.2) 79.5 (↓76.9) 60.1 ( 4.4) 0.2 (↑0.1) 1.6 (↓0.8) 2.3 (↓0.3) 48.2 ( 2.8) 
+
+Ferrari 94.5 (↓94.5) 99.7 (↓98.8) 100.0 (↓98.1) 63.2 ( 13.3) 96.8 (↓96.7) 99.9 (↓98.5) 100.0 (↓97.4) 61.4 ( 5.7) 0.3 1.1 (↓0.3) 1.8 (↑0.2) 50.0 ( 1.0) 
+
+FedOSD 92.5 (↓92.5) 99.7 (↓98.8) 100.0 (↓98.1) 63.2 ( 13.3) 95.3 (↓95.2) 99.6 (↓98.2) 100.0 (↓97.4) 61.4 ( 5.7) 0.0 (↑0.3) 0.9 (↓0.1) 2.1 (↓0.1) 50.0 ( 1.0) 
+
+NoT 54.7 (↓54.7) 81.3 (↓80.4) 88.7 (↓86.8) 63.2 ( 13.3) 49.6 (↓49.5) 79.7 (↓78.3) 87.1 (↓84.5) 61.4 ( 5.7) 0.0 (↑0.3) 0.9 (↓0.1) 1.7 (↑0.3) 49.6 ( 1.4) 
+
+SoUL 83.5 (↓83.5) 95.7 (↓94.8) 98.8 (↓96.9) 63.2 ( 13.3) 86.3 (↓86.2) 97.9 (↓96.5) 99.2 (↓96.6) 61.4 ( 5.7) 0.3 1.0 (↓0.2) 1.9 (↑0.1) 50.4 ( 0.6) 
+
+FFMU 35.9 (↓35.9) 64.5 (↓63.6) 75.5 (↓73.6) 63.1 ( 13.2) 29.4 (↓29.3) 57.0 (↓55.6) 68.8 (↓66.2) 61.3 ( 5.6) 0.3 0.6 (↑0.2) 1.3 (↑0.7) 49.9 ( 1.1) 
+
+FUSED 91.5 (↓91.5) 99.2 (↓98.3) 99.8 (↓97.9) 63.2 ( 13.3) 94.7 (↓94.6) 99.6 (↓98.2) 100.0 (↓97.4) 61.4 ( 5.7) 0.1 (↑0.2) 1.0 (↓0.2) 1.6 (↑0.4) 49.6 ( 1.4) 
+
+GradAscent 84.0 (↓84.0) 96.8 (↓95.9) 98.5 (↓96.6) 63.2 ( 13.3) 86.3 (↓86.2) 97.2 (↓95.8) 98.7 (↓96.1) 61.4 ( 5.7) 0.0 (↑0.3) 0.7 (↑0.1) 1.2 (↑0.8) 50.0 ( 1.0) 
+
+EASE 0.0 1.1 (↓0.2) 2.3 (↓0.4) 52.9 ( 3.0) 0.0 (↑0.1) 1.3 (↑0.1) 2.1 (↑0.5) 59.0 ( 3.3) 0.2 (↑0.1) 0.9 (↓0.1) 2.1 (↓0.1) 51.2 ( 0.2) 
+
+Retrain 0.0 0.9 1.9 49.9 0.1 1.4 2.6 55.7 0.3 0.8 2.0 51.0 
+
+Method R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓ R-R@1 ↑ R-R@5 ↑ R-R@10 ↑ Comm. ↓
+
+FedEraser 94.5 (↓5.4) 99.4 (↓0.6) 99.8 (↓0.2) 475.0 93.1 (↓5.4) 99.0 (↓1.0) 99.7 (↓0.3) 356.2 97.2 (↓1.5) 99.7 (↓0.3) 99.9 (↓0.1) 356.2 FedRecover 92.0 (↓7.9) 98.4 (↓1.6) 99.3 (↓0.7) 85.5 ( 389.5) 92.1 (↓6.4) 98.5 (↓1.5) 99.3 (↓0.7) 64.1 ( 292.1) 57.9 (↓40.8) 76.7 (↓23.3) 83.3 (↓16.7) 64.1 ( 292.1) 
+
+Ferrari 93.4 (↓6.5) 99.3 (↓0.7) 99.6 (↓0.4) 130.6 ( 344.4) 92.7 (↓5.8) 99.2 (↓0.8) 99.5 (↓0.5) 106.9 ( 249.3) 96.9 (↓1.8) 99.6 (↓0.4) 99.7 (↓0.3) 106.9 ( 249.3) 
+
+FedOSD 93.8 (↓6.1) 99.1 (↓0.9) 99.8 (↓0.2) 190.0 ( 285.0) 94.1 (↓4.4) 99.4 (↓0.6) 99.7 (↓0.3) 142.5 ( 213.7) 96.5 (↓2.2) 99.5 (↓0.5) 99.8 (↓0.2) 142.5 ( 213.7) 
+
+NoT 64.2 (↓35.7) 90.5 (↓9.5) 94.3 (↓5.7) 95.0 ( 380.0) 73.8 (↓24.7) 98.7 (↓1.3) 99.4 (↓0.6) 71.2 ( 285.0) 68.6 (↓30.1) 93.5 (↓6.5) 99.6 (↓0.4) 71.2 ( 285.0) 
+
+SoUL 93.8 (↓6.1) 99.2 (↓0.8) 99.7 (↓0.3) 95.0 ( 380.0) 93.1 (↓5.4) 99.1 (↓0.9) 99.6 (↓0.4) 71.2 ( 285.0) 96.5 (↓2.2) 99.5 (↓0.5) 99.8 (↓0.2) 71.2 ( 285.0) 
+
+FFMU 42.8 (↓57.1) 71.9 (↓28.1) 81.3 (↓18.7) 190.0 ( 285.0) 48.9 (↓49.6) 82.2 (↓17.8) 92.9 (↓7.1) 142.5 ( 213.7) 43.3 (↓55.4) 77.6 (↓22.4) 89.2 (↓10.8) 142.5 ( 213.7) 
+
+FUSED 94.2 (↓5.7) 99.5 (↓0.5) 99.8 (↓0.2) 190.0 ( 285.0) 94.1 (↓4.4) 99.1 (↓0.9) 99.6 (↓0.4) 142.5 ( 213.7) 96.1 (↓2.6) 99.4 (↓0.6) 99.9 (↓0.1) 142.5 ( 213.7) 
+
+GradAscent 91.2 (↓8.7) 98.6 (↓1.4) 99.4 (↓0.6) 130.6 ( 344.4) 90.5 (↓8.0) 98.3 (↓1.7) 99.3 (↓0.7) 106.9 ( 249.3) 93.9 (↓4.8) 98.9 (↓1.1) 99.5 (↓0.5) 106.9 ( 249.3) 
+
+EASE 95.2 (↓4.7) 99.6 (↓0.4) 99.9 (↓0.1) 95.0 ( 380.0) 94.5 (↓4.0) 99.5 (↓0.5) 99.8 (↓0.2) 85.5 ( 270.7) 97.9 (↓0.8) 99.9 (↓0.1) 100.0 71.2 ( 285.0) 
+
+Retrain 99.9 100.0 100.0 475.0 98.5 100.0 100.0 356.2 98.7 100.0 100.0 356.2 34

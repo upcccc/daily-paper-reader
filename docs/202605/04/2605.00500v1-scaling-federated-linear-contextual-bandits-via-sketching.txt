@@ -1,0 +1,2311 @@
+Title: Scaling Federated Linear Contextual Bandits via Sketching
+
+URL Source: https://arxiv.org/pdf/2605.00500v1
+
+Published Time: Mon, 04 May 2026 00:47:36 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# SCALING FEDERATED LINEAR CONTEXTUAL BANDITS VIA 
+
+# SKETCHING 
+
+Hantao Yang 
+
+University of Science and Technology of China 
+
+yanghantao@mail.ustc.edu.cn 
+
+Hong Xie 
+
+University of Science and Technology of China 
+
+xiehong2018@foxmail.com 
+
+Xutong Liu 
+
+University of Washington Tacoma 
+
+liuxt2371@gmail.com 
+
+Defu Lian 
+
+University of Science and Technology of China 
+
+liandefu@ustc.edu.cn 
+
+May 4, 2026 
+
+## ABSTRACT 
+
+In federated contextual linear bandits, high data dimensionality incurs prohibitive computation and communication costs: local agents perform O(d3)-time determinant computation and upload O(d2)
+
+parameters, making existing algorithms unscalable, where d is the dimension of data. To relieve these scaling bottlenecks, this paper proposes Federated Sketch Contextual Linear Bandits (FSCLB). On the computation side, FSCLB uses SVD to indirectly obtain the determinant required for communication, eliminating the prohibitive cost of direct determinant calculation and cutting complexity from O(d3)
+
+to O(l2d) per round, where l < d is the sketch size. On the communication side, FSCLB introduces a double-sketch strategy that reduces both upload and download costs from O(d2) to O(ld ). Naively involving sketch update into federated contextual linear bandits can destroy the local increment and invalidate the asynchronous communication condition; FSCLB solves this by replacing the covariance matrix with the sketch matrix when deciding whether to communicate. Theoretically, FSCLB achieves a regret bound of eO(( √d + √M ε l)√lT ), where εl is the upper bounded by the spectral tail of the covariance matrix; when l exceeds the rank of the covariance matrix, the bound simplifies to eO(√ldT ), matching the optimal no-sketch regret. Experiments on both synthetic and real-world datasets show that FSCLB significantly reduces computational and communication costs by over 90 % while sacrificing only a negligible amount of cumulative reward. 
+
+## 1 Introduction 
+
+The stochastic multi-armed bandit (MAB) problem is a classic strategy for solving the exploration–exploitation problem and is widely used in recommendation systems [ 1, 2]. Contextual linear bandits extend MAB by associating each arm with a context vector; the expected reward is linear in this context, governed by an unknown parameter. Strong regret bounds were established in [ 3], and the linear bandit model has since been widely deployed in online recommendation [4], web advertising [5], and economics [6]. Driven by data scattered across myriad clients and edge devices, federated learning (FL) [ 7, 8 ] has emerged as the dominant paradigm for distributed machine learning, enabling joint training of a global model without sharing raw data. This privacy-preserving framework has naturally been extended to the bandit setting, giving rise to federated multi-armed bandits (FMAB) [ 9, 10 ]. FMAB has inspired federated contextual linear bandits, enabling a swarm of agents to cooperatively solve a global linear bandit while maintaining performance guarantees [11]. Local computation and communication overhead directly determine the overall efficiency of federated learning. For the local computation, the ever-growing scale of data makes high-dimensional vectors a major source of prohibitive computation and communication costs, ultimately degrading the algorithmic efficiency. High-dimensional objects 
+
+> arXiv:2605.00500v1 [cs.LG] 1 May 2026
+
+A PREPRINT - M AY 4, 2026 can quickly incur prohibitive local costs: a single 10 000 × 10 000-pixel medical image, when unfolded into 32-bit floats, already occupies 400 MB [ 12 ]. In many real-world applications, the vectors that must be processed can easily reach thousands of dimensions [ 13 , 14 , 15 ]. In previous work on federated contextual linear bandits, agents usually have to compute a matrix determinant each round to decide whether to communicate with the server; this determinant evaluation incurs O(d3) complexity, which is prohibitive when the dimension d is large. On the other hands, FL may suffering from the costly communication. In federated settings, communication efficiency must be considered during on-device training, as clients are often connected to the central server via slow connections ( ≈ 1Mbps) [ 16 ]. The high cost of communication has motivated a recent interest in improving communication-efficient protocols for distributed and federated systems [17]. To tackle the above computation and communication overheads, sketching is proposed as an effective dimensionality-reduction technique that has been widely applied in areas such as federated learning [ 16 ] and low-rank approximation [ 18 ]. Sketching reduces dimensionality by compressing a large matrix into a compact sketch. [ 19 ] combined the Frequent-Directions [ 20 ] sketch with contextual linear bandits, reducing the computational complexity of contextual linear bandits in high dimensions. While sketching mitigates large-scale computation and communication in FL, involving it into FMAB raises new challenges. Classic federated contextual linear bandits rely on covariance matrix growth to trigger uploads; a sketched matrix, however, truncates increments and can mask this growth, rendering the original trigger infeasible. Moreover, sketching only cuts the upload cost; if the server naively averages the received sketches for policy computation, the download cost remains O(d2). Finally, because every sketch is only an approximation, the aggregator must curb error accumulation to retain global accuracy. In this paper, we proposed federated sketch contextual linear bandits (FSCLB) to reduce the computation cost and communication by involving sketch method. The main contributions of this paper are summarized as follows: 
+
+Algorithmic framework. 
+
+1) Reducing computation with SVD. For the computation cost, our algorithm lets each local agent compute the determinant indirectly: it merges the local sketch and server sketch, performs SVD on the resulting small matrix, and obtains the determinant from the singular values. This replaces the determinant calculation with an SVD that fits naturally into the sketch-update pipeline. After introducing SCFD, the SVD is executed only on the O(l × d) sketch matrix, reducing the original O(d3) to O(l2d) with sketch size l < d .2) Reducing communication with double sketch: 
+
+• For the upload communication cost, local agents and the server exchange only the compact sketch matrix and the accumulated singular values instead of the full covariance matrix, cutting the per-round payload from 
+
+O(d2) to O(ld ) (l < d is the sketch size). • For the download communication cost, we propose a double-sketch strategy to limit the communication cost during the download. If the server simply merges all the information, it still has to transmit a d × d matrix during the download phase. Therefore, after the local side has already sketched the covariance matrix, we perform an additional sketching step on the server once the individual sketch matrices are merged, and the server then carries out all computations using this double-sketched matrix. This keeps the download message aligned with the upload sketch matrix while guaranteeing that the server’s returned sketch matrix and the local sketch matrix share the same lower dimension, ensuring low communication overhead in both the upload and download. 3) Regret guarantee with SCFD. In our algorithm, we adopt Spectral Compensation Frequent Directions (SCFD)[ 21 ] as the sketch-update strategy. SCFD not only accommodates our proposed dual-sketch strategy but also yields a tighter regret bound than the classical FD approach. On the other hand, SCFD is monotonically non-decreasing, which matches the asynchronous-communication rule that uploads occur only after sufficient local growth, ensuring asynchronous communication remains valid. 
+
+Theoretical analysis. We show that FSCLB incurs O(l2d) per-round computation and transmits only O(ld ) scalars whenever communication occurs. We prove its regret is bounded by eO(( √d + √M ε l)√lT ), where εl is upper bounded by the spectral tail of the covariance matrix. When the sketch size exceeds the rank of the original covariance matrix, 
+
+εl = 0 and the bound collapses to O(√ldT ), matching the guarantee of FedLinUCB. 
+
+Empirical evaluation. We conduct experiments on both synthetic and real-world datasets, and the results show that, compared with the no-sketch baseline, the FSCLB algorithm sacrifices only a marginal amount of reward while significantly reducing both computational and communication costs. 2A PREPRINT - M AY 4, 2026                                                 
+
+> Table 1: Summary of the main results
+> Previously work Asynchronism Regret Per-round computation cost Total communication cost Async-LinUCB [22] Partially eO(d√T)O(d3)O(d3M2log T)
+> FedLinUCB [11] Fully eO(d√T)O(d3)O(d3M2log T)
+> FSCLB (Ours) Fully eO(( √d+√M ε l)√lT )O(l2d)O ld 2M2log ((1 + εl)T)
+> Regarding the comparison of asynchronism, “Partially” denotes partial asynchrony that still relies on certain synchronization strategies to complete updates, whereas “Fully” indicates complete asynchrony whose update and communication procedures require no synchro-nization whatsoever. lis the sketch size with l < d .εlis upper bounded by the spectral tail of the covariance matrix. According to [ 19 ], if the rank of the selected-arm sequence smaller than the sketch size, then εl= 0 and our algorithm achieves a regret of order eO(√ldT ).
+
+## 2 Related Work 
+
+Federated bandits. In large-scale bandit tasks, a larger number of agents must collaborate to achieve more accurate and faster learning. To mitigate potential privacy leakage in multi-agent collaborative learning, federated bandits have attracted growing attention [ 9 , 10 ]. FL enables multiple agents to perform asynchronous collaborative learning: a central server aggregates the data from all agents, performs the necessary computations, and returns the updated results to every agents [ 23 , 24 , 25 , 26 ]. The optimization goal of FMAB is to minimize the sum of regrets across all agents [ 27 , 28 ]. Fed2-UCB [ 29 ] and UCB-TCOM [ 30 ] are two representative homogeneous FMAB algorithms; their work establishes the classic bandit framework under federated learning. As a further extension, [ 31 ] combines combinatorial multi-armed bandits with federated learning and provides a general multi-agent framework. [ 32 ] proposes a novel federated multi-armed bandit algorithm tailored to fully distributed networks; thid method simultaneously minimizes both individual and group regret by communicating with immediate neighbors. Our algorithm also operates under communication constraints, but in contrast to [ 32 ], we enforce the stricter regime where no pair of agents may exchange messages at all. 
+
+Federated contextual linear bandits. In FMAB, the contextual linear bandit [ 3] is a more general and challenging direction. Here, multiple agents jointly solve the linear contextual bandit problem. [ 33 ] proposed the DCB algorithm for P2P networks. [ 34 ] considered both P2P and star communication patterns and achieved an eO(d√T ) regret under synchronous communication. In the asynchronous setting, [ 22 ] gave the first asynchronous algorithm for star-shaped federated contextual linear bandits, attaining the same regret order. [ 11 ] further generalizes asynchronous communication, enabling truly asynchronous federated contextual linear bandits and establishing an equally tight regret bound under standard assumptions. Extensions to cluster bandits [35, 36] broaden their practical scope. 
+
+Sketch bandits. Sketching is a classic dimension-reduction technique [ 37 , 38 , 39 ]. Introducing sketching techniques into linear bandits can effectively reduce the computational cost of matrix inversion [ 40 , 19 , 41 ]. [ 20 ] proposed the Frequent Directions sketch (FD), which enjoys strong theoretical guarantees in streaming settings and is well-suited for online scenarios. [ 19 ] integrates FD with the classical OFUL algorithm in linear contextual bandits, yielding the SOFUL algorithm that reduces the per-round update cost. [ 21 ] proposes a variant of the FD method and applies it to linear bandits, achieving a lower regret bound compared to SOFUL. In distributed or federated learning, sketching is used to reduce the dimensional of matrix multiplications and aggregation operations, thereby enabling more communication-efficient transmission protocols [42, 17]. In this paper, we incorporate sketching techniques into fully asynchronous federated contextual linear bandits to reduce both computational and communication costs; a comparison with prior works is provided in Table 1. 
+
+## 3 Preliminaries 
+
+3.1 Notation and Definition 
+
+In our paper, every d-dimensional vector is represented as a column vector. For matrix A and B, [A; B] denotes their column-wise concatenation. [A]k denotes the matrix formed by taking the first k rows of matrix A. For matrix 
+
+A ∈ Rd1×d2 , the computed SVD of A is defined as A = U ΣV ⊤, where U is d1 × d2 matrix, Σ is d2 × d2 diagonal matrix, V is d2 × d2 matrix. We use SV D (A) to denote the singular value decomposition of matrix A and obtain the corresponding U , V ⊤ and Σ. Let σi(A) be the i-th largest singular value of A. For theoretical bounds, the notation 
+
+eO(·) omits logarithmic factors. 3A PREPRINT - M AY 4, 2026 
+
+3.2 Problem Setting Federated contextual bandits. At each round t ∈ [T ], an arbitrary agent mt ∈ [M ] is active for participation. Then, this agent receives a decision set Dt ⊂ Rd. The agent selects an appropriate action xt ∈ Dt based on historical information and receives the corresponding reward rt. We assume that the reward rt satisfies rt = ⟨xt, θ∗⟩ + ηt for all t ∈ [T ], where ηt is conditionally independent of xt given x1: t−1, m 1: t−1, r 1: t−1. According to [ 11 ], we make the following assumption: 
+
+Assumption 3.1. The noise ηt is R-sub-Gaussian conditioning on x1: t−1, m 1: t−1, r 1: t−1.
+
+E[eλη t |x1: t−1, m 1: t−1, r 1: t−1] ≤ exp (R2λ2/2) .
+
+Assumption 3.2. ∥θ∗∥2 ≤ S, ∥x∥2 ≤ L for all action xt ∈ Dt, for all t ∈ [T ].
+
+The goal of the agents is to collaboratively minimize the cumulative regret defined as 
+
+Regret (T ) := 
+
+> T
+
+X
+
+> t=1
+
+
+
+max 
+
+> x∈Dt
+
+⟨x, θ∗⟩ − ⟨ xt, θ∗⟩
+
+
+
+.
+
+where x∗ 
+
+> t
+
+= argmax x∈Dt ⟨x, θ∗⟩ is the optimal arm. We use Xt = [ x1, ..., xt]⊤ to define the matrix of all actions selected up to round t by an arbitrary algorithm. 
+
+Communication model. We adopt the communication protocol with M local user agents and one central server, where each user can communicate with the server by uploading and downloading data. Local users do not communicate with each other directly. Moreover, we adopt the asynchronous communication paradigm: (1) there is no mandatory synchronization, (2) the communication between an agent and the server operates independently of other agents, without triggering additional communication. The switching cost in online learning and bandits is defined as the number of times the user updates its policy of selecting an action from the decision set, which equals to the number of communications in our model [ 11 ]. In addition to the number of communication rounds, the amount of data transferred between user and server in each round also contributes to communication overhead. Here we define the communication volume as how much data is exchanged between user and server during one communication round. For example, in FedLinUCB, when a communication round occurs the agent must upload a d × d local correlation matrix to the server and download a d × d matrix (the inverse of the regularized correlation matrix) plus a 1 × d vector of estimated values; thus, the per-round communication volume of FedLinUCB is d2 + d = O(d2). We define our communication cost Com (T ) as the combination of communication volume and switching cost. Com (T ) = switching cost × communication volume .
+
+Sketch. Maintaining the full matrix XT incurs substantial computational and communication overhead. Let l < d is the sketch size. The goal of sketching is to keep an approximate matrix ST ∈ Rl×d in place of XT for policy updates, where ST satisfies 
+
+S⊤ 
+
+> T
+
+ST ≈ X⊤ 
+
+> T
+
+XT .
+
+Frequent Directions (FD) [ 20 ] is a classical sketch algorithm that truncates the smallest singular value after performing an SVD of the covariance matrix at every update. In each round t, FD updates as follows: 
+
+[U , Σ, V ⊤]= SV D  [S⊤
+
+> t−1
+
+; xt]⊤ ,δt=σ2 
+
+> l
+
+(Σ), St=pΣ2 − δtIV ⊤.
+
+The sketch matrix serves as an approximate representation of the original covariance matrix, some information is lost during the sketching process (e.g., the truncation of singular values), resulting in a discrepancy between the sketch and the original covariance matrix. We quantify this discrepancy using the spectral error defined in [19]: 
+
+εl = min 
+
+> k=0 ,...,l −1
+
+λd−k + λd−k+1 + ... + λd
+
+λ(l − k) .
+
+With this definition, εl is upper bounded by the spectral tail of the covariance matrix under l sketch size. According to the Proposition 1 in [19] and Theorem 3.1 in [20], we known that the approximation matrix is bounded by: 
+
+S⊤ 
+
+> T
+
+ST − X⊤ 
+
+> T
+
+XT 2 ≤ λε l.
+
+4A PREPRINT - M AY 4, 2026 Notation Definition 
+
+eVm,t the matrix that user m downloads from the server at round t to update its policy 
+
+Sloc m,t , eSser t sketch matrix in user m, server at time t
+
+Sm,t sketch matrix correspond to eVm,t 
+
+ρloc m,t the sum of all singular values truncated during sketch updates at user m up to round tρser t the sum of all ρloc m,t uploaded by every user to the server up to round t
+
+> Table 2: Notations
+
+## 4 Algorithm 
+
+In this section, we present the Federated Sketch Contextual Linear Bandits (FSCLB) algorithm and detail the key implementation techniques. For clarity, the fundamental notation used in the algorithms is summarized in Table 2. 
+
+4.1 Determinant Calculation and Data Upload 
+
+In FedLinUCB [ 11 ], the local user need to compute the determinant in each round to decide whether communication is required; traditional determinant computation incurs O(d3) complexity. In FSCLB, we compute the determinant of the corresponding matrix via its singular values. Note that the singular values of this covariance matrix are exactly the squares of the singular values of the matrix Xt formed by the sequence of arms selected by the algorithm. Since the determinant of a matrix equals the product of all its singular values, we can therefore compute the required determinant from the singular values of Xt. However, directly computing these singular values is prohibitively expensive, so we employ a sketching method to obtain a matrix St whose singular values are easy to compute and which approximates 
+
+Xt; the determinant is then obtained by squaring these singular values, adding λ, and taking the product. In FSCLB, each user needs two determinants: 1) the determinant of the matrix formed by summing the eVm,t downloaded from the server and the user’s locally accumulated covariance matrix, and 2) the determinant of eVm,t . Since eVm,t 
+
+remains unchanged when no communication occurs, its determinant can be obtained from the server during the last communication round and then stored locally; hence no need to compute it. For the determinant in item 1), each user keeps a sketch matrix (Sloc m,t )⊤Sloc m,t that approximates the local covariance matrix; so the user only needs to maintain the Sm,t downloaded from the server. Moreover, the singular values of S⊤
+
+> m,t
+
+Sm,t + ( Sloc m,t )⊤Sloc m,t are the squares of the singular values of the concatenated matrix S⊤
+
+> m,t
+
+; ( Sloc m,t )⊤⊤, which has size at most 2l × d. The SVD of 
+
+S⊤
+
+> m,t
+
+; ( Sloc m,t )⊤⊤ costs O(l2d); squaring the resulting singular values and adding the regularization terms yields the determinant by a sequential product. When l ≪ d this is cheaper than the O(d3) cost of computing the determinant directly. We implement this procedure in Lines 12–15 of Alg 1. We use det (A) to denote the determinant of matrix A,and we use det (1)  
+
+> mt,t
+
+as a shorthand for the determinant det 
+
+ eVmt,t +( Sloc mt,t )⊤Sloc mt,t +ρloc mt,t I
+
+
+
+.
+
+Remark 4.1. Although computing the determinant via singular values is asymptotically cheaper than the traditional determinant algorithm, the required sketch updates introduce extra cost. Our algorithm delivers clear gains when 
+
+l ≪ d; if the sketch size is close to the original dimension, the computational savings become marginal. We therefore insert conditional checks in the algorithm (line 11 in Algorithm 1) to ensure that the cumulative cost of the extra SVD computations never exceeds the cost of the direct determinant calculation. Analysis shows that, when l < 0.4d, the combined time complexity of all these additional steps is provably lower than that of computing the determinant directly. 
+
+4.2 SCFD 
+
+We define the local covariance matrix (Xloc m,t )⊤Xloc m,t = Pti=1 ,m i=m xix⊤ 
+
+> i
+
+and maintain its sketch via SCFD [ 21 ]. Unlike conventional FD, SCFD returns the truncated singular values to the sketch, yielding a more accurate estimate. In FSCLB, we maintain ρloc m,t to record the sum of singular values truncated in local; after each sketch update, we add 
+
+ρloc m,t I back into the sketch matrix (Sloc m,t )⊤Sloc m,t to approximate the local covariance matrix, and we use this sketch matrix to evaluate the determinant criterion. Specifically, SCFD updates produce the approximation: 
+
+(Sloc m,t )⊤Sloc m,t + ρloc m,t I ≈ (Xloc m,t )⊤Xloc m,t .
+
+5A PREPRINT - M AY 4, 2026 
+
+Algorithm 1 Federated Sketch Contextual Linear Bandits 
+
+Input: δ, α> 0, sketch size l < d .
+
+Parameter: For all m∈[M ]: eVm, 1= eV ser  
+
+> 0
+
+←λId×d, Sm, 1=Sloc m, 0= eSser  
+
+> 0
+
+←0l×d, ρloc m, 0=eρser  
+
+> 0
+
+=ρser  
+
+> 0
+
+←0, ˆθm, 1←0,
+
+∆m, 1=∆ ser  
+
+> 0
+
+←0, bser  
+
+> 0
+
+=bloc m, 0←0, eΣser  
+
+> 0
+
+←0.
+
+Output: 
+
+1: for round t = 1 , ..., T do 
+
+2: Activate mt and receive Dt
+
+3: xt←argmax x∈Dt
+
+nD ˆθmt,t , x
+
+E
+
++βmt,t (δ)|| x|| eV −1
+
+> mt,t
+
+o
+
+4: mt play xt and receive rt
+
+5: (Xloc mt,t )⊤Xloc mt,t ←(Xloc mt,t −1)⊤Xloc mt,t −1+xtx⊤
+
+> t
+
+6: Sloc mt,t ← (Sloc mt,t −1)⊤; xt
+
+⊤, bloc mt,t ←bloc mt,t −1+rtxt
+
+7: [U1, Σ1, V ⊤ 
+
+> 1
+
+]←SV D (Sloc mt,t )
+
+8: δF L mt,t ←σ2 
+
+> l
+
+(Σ1), ρloc mt,t ←ρloc mt,t −1+δF L mt,t 
+
+9: ˆΣ1←
+
+q
+
+max {Σ21−δF L mt,t I, 0}
+
+10: Sloc mt,t ←[ ˆΣ1]l×dV ⊤ 
+
+> 1
+
+∈ Rl×d
+
+11: if l < 0.4d then 
+
+12: [U2, Σ2, V ⊤ 
+
+> 2
+
+]←SV D 
+
+(Smt,t )⊤; ( Sloc mt,t )⊤⊤
+
+13: e(1)  
+
+> t
+
+←(λ+ρloc mt,t +∆ mt,t )d−2l
+
+14: e(2)  
+
+> t
+
+← Q2li=1 
+
+ σ2 
+
+> i
+
+(Σ2)+ λ+ρloc mt,t +∆ mt,t 
+
+
+
+15: det (1) 
+
+> mt,t
+
+←e(1)  
+
+> t
+
+· e(2) 
+
+> t
+
+16: else 
+
+17: det (1) 
+
+> mt,t
+
+←det 
+
+ eVmt,t +( Sloc mt,t )⊤Sloc mt,t +ρloc mt,t I
+
+
+
+18: end if 
+
+19: if det (1) 
+
+> mt,t
+
+>(1+ α)det ( eVmt,t ) then 
+
+20: mt upload Sloc mt,t , ρ loc mt,t to server // upload phase 
+
+21: Run Algorithm 2, and mt download the output 
+
+22: mt compute 
+
+eV −1
+
+> mt,t +1
+
+← 1
+
+> λ+∆ mt,t +1
+
+ I−S⊤
+
+> mt,t +1
+
+Hmt,t +1 Smt,t +1 
+
+
+
+23: mt compute βmt,t +1 (δ) as equation 1 
+
+24: else 
+
+25: eVmt,t +1 ← eVmt,t , eV ser t ← eV ser t−1 , ˆθmt,t +1 ← ˆθmt,t ,
+
+Smt,t +1 ←Smt,t , eSser t ← eSser t−1, bser t ←bser t−1,
+
+∆mt,t +1 ←∆mt,t , ∆ser t ←∆ser t−1, βmt,t +1 ←βmt,t ,
+
+ρser t ←ρser t−1, eρser t ←eρser t−1,
+
+26: end if 
+
+27: for all user m̸ = mt do 
+
+28: Sloc m,t ←Sloc m,t −1, bloc m,t ←bloc m,t −1, ρloc m,t ←ρloc m,t −1,
+
+eV −1
+
+> m,t +1
+
+← eV −1 
+
+> m,t
+
+, Sm,t +1 ←Sm,t , ˆθm,t +1 ← ˆθm,t ,
+
+βm,t +1 ←βm,t , ∆m,t +1 ←∆m,t , Hm,t +1 ←Hm,t 
+
+29: end for 
+
+30: end for 
+
+We adopt SCFD instead of classical FD not only to tighten regret but also to keep the communication trigger valid. In FedLinUCB [ 11 ], an upload is triggered whenever the determinant of the cumulative covariance matrix has grown sufficiently. This demands a monotonically non-decreasing determinant, whereas the sketch produced by classical FD updates not only fails to guarantee monotonicity but may also truncate the local growth. Property 1 in [ 21 ] shows that SCFD updates not only satisfies the monotonicity requirement but also preserves the local growth information, satisfying the asynchronous communication rule and yielding the theoretical guarantee we need. 6A PREPRINT - M AY 4, 2026 
+
+Algorithm 2 Operations Performed on Server 
+
+Input : mt upload Sloc mt,t , ρ loc mt,t // upload phase 
+
+Output :
+
+1: ρser t ← ρser t−1 + ρloc mt,t 
+
+2: (Xser t )⊤Xser t ← (Xser t−1)⊤Xser t−1 + ( Xloc mt,t )⊤Xloc mt,t // This line is only for proof 
+
+3: compute SVD: 
+
+[U , Σ, V ⊤] ← SV D 
+
+h
+
+( eSser t−1)⊤; ( Sloc mt,t )⊤
+
+i⊤
+
+4: δser t ← σ2 
+
+> l
+
+(Σ), eρser t ← eρser t−1 + δser t
+
+5: ˆΣ ← pmax {Σ2 − δser t I, 0}
+
+6: eSser t ← [ ˆΣ]l×dV ⊤ ∈ Rl×d
+
+7: ∆ser t ← eρser t + ρser t , bser t ← bser t−1 + bloc mt,t 
+
+8: Hser t ← ( ˆΣ2 + (∆ ser t + λ)I)−1, Hmt,t +1 ← Hser t
+
+9: eV ser t ← (λ + ∆ ser t )I + ( eSser t )⊤ eSser t , eVmt,t +1 ← eV ser t
+
+10: Smt,t +1 ← eSser t , ˆθmt,t +1 ← ( eV ser t )−1bser t
+
+11: ∆mt,t +1 ← ∆ser t
+
+12: Sloc mt,t ← 0, bloc mt,t ← 0, ρloc mt,t ← 0
+
+13: Compute and return Smt,t +1 , ˆθmt,t +1 , det ( eVmt,t +1 ), Hmt,t +1 , ∆mt,t +1 to mt // download phase 
+
+4.3 Double Sketch on Server 
+
+Standard SCFD updates the sketch matrix by concatenating a single vector; in contrast, on the server side of our model the sketches from different users are merged, so the server performs the sketch update via matrix concatenation—an operation that differs from the single-agent case. We extend the SCFD to a multi-sketch merging update: on the server, after concatenating the incoming sketch matrices we apply a second sketching step, effectively performing a double-sketch (line 3-6 in Algorithm 2). This guarantees that the matrix returned to the users remains l × d. A plain concatenation could increase the rank and destroy the desired computational and communication savings; the second sketch keeps the merged matrix within the required sketch size. After the double-sketch merge on the server, additional singular values are truncated. Following SCFD, we accumulate these extra truncated values into a scalar eρser t and add eρser t I back to the merged sketch matrix in the same way. The singular values that must be restored to the sketch matrix on the server consist of two parts: 1) ρser t , the sum of all local truncation values uploaded by the users, and 2) eρser t , the truncation values accumulated during the second sketch applied to the merged matrix. The server forms ∆ser t = ρser t + eρser t and use ∆ser t to approximates the original covariance matrix: 
+
+( eSser t )⊤ eSser t + ∆ ser t I ≈ (Xser t )⊤Xser t .
+
+where (Xser t )⊤Xser t denotes the aggregate of all users’ covariance matrices without sketching. By performing sketch updates via SCFD and combining them with the sketch-merging procedure proposed above, we can construct the confidence interval for each user as: 
+
+βm,t (δ)= fM R
+
+s
+
+d log 
+
+ 1 + T L 2/(eαλ )
+
+δ
+
+
+
++ √λS 
+
+!
+
++ √λ +
+
+r ∆m,t 
+
+λ
+
+!
+
+S. (1) where fM = √1 + M α + M √2α.
+
+Lemma 4.1. With probability at least 1 − δ, for any 0 < t ≤ T and m ∈ [M ], we have 
+
+ˆθm,t − θ∗
+
+> eVm,t
+
+≤ βm,t (δ).
+
+7A PREPRINT - M AY 4, 2026 
+
+4.4 Computation and Communication 
+
+The computational cost of FSCLB splits into local and server parts. As Section 5 shows, the total number of communication rounds is logarithmic, and the server only computes when communication occurs. Therefore, the per-round cost is dominated by local computation. In local user, the dominant computational cost comes from the SVD. As shown in [20], SVD costs O(l2d) in each round. Regarding communication cost, both the determinant and the matrix used to compute the estimate can be reconstructed from their corresponding l × d sketch matrices. Moreover, following [ 21 ], eV −1 
+
+> m,t
+
+can be obtained from the diagonal matrix Hm,t generated during the server-side sketch update together with the sketch Sm,t (line 22 in Alg 1). To compute βm,t (δ), the local user only needs to know the value of ∆mt,t . Because the matrix H obtained on the server is diagonal, only its l entries are sent; sending the sketch itself requires l × d elements. Hence, local user uploads and downloads O(ld ) communication volume, which is smaller than the previous O(d2) communication volume. 
+
+Remark 4.2. Note that in the communication-check step of FSCLB (line 19 in Algorithm 1), det (1)  
+
+> mt,t
+
+must be compared with det ( eVmt,t ); in fact, det ( eVmt,t ) does not need to be computed locally. During the download phase (line 13 in Algorithm 2), the server can send the pre-computed det ( eVmt,t ) to the local agent, and since the matrix eVmt,t remains unchanged until the next communication round, det ( eVmt,t ) stays constant and do not need to be re-calculated. 
+
+## 5 Regret Analysis 
+
+Theorem 5.1. With probability at least 1 − δ, the expected cumulative regret of Algoritm 1 is upper bounded by 
+
+Regret (T ) ≤ 2dSLM ln(1 + T L 2/λ )+ 2 βp2(1 + M α ) · ef (l, T ). (2) 
+
+where 
+
+ef (l, T ) = 
+
+s
+
+2lT ln 
+
+
+
+1 + T L 2
+
+lλ 
+
+
+
++ 2 dT ln (1 + εl),β = eO
+
+
+
+(1 + M √α + p(1 /α + M )εl)√d
+
+
+
+.
+
+Additionally, the total communication times is bounded by 
+
+2d(M + 1 /α ) log 
+
+
+
+(1 + εl)
+
+
+
+1 + T L 2
+
+λd 
+
+ 
+
+.
+
+The total computation cost is bounded by 
+
+O  min {2l, d }2  dT + ( M + 1 /α )d2 log ((1 + εl)T ) .
+
+The total communication cost is bounded by 
+
+O  ld 2(M + 1 /α ) log ((1 + εl)T ) .
+
+For the upper bound of βm,t , we can show that 
+
+Lemma 5.1. For all m ∈ [M ] and all t ∈ [T ], it holds that 
+
+βm,t (δ) ≤ β. 
+
+According to [ 19 ], if we set l ≥ rank (X⊤ 
+
+> T
+
+XT ), then εl = 0 . Furthermore, if we set α = 1 /M 2 additionally, we can get Regret (T ) = eO(√ldT ). The detailed proof is provided in the Appendix. 
+
+## 6 Experiment 
+
+We compare our algorithm against two baseline: 1) FedLinUCB [ 11 ], 2) Random, in each round, every active user selects arm randomly. We ran 20 independent trials of 20 000 rounds. 8A PREPRINT - M AY 4, 2026 
+
+6.1 Simulation Dataset 
+
+We first validate our conclusions on simulated data. In simulation datasets, we set the dimension to d = 50 and 100 ,and the corresponding sketch size l to 20 and 40. Each round contains 10 arms, M = 10 users, and we set α = 1 . We compare the algorithms in terms of total reward, total computation cost, and overall communication cost Com (T ). 1) Reward: the cumulative difference between the reward of the arm selected in each round and the reward that would have been obtained by the optimal arm. 2) Computation: the running time (in seconds) required to run the algorithm. 3) Communication cost Com (T ) (as defined in Section 3.2): the cumulative number of scalar elements uploaded and downloaded across all communication rounds (e.g., entries of matrices and vectors). The results are reported in Figures 1,2 and 3. Experiments confirm the effectiveness of FSCLB. Compared with FedLinUCB, the total reward of FSCLB is slightly lower; this is because the SCFD module approximates the original covariance matrix with a sketched one, inevitably incurring some information loss. The benefit is a marked reduction in computation and communication costs. As can be seen, both running time and communication complexity are clearly reduced relative to the conventional approach, while the accompanying drop in reward is negligible. 0K 10K 20K 
+
+> timestep
+> 0K
+> 4K
+> 8K
+> 12K
+> 16K
+> reward
+> FSCLB(Ours)
+> Random
+> FedlinUCB
+
+(a) 50 dimension 0K 10K 20K  
+
+> timestep
+> 0K
+> 4K
+> 8K
+> 12K
+> 16K
+> reward
+> FSCLB(Ours)
+> Random
+> FedlinUCB
+
+(b) 100 dimension Figure 1: Reward in simulation dataset 0K 10K 20K 
+
+> timestep
+> 0
+> 200
+> 400
+> 600
+> runnung time (s)  FSCLB(Ours)
+> FedlinUCB
+
+(a) 50 dimension 0K 10K 20K  
+
+> timestep
+> 0K
+> 2K
+> 4K
+> runnung time (s)  FSCLB(Ours)
+> FedlinUCB
+
+(b) 100 dimension Figure 2: Computation cost in simulation dataset 0K 10K 20K 
+
+> timestep
+> 0
+> 40
+> 80
+> 120
+> 160
+> communication (× 10 4) FSCLB(Ours)
+> FedlinUCB
+
+(a) 50 dimension 0K 10K 20K  
+
+> timestep
+> 0
+> 40
+> 80
+> communication (× 10 5) FSCLB(Ours)
+> FedlinUCB
+
+(b) 100 dimension Figure 3: Communication in simulation dataset 
+
+9A PREPRINT - M AY 4, 2026 
+
+6.2 Real Dataset 
+
+We selected two high-dimensional public datasets from the OpenML repository: SatImage with d = 37 (ID 23) and MFeat with d = 48 (ID 182). Our feedback setting follows [ 19 ], and set l = 12 , 20 respectively; the experimental results are shown in Fig 4,5 and 6. On real-world setting, rewards are binary: 1 if the optimal arm is pulled and 0 otherwise. Under this feedback, the Random strategy deteriorates sharply, whereas FSCLB still matches the performance of FedLinUCB. These results show that, even in the setting where arm-selection is highly sensitive, FSCLB can maintain strong reward performance with lower computation and communication costs. 0K 10K 20K 
+
+> timestep
+> 0K
+> 4K
+> 8K
+> 12K
+> 16K
+> reward
+> FSCLB(Ours)
+> Random
+> FedlinUCB
+
+(a) satimage 0K 10K 20K  
+
+> timestep
+> 0K
+> 4K
+> 8K
+> 12K
+> 16K
+> reward
+> FSCLB(Ours)
+> Random
+> FedlinUCB
+
+(b) mfeat Figure 4: Reward in real dataset 0K 10K 20K 
+
+> timestep
+> 0
+> 100
+> 200
+> 300
+> runnung time (s)  FSCLB(Ours)
+> FedlinUCB
+
+(a) satimage 0K 10K 20K  
+
+> timestep
+> 0
+> 200
+> 400
+> 600
+> runnung time (s)  FSCLB(Ours)
+> FedlinUCB
+
+(b) mfeat Figure 5: Computation cost in real dataset 0K 10K 20K 
+
+> timestep
+> 0
+> 20
+> 40
+> 60
+> 80
+> communication (× 10 4) FSCLB(Ours)
+> FedlinUCB
+
+(a) satimage 0K 10K 20K  
+
+> timestep
+> 0
+> 40
+> 80
+> 120
+> 160
+> communication (× 10 4) FSCLB(Ours)
+> FedlinUCB
+
+(b) mfeat Figure 6: Communication in real dataset 
+
+## 7 Conclusion 
+
+In this work we consider the computational and communication cost in federated contextual linear bandits. We involve sketching into this setting and propose the FSCLB algorithm, which cuts local computation and communication. FSCLB employs a double-sketch strategy to guarantee low cost in both upload and download. By adopting SCFD [ 21 ] and 10 A PREPRINT - M AY 4, 2026 building the communication trigger rule on the sketched matrix, we avoid the loss of asynchrony that classical FD can cause. We prove that FSCLB achieves a regret bound of eO(( √d + √M ε l)√lT ); once the sketch size l exceeds the rank of the arm-selection sequence, the bound improves to eO(√ldT )—matching the best known rate of non-sketched federated contextual linear bandits. Moreover, FSCLB needs O(l2d) per-round computation and O(ld ) per-round communication ((when it occurs), improving on the O(d3) computation and O(d2) communication of prior work. 11 A PREPRINT - M AY 4, 2026 
+
+## References 
+
+[1] Peter Auer. Using confidence bounds for exploitation-exploration trade-offs. J. Mach. Learn. Res. , 3(null):397–422, March 2003. [2] Tor Lattimore and Csaba Szepesvári. Bandit algorithms . Cambridge University Press, 2020. [3] Yasin Abbasi-Yadkori, Dávid Pál, and Csaba Szepesvári. Improved algorithms for linear stochastic bandits. In 
+
+Proceedings of the 25th International Conference on Neural Information Processing Systems , NIPS’11, page 2312–2320, Red Hook, NY, USA, 2011. Curran Associates Inc. [4] Lihong Li, Wei Chu, John Langford, and Robert E. Schapire. A contextual-bandit approach to personalized news article recommendation. In Proceedings of the 19th International Conference on World Wide Web , WWW ’10, page 661–670, New York, NY, USA, 2010. Association for Computing Machinery. [5] Liang Tang, Rómer Rosales, Ajit Singh, and Deepak K. Agarwal. Automatic ad format selection via contextual bandits. Proceedings of the 22nd ACM international conference on Information & Knowledge Management , 2013. [6] Meena Jagadeesan, Alexander Wei, Yixin Wang, Michael I. Jordan, and Jacob Steinhardt. Learning equilibria in matching markets with bandit feedback. J. ACM , 70(3), May 2023. [7] Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-Efficient Learning of Deep Networks from Decentralized Data. In Aarti Singh and Jerry Zhu, editors, Proceedings of the 20th International Conference on Artificial Intelligence and Statistics , volume 54 of Proceedings of Machine Learning Research , pages 1273–1282. PMLR, 20–22 Apr 2017. [8] Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith. Federated optimization in heterogeneous networks. In I. Dhillon, D. Papailiopoulos, and V. Sze, editors, Proceedings of Machine Learning and Systems , volume 2, pages 429–450, 2020. [9] Jian Li, Tongbao Chen, and Shaohua Teng. A comprehensive survey on client selection strategies in federated learning. Computer Networks , 251:110663, 2024. [10] Boursier Etienne and Perchet Vianney. A survey on multi-player bandits. J. Mach. Learn. Res. , 25(1), January 2024. [11] Jiafan He, Tianhao Wang, Yifei Min, and Quanquan Gu. A simple and provably efficient algorithm for asyn-chronous federated contextual linear bandits. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh, editors, Advances in Neural Information Processing Systems , volume 35, pages 4762–4775. Curran Associates, Inc., 2022. [12] Chen Zhang. Mathematical computation on high-dimensional data via array programming and parallel acceleration, 2025. [13] Chao Zhang, Yechen Li, Neha Arora, Damien Pierce, and Carolina Osorio. Traffic simulations: Multi-city calibration of metropolitan highway networks, 2025. [14] Sakitha Kumarage, Mehmet Yildirimoglu, and Zuduo Zheng. A hybrid modelling framework for the estimation of dynamic origin–destination flows. Transportation Research Part B: Methodological , 176:102804, 2023. [15] Carolina Osorio. High-dimensional offline origin-destination (od) demand calibration for stochastic traffic simulators of large-scale road networks. Transportation Research Part B: Methodological , 124:18–43, 2019. [16] Daniel Rothchild, Ashwinee Panda, Enayat Ullah, Nikita Ivkin, Ion Stoica, Vladimir Braverman, Joseph Gonzalez, and Raman Arora. FetchSGD: Communication-efficient federated learning with sketching. In Hal Daumé III and Aarti Singh, editors, Proceedings of the 37th International Conference on Machine Learning , volume 119 of 
+
+Proceedings of Machine Learning Research , pages 8253–8265. PMLR, 13–18 Jul 2020. [17] Mayank Shrivastava, Berivan Isik, Qiaobo Li, Sanmi Koyejo, and Arindam Banerjee. Sketching for distributed deep learning: A sharper analysis. In A. Globerson, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Information Processing Systems , volume 37, pages 6417–6447. Curran Associates, Inc., 2024. [18] Joel A. Tropp, Alp Yurtsever, Madeleine Udell, and Volkan Cevher. Randomized single-view algorithms for low-rank matrix approximation. CoRR , abs/1609.00048, 2016. [19] Ilja Kuzborskij, Leonardo Cella, and Nicolò Cesa-Bianchi. Efficient linear bandits through matrix sketching. In Kamalika Chaudhuri and Masashi Sugiyama, editors, Proceedings of the Twenty-Second International Conference on Artificial Intelligence and Statistics , volume 89 of Proceedings of Machine Learning Research , pages 177–185. PMLR, 16–18 Apr 2019. 12 A PREPRINT - M AY 4, 2026 [20] Mina Ghashami, Edo Liberty, Jeff M. Phillips, and David P. Woodruff. Frequent directions: Simple and deterministic matrix sketching. SIAM J. Comput. , 45(5):1762–1792, January 2016. [21] Cheng Chen, Luo Luo, Weinan Zhang, Yong Yu, and Yijiang Lian. Efficient and robust high-dimensional linear contextual bandits. In Proceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence ,IJCAI’20, 2021. [22] Chuanhao Li and Hongning Wang. Asynchronous upper confidence bound algorithms for federated linear bandits. In Gustau Camps-Valls, Francisco J. R. Ruiz, and Isabel Valera, editors, Proceedings of The 25th International Conference on Artificial Intelligence and Statistics , volume 151 of Proceedings of Machine Learning Research ,pages 6529–6553. PMLR, 28–30 Mar 2022. [23] Jakub Koneˇ cný, H. Brendan McMahan, Felix X. Yu, Peter Richtárik, Ananda Theertha Suresh, and Dave Bacon. Federated learning: Strategies for improving communication efficiency. CoRR , abs/1610.05492, 2016. [24] Anit Kumar Sahu, Tian Li, Maziar Sanjabi, Manzil Zaheer, Ameet Talwalkar, and Virginia Smith. Federated optimization in heterogeneous networks. arXiv: Learning , 2018. [25] Seyyedali Hosseinalipour, Christopher G. Brinton, Vaneet Aggarwal, Huaiyu Dai, and Mung Chiang. From feder-ated to fog learning: Distributed machine learning over heterogeneous wireless networks. IEEE Communications Magazine , 58(12):41–47, 2020. [26] Fares Fourati, Mohamed-Slim Alouini, and Vaneet Aggarwal. Federated combinatorial multi-agent multi-armed bandits. In Proceedings of the 41st International Conference on Machine Learning , ICML’24. JMLR.org, 2024. [27] Dileep Kalathil, Naumaan Nayyar, and Rahul Jain. Decentralized learning for multiplayer multiarmed bandits. 
+
+IEEE Transactions on Information Theory , 60(4):2331–2345, 2014. [28] Mengfan Xu and Diego Klabjan. Decentralized randomly distributed multi-agent multi-armed bandit with heterogeneous rewards. In Proceedings of the 37th International Conference on Neural Information Processing Systems , NIPS ’23, Red Hook, NY, USA, 2023. Curran Associates Inc. [29] Chengshuai Shi and Cong Shen. Federated multi-armed bandits. Proceedings of the AAAI Conference on Artificial Intelligence , 35(11):9603–9611, May 2021. [30] Xuchuang Wang, Lin Yang, Yu-Zhen Janice Chen, Xutong Liu, Mohammad Hajiesmaili, Don Towsley, and John C. S. Lui. Achieving near-optimal individual regret & low communications in multi-agent bandits. In The Eleventh International Conference on Learning Representations, ICLR 2023, Kigali, Rwanda, May 1-5, 2023 .OpenReview.net, 2023. [31] Fares Fourati, Mohamed-Slim Alouini, and Vaneet Aggarwal. Federated combinatorial multi-agent multi-armed bandits. In Proceedings of the 41st International Conference on Machine Learning , ICML’24. JMLR.org, 2024. [32] Haoran Zhang, Yang Xu, Xuchuang Wang, Hao-Xu Chen, Hao Qiu, Lin Yang, and Yang Gao. Federated multi-armed bandits with efficient bit-level communications. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [33] Nathan Korda, Balazs Szorenyi, and Shuai Li. Distributed clustering of linear bandits in peer to peer networks. In Maria Florina Balcan and Kilian Q. Weinberger, editors, Proceedings of The 33rd International Conference on Machine Learning , volume 48 of Proceedings of Machine Learning Research , pages 1301–1309, New York, New York, USA, 20–22 Jun 2016. PMLR. [34] Yuanhao Wang, Jiachen Hu, Xiaoyu Chen, and Liwei Wang. Distributed bandit learning: Near-optimal regret with efficient communication. In International Conference on Learning Representations , 2020. [35] Xutong Liu, Haoru Zhao, Tong Yu, Shuai Li, and John C.S. Lui. Federated online clustering of bandits. In James Cussens and Kun Zhang, editors, Proceedings of the Thirty-Eighth Conference on Uncertainty in Artificial Intelligence , volume 180 of Proceedings of Machine Learning Research , pages 1221–1231. PMLR, 01–05 Aug 2022. [36] Hantao Yang, Xutong Liu, Zhiyong Wang, Hong Xie, John C. S. Lui, Defu Lian, and Enhong Chen. Federated contextual cascading bandits with asynchronous communication and heterogeneous users. In Proceedings of the Thirty-Eighth AAAI Conference on Artificial Intelligence and Thirty-Sixth Conference on Innovative Applications of Artificial Intelligence and Fourteenth Symposium on Educational Advances in Artificial Intelligence ,AAAI’24/IAAI’24/EAAI’24. AAAI Press, 2024. [37] Zhao Song, David P. Woodruff, and Peilin Zhong. Low rank approximation with entrywise l1-norm error. In 
+
+Proceedings of the 49th Annual ACM SIGACT Symposium on Theory of Computing , STOC 2017, page 688–701, New York, NY, USA, 2017. Association for Computing Machinery. 13 A PREPRINT - M AY 4, 2026 [38] Alexandr Andoni, Chengyu Lin, Ying Sheng, Peilin Zhong, and Ruiqi Zhong. Subspace embedding and linear regression with orlicz norm. In Jennifer Dy and Andreas Krause, editors, Proceedings of the 35th International Conference on Machine Learning , volume 80 of Proceedings of Machine Learning Research , pages 224–233. PMLR, 10–15 Jul 2018. [39] Rohan Deb, Qiaobo Li, Mayank Shrivastava, and Arindam Banerjee. Beyond johnson-lindenstrauss: Uniform bounds for sketched bilinear forms, 2025. [40] Xiaotian Yu, Michael R. Lyu, and Irwin King. Cbrap: Contextual bandits with random projection. Proceedings of the AAAI Conference on Artificial Intelligence , 31(1), Feb. 2017. [41] Dongxie Wen, Hanyan Yin, Xiao Zhang, and Zhewei Wei. Matrix sketching in bandits: Current pitfalls and new framework, 2024. [42] Zhao Song, Yitan Wang, Zheng Yu, and Lichen Zhang. Sketching for first order method: efficient algorithm for low-bandwidth channel and vulnerability. In Proceedings of the 40th International Conference on Machine Learning , ICML’23. JMLR.org, 2023. 14 A PREPRINT - M AY 4, 2026 
+
+## A Appendix 
+
+A.1 Notation in Proof 
+
+According to [11], for a squence Xt = [ x1, ..., xt]⊤ in FSCLB, we define 
+
+Σall t = λI +
+
+> t
+
+X
+
+> i=1
+
+xix⊤ 
+
+> i
+
+= λI + X⊤ 
+
+> T
+
+XT .
+
+eV all t = λI + eΣser t + ρser t I +
+
+> M
+
+X
+
+> m′=1
+
+ (Sloc m′,t )⊤Sloc m′,t + ρloc m′,t I .
+
+ball t =
+
+> t
+
+X
+
+> i=1
+
+rixi, yall t =
+
+> t
+
+X
+
+> i=1
+
+ηixi.
+
+We use Nm(t) to denote the set of moments when user m communicated with the server before time t. And Nm,t =max {Nm(t)}, Nt = max m′∈[M ] Nm′,t 
+
+eV up m,t = X
+
+> i∈Nm(t)
+
+ (Sloc m,i )⊤Sloc m,i + ρloc m,i I .
+
+Σup m,t =
+
+> Nm,t
+
+X 
+
+> j=1 ,m j=m
+
+xj x⊤ 
+
+> j
+
+, bup m,t =
+
+> Nm,t
+
+X 
+
+> j=1 ,m j=m
+
+rj xj , yup m,t =
+
+> Nm,t
+
+X 
+
+> j=1 ,m j=m
+
+ηj xj .
+
+Then we can get 
+
+eΣser t + ρser t I =
+
+> M
+
+X
+
+> m=1
+
+eV up m,t , eΣser t ⪯ X⊤ 
+
+> T
+
+XT .
+
+Correspondingly, the data represented by the sketch on each user’s local device is denoted as 
+
+Σloc m,t =
+
+> t
+
+X 
+
+> j=Nm,t +1 ,m j=m
+
+xj x⊤ 
+
+> j
+
+, bloc m,t =
+
+> t
+
+X 
+
+> j=Nm,t +1 ,m j=m
+
+rj xj , yloc m,t =
+
+> t
+
+X 
+
+> j=Nm,t +1 ,m j=m
+
+ηj xj .
+
+We use ρF D t to denote the minimum singular value of the same sequence at time t when running the sequence Xser T
+
+under classical FD sketch. We define the sketch error ¯ρt = Pti=1 ρF D i under classical FD sketch. 
+
+A.2 Technical Lemmas 
+
+This section collects the key, previously established properties and lemmas that we will use in our proofs. 
+
+Lemma A.1. (Weyl inequality) For any positive semi-definite matrix A, B, if A ⪰ B and rank (A) = rank (B), then 
+
+σmin (A) ≥ σmin (B)
+
+Lemma A.2. For any positive semi-definite matrix A and any vector x, y, we have |x⊤y| ≤ ∥ x∥A ∥y∥A−1 .Proof. 
+
+|x⊤y| = x⊤A 12 A− 12 y (3) 
+
+≤ A 12 x 2
+
+A− 12 y 2
+
+(Cauchy-Schwartz inequality) (4) 
+
+= ∥x∥A ∥y∥A−1 . (5) 
+
+Lemma A.3. By [3] and [19], with sketch size l, we have 
+
+> T
+
+X
+
+> t=1
+
+min {1, ∥xt∥2(Σall t−1)−1 } ≤ 2 ln det (Σall T )
+
+det (λI)
+
+≤ 2d ln (1 + εl) + 2 l ln 
+
+
+
+1 + T L 2
+
+lλ 
+
+
+
+.
+
+15 A PREPRINT - M AY 4, 2026 
+
+A.3 SCFD under Federated Contextual Linear Bandits 
+
+The error term of SCFD is tied to the sequence it generates; this section will link the error produced by SCFD in federated learning to that in the traditional single-agent case. 
+
+Lemma A.4. (Monotonicity in Federated Learning) Assume that the communication happened at t1, ..., t n, then 
+
+eV ser tj ⪰ eV ser ti , ∀j ≥ i. 
+
+Proof. According to [21], at tj , we have 
+
+( eSser t )⊤ eSser t + eσser t I ⪰ ( eSser t−1)⊤ eSser t−1.
+
+Because eρser t = Pti=1 eσser i , we get 
+
+( eSser t )⊤ eSser t + eρser t I ⪰ ( eSser t−1)⊤ eSser t−1 + eρser t−1I.
+
+On the other hand, ρser t ≥ ρser t−1, therefore 
+
+( eSser t )⊤ eSser t + ∆ ser t I ⪰ ( eSser t−1)⊤ eSser t−1 + ∆ ser t−1I,
+
+this implies 
+
+eV ser t ⪰ eV ser t−1 .
+
+Lemma A.5. For any t ∈ [T ], we can get 
+
+(λ + ∆ ser t )I + X⊤ 
+
+> t
+
+Xt ⪰ eV ser t = λI +
+
+> M
+
+X
+
+> m=1
+
+eV up m,t ⪰ λI +
+
+> M
+
+X
+
+> m=1
+
+Σup m,t .
+
+Proof. According to [21], we have 
+
+eV ser t = ( λ + ∆ ser t )I + ( eSser t )⊤ eSser t
+
+= λI + ρser t I + eρser t I + ( eSser t )⊤ eSser t
+
+⪰ λI + ρser t I + eΣser t (6) 
+
+= λI +
+
+> M
+
+X
+
+> m=1
+
+eV up m,t (7) 
+
+⪰ λI +
+
+> M
+
+X
+
+> m=1
+
+Σup m,t , (8) and 
+
+eV ser t = ( λ + ∆ ser t )I + ( eSser t )⊤ eSser t
+
+⪯ (λ + ∆ ser t )I + X⊤ 
+
+> t
+
+Xt. (9) 
+
+Lemma A.6. According to [ 19 ], we define εl = min k≤l−1 λd−k +λd−k+1 +... +λd 
+
+> λ(l−k)
+
+, where λ1 > ... > λ d are the eigenvalues of the correlation matrix X⊤ 
+
+> T
+
+X. Let Bc be the number of communication. Then, 
+
+ρser T
+
+λ < B cεl, eρser T
+
+λ < ε l.
+
+16 A PREPRINT - M AY 4, 2026 
+
+Proof. We define εSl = min k≤l−1  
+
+> λSd−k+λSd−k+1 +... +λSd
+> λ(l−k)
+
+, where λS 
+
+> 1
+
+> ... > λ Sd are the eigenvalues of the sketch matrix 
+
+eΣser T . According to [ 19 ], eρser T 
+
+> λ
+
+≤ εSl . Because eΣser T ⪯ X⊤ 
+
+> T
+
+X, according to Lemma A.1, we known that εSl ≤ εl. Then  
+
+> eρser T
+> λ
+
+≤ εl.
+
+ρser t = ρser Nt = X
+
+> i∈∪ Mm=1 Nm(t)
+
+ρloc mi,i . (10) We partition the sequence Xser T according to the order of timestamps sorted in ascending order within ∪Mm=1 Nm(t).Then, within each epoch, it is equivalent to a single user running the classical FD algorithm, and each epoch starts anew. For any tk ∈ ∪ Mm=1 Nm(t), assume tk < t < t k+1 , and there is only one user activated in this epoch. We denote by ε(k) 
+
+> l
+
+the value of εl that would be obtained by running the FD sketch on the sequence from round tk to tk+1 with single-agent. Because X⊤  
+
+> [tk,...,t k−1]
+
+X[tk ,...,t k −1] ⪯ X⊤ 
+
+> T
+
+XT , Lemma A.1 implies that when the singular values are arranged in descending order, each singular value of the former matrix is at most the corresponding one of the latter; then we get 
+
+ε(k) 
+
+> l
+
+≤ εl.Note that in FSCLB the local sketch matrix is reset to zero whenever a communication round ends, according to [ 19 ], we have ρloc m,t k < λε (k) 
+
+> l
+
+. We known that Bc = | ∪ Mm=1 Nm(t)|, therefore 
+
+ρser t =
+
+> Bc
+
+X
+
+> k=1
+
+ρloc mtk ,t k ≤ Bcλε (k) 
+
+> l
+
+≤ λB cεl.
+
+A.4 Analysis fo Communication and Computation A.4.1 Proof for Communication 
+
+Our proof of the communication bound is a sketch version of Appendix B.1 in [11]. Firstly, we define 
+
+τi = min {t|det ( eV ser t ) ≥ 2iλd}.
+
+For each agent m, let nm be the number of communications triggered by the determinant of agent m during this epoch 
+
+τi ∼ τi+1 − 1, and we denote the communication rounds as t1, ..., t nm for simplicity. We can get 
+
+det ( eVm,t j + ( Sloc m,t j )⊤Sloc m,t j + ρloc m,t j I) − det ( eVm,t j ) > αdet ( eVm,t j ).
+
+Since eVm,t j ⪰ eV ser τi , which implies that 
+
+det ( eV ser τi + ( Sloc m,t j )⊤Sloc m,t j + ρloc m,t j I) − det ( eV ser τi ) > αdet ( eV ser τi ).
+
+According to eVm,t j ⪰ eV ser τi and Lemma D.1 in [11], we have 
+
+det ( eVm,t j + ( Sloc m,t j )⊤Sloc m,t j + ρloc m,t j I) − det ( eVm,t j ) > det ( eV ser τi + ( Sloc m,t j )⊤Sloc m,t j + ρloc m,t j I) − det ( eV ser τi ).
+
+In addition, we define the sequence of all communications from τi to τi+1 − 1 as t′
+
+> 1
+
+, ..., t ′
+
+> L
+
+. We have 
+
+det ( eV ser t′ 
+
+> j
+
+) − det ( eV ser t′ 
+
+> j−1
+
+) = det ( eV ser t′ 
+
+> j−1
+
++ ( Sloc mt′  
+
+> j,t ′
+> j
+
+)⊤Sloc mt′  
+
+> j,t ′
+> j
+
++ ρloc mt′  
+
+> j,t ′
+> j
+
+I) − det ( eV ser t′ 
+
+> j−1
+
+) (11) 
+
+≥ det ( eV ser τi + ( Sloc mt′  
+
+> j,t ′
+> j
+
+)⊤Sloc mt′  
+
+> j,t ′
+> j
+
++ ρloc mt′  
+
+> j,t ′
+> j
+
+I) − det ( eV ser τi ) (12) 
+
+> αdet ( eV ser τi ). (13) Then 
+
+det ( eV ser τi+1 −1) − det ( eV ser τi ) = X
+
+> 1≤j≤L
+
+det ( eV ser t′ 
+
+> j
+
+) − det ( eV ser t′ 
+
+> j−1
+
+) ≥
+
+> M
+
+X
+
+> m=1
+
+(nm − 1) αdet ( eV ser τi ). (14) 17 A PREPRINT - M AY 4, 2026 Since det ( eV ser τi+1 −1) < 2det ( eV ser τi ), we have 
+
+> M
+
+X
+
+> m=1
+
+nm ≤ M + 2 /α. 
+
+Then the number of communications within one epoch is bounded by 2( M + 1 /α ). Since eV ser T is positive definite, and 
+
+eV ser T ⪯ (λ + ∆ ser t )I + X⊤ 
+
+> t
+
+Xt, by the arithmetic-geometric inequality, we have 
+
+det ( eV ser T ) ≤ tr ( eV ser T )
+
+d
+
+!d
+
+(15) 
+
+≤ 1
+
+d tr (( λ + ∆ ser T )I +
+
+> T
+
+X
+
+> t=1
+
+xx ⊤)
+
+!d
+
+(16) 
+
+≤ (λ + ∆ ser T )d
+
+
+
+1 + T L 2
+
+λd 
+
+d
+
+. (17) Then we have 
+
+max {i ≥ 0|τi̸ = ϕ} = log 2
+
+det ( eV ser T )
+
+λd ≤ d log 2(1 + ∆ser T
+
+λ )
+
+
+
+1 + T L 2
+
+λd 
+
+
+
+.
+
+We have ∆ser T < (T + 1) εl, then the number of communications triggered by the determinant is bounded by 
+
+2( M + 2 /α )d log(1 + εl)
+
+
+
+1 + T L 2
+
+λd 
+
+
+
+.
+
+Therefore, the total communication times is bounded by 2d(M + 1 /α ) log(1 + εl)
+
+
+
+1 + T L 2
+
+> λd
+
+
+
+.The total computation cost is bounded by O(min {2l, d }2dT + ( M + 1 /α )d4 log(1 + εl)T ).The total communication cost is bounded by O(ld 2(M + 1 /α ) log(1 + εl)T ).
+
+A.5 Proof for Covariance Comparison Lemma A.7. (sketch covariance comparison) For any time t ∈ [T ] and each m ∈ [M ]
+
+eV ser t ⪰ 1
+
+α
+
+ (Sloc m,t )⊤Sloc m,t + ρloc m,t I .
+
+If user m is the only active agent from round t1 to t2 − 1 and user m only communicated with the server at round t1,then for all t1 + 1 ≤ t ≤ t2, it further holds that 
+
+eVm,t ⪰ 11 + M α Σall t
+
+Proof. According to Section B.2 in [11], it is obciously that 
+
+eVm,t ⪰ 1
+
+α
+
+ (Sloc m,t )⊤Sloc m,t + ρloc m,t I ,
+
+eV ser t ⪰ eVm,t ⪰ 1
+
+α
+
+ (Sloc m,t )⊤Sloc m,t + ρloc m,t I .
+
+For the second inequality in lemma 
+
+eV ser t ⪰ 1
+
+M α 
+
+> M
+
+X
+
+> m′=1
+
+ (Sloc m′,t )⊤Sloc m′,t + ρloc m′,t I ,
+
+18 A PREPRINT - M AY 4, 2026 and 
+
+eVm,t = eV ser t (18) 
+
+⪰ 11 + M α eV ser t +
+
+> M
+
+X
+
+> m′=1
+
+ (Sloc m′,t )⊤Sloc m′,t + ρloc m′,t I!
+
+(19) 
+
+⪰ 11 + M α λI +
+
+> M
+
+X
+
+> m=1
+
+Σup m,t +
+
+> M
+
+X
+
+> m′=1
+
+ (Sloc m′,t )⊤Sloc m′,t + ρloc m′,t I!
+
+(20) 
+
+⪰ 11 + M α λI +
+
+> M
+
+X
+
+> m=1
+
+Σup m,t +
+
+> M
+
+X
+
+> m′=1
+
+Σloc m,t 
+
+!
+
+(21) 
+
+= 11 + M α Σall t . (22) The last inequality is because Proposition 2 in [19]. 
+
+A.6 Proof of Lemma 4.1 Lemma A.8. (Lemma 4.1 and Lemma 5.1 in Section 4,5) With probability at least 1 − δ, for each t, the estimate satisfies that 
+
+ˆθm,t +1 − θ∗
+
+> eVm,t +1
+
+≤ βm,t (δ) ≤ β. 
+
+Proof. Because ˆθm,t , eVm,t update when m communicated with server, then the proof is equal to proof that 
+
+ˆθm,N mt,t +1 − θ∗
+
+> eVm,N mt,t +1
+
+≤ βm,t (δ) ≤ β. 
+
+Thus, we only need to consider for those round t where user m communicates with the server. 
+
+ˆθm,t +1 − θ∗ 2
+
+> eVm,t +1
+
+=
+
+ ˆθm,t +1 − θ∗⊤ eVm,t +1 
+
+ ˆθm,t +1 − θ∗
+
+(23) 
+
+=
+
+ ˆθm,t +1 − θ∗⊤ eVm,t +1 eV −1
+
+> m,t +1
+> M
+
+X
+
+> m′=1
+
+bup m′,t − θ∗
+
+!
+
+(24) 
+
+=
+
+ ˆθm,t +1 − θ∗⊤ eVm,t +1 eV −1
+
+> m,t +1
+> M
+
+X
+
+> m′=1
+
+(Σup m′,t θ∗ + yup m′,t ) − θ∗
+
+!
+
+(25) 
+
+=
+
+ ˆθm,t +1 − θ∗⊤ eVm,t +1 eV −1
+
+> m,t +1
+> M
+
+X
+
+> m′=1
+
+Σup m′,t θ∗ − θ∗
+
+!
+
++
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+yup m′,t 
+
+(26) 
+
+=
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+Σup m′,t − eVm,t +1 
+
+!
+
+θ∗
+
+| {z }
+
+> (A)
+
++
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+yup m′,t 
+
+| {z }
+
+> (B)
+
+. (27) For term (B) 
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+yup m′,t =
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+(yup m′,t + yloc m′,t ) −
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+yloc m′,t (28) 
+
+=
+
+ ˆθm,t +1 − θ∗⊤
+
+yall t −
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+yloc m′,t . (29) 19 A PREPRINT - M AY 4, 2026 Then 
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+m′=1 
+
+yup m′,t ≤
+
+ ˆθm,t +1 − θ∗⊤
+
+yall t +
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+m′=1 
+
+yloc m′,t (30) 
+
+≤ ˆθm,t +1 − θ∗
+
+Σall t
+
+yall t (Σall t )−1
+
++
+
+MX
+
+m′=1 
+
+ˆθm,t +1 − θ∗
+
+αλ I+Σloc m′,t 
+
+yloc m′,t (αλ I+Σloc m′,t )−1 . (31) The second inequality is because Lemma A.2. According to the Proposition 2 in [19], for any user m
+
+Σloc m,t ⪯ (Sloc m,i )⊤Sloc m,i + ρloc m,t I. (32) Furthermore 
+
+∆m,t +1 = ρser t + eρser t ≤ (Bc + 1) εl ≤ R1λ(M + 1 /α )dε l log(1 + εl)T, (33) where R1 is a sufficient large constant. Then, combining with Lemma A.7, we have 
+
+ˆθm,t +1 − θ∗
+
+Σall t
+
+ˆθm,t +1 − θ∗
+
+eVm,t +1 
+
+≤ √1 + M α, (34) and 
+
+ˆθm,t +1 − θ∗
+
+αλ I+Σloc m′,t 
+
+ˆθm,t +1 − θ∗
+
+eVm,t +1 
+
+≤
+
+vuuuuut
+
+ˆθm,t +1 − θ∗ 2(Sloc m,t +1 )⊤Sloc m,t +1 +ρloc m,t +1 I
+
++ αλ ˆθm,t +1 − θ∗ 22
+
+ˆθm,t +1 − θ∗ 2
+
+eVm,t +1 
+
+(35) 
+
+≤
+
+vuuuuut
+
+α ˆθm,t +1 − θ∗ 2
+
+eVm,t +1 
+
++ αλ ˆθm,t +1 − θ∗ 22
+
+ˆθm,t +1 − θ∗ 2
+
+eVm,t +1 
+
+(36) 
+
+≤
+
+vuuuutα +
+
+αλ ˆθm,t +1 − θ∗ 22
+
+ˆθm,t +1 − θ∗ 2
+
+λI
+
+(37) 
+
+= √2α. (38) According to [3] and [11], with probability at least 1 − δT 2M , we have 
+
+yall t (Σall t )−1 ≤ 2R
+
+s
+
+ln 
+
+ det (Σall t )
+
+det (λI)
+
+
+
++ ln( 1
+
+δ ) (39) 
+
+≤ 2R
+
+s
+
+d log 
+
+ 1 + T L 2/(αλ )
+
+δ
+
+
+
++ √λS, (40) and 
+
+yloc m′,t (αλ I+Σloc m′,t )−1 ≤ 2R
+
+s
+
+d log 
+
+ 1 + T L 2/(αλ )
+
+δ
+
+
+
++ √λS. (41) 20 A PREPRINT - M AY 4, 2026 Define eα = min {α, 1}. Therefore, term (B) is bounded by 
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+yup m′,t (42) 
+
+≤
+
+√1 + M α + M √2α
+
+
+
+2R
+
+s
+
+d log 
+
+ 1 + T L 2/(eαλ )
+
+δ
+
+
+
++ √λS 
+
+!
+
+ˆθm,t +1 − θ∗
+
+> eVm,t +1
+
+. (43) For term (A), by Cauchy-Schwartz inequality and the triangle inequality, we have 
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+Σup m′,t − eVm,t +1 
+
+!
+
+θ∗ (44) 
+
+≤ ˆθm,t +1 − θ∗
+
+> eVm,t +1
+> M
+
+X
+
+> m′=1
+
+Σup m′,t − eVm,t +1 
+
+!
+
+θ∗ 
+
+> eV−1
+> mt,t
+
+(45) 
+
+≤ 1
+
+√λ
+
+ˆθm,t +1 − θ∗
+
+> eVm,t +1
+> M
+
+X
+
+> m′=1
+
+Σup m′,t − eVm,t +1 
+
+! 
+
+> eV−1
+> m,t +1
+
+∥θ∗∥ eV −1
+
+> m,t +1
+
+(46) 
+
+≤ 1
+
+√λ ∥θ∗∥2 ˆθm,t +1 − θ∗
+
+> eVm,t +1
+> M
+
+X
+
+> m′=1
+
+Σup m′,t − eVm,t +1 
+
+> 2
+
+(47) 
+
+≤ S
+
+√λ
+
+ˆθm,t +1 − θ∗
+
+> eVm,t +1
+> M
+
+X
+
+> m′=1
+
+Σup m′,t − ( eVm,t +1 − λI)
+
+> 2
+
++ λ
+
+!
+
+. (48) We have 
+
+eVm,t +1 − λI ⪯
+
+> M
+
+X
+
+> m′=1
+
+Σup m′,t ⪯ eVm,t +1 − λI + ∆ m,t +1 I, ∀m ∈ [M ]. (49) Then 
+
+ ˆθm,t +1 − θ∗⊤ MX
+
+> m′=1
+
+Σup m′,t − eVm,t +1 
+
+!
+
+θ∗ (50) 
+
+≤ (p∆m,t +1 + λ)S
+
+√λ
+
+ˆθm,t +1 − θ∗
+
+> eVm,t +1
+
+. (51) Combining term (A) and (B), we get 
+
+ˆθm,t − θ∗
+
+> eVm,t
+
+≤
+
+√1 + M α + M √2α
+
+
+
+R
+
+s
+
+d log 
+
+ 1 + T L 2/(eαλ )
+
+δ
+
+
+
++ √λS 
+
+!
+
+(52) 
+
++ ( √λ +
+
+r ∆m,t +1 
+
+λ )S (53) 
+
+= βm,t (δ).
+
+Let 
+
+β =
+
+√1 + M α +M √2α
+
+
+
+R
+
+s
+
+d log 
+
+ 1 + T L 2/(eαλ )
+
+δ
+
+
+
++√λS 
+
+!
+
++( pR1(M + 1 /α )dε l log(1 + εl)T +√λ)S. 
+
+(54) Then 
+
+βm,t (δ) ≤ β = eO
+
+
+
+(1 + M √α + p(1 /α + M )εl)√d
+
+
+
+.
+
+21 A PREPRINT - M AY 4, 2026 
+
+Lemma A.9. For per-round regret, we have 
+
+max 
+
+> x∈Dt
+
+⟨θ∗, x⟩ − ⟨ θ∗, xt⟩ ≤ 2β ∥xt∥ eV −1
+
+> mt,t
+
+.
+
+According to the proof of Lemma B.2 in [11], this lemma is obviously. 
+
+Lemma A.10. When the communication does not happened, it holds that 
+
+∥xt∥ eV −1
+
+> mt,t
+
+≤ √1 + M α ∥xt∥(Σall t )−1 .
+
+This Lemma is because Lemma A.7. 
+
+A.7 Proof of Theorem 5.1 
+
+We assume that the sequence of rounds that the active agent communicates with server is 0 = t0 < t 1 < ... < t N =
+
+T + 1 , and from ti + 1 to ti+1 − 1 there is only one agent active, i.e. mti = mti+1 = ... = mti+1 −1. According to Lemma A.9, we can refined the regret as 
+
+Regret (T ) = 
+
+> T
+
+X
+
+> t=1
+
+
+
+max 
+
+> x∈Dt
+
+⟨θ∗, x⟩ − ⟨ θ∗, xt⟩
+
+
+
+(55) 
+
+≤ 
+
+> N−1
+
+X
+
+> i=0
+> ti+1 −1
+
+X
+
+> t=ti+1
+
+2β ∥xt∥ eV −1
+
+> mt,t
+
++ 
+
+> N−1
+
+X
+
+> i=0
+
+min { max 
+
+> x∈Dti
+
+⟨θ∗, x⟩ − ⟨ θ∗, xti ⟩ , 2β ∥xti ∥ eV −1
+
+> mti ,t i
+
+}. (56) For a more refined analysis of the rounds {ti}Ni=1 , we define 
+
+Ti = min {t|det (Σall t ) ≥ 2iλd}.
+
+and let N ′ be the largest integer such that TN ′ is not empty. For each time interval from Ti to Ti+1 and each user 
+
+m ∈ [M ], suppose m communicates with the server more than once, where the communications occur at rounds 
+
+Ti ≤ Ti, 1 < T i, 2 < ... < T i,j < T i+1 . Then 
+
+2β xTi,j eV −1
+
+> m,T i,j
+
+≤ 2β xTi,j eV −1
+
+> m,T i,j −1+1
+
+≤ 2β√1 + M α xTi,j (Σall m,T i,j −1+1 )−1 . (57) On the other hands, according to our define, we known that 
+
+det (Σall m,T i+1 −1)/det (Σall m,T i,j −1+1 ) < 2.
+
+Then, we have 
+
+2β xTi,j eV −1
+
+> m,T i,j
+
+≤ 2β√1 + M α xTi,j (Σall m,T i,j −1+1 )−1 (58) 
+
+≤ 2βp2(1 + M α ) xTi,j (Σall m,T i+1 −1)−1 (59) 
+
+≤ 2βp2(1 + M α ) xTi,j (Σall m,T i,j )−1 . (60) According to [11] (Section 6.2), we known that  
+
+> N−1
+
+X
+
+> i=0
+
+min { max 
+
+> x∈Dti
+
+⟨θ∗, x⟩ − ⟨ θ∗, xti ⟩ , 2β ∥xti ∥ eV −1
+
+> mti ,t i
+
+} ≤ 2SLM N ′ + 
+
+> N−1
+
+X
+
+> i=0
+
+2βp2(1 + M α ) ∥xti ∥(Σall mti ,t i )−1 .
+
+From Section 6.2 in [11], N ′ ≤ d ln(1 + T L 2/λ ).According to Lemma A.9 and Lemma A.10, we have  
+
+> N−1
+
+X
+
+> i=0
+> ti+1 −1
+
+X
+
+> t=ti+1
+
+2β ∥xt∥ eV −1
+
+> mt,t
+
+≤ 
+
+> N−1
+
+X
+
+> i=0
+> ti+1 −1
+
+X
+
+> t=ti+1
+
+2βp2(1 + M α ) ∥xt∥(Σall mt,t )−1 .
+
+22 A PREPRINT - M AY 4, 2026 Then 
+
+Regret (T ) = 
+
+> T
+
+X
+
+> t=1
+
+
+
+max 
+
+> x∈Dt
+
+⟨θ∗, x⟩ − ⟨ θ∗, xt⟩
+
+
+
+(61) 
+
+≤ 2dSLM ln(1 + T L 2/λ ) + 2 βt
+
+p2(1 + M α )
+
+> T
+
+X
+
+> t=1
+
+∥xt∥(Σall mt,t )−1 (62) 
+
+≤ 2dSLM ln(1 + T L 2/λ ) + 2 βp2(1 + M α )
+
+vuutT
+
+> T
+
+X
+
+> t=1
+
+∥xt∥2(Σall mt,t )−1 (63) 
+
+≤ 2dSLM ln(1 + T L 2/λ ) + 2 βp2(1 + M α )
+
+s
+
+T
+
+
+
+2d ln 
+
+
+
+1 + ¯ρT
+
+λ
+
+
+
++ 2 l ln 
+
+
+
+1 + T L 2
+
+lλ 
+
+ 
+
+(64) 
+
+≤ 2dSLM ln(1 + T L 2/λ ) + 2 βp2(1 + M α )
+
+s
+
+2lT ln 
+
+
+
+1 + T L 2
+
+lλ 
+
+
+
++ 2 dT ln (1 + εl), (65) where 
+
+β =
+
+√1+ M α +M √2α
+
+
+
+R
+
+s
+
+d log 
+
+ 1 + T L 2/(eαλ )
+
+δ
+
+
+
++√λS 
+
+!
+
++( pR1(M + 1 /α )dε l log(1 + εl)T +√λ)S
+
+(66) 
+
+= eO
+
+
+
+(1 + M √α + p(1 /α + M )εl)√d
+
+
+
+. (67) Therefore 
+
+Regret (T ) ≤ eO
+
+
+
+(1 + M √α + p(1 /α + M )εl)( √ld + d ln(1 + εl)) p(1 + M α )T
+
+
+
+.
+
+We define r = rank (XT ) is the rank of covariance matrix (i.e. the selected-arm sequence), setting l ≥ r gives εl = 0 ,and 
+
+Regret (T ) ≤ 2dSLM ln(1 + T L 2/λ ) + 8 β√1 + M α 
+
+s
+
+lT ln 
+
+
+
+1 + T L 2
+
+lλ 
+
+
+
+= eO
+
+
+
+(1 + M √α)p(1 + M α )ldT 
+
+
+
+.
+
+Furthermore, if we set l = r with α = 1 /M 2 additionally, we can get Regret (T ) = eO(√rdT ).23

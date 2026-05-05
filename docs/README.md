@@ -6,67 +6,88 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-04
-- 运行时间：2026-05-04 20:21:42 UTC
+- 最新运行日期：2026-05-05
+- 运行时间：2026-05-05 20:14:35 UTC
 - 运行状态：成功
-- 本次总论文数：15
-- 精读区：5
-- 速读区：10
+- 本次总论文数：22
+- 精读区：11
+- 速读区：11
 
 ### 今日简报（AI）
-今日精选 15 篇论文，重点攻克了洗牌差分隐私下的投毒防御及联邦学习动态聚合难题。
-核心结论指出 Shuffle-DP 能有效兼顾隐私与安全，而超梯度在线更新显著提升了联邦学习的收敛效率。
-建议优先阅读满分防御方案，并留意联邦学习在气象监测和线性老虎机算法中的最新应用。
-- 详情：[/202605/04/README](/202605/04/README)
+今日精选 22 篇前沿论文，深度聚焦联邦学习中的隐私保护技术与架构优化。
+重点关注结合差分隐私与同态加密的心血管疾病建模，以及通过随机参数选择提升联邦学习安全性的新方案。
+建议关注多重加密技术在医疗等敏感领域的落地应用，探索如何在保障隐私的同时进一步降低通信开销。
+- 详情：[/202605/05/README](/202605/05/README)
 
 ### 精读区论文标签
-1. [Defense against Poisoning Attacks under Shuffle-DP](/202605/04/2605.00625v1-defense-against-poisoning-attacks-under-shuffle-dp)  
+1. [Privacy-Preserving Federated Learning via Differential Privacy and Homomorphic Encryption for Cardiovascular Disease Risk Modeling](/202605/05/2604.27598v2-privacy-preserving-federated-learning-via-differential-privacy-and-homomorphic-encryption-for-cardiovascular-disease-risk-modeling)  
    标签：评分：10.0/10、query:dml-dp
-   evidence：Shuffle-DP模式下的投毒攻击防御
-2. [Federated Learning with Hypergradient-based Online Update of Aggregation Weights](/202605/04/2605.00458v1-federated-learning-with-hypergradient-based-online-update-of-aggregation-weights)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：具有在线聚合权重更新的联邦学习
-3. [Federated Distillation for Whole Slide Image via Gaussian-Mixture Feature Alignment and Curriculum Integration](/202605/04/2605.00578v1-federated-distillation-for-whole-slide-image-via-gaussian-mixture-feature-alignment-and-curriculum-integration)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：协作病理学的联邦学习框架
-4. [FedKPer: Tackling Generalization and Personalization in Medical Federated Learning via Knowledge Personalization](/202605/04/2605.00698v1-fedkper-tackling-generalization-and-personalization-in-medical-federated-learning-via-knowledge-personalization)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：针对具有统计异构性的医疗应用联邦学习框架
-5. [EASE: Federated Multimodal Unlearning via Entanglement-Aware Anchor Closure](/202605/04/2605.00733v1-ease-federated-multimodal-unlearning-via-entanglement-aware-anchor-closure)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：具有隐私和遗忘机制的联邦多模态学习
+   evidence：结合差分隐私与同态加密的隐私保护联邦学习
+2. [FLRSP: Privacy-Preserving Federated Learning Using Randomly Selected Model Parameters](/202605/05/2605.01204v1-flrsp-privacy-preserving-federated-learning-using-randomly-selected-model-parameters)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：使用随机参数的隐私保护联邦学习
+3. [Optimal Privacy-Utility Trade-Offs in LDP: Functional and Geometric Perspectives](/202605/05/2605.02319v1-optimal-privacy-utility-trade-offs-in-ldp-functional-and-geometric-perspectives)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：刻画了本地差分隐私（LDP）中的最优隐私-效用权衡及信道
+4. [Privacy Preserving Machine Learning Workflow: from Anonymization to Personalized Differential Privacy Budgets in Federated Learning](/202605/05/2605.02372v1-privacy-preserving-machine-learning-workflow-from-anonymization-to-personalized-differential-privacy-budgets-in-federated-learning)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：联邦学习中的差分隐私预算
+5. [Period-conscious Time-series Reconstruction under Local Differential Privacy](/202605/05/2605.02724v1-period-conscious-time-series-reconstruction-under-local-differential-privacy)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：本地差分隐私下的时间序列重构
+6. [Split and Aggregation Learning for Foundation Models Over Mobile Embodied AI Network (MEAN): A Comprehensive Survey](/202605/05/2605.00970v1-split-and-aggregation-learning-for-foundation-models-over-mobile-embodied-ai-network-mean-a-comprehensive-survey)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：隐私保护机器学习与分布式人工智能范式
+7. [Metric-Normalized Posterior Leakage (mPL): Attacker-Aligned Privacy for Joint Consumption](/202605/05/2605.01137v1-metric-normalized-posterior-leakage-mpl-attacker-aligned-privacy-for-joint-consumption)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：联合观测下的度量差分隐私与本地差分隐私
+8. [Stabilizing Private LASSO under Heterogeneous Covariates via Anisotropic Objective Perturbation](/202605/05/2605.01492v1-stabilizing-private-lasso-under-heterogeneous-covariates-via-anisotropic-objective-perturbation)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：通过目标扰动和隐私预算管理的差分隐私LASSO
+9. [Class-Aware Adaptive Differential Privacy in Deep Learning for Sensor-Based Fall Detection](/202605/05/2605.01679v1-class-aware-adaptive-differential-privacy-in-deep-learning-for-sensor-based-fall-detection)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：深度学习中的类感知自适应差分隐私
+10. [Federated Semi-Supervised Graph Neural Networks with Prototype-Guided Pseudo-Labeling for Privacy-Preserving Gestational Diabetes Mellitus Prediction](/202605/05/2605.01810v1-federated-semi-supervised-graph-neural-networks-with-prototype-guided-pseudo-labeling-for-privacy-preserving-gestational-diabetes-mellitus-prediction)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：隐私保护联邦半监督框架
+11. [Misclassification Rate and Privacy-Utility Trade-offs in Graph Convolutional Networks via Subsampling Stability](/202605/05/2605.01987v1-misclassification-rate-and-privacy-utility-trade-offs-in-graph-convolutional-networks-via-subsampling-stability)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：差分隐私下GCN的隐私与效用权衡
 
 ### 速读区论文标签
-1. [High-Probability Convergence in Decentralized Stochastic Optimization with Gradient Tracking](/202605/04/2605.00281v1-high-probability-convergence-in-decentralized-stochastic-optimization-with-gradient-tracking)  
+1. [Hierarchical Federated Learning for Networked AI: From Communication Saving to Architecture-Aware Design](/202605/05/2605.00931v1-hierarchical-federated-learning-for-networked-ai-from-communication-saving-to-architecture-aware-design)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：作为分布式优化框架的分层联邦学习
+2. [A Systematic Exploration of Text Decomposition and Budget Distribution in Differentially Private Text Obfuscation](/202605/05/2605.01065v1-a-systematic-exploration-of-text-decomposition-and-budget-distribution-in-differentially-private-text-obfuscation)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：差分隐私文本混淆与隐私预算分配
+3. [Optimal Communication Rate of Secure Aggregation over Ring Networks with Pairwise Keys](/202605/05/2605.01849v1-optimal-communication-rate-of-secure-aggregation-over-ring-networks-with-pairwise-keys)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：去中心化联邦学习中的安全模型聚合
+4. [LAPRAS : Learning-Augmented PRivate Answering for linear query Streams](/202605/05/2605.01960v1-lapras--learning-augmented-private-answering-for-linear-query-streams)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：针对查询流的在线差分隐私分析
+5. [Stability and Generalization for Decentralized Markov SGD](/202605/05/2605.01701v1-stability-and-generalization-for-decentralized-markov-sgd)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：多智能体协作的去中心化随机优化
-2. [Federated Weather Modeling on Sensor Data](/202605/04/2605.00322v1-federated-weather-modeling-on-sensor-data)  
+   evidence：去中心化SGD的稳定性与泛化
+6. [Toward Resilient 5G Networks: Comparative Analysis of Federated and Centralized Learning for RF Jamming Detection](/202605/05/2605.01705v1-toward-resilient-5g-networks-comparative-analysis-of-federated-and-centralized-learning-for-rf-jamming-detection)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：不共享原始数据以保护隐私的联邦学习气象建模
-3. [Scaling Federated Linear Contextual Bandits via Sketching](/202605/04/2605.00500v1-scaling-federated-linear-contextual-bandits-via-sketching)  
+   evidence：保护用户设备隐私的联邦学习框架
+7. [Less is More: Geometric Unlearning for LLMs with Minimal Data Disclosure](/202605/05/2605.01735v1-less-is-more-geometric-unlearning-for-llms-with-minimal-data-disclosure)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：通过草图算法扩展联邦学习算法规模
-4. [AGoQ: Activation and Gradient Quantization for Memory-Efficient Distributed Training of LLMs](/202605/04/2605.00539v1-agoq-activation-and-gradient-quantization-for-memory-efficient-distributed-training-of-llms)  
+   evidence：通过大语言模型选择性遗忘实现隐私保护机器学习
+8. [DBLP: Phase-Aware Bounded-Loss Transport for Burst-Resilient Distributed ML Training](/202605/05/2605.01989v1-dblp-phase-aware-bounded-loss-transport-for-burst-resilient-distributed-ml-training)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：通过量化实现大语言模型的高效内存分布式训练
-5. [Learning to Act and Cooperate for Distributed Black-Box Consensus Optimization](/202605/04/2605.00691v1-learning-to-act-and-cooperate-for-distributed-black-box-consensus-optimization)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：多智能体系统中的分布式黑盒共识优化
-6. [A Line-search-free Method for Adaptive Decentralized Optimization](/202605/04/2605.00711v1-a-line-search-free-method-for-adaptive-decentralized-optimization)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：用于自适应优化的完全去中心化算法
-7. [Decentralized Proximal Stochastic Gradient Langevin Dynamics](/202605/04/2605.00723v1-decentralized-proximal-stochastic-gradient-langevin-dynamics)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：用于分布式采样的去中心化随机梯度朗之万动力学
-8. [Information-Theoretic Generalization Bounds for Stochastic Gradient Descent with Predictable Virtual Noise](/202605/04/2605.00064v1-information-theoretic-generalization-bounds-for-stochastic-gradient-descent-with-predictable-virtual-noise)  
+   evidence：分布式机器学习训练效率与网络协议
+9. [GraphPL: Leveraging GNN for Efficient and Robust Modalities Imputation in Patchwork Learning](/202605/05/2604.25352v1-graphpl-leveraging-gnn-for-efficient-and-robust-modalities-imputation-in-patchwork-learning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：随机梯度下降分析中的虚拟噪声注入
-9. [A Privacy-Preserving Approach to Conformance Checking](/202605/04/2605.00283v1-a-privacy-preserving-approach-to-conformance-checking)  
+   evidence：分布式多模态学习与拼凑学习
+10. [Networked Information Aggregation for Binary Classification](/202605/05/2605.01082v1-networked-information-aggregation-for-binary-classification)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：使用同态加密的隐私保护方法
-10. [Randomized Subspace Nesterov Accelerated Gradient](/202605/04/2605.00740v1-randomized-subspace-nesterov-accelerated-gradient)  
+   evidence：图上的顺序分布式训练过程
+11. [Revisiting Privacy Leakage in Machine Unlearning: Membership Inference Beyond the Forgotten Set](/202605/05/2605.01129v1-revisiting-privacy-leakage-in-machine-unlearning-membership-inference-beyond-the-forgotten-set)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：通信受限环境下的优化算法
+   evidence：机器遗忘中的隐私泄露分析
 
 
 <div class="dpr-home-promo-card">

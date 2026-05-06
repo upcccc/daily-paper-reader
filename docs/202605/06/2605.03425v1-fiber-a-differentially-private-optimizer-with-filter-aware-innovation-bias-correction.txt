@@ -1,0 +1,2011 @@
+Title: FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction
+
+URL Source: https://arxiv.org/pdf/2605.03425v1
+
+Published Time: Wed, 06 May 2026 00:34:47 GMT
+
+Number of Pages: 33
+
+Markdown Content:
+# FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Duc Dm 1 Thao Do 1 Minh Son Hoang 1 Tran Le Duc Anh 2 Daeyoung Kim † 1 Huy Nguyen † 3
+
+# Abstract 
+
+Differentially private (DP) training protects in-dividual examples by adding noise to gradients, but the injected noise interacts nontrivially with adaptive optimizers. Recent DP methods tem-porally filter privatized gradients to reduce vari-ance; however, filtering also changes the DP noise statistics seen by AdamW’s second-moment ac-cumulator. As a result, bias corrections derived for unfiltered DP noise (e.g., subtracting σ2
+
+> w
+
+) can become miscalibrated when filtering is present. We propose F IBER, a DP optimizer designed for temporally filtered privatized gradients. F IBER(i) performs denoising in innovation space by fil-tering the residual stream and integrating it to form the filtered gradient estimate, (ii) decouples the two-point observation geometry from the in-novation gain to enable independent tuning, and (iii) introduces a filter-aware second-moment cal-ibration that subtracts the attenuated DP noise contribution A(ω)σ2
+
+> w
+
+, where A(ω) is derived in closed form for the innovation filter and can be computed for general stable linear filters. Across vision and language benchmarks, F IBER consis-tently demonstrates substantial improvements in the performance of DP optimizers, surpassing state-of-the-art results under equivalent privacy constraints on multiple tasks. 
+
+# 1. Introduction 
+
+Differential privacy (Dwork & Roth, 2014) offers strong protection for individual data in machine learning, but it often reduces model utility, especially during long train-ing, with high-dimensional models, or in fine-tuning where 
+
+> †
+
+Equal supervision. 1 School of Computing, Korea Advanced Institute of Science and Technology, Daejeon, Republic of Ko-rea 2 Center for Environmental Intelligence (CEI), VinUniver-sity, Hanoi, Vietnam 3 Khoury College of Computer Sciences, Northeastern University, USA . Correspondence to: Duc Dm 
+
+<ducdm200158@kaist.ac.kr >.
+
+Preprint. May 6, 2026. 
+
+optimization is sensitive (Abadi et al., 2016; Jayaraman & Evans, 2019; De et al., 2022b). A central challenge is that DP noise does not remain iso-lated in the gradient it is added to. In modern adaptive optimizers, privatized gradients are aggregated into mo-mentum and second-moment statistics, so DP perturba-tions become stateful through the optimizer state. For Adam (Kingma & Ba, 2015), the squared-gradient accu-mulator vt = β2vt−1 + (1 − β2)g2 
+
+> t
+
+is nonlinear and con-verts zero-mean DP noise into persistent positive bias. This preconditioner inflation shrinks effective step sizes and de-grades adaptivity over time. Tang et al. (2024) show that DP-Adam can collapse toward DP-SGD behavior unless this bias is explicitly handled. Recent work applies temporal filtering to privatized gra-dients to reduce DP noise impact. Methods range from low-pass filters (Zhang et al., 2024a;b) to correlated-noise mechanisms (Kairouz et al., 2021; Choquette-Choo et al., 2024; Koloskova et al., 2023), showing clear benefits for gradient estimation. However, filtering introduces a previ-ously unmodeled failure mode when combined with adap-tive optimizers. The core issue is that filtering attenuates DP noise variance before it reaches the second-moment accumulator. Temporal denoising changes the DP noise statistics seen by adaptive optimizers. Let gt = ¯ gt + wt with 
+
+wt ∼ N (0 , σ 2
+
+> w
+
+Id), ¯gt denote the clipped minibatch gradient estimate before DP noise is added and gt be the privatized gradient used by the learning algorithm, and let ˜gt denote a filtered version used to update AdamW moments. For sta-ble linear filters, the DP noise component is attenuated. In steady state, Var(˜ gt,i |¯g) = A σ 2 
+
+> w
+
+for some A ∈ (0 , 1] . Con-sequently, the bias-corrected second moment satisfies the approximation E[ˆ vt,i ] ≈ E[˜ g2
+
+> t,i
+
+] = E[s2
+
+> t,i
+
+] + A σ 2
+
+> w
+
+, where st
+
+is the filtered signal component. This has two implications: (i) without correction, ˆvt retains a positive DP noise term that can shrink adaptive steps, and (ii) DP-Adam bias correc-tions derived for unfiltered noise (subtracting σ2
+
+> w
+
+) become miscalibrated when filtering is present. We therefore pro-pose a filter-aware correction that subtracts the attenuated DP noise contribution A σ 2
+
+> w
+
+, yielding a better-calibrated preconditioner under filtered DP noise. Existing filtering methods (Zhang et al., 2024a;b; Koloskova et al., 2023) improve gradient estimation but do not model or correct 1
+
+> arXiv:2605.03425v1 [cs.LG] 5 May 2026 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction
+
+how filtering alters DP noise statistics within AdamW’s in-ternal state, leaving a critical gap. We introduce F IBER(Filter-aware Innovation Bias-corrected optimiz ER ), a dif-ferentially private adaptive optimizer tailored to temporally filtered privatized gradients. Our main contributions are: • Principled innovation-space filtering. We propose a denoising approach in residual space, integrating the residual stream with a lightweight, theoretically grounded second-order recursion. This method enables tracking of nonstationary dynamics under DP noise. • Decoupled hyperparameter control. We provide the first explicit separation of observation geometry (κ, γ )
+
+from innovation gain ω, enabling independent tuning of estimator geometry and temporal smoothing for practi-cal and effective hyperparameter optimization. • First filter-aware DP-AdamW calibration. We rigor-ously analyze how temporal filtering affects the statis-tics of DP noise and derive the precise attenuation factor. To our knowledge, this is the first explicit analysis and practical calibration of AdamW’s second-moment statistics under filtered DP noise, including an attenuation-aware correction for stable linear filters. • Extensive empirical validation. FIBER consistently outperforms DP-Adam(W) and temporal-filtering base-lines across a wide range of vision and language bench-marks, achieving state-of-the-art performance under tight privacy budgets and long training horizons, while remaining competitive at higher ε.
+
+# 2. Related Work 
+
+2.1. Differentially Private Optimization Methods 
+
+Most practical DP training algorithms use per-example gra-dient clipping and add Gaussian noise, resulting in DP-SGD and adaptive variants such as DP-Adam and DP-AdamW (Abadi et al., 2016; Yu et al., 2024; Gilani et al., 2025). While effective in smaller regimes and some fine-tuning tasks, these methods often suffer in long-horizon training and large-scale models (Jayaraman & Evans, 2019; De et al., 2022b). Another line of work improves robustness to DP per-turbations through mechanism- and training-level choices, including adaptive clipping and automated tuning (Bu et al., 2023b; Xia et al., 2023), as well as architectural and opti-mization design choices that reduce sensitivity to DP noise (Yu et al., 2024; Bu et al., 2023c; Mehta et al., 2023a). For adaptive optimizers in particular, recent work analyzes how DP noise biases the internal second-moment accumulator and can collapse adaptivity over time, motivating explicit bias-correction strategies (Tang et al., 2024). The present work is aligned with this perspective but focuses on a setting that is increasingly prevalent in practice: filtered privatized gradients. In this regime, the statistics entering AdamW are altered by the filter, and correcting the second moment requires accounting for the filter-induced attenuation, not only the raw DP noise level. 
+
+2.2. Temporal Structure: Filtering and Correlation 
+
+Recent research leverages the temporal structure of DP noise to improve optimization. Correlated-noise mecha-nisms show that coupling noise across iterations can im-prove privacy-utility trade-offs in certain regimes (Kairouz et al., 2021; Choquette-Choo et al., 2024; Koloskova et al., 2023). In parallel, signal-processing-inspired methods ap-ply temporal low-pass filtering to privatized gradients to suppress high-frequency DP noise while preserving learn-ing signal (Zhang et al., 2024b). Several approaches also address clipping-induced distortion (e.g., via error-feedback-like corrections) to recover unbiased optimization behavior under clipping constraints (Zhang et al., 2024c). Some view DP training as filtering: privatized gradients are noisy measurements of an underlying time-varying learning sig-nal, and temporal structure is exploited to suppress injected noise while preserving signal. Kalman-filter optimizers are impractical for deep learning due to costly covariance tracking and stepwise matrix operations (Vuckovic, 2018). Recent work favors constant-gain, lightweight state-space variants. DiSK, for example, uses a two-point measure, com-puting gradients at both current θt and lookahead parameters 
+
+θt + γd t−1 and exponential smoothing of a latent gradient state-a first-order model with an EMA filter-providing em-pirical and theoretical guarantees (Zhang et al., 2024a). Despite recent advances, a crucial challenge persists: tem-poral filtering can miscalibrate adaptive preconditioners because the noise statistics observed by AdamW’s moments fluctuate with privacy budgets and training dynamics. Con-sequently, naive smoothing or variance subtraction may lead to unstable updates. This motivates protocols to test robust-ness across regimes and methods that go beyond gradient-state heuristics by aligning optimizer moments with the post-filter noise model. 
+
+# 3. Method 
+
+3.1. Problem Setup 
+
+Given a dataset D = {ξi}Ni=1 , we minimize empirical risk: 
+
+min 
+
+> θ∈Rd
+
+F (θ) ≜ 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+f (θ; ξi), (1) where f (θ; ξ) is the per-example loss and θ are parameters. At iteration t, sample minibatch Bt ⊂ D of size B.2FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+3.2. Differentially Private Optimization 
+
+We briefly review (ε, δ )-differential privacy(Dwork & Roth, 2014), the Gaussian mechanism(Dwork & Roth, 2014; Wang et al., 2019), and DP-SGD-the standard privatiza-tion procedure used in DP optimization. Background details are deferred to Appendix A. 
+
+DP two-point gradient observation. At iteration t, a privatized gradient observation is formed using a two-point per-example construction, followed by per-example clipping and Gaussian noise, with clip( u, C ) = u·min {1, C/ ∥u∥2}:
+
+ut(ξ) ≜ a ∇f (θt + γd t−1; ξ) + (1 − a) ∇f (θt; ξ), (2) 
+
+gt ≜ 1
+
+B
+
+X
+
+> ξ∈Bt
+
+clip  ut(ξ), C  + wt. (3) Here a ≜ 1−κκγ , dt−1 ≜ θt − θt−1, we set d−1 = 0 and 
+
+wt ∼ N (0 , σ 2
+
+> w
+
+Id) with σ2 
+
+> w
+
+the per-coordinate variance at the averaged gradient. DiSK (Zhang et al., 2024a) denoises the privatized gradient gt with an EMA filter: 
+
+˜gt ≜ (1 − κ)˜ gt−1 + κg t, (4) This filtered gradient is used by the optimizer. To avoid negative weights (which can amplify norms and disrupt DP clipping), we require 0 ≤ a ≤ 1; for κ ∈ (0 , 1) and γ > 0,this is equivalent to γ ≥ (1 − κ)/κ (see Appendix E.5). 
+
+3.3. F IBER: Innovation-Filtered DP-AdamW with Filter-Aware Bias Correction 
+
+FIBER is structured around three primary components: (i) innovation-space filtering, (ii) decoupling the two-point esti-mator from the denoiser, and (iii) filter-aware bias correction for AdamW under filtered DP noise. F IBER preserves DP-SGD’s privacy guarantees. 1
+
+Component 1: Innovation-space filtering. Rather than directly smoothing the gradient state (4) , F IBER filters the residual process 
+
+νt ≜ gt − ˜gt−1, (5) This approach maintains a smoothed residual state rt and integrates it to obtain the denoised estimate ˜gt:
+
+rt ≜ (1 − ω) rt−1 + ω ν t, (6) 
+
+˜gt ≜ ˜gt−1 + rt. (7) Gradient-state EMA smoothing applies a first-order low-pass filter directly to gt, which trades noise suppression for     
+
+> 1Privacy preservation follows from post-processing: all F IBERcomputations are deterministic functions of the privatized gradients
+> {gt}, so by the composition theorem of DP (Dwork & Roth, 2014), if {gt}is (ε, δ )-DP, then F IBER’s output is also (ε, δ )-DP.
+
+lag when the underlying gradient drifts. In contrast, the α–β
+
+or residual view smooths only the residual νt and integrates it into ˜gt. This yields a second-order recursion that can track persistent drift in the latent gradient. This distinction corresponds to different latent models (random-walk vs. constant-velocity) and is made formal in Section 4.1. 
+
+Component 2: Decoupling (κ, γ ) from ω. The two-point parameters (κ, γ ) appear only in the observation construc-tion (2) (as determined by a = 1−κκγ ), while the denoising gain ω appears only in the residual recursion (6) –(7) . This separation enables independent control of extrapolation ge-ometry ( (κ, γ )) and temporal denoising strength ( ω), instead of coupling both behaviors to a single gain parameter. 
+
+Component 3: Filter-aware bias correction for AdamW. 
+
+AdamW moments use the denoised ˜gt:
+
+mt ≜ β1mt−1 + (1 − β1)˜ gt, (8) 
+
+vt ≜ β2vt−1 + (1 − β2) ˜gt ⊙ ˜gt
+
+, (9) with bias corrections ˆmt = mt/(1 − βt+1 1 ) and ˆvt =
+
+vt/(1 −βt+1 2 ). With decoupled weight decay λ, the AdamW update is 
+
+θt+1 = (1 − ηλ ) θt − η ˆmt ⊘  √¯vt + ϵ, (10) where ¯vt is a corrected second moment. Since the DP per-turbation wt in (3) is filtered before it enters the second-moment recursion, the resulting variance in the filtered gra-dient ˜gt is reduced by a factor A(ω) (Appendix C). We therefore subtract the expected filtered contribution from the bias-corrected second moment: 
+
+σ2filt ≜ A(ω) σ2
+
+> w
+
+, A(ω) ≜ 2 − ω
+
+4 − 3ω . (11) We then define the corrected accumulator 
+
+¯vt ≜ max  ˆvt − σ2filt , ϵ v
+
+, (12) where ϵv ≥ 0 is a small floor for numerical stability. Since (11) uses steady-state variance, early iterations may be con-servative; the floor prevents negative and over-corrected val-ues. If signal and DP noise are approximately uncorrelated, this adjustment removes filtered variance - though cross terms may persist in closed-loop training (Appendix E.4). 
+
+Pseudocode. Algorithm 1 summarizes F IBER. The two-point per-example observation ut(ξ) is defined in Equa-tion (2); clipping and privatization follow Equation (3). 
+
+# 4. Theoretical Analysis 
+
+4.1. Residual Gradients and Innovation Filtering 
+
+Our first contribution is a residual-gradient dynamics view-point, which yields Equations (5) –(7) as a simplified 3FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Algorithm 1 Simplified F IBER (full pseudocode in Ap-pendix D) 
+
+1: Input: θ0, steps T .2: DP params: batch B, clip C, noise σDP .3: AdamW params: step η, (β1, β 2), ϵ, weight decay λ.4: FIBER params: (κ, γ, ω, ϵ v ).5: State init: ˜gt ← 0, r ← 0, m ← 0, v ← 0.6: Constants: σ2 
+
+> w
+
+← (σDP C/B )2; A(ω) as in Eq. (11). 7: for t = 0 , . . . , T − 1 do 
+
+8: (1) DP observation 
+
+9: Form gt via two-point observation + clipping + Gaussian noise (Eqs. (2)–(3)). 10: (2) Innovation (residual) filtering 
+
+11: νt ← gt − ˜gt−1
+
+12: rt ← (1 − ω)rt−1 + ων t
+
+13: ˜gt ← ˜gt−1 + rt
+
+14: (3) AdamW moments 
+
+15: mt ← β1mt−1 + (1 − β1)˜ gt
+
+16: vt ← β2vt−1 + (1 − β2)(˜ gt ⊙ ˜gt)
+
+17: (4) Bias + filter-aware second-moment correction 
+
+18: ˆmt ← mt/(1 − βt+1 1 )
+
+19: ˆvt ← vt/(1 − βt+1 2 )
+
+20: ¯vt ← max(ˆ vt − A(ω)σ2 
+
+> w
+
+, ϵ v )
+
+21: (5) Parameter update 
+
+22: θt+1 ← (1 − ηλ )θt − η ˆmt ⊘ (√¯vt + ϵ)
+
+23: d ← θt+1 − θt
+
+24: end for 
+
+constant-gain Kalman filter; we further validate its drift-tracking behavior via diagnostics in Appendix E.3. 
+
+Proposition 4.1. Consider a constant-velocity model for the latent (noise-free) gradient in which the gradient has a slowly varying drift component. In steady state, the Kalman filter yields a constant-gain α–β recursion in residual form with gains (α, β ). To reduce hyperparameter tuning and avoid covariance tracking, FIBER uses a tied-gain approxi-mation α = β = ω, recovering (5) –(7) .
+
+FIBER filters innovations and integrates them to denoise gradients. Setting α = β = ω yields a single bias-variance knob; this is a tied-gain, constant-gain surrogate motivated by rapid gain convergence and avoiding covariance tracking, though it generally does not match the optimal steady-state Kalman gains. See Appendix B.1 for details. 
+
+4.2. Decoupling Estimation and Smoothing 
+
+Our second contribution is to decouple the two-point esti-mator parameters (κ, γ ) (which determine how per-example gradients are formed before clipping/noise) from the resid-ual smoother gain ω (which controls temporal denoising after privatization). 
+
+Remark 4.2 . In single-gain two-point formulations that also use gradient-state smoothing, the same parameter κ controls both (i) temporal smoothing ( ˜gt = (1 − κ)˜ gt−1 + κg t) and (ii) the two-point mixing weight a(κ, γ ), so changing κ
+
+necessarily changes both effects. In F IBER, (κ, γ ) appear only in the construction of ut(ξ), while ω appears only in the residual recursion (5) - (7) . This separation enables independent tuning of extrapolation geometry and temporal denoising, which we validate empirically in Section 5.3. 
+
+4.3. Filter-Aware Bias Correction for AdamW 
+
+Our third contribution corrects AdamW’s second-moment estimate under filtered DP noise. Recall that the privatized gradient can be written as gt = ¯ gt + wt, where wt is the Gaussian DP noise. F IBER applies the residual filter (5) -(7) to gt, which turns i.i.d. noise into a colored sequence but attenuates its marginal variance by a closed-form factor. 
+
+Proposition 4.3. Let {wt} be i.i.d. N (0 , σ 2
+
+> w
+
+), and an LTI filter with impulse response {hj } outputs 
+
+˜wt =
+
+> ∞
+
+X
+
+> j=0
+
+hj wt−j . (13) 
+
+If the filter is ℓ2-stable ( P 
+
+> j
+
+h2 
+
+> j
+
+< ∞), then at stationarity 
+
+Var( ˜ wt) = σ2
+
+> w
+> ∞
+
+X
+
+> j=0
+
+h2 
+
+> j
+
+≜ A σ 2
+
+> w
+
+, (14) 
+
+where A is the squared ℓ2 gain of the filter. For vector DP noise wt ∼ N (0 , σ 2
+
+> w
+
+Id) filtered coordinate-wise, 
+
+E∥ ˜wt∥22 = d A σ 2
+
+> w
+
+. (15) 
+
+Proof. Using (13) and independence of {wt}, all cross terms vanish, so E[ ˜ w2 
+
+> t
+
+] = P 
+
+> j≥0
+
+h2 
+
+> j
+
+E[w2 
+
+> t−j
+
+] =
+
+σ2
+
+> w
+
+P 
+
+> j≥0
+
+h2 
+
+> j
+
+. The vector case follows by summing coordinate-wise variances. 
+
+Corollary 4.4. Consider a stable linear state-space system driven by scalar wt ∼ N (0 , σ 2
+
+> w
+
+):
+
+zt = M z t−1 + Gw t, ˜wt = Hz t, (16) 
+
+with ρ(M ) < 1. Let Σ be the stationary state covariance solving the Lyapunov equation 
+
+Σ = M ΣM ⊤ + σ2
+
+> w
+
+GG ⊤. (17) 
+
+Then Var( ˜ wt) = HΣH⊤ ≜ A σ 2
+
+> w
+
+.
+
+Applying Corollary 4.4 to the state-space realization of the residual filter yields the closed-form attenuation. 
+
+Corollary 4.5. For the innovation recursion in Equations 
+
+(5) -(7) with gain ω ∈ (0 , 1] driven by i.i.d. DP noise, 
+
+A(ω) = 2 − ω
+
+4 − 3ω ∈
+
+h 12 , 1
+
+i
+
+. (18) 4FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Proposition 4.6. Assume the input to the innovation fil-ter is pure i.i.d. Gaussian noise, i.e., gt = wt with wt ∼N (0 , σ 2
+
+> w
+
+Id) independent across t. Then for any ω ∈ (0 , 1] ,the innovation filter (5) -(7) is stable and, in steady state, each coordinate satisfies 
+
+lim  
+
+> t→∞
+
+Var(˜ gt,i ) = A(ω) σ2 
+
+> w
+
+(19) 
+
+Remark 4.7 . Any stable linear temporal filter scales the marginal variance of i.i.d. DP noise by its squared ℓ2
+
+gain A = P 
+
+> j≥0
+
+h2 
+
+> j
+
+(or via the Lyapunov equation). Thus, AdamW’s second-moment estimate is corrected by subtract-ing Aσ 2 
+
+> w
+
+per coordinate, with a floor ϵv . Appendix C gives full derivations, including finite-time bounds and second-moment decomposition for innovation filters, and discusses possible cross terms under closed-loop training. 
+
+# 5. Experiments 
+
+We evaluate F IBER on a diverse set of computer vision (CV) and natural language processing (NLP) tasks under differential privacy. We test if innovation-space denoising and filter-aware second-moment correction improve conver-gence and performance in practical DP settings. Implemen-tation details are in Appendix E, hyperparameter sensitivity in Appendix E.5, and multi-seed results in Appendix F.8. 
+
+5.1. Experimental Setup Privacy accounting and hyperparameters. All results use subsampled Gaussian mechanism with per-example ℓ2
+
+clipping at norm C. The noise multiplier is computed using a R ´enyi DP (RDP) (Wang et al., 2019; Bu et al., 2023c) ac-countant with fixed batch size sampling without replacement. We set δ = 1 /N 1.1 for privacy. The default ϵv = 10 −8 is justified in Appendix E.6. 
+
+Datasets and tasks. For vision, we train on MNIST (Le-Cun et al., 1998), CIFAR-10/100 (Krizhevsky, 2009), and ImageNet-1k (Deng et al., 2009). For NLP, we fine-tune on GLUE (Wang et al., 2018) and evaluate text generation on E2E (Novikova et al., 2017). 
+
+Models. We use CNN5 for MNIST/CIFAR-10, WRN for CIFAR-100, and ViT-small (Dosovitskiy et al., 2020) for ImageNet-1k. For NLP, we fine-tune RoBERTa (Liu et al., 2019) on GLUE and GPT-2-small (Radford et al., 2019) on E2E. More results on multiseed are reported in Appendix E Models are trained from scratch or fine-tuned from Hug-gingFace checkpoints (Wolf et al., 2020). 
+
+Hyperparameter tuning. For each task and privacy bud-get, we independently tune all hyperparameters for each opti-mizer using 100 grid search trials per optimizer. Base hyper-parameters (learning rate, epochs, batch size) are not shared between methods. Baseline-specific parameters (see Ta-ble 9) are tuned with the same budget as F IBER. For F IBER, we stage the search: first tuning (κ, γ ), then ω using the best 
+
+(κ, γ ) pair. Unless noted, (κ, γ, ω ) = (0 .6, 0.7, 0.9) .
+
+Baselines. We design baselines to span the main mech-anisms used to improve DP training, so that each claim is evaluated against an appropriate control. We include unfil-tered adaptive DP optimizers - DPAdamW with per-example clipping and Gaussian noise (we use DPAdam for CV tasks); temporal filtering baselines, DiSK (Zhang et al., 2024a) and DOPPLER (Zhang et al., 2024b); a correlated-noise base-line, MF-DP-FTRL (Choquette-Choo et al., 2023), which introduces structured correlations across steps/epochs; and a compositional baseline, DiSK-CORR, which augments DiSK with our filter-aware second-moment correction. For EMA state filtering with i.i.d. noise, the steady-state atten-uation is Astate (κ) = κ/ (2 − κ); accordingly, we subtract 
+
+Astate (κ)σ2 
+
+> w
+
+from ˆvt (details in Appendix C.4). 
+
+5.2. Main Results CV tasks. Figure 1 shows test accuracy across privacy budgets for MNIST (CNN5), CIFAR-10 (CNN5), and CIFAR-100 (WRN). Across all datasets, F IBER consis-tently outperforms DiSK, with the largest gains at low ε,where DP noise dominates. We also compare temporal filtering baselines: DiSK and DiSK-CORR. DiSK-CORR often matches or improves on DiSK, supporting our point that adaptive preconditioning must be calibrated to filtered DP noise. FIBER remains best, indicating benefit from innovation-space denoising beyond second-moment correc-tion. For CIFAR-10, we also include baselines: DOPPLER (low-pass DP-training) and MF-DP-FTRL (correlated-noise baseline). Figure 2 shows representative learning curves at fixed privacy budgets. F IBER converges faster and reaches higher accuracy than DPAdam and DiSK. We also evaluate ViT-small on ImageNet-1k under DP; the learning curve is shown in Figure 2, with F IBER outperforming DiSK and DPAdam, raising accuracy from 39 to 44. Early gains suggest F IBER mitigates DP-induced optimization slow-down. We further evaluate parameter transfer by finetuning a pretrained ViT-small on CIFAR-100. Table 1 presents accuracy results across varying privacy budgets. F IBERdemonstrates superior performance compared to both DP-Adam and DiSK for all values of ε, with the most substantial improvements observed under stricter privacy constraints. Relative to DiSK, F IBER increases accuracy by +2 .0 to 
+
++5 .1 percentage points as ε ranges from 1 to 8, with greater improvements at lower privacy budgets. These results in-dicate that innovation filtering and filter-aware correction remain effective during finetuning, even when pretrained representations reduce optimization difficulty. 5FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Figure 1. Training from scratch across privacy budgets. Final test accuracy on MNIST (CNN5), CIFAR-10 (CNN5), and CIFAR-100 (WRN) under different ε. We compare DPAdam, DiSK, DiSK-CORR, and F IBER. On CIFAR-10 (CNN5) we additionally include DOPPLER as a low-pass baseline and MF-DP-FTRL as a correlated-noise baseline. 
+
+Table 1. Fine-tuning ViT-small on CIFAR-100 under DP. ( Best 
+
+and second best are highlighted.) Method ε = 0 .5 ε = 1 .0 ε = 2 .0 ε = 4 .0 ε = 8 .0               
+
+> DP-AdamW 63.2 78.0 83.7 85.7 86.8 DiSK 83.5 85.4 86.8 87.6 88.5 FIBER88.6 89.4 90.0 90.4 90.5
+
+NLP tasks. We fine-tune RoBERTa-base on MNLI, QNLI, SST-2, and QQP with DP. F IBER consistently outperforms DPAdamW across all tasks and privacy budgets, especially at ε=1 . Its denoising and calibration methods improve lan-guage fine-tuning under DP. F IBER is usually competitive with or better than DiSK, demonstrating the value of innova-tion filtering. DOPPLER results use looser privacy budgets. See Appendix E for more NLP results and settings. 
+
+Table 2. Task metric of fine-tuning result on the GLUE dataset.                                                   
+
+> Task εNon-DP DPAdamW DiSK DOPPLER FIBERMNLI 6.7 87.6 83.2 84.8 83.80 84.7 1.0 87.6 80.7 82.0 83.55 83.0 QNLI 6.7 92.8 87.5 88.9 87.76 90.6
+> 1.0 92.8 86.0 88.7 87.63 90.5
+> SST-2 6.7 94.8 91.5 92.8 91.82 94.0
+> 1.0 94.8 91.4 91.5 91.71 93.1
+> QQP 6.7 91.9 85.8 89.0 86.50 89.5
+> 1.0 91.9 84.2 86.9 85.71 88.6
+
+NLG tasks We evaluate F IBER for DP text generation by fine-tuning GPT-2-small with HuggingFace checkpoints on the E2E dataset. Our task setup, training scripts, and hyperparameter tuning protocol follow those of previous DP generation studies (e.g., Li et al., 2022) to ensure compa-rability. We set (κ, γ, ω ) = (0 .6, 0.7, 0.9) . Table 3 reports results on E2E for ε ∈ { 3, 8}. F IBER consistently improves over DPAdamW and achieves performance close to DiSK, while exhibiting slightly different metric trade-offs. 
+
+Attribution vs. DP-AdamW. FIBER and DiSK both use two-point gradients, while DP-AdamW uses one-point. Thus, the F IBER vs. DP-AdamW gap reflects both the 
+
+Table 3. GPT-2 fine-tuning on E2E (higher is better).                                                 
+
+> Algorithm BLEU (%) ROUGE-L (%) METEOR NIST CIDEr AdamW ( ε=∞)69.46 71.36 0.461 8.780 2.422 DPAdamW ( ε= 3 )61.52 65.87 0.417 7.071 2.167 DiSK ( ε= 3 )68.35 70.23 0.456 8.636 2.399 FIBER ( ε= 3 )67.57 69.97 0.463 8.660 2.407
+> DPAdamW ( ε= 8 )64.99 67.34 0.425 8.387 2.192 DiSK ( ε= 8 )68.73 70.58 0.460 8.697 2.463
+> FIBER ( ε= 8 )67.90 70.56 0.466 8.669 2.370
+
+two-point method and F IBER’s unique features. To isolate FIBER’s contribution, we focus on comparisons with DiSK. 
+
+5.3. Ablation Studies 
+
+We ablate each F IBER component to quantify its contribu-tion under matched privacy budgets and a consistent experi-mental protocol. We further analyze the compute–accuracy trade-off and empirically validate the variance attenuation factor A(ω) using a paired-run differencing procedure. 
+
+Table 4. Residual filtering vs. gradient-state exponential smoothing under the same training protocol and privacy budgets.                             
+
+> εFilter type Acc. (%) κγ
+> 0.5 DiSK 59.70 0.7 0.5 0.5 FIBER65.32 0.6 0.7 2.0 DiSK 68.80 0.7 0.5 2.0 FIBER71.39 0.6 0.7 8.0 DiSK 74.90 0.7 0.5 8.0 FIBER73.19 0.6 0.7
+
+Innovation filtering vs. gradient-state smoothing. We compare DiSK’s gradient-state smoothing and F IBER’s in-novation filtering in a controlled setup. Both use the same DP mechanism and two-point construction; to match de-grees of freedom, we tie F IBER’s innovation gain to the two-point parameter ( ω = κ) and tune (κ, γ ) pair for both. As shown in Table 4, innovation filtering benefits most in high-noise regimes: at ε = 0 .5 and 2, F IBER outperforms DiSK by +5 .20 and +2 .59 points, respectively. When pri-vacy is looser ( ε = 8 ), the difference vanishes and DiSK 6FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction   
+
+> Figure 2. Training dynamics at fixed privacy budgets. Test accuracy curves on MNIST ( ε=0 .5), CIFAR-100 ( ε=1 ), and ImageNet-1k (ε=8 ). MNIST and CIFAR-100 include DPAdam, DiSK, DiSK-CORR, and F IBER; ImageNet-1k includes DPAdam, DiSK, and F IBER.
+
+is marginally better, suggesting the benefit of innovation filtering decreases as DP noise lessens. To isolate filtering from filter-aware correction, we disable the correction in FIBER by setting A(ω) = 0 . A full ablation isolating the two-point mechanism is left to future work. 
+
+Decoupling (κ, γ ) from innovation gain ω. We test whether the temporal denoising gain ω provides an in-dependent knob beyond the two-point geometry. Fixing 
+
+(κ, γ ) = (0 .6, 0.7) , we sweep ω (innovation denoising of 
+
+νt = gt − ˜gt−1) and observe a clear optimum near ω = 0 .9
+
+in Table 5 (CNN5/CIFAR-10, ε = 1 ): small ω under-denoises, while ω → 1 weakens effective averaging and passes more noise. To further separate geometry from de-noising, we fix γ = 0 .7 and sweep (κ, ω ). Figure 3 (CNN5, 
+
+ε = 4 , 80 epochs) shows a smooth landscape where increas-ing ω from 0.5 to 0.9 improves accuracy for most κ, with the best setting again at (κ, ω ) = (0 .6, 0.9) (75.44%). In contrast, larger κ degrades accuracy even at high ω, indi-cating that (κ, γ ) set the stable region while ω can be tuned within it. See Appendix E.5 for additional results.               
+
+> Table 5. Decoupling the innovation gain ωfrom the two-point parameters (κ, γ ).
+> ω0.60 0.70 0.80 0.90 0.99
+> Test Acc. (%) 68.86 69.66 70.74 70.76 70.62
+
+Filter-aware second-moment correction. To isolate the effect of filter-aware correction on AdamW’s sec-ond moment, we compare: (i) full FIBER, which subtracts attenuated variance A(ω)σ2 
+
+> w
+
+from the bias-corrected second moment; (ii) a variant without subtraction (F IBER NO CORR); and (iii) a baseline (F IBER BC CORR) using the bias-correction strategy from Tang et al. (2024), which ignores filter attenuation. For fairness, we re-tune DiSK-CORR rather than reusing the op-timal ω found for DiSK: we sweep ω (which jointly controls smoothing, the two-point geometry, and the attenuation fac-tor A(ω)) under the same tuning budget, and report DiSK-CORR using its own best-performing ω. Figure 4: F IBERachieves the highest test accuracy across privacy budgets, outperforming both variants. This shows that adjusting for filter-altered DP noise in AdamW’s second moment avoids preconditioner inflation and improves DP stability.         
+
+> Figure 3. Sweep over (κ, ω )with fixed γ= 0 .7.
+> Figure 4. Test accuracy versus privacy budget ε(CIFAR-10).
+
+Compute-Accuracy Tradeoff. FIBER and DiSK use two-point gradient observations, requiring two backward passes per update; DP-AdamW uses a single-point update. Thus, per-update compute for F IBER and DiSK is at most twice that of DP-AdamW, though actual slowdowns are often smaller. Figure 5 shows F IBER achieves the best accu-racy while remaining time-competitive and compares test accuracy at matched compute. 7FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Figure 5. Compute fairness diagnostics. (a) Eval accuracy vs. wall-clock time on CIFAR-10 (CNN5, ε = 4 ). (b) Test accuracy vs. number of gradient evaluations on CIFAR-100 (WRN, ε = 1 ). 
+
+Empirical check of variance attenuation. To validate the theoretical attenuation factor A(ω), we run two replicas with identical initialization and minibatch order but inde-pendent DP noise. Define ∆gt and ∆˜ gt as the differences between privatized and filtered gradients, respectively. We track ρt = Var( u⊤∆˜ gt)/Var( u⊤∆gt) using fixed random projections u. To ensure ∆gt is noise-dominated, we report 
+
+rt = Var( u⊤∆gt)/(2 σ2
+
+> w
+
+), which remains near 1. Figure 6 shows ρt matches A(ω), supporting the attenuation model. 
+
+Figure 6. Empirical validation of variance attenuation. Top: 
+
+ρt = Var(∆˜ gt)/Var(∆ gt) during training for ω = 0 .9. Bottom: distribution of per-projection ratios over the last 200 steps. 
+
+5.4. Diagnostic Studies 
+
+We validate F IBER through controlled diagnostics isolating (i) drift-tracking behavior and (ii) assumption compliance. Full methodology and results in Appendices E.3 and E.4. 
+
+Conditions where innovation filtering helps. We iso-late drift-tracking by testing filters on synthetic gradients: constant-velocity (CV) for drift and random-walk (RW) for stationary signals, both with DP noise. We report win rate, i.e., the number of trials (out of 7 random seeds) where innovation filtering achieves higher final utility than EMA state smoothing under the same (ε, δ ) and training protocol. Table 6 shows innovation filtering wins consistently on CV (7/7 at ε = 8 ), while providing little benefit on RW. 
+
+Table 6. Synthetic drift: innovation filter win rates.             
+
+> Model ε= 2 ε= 4 ε= 8
+> CV 5/7 6/7 7/7 RW 0/7 0/7 1/7
+
+Table 7. Proxy diagnostics for the filter-aware correction assump-tions from a representative run (single random projection, index 0), reported over the steady-state phase. Metric Value            
+
+> ω0.9
+> Total steps T800
+> Warmup / steady-state steps 100 /700
+> bρ(s, n )0.1404
+> Cross-term ratio bE[sn ]/bE[n2]0.1505
+> Coeff. of variation (CV) 0.0313
+
+Correction validation. We decompose the privatized gra-dient as gt = st + nt, where st is the underlying clipped gradient signal and nt is the injected DP Gaussian noise (after filtering). Our variance subtraction is exact when 
+
+E[stnt] = 0 , in which case E[g2 
+
+> t
+
+] = E[s2 
+
+> t
+
+] + E[n2 
+
+> t
+
+] el-ementwise. Paired-run diagnostics on CIFAR-10 show projected correlation bρ(s, n ) = 0 .14 and cross-term ratio 
+
+|bE[sn ]|/bE[n2] = 0 .15 – modest violations consistent with effective correction (Table 7). To prevent over-correction, we monitor clamp mass t (fraction of | ˆmt| on floor-clamped coordinates). Figure 7 confirms small ϵv ≤ 10 −7 preserves adaptivity (clamp mass < 0.01 ), while large ϵv ≥ 10 −6
+
+causes uniform preconditioning (clamp mass > 0.8) ( See Appendix E.6 for more details). We set ϵv = 10 −8 by de-fault, which preserves adaptivity while preventing numerical instability from the variance subtraction. 
+
+Figure 7. Variance floor sensitivity. Clamp diagnostics for 
+
+ϵv ∈ { 10 −8, 10 −7, 10 −6, 10 −5}. Small floors ( 10 −8, 10 −7) yield negligible clamp activity after a short transient, while larger floors (10 −6, 10 −5) induce a floor-dominated regime. 
+
+# 6. Conclusion 
+
+Differential privacy introduces stochastic perturbations that can substantially degrade the behavior of adaptive optimiz-8FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+ers. We presented F IBER, which (i) denoises privatized gradients in innovation space via a stable second-order re-cursion, (ii) decouples the two-point observation geometry from the temporal denoising gain for simpler tuning, and (iii) applies a filter-aware calibration to AdamW’s second-moment estimator to match the post-filter noise statistics. Across vision and language benchmarks, F IBER consis-tently improves utility under fixed privacy budgets, with the largest gains in tighter-privacy and long-horizon regimes. 
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+# References 
+
+Abadi, M., Chu, A., Goodfellow, I., McMahan, H. B., Mironov, I., Talwar, K., and Zhang, L. Deep learning with differential privacy. In Proceedings of the 2016 ACM SIGSAC conference on computer and communications security , pp. 308–318, 2016. Bao, W., Bauer, L. A., and Bindschaedler, V. On the importance of architecture and feature selection in dif-ferentially private machine learning. arXiv preprint arXiv:2205.06720 , 2022. URL https://arxiv. org/abs/2205.06720 .Bu, Z., Mao, J., and Xu, S. Scalable and efficient training of large convolutional neural networks with differential privacy. In Advances in Neural Information Process-ing Systems , volume 35, pp. 22898–22912, 2022. URL 
+
+https://arxiv.org/abs/2205.10683 .Bu, Z., Wang, Y., Zha, S., and Karypis, G. Automatic clipping: Differentially private deep learning made easier and stronger. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , 2023a. Bu, Z., Wang, Y.-X., Zha, S., and Karypis, G. Automatic clipping: Differentially private deep learning made easier and stronger. In Advances in Neural Information Process-ing Systems , volume 36, 2023b. Bu, Z., Wang, Y.-X., Zha, S., and Karypis, G. Differentially private optimization on large model at small cost. In 
+
+International Conference on Machine Learning , pp. 3192– 3218, 2023c. Bu, Z., Wang, Y.-X., Zha, S., and Karypis, G. Differentially private bias-term fine-tuning of foundation models. In 
+
+International Conference on Machine Learning , 2024a. URL https://arxiv.org/abs/2210.00036 .Bu, Z., Zhang, X., Zha, S., Hong, M., and Karypis, G. Pre-training differentially private models with limited public data. In Globersons, A., Mackey, L., Belgrave, D., Fan, A., Paquet, U., Tomczak, J. M., and Zhang, C. (eds.), 
+
+Advances in Neural Information Processing Systems 38: Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 , 2024b. Choquette-Choo, C. A., Ganesh, A., McKenna, R., McMa-han, H. B., Rush, J., Thakurta, A. G., and Xu, Z. (ampli-fied) banded matrix factorization: A unified approach to private training. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , 2023. Choquette-Choo, C. A., Dvijotham, K. D., Pillutla, K., Ganesh, A., Steinke, T., and Guha Thakurta, A. Cor-related noise provably beats independent noise for differ-entially private learning. In International Conference on Learning Representations , 2024. De, S., Berrada, L., Hayes, J., Smith, S. L., and Balle, B. Un-locking high-accuracy differentially private image classi-fication through scale. arXiv preprint arXiv:2204.13650 ,2022a. URL https://arxiv.org/abs/2204. 13650 .De, S., Berrada, L., Hayes, J., Smith, S. L., and Balle, B. Un-locking high-accuracy differentially private image classi-fication through scale. arXiv preprint arXiv:2204.13650 ,2022b. Deng, J., Dong, W., Socher, R., Li, L.-J., Li, K., and Fei-Fei, L. Imagenet: A large-scale hierarchical image database. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 248–255. IEEE, 2009. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., and Houlsby, N. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 ,2020. Dwork, C. and Roth, A. The algorithmic foundations of dif-ferential privacy. Foundations and Trends in Theoretical Computer Science , 9(3-4):211–407, 2014. 9FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Gilani, A., Tasnim, N., Sankar, L., and Kosut, O. Geoclip: Geometry-aware clipping for differentially private SGD. 
+
+CoRR , abs/2506.06549, 2025. doi: 10.48550/ARXIV. 2506.06549. URL https://doi.org/10.48550/ arXiv.2506.06549 .Jayaraman, B. and Evans, D. Evaluating differentially pri-vate machine learning in practice. In USENIX Security Symposium , pp. 1895–1912, 2019. Kairouz, P., McMahan, H. B., Song, S., Thakkar, O., Thakurta, A., and Xu, Z. Practical and private (deep) learning without sampling or shuffling. In International Conference on Machine Learning , pp. 5213–5225, 2021. Kingma, D. P. and Ba, J. Adam: A method for stochas-tic optimization. In Bengio, Y. and LeCun, Y. (eds.), 
+
+3rd International Conference on Learning Represen-tations, ICLR 2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings , 2015. URL http: //arxiv.org/abs/1412.6980 .Koloskova, A., McKenna, R., Charles, Z., Rush, J. K., and McMahan, H. B. Gradient descent with linearly corre-lated noise: Theory and applications to differential pri-vacy. In Advances in Neural Information Processing Systems , volume 36, 2023. Krizhevsky, A. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. LeCun, Y., Bottou, L., Bengio, Y., and Haffner, P. Gradient-based learning applied to document recognition. Proceed-ings of the IEEE , 86(11):2278–2324, 1998. Li, X., Tram `er, F., Liang, P., and Hashimoto, T. Large lan-guage models can be strong differentially private learn-ers. In International Conference on Learning Repre-sentations , 2022. URL https://arxiv.org/abs/ 2110.05679 .Liu, Y., Ott, M., Goyal, N., Du, J., Joshi, M., Chen, D., Levy, O., Lewis, M., Zettlemoyer, L., and Stoyanov, V. RoBERTa: A robustly optimized BERT pretraining ap-proach. arXiv preprint arXiv:1907.11692 , 2019. Mehta, H., Guha Thakurta, A., Kurakin, A., and Cutkosky, A. Towards large scale transfer learning for differentially private image classification. Transactions on Machine Learning Research , 2023a. Mehta, H., Thakurta, A. G., Kurakin, A., and Cutkosky, A. Large scale transfer learning for differentially private image classification. Transactions on Machine Learning Research , 2023b. Novikova, J., Du ˇsek, O., and Rieser, V. The E2E dataset: New challenges for end-to-end generation. In Proceed-ings of the 18th Annual SIGdial Meeting on Discourse and Dialogue , pp. 201–206, Saarbr ¨ucken, Germany, 2017. Association for Computational Linguistics. Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., Desmaison, A., K ¨opf, A., Yang, E. Z., DeVito, Z., Raison, M., Tejani, A., Chilamkurthy, S., Steiner, B., Fang, L., Bai, J., and Chintala, S. Pytorch: An imperative style, high-performance deep learning library. In Wallach, H. M., Larochelle, H., Beygelzimer, A., d’Alch ´e-Buc, F., Fox, E. B., and Garnett, R. (eds.), Advances in Neural In-formation Processing Systems 32: Annual Conference on Neural Information Processing Systems 2019, NeurIPS 2019, December 8-14, 2019, Vancouver, BC, Canada , pp. 8024–8035, 2019. Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., and Sutskever, I. Language models are unsupervised multitask learners. Technical report, OpenAI, 2019. Tang, Q., Shpilevskiy, F., and L ´ecuyer, M. Dp-adambc: Your dp-adam is actually dp-sgd (unless you apply bias correction). In Proceedings of the AAAI Conference on Ar-tificial Intelligence , volume 38, pp. 15276–15283, 2024. Tramer, F. and Boneh, D. Differentially private learning needs better features (or much more data). arXiv preprint arXiv:2011.11660 , 2020. Vuckovic, J. Kalman gradient descent: Adaptive vari-ance reduction in stochastic optimization. arXiv preprint arXiv:1810.12273 , 2018. Wang, A., Singh, A., Michael, J., Hill, F., Levy, O., and Bowman, S. R. GLUE: A multi-task benchmark and anal-ysis platform for natural language understanding. arXiv preprint arXiv:1804.07461 , 2018. Wang, Y.-X., Balle, B., and Kasiviswanathan, S. P. Subsam-pled r ´enyi differential privacy and analytical moments accountant. In The 22nd international conference on arti-ficial intelligence and statistics , pp. 1226–1235. PMLR, 2019. Wolf, T., Debut, L., Sanh, V., Chaumond, J., Delangue, C., Moi, A., Cistac, P., Rault, T., Louf, R., Funtowicz, M., Davison, J., Shleifer, S., von Platen, P., Ma, C., Jer-nite, Y., Plu, J., Xu, C., Scao, T. L., Gugger, S., Drame, M., Lhoest, Q., and Rush, A. M. Transformers: State-of-the-art natural language processing. In Liu, Q. and Schlangen, D. (eds.), Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations, EMNLP 2020 - Demos, Online, 
+
+10 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+November 16-20, 2020 , pp. 38–45. Association for Com-putational Linguistics, 2020. doi: 10.18653/V1/2020. EMNLP-DEMOS.6. URL https://doi.org/10. 18653/v1/2020.emnlp-demos.6 .Xia, T., Shen, S., Yao, S., Fu, X., Xu, K., Xu, X., and Fu, X. Differentially private learning with per-sample adaptive clipping. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pp. 10444–10452, 2023. Yousefpour, A., Shilov, I., Sablayrolles, A., Testuggine, D., Prasad, K., Malek, M., Nguyen, J., Ghosh, S., Bharadwaj, A., Zhao, J., Cormode, G., and Mironov, I. Opacus: User-friendly differential privacy library in pytorch. CoRR ,abs/2109.12298, 2021. URL https://arxiv.org/ abs/2109.12298 .Yu, D., Naik, S., Backurs, A., Gopi, S., Inan, H. A., Kamath, G., Kulkarni, J., Lee, Y. T., Manber, A., Messing, L., Raghunathan, A., Telang, R., and Zhang, H. Differentially private fine-tuning of language models. In International Conference on Learning Representations , 2022. URL 
+
+https://arxiv.org/abs/2110.06500 .Yu, D., Naik, S., Backurs, A., Gopi, S., Inan, H. A., Kamath, G., et al. Differentially private fine-tuning of language models. Journal of Privacy and Confidentiality , 14(2), 2024. Zhang, X., Bu, Z., Balle, B., Hong, M., Razaviyayn, M., and Mirrokni, V. Disk: Differentially private optimizer with simplified kalman filter for noise reduction. arXiv preprint arXiv:2410.03883 , 2024a. Zhang, X., Bu, Z., Hong, M., and Razaviyayn, M. Doppler: Differentially private optimizers with low-pass filter for privacy noise reduction. Advances in Neural Information Processing Systems , 37:41826–41851, 2024b. Zhang, X., Bu, Z., Wu, S., and Hong, M. Differentially private sgd without clipping bias: An error-feedback ap-proach. In International Conference on Learning Repre-sentations , 2024c. 11 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+# A. Differentially Private Optimization 
+
+A.1. Differentially Private Optimization 
+
+We briefly recall differential privacy and the standard privatization mechanism used in DP optimization. 
+
+Definition A.1 (( ε, δ )-Differential Privacy (Dwork & Roth, 2014)) . A randomized mechanism M is (ε, δ )-differentially private if for any two neighboring datasets D, D′ (differing in one example) and any measurable set S,
+
+Pr[ M(D) ∈ S] ≤ eε Pr[ M(D′) ∈ S] + δ. (20) 
+
+Definition A.2 (Gaussian Mechanism (Dwork & Roth, 2014; Wang et al., 2019)) . Let A : D → Rd have ℓ2 sensitivity 
+
+∆2(A) = max D,D′ ∥A(D) − A(D′)∥2 over neighboring datasets. Then releasing A(D) + w with w ∼ N (0 , σ 2∆2(A)2Id)
+
+is (ε, δ )-DP for an appropriate choice of σ as a function of (ε, δ ).
+
+DP-SGD. DP-SGD applies the Gaussian mechanism to clipped per-example gradients. With clip( u, C ) = u ·
+
+min {1, C/ ∥u∥2}, the privatized minibatch gradient is 
+
+gt = 1
+
+B
+
+X
+
+> ξ∈Bt
+
+clip( ∇f (θt; ξ), C ) + wt, w t ∼ N (0 , σ 2
+
+> w
+
+Id),
+
+where we parameterize noise by the noise multiplier σDP and set σw = ( σDP C)/B . Alternatively, noise N (0 , (σDP C)2Id)
+
+can be added to the sum of clipped gradients, followed by division by B. The pseudocode for DP-SGD is presented in Appendix D. 
+
+Privacy guarantee. For sampling rate q = B/ |D| and T steps, DP-SGD is (ε, δ )-DP when σDP is chosen using a standard privacy accountant. 
+
+# B. From Residual Gradient Dynamics to Innovation Filtering 
+
+This appendix completes the proof of Proposition 4.1 (Section 4.1). The derivation follows the pipeline 
+
+(i) residual-gradient dynamics ⇒ (ii) Kalman filter / α–β form ⇒ (iii) simplifications ⇒ FIBER
+
+We also note that if the drift state is removed (a random-walk model), the resulting filter reduces to a first-order exponential smoother (EMA), whereas the constant-velocity model below yields a second-order recursion. 
+
+Conventions. We present the derivation for a single coordinate (scalar) and suppress coordinate indices. Under a diagonal/coordinate-wise approximation, the same derivation applies element-wise to vectors. Throughout, gt denotes the observed (privatized) gradient at step t.
+
+B.1. Residual-Gradient Dynamics: Constant-Velocity Model 
+
+We model the latent (noise-free) gradient signal st as evolving with a persistent drift rt:
+
+st = st−1 + rt−1 + ηt, (21) 
+
+rt = rt−1 + ζt, (22) 
+
+gt = st + wt, (23) where wt is observation noise (including DP noise and minibatch noise), and ηt, ζ t are process noises capturing model mismatch and changes in the latent gradient dynamics. Equations (21) - (23) correspond to the classical constant-velocity tracking model. 
+
+B.2. Kalman Filter and the α–β Form 
+
+Define the 2D state xt ≜ [ st, r t ]⊤. Then (21)-(23) becomes 
+
+xt = Ax t−1 + εt, gt = Hx t + wt, (24) 12 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+where εt = [ ηt, ζ t]⊤, and 
+
+A =
+
+1 10 1
+
+
+
+, H = 1 0 .
+
+Let ˆxt|t−1 and ˆxt denote the predicted and corrected estimates with covariances Pt|t−1 and Pt. The Kalman recursion is 
+
+ˆxt|t−1 = Aˆxt−1, (25) 
+
+Pt|t−1 = AP t−1A⊤ + Q, (26) 
+
+Kt = Pt|t−1H⊤ HP t|t−1H⊤ + R−1, (27) 
+
+et = gt − H ˆxt|t−1, (28) 
+
+ˆxt = ˆ xt|t−1 + Ktet, (29) 
+
+Pt = ( I − KtH)Pt|t−1. (30) Since HP t|t−1H⊤ is scalar, (27) only requires scalar division. 
+
+α–β form. Write Kt = [ αt, β t]⊤ and expand (25)-(29): 
+
+ˆst|t−1 = ˆ st−1 + ˆ rt−1, ˆrt|t−1 = ˆ rt−1, (31) 
+
+et = gt − ˆst|t−1 = gt − (ˆ st−1 + ˆ rt−1), (32) 
+
+ˆst = ˆ st|t−1 + αtet, ˆrt = ˆ rt|t−1 + βtet. (33) This is the classical α–β filter for constant-velocity tracking. 
+
+B.3. From Kalman Recursion to the F IBER Innovation Filter 
+
+We now apply standard simplifications to obtain the lightweight recursion used by F IBER. 
+
+Step 1: Coordinate-wise (diagonal) approximation. We treat coordinates independently (equivalently assume diagonal covariances), avoiding dense-matrix storage or inversion. 
+
+Step 2: Steady-state constant gains. When noise statistics are approximately stationary, Kalman gains converge quickly. We therefore replace time-varying gains by constants: 
+
+αt ≈ α, βt ≈ β. (34) 
+
+Step 3: Tied-gain reduction and identification with optimizer states. To minimize tuning and match the optimizer implementation, we tie the gains: 
+
+α = β = ω ∈ (0 , 1] . (35) (We emphasize that in the exact steady-state Kalman filter one generally has α∞̸ = β∞; the tied-gain choice (35) is a practical simplification.) We identify the Kalman estimates with the optimizer variables: 
+
+˜gt ≡ ˆst, rt ≡ ˆrt. (36) Substituting (35)-(36) into (32)-(33) gives 
+
+rt = rt−1 + ω(gt − (˜ gt−1 + rt−1)) = (1 − ω)rt−1 + ω gt − ˜gt−1
+
+, (37) 
+
+˜gt = ˜ gt−1 + rt−1 + ω(gt − (˜ gt−1 + rt−1)) = ˜ gt−1 + rt. (38) 
+
+Residual-filter form. Define the residual signal 
+
+νt ≜ gt − ˜gt−1. (39) Then (37)-(38) becomes 
+
+rt = (1 − ω)rt−1 + ων t, (40) 
+
+˜gt = ˜ gt−1 + rt, (41) which matches (5)-(7) after identifying νt with the main-text notation. 13 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Second-order form. Eliminating rt via rt = ˜ gt − ˜gt−1 yields 
+
+˜gt = (2 − 2ω)˜ gt−1 − (1 − ω)˜ gt−2 + ωg t, (42) showing innovation filtering is second-order (two poles), unlike EMA. 
+
+B.4. Convergence of Time-Varying Kalman Gains 
+
+The Kalman gain Kt = [ αt, β t]⊤ depends on the covariance Pt|t−1, which evolves according to a Riccati recursion. Under time-invariant (A, H, Q, R ) with R > 0, standard Kalman filtering theory implies that the covariance converges to a unique stabilizing fixed point (under detectability/stabilizability conditions), and therefore the gains converge to constants. For completeness, we now write the scalar recursion for the covariance entries. 
+
+Noise model. We take Q = diag( σ2 
+
+> s
+
+, σ 2 
+
+> r
+
+) and R = σ2 
+
+> w
+
+in (26) and (27). 
+
+Covariance parameterization. Write the posterior covariance as 
+
+Pt =
+
+pt ct
+
+ct qPt
+
+
+
+, (43) where pt = Var( st − ˆst), qPt = Var( rt − ˆrt), and ct = Cov( st − ˆst, r t − ˆrt). Let P − 
+
+> t
+
+denote the predicted covariance 
+
+Pt|t−1 with the same parameterization P − 
+
+> t
+
+=
+
+p− 
+
+> t
+
+c−
+
+> t
+
+c− 
+
+> t
+
+qP −
+
+> t
+
+
+
+.
+
+Prediction. From P − 
+
+> t
+
+= AP t−1A⊤ + Q, we obtain 
+
+p− 
+
+> t
+
+= pt−1 + 2 ct−1 + qPt−1 + σ2 
+
+> s
+
+, (44) 
+
+c− 
+
+> t
+
+= ct−1 + qPt−1, (45) 
+
+qP − 
+
+> t
+
+= qPt−1 + σ2 
+
+> r
+
+. (46) 
+
+Gains. The innovation variance is St = HP − 
+
+> t
+
+H⊤ + R = p− 
+
+> t
+
++ σ2
+
+> w
+
+, and the Kalman gain is 
+
+αt = p−
+
+> t
+
+p− 
+
+> t
+
++ σ2
+
+> w
+
+, βt = c−
+
+> t
+
+p− 
+
+> t
+
++ σ2
+
+> w
+
+. (47) 
+
+Correction. Using Pt = ( I − KtH)P − 
+
+> t
+
+yields 
+
+pt = (1 − αt) p− 
+
+> t
+
+= σ2
+
+> w
+
+p− 
+
+> t
+
++ σ2
+
+> w
+
+p− 
+
+> t
+
+, (48) 
+
+ct = (1 − αt) c− 
+
+> t
+
+= σ2
+
+> w
+
+p− 
+
+> t
+
++ σ2
+
+> w
+
+c− 
+
+> t
+
+, (49) 
+
+qPt = qP − 
+
+> t
+
+− βtc− 
+
+> t
+
+= qP − 
+
+> t
+
+− (c− 
+
+> t
+
+)2
+
+p− 
+
+> t
+
++ σ2
+
+> w
+
+. (50) Equations (44)-(50) define a discrete-time Riccati recursion. 
+
+Steady state and constant-gain approximation. Under standard conditions with σ2 
+
+> w
+
+> 0, the recursion converges to a stabilizing fixed point (p∞, c ∞, q P
+
+> ∞
+
+), implying 
+
+(αt, β t) → (α∞, β ∞). (51) Empirically, this convergence is fast (a few tens of steps), which motivates replacing time-varying gains by constants and using the single tunable innovation gain ω in F IBER. Figure 8 visualizes this convergence on a representative setting. 14 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Figure 8. Convergence of (αt, β t) and p− 
+
+> t
+
+under the constant-velocity Kalman recursion (Eqs. (44) - (50) ), illustrating the rapid approach to steady-state gains. 
+
+B.5. Comparison: DiSK Random-Walk Dynamics Gives EMA 
+
+For reference, DiSK-style gradient-state filtering corresponds to a random-walk latent gradient model 
+
+st = st−1 + qt, gt = st + wt (52) whose steady-state scalar Kalman filter reduces to the first-order EMA 
+
+˜gt = (1 − κ)˜ gt−1 + κg t. (53) Thus, F IBER differs at the modeling level (constant-velocity vs. random-walk), which leads to innovation filtering rather than gradient-state EMA smoothing. 
+
+# C. Filter-Aware Bias Correction 
+
+This appendix derives the DP noise attenuation factor A(ω) used in our filter-aware second-moment correction, and then connects it to AdamW’s second-moment estimator. 
+
+C.1. Noise Propagation Through the Innovation Filter 
+
+We work coordinate-wise (the filter is linear and DP noise is isotropic), and drop the coordinate index. Assume the innovation filter input is pure DP noise: 
+
+gt = wt, E[wt] = 0 , Var( wt) = σ2
+
+> w
+
+, wt ⊥ wt′ (t̸ = t′). (54) Recall the innovation recursion (main text (5)-(7)): 
+
+νt = gt − ˜gt−1, rt = (1 − ω)rt−1 + ων t, ˜gt = ˜ gt−1 + rt. (55) Substituting gt = wt into (55) gives the linear system 
+
+˜gt = (1 − ω)˜ gt−1 + (1 − ω)rt−1 + ωw t, (56) 
+
+rt = −ω˜gt−1 + (1 − ω)rt−1 + ωw t. (57) Define the 2D filter state zt ≜ [˜ gt, r t]⊤. Then 
+
+zt = M z t−1 + ωb w t, M ≜
+
+1 − ω 1 − ω
+
+−ω 1 − ω
+
+
+
+, b ≜
+
+11
+
+
+
+. (58) 
+
+Stability. The eigenvalues of M have magnitude √1 − ω, hence M is Schur-stable for ω ∈ (0 , 1] . Therefore, a unique stationary covariance exists. 15 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+C.2. Deriving A(ω) via a Lyapunov Equation 
+
+Let Σ ≜ lim t→∞ E[ztz⊤ 
+
+> t
+
+] denote the stationary covariance. Since wt is independent of zt−1, Σ satisfies the discrete Lyapunov equation 
+
+Σ = M ΣM ⊤ + Q, Q ≜ ω2σ2 
+
+> w
+
+bb ⊤ = ω2σ2
+
+> w
+
+1 11 1
+
+
+
+. (59) Write 
+
+Σ = 
+
+x yy z
+
+
+
+, so that x = Var(˜ gt), z = Var( rt). (60) Let ρ ≜ 1 − ω, so M =
+
+ ρ ρ
+
+−ω ρ
+
+
+
+. Expanding M ΣM ⊤ and equating entries in (59) yields the linear system 
+
+x = ρ2(x + 2 y + z) + ω2σ2
+
+> w
+
+, (61) 
+
+y = −ρω (x + y) + ρ2(y + z) + ω2σ2
+
+> w
+
+, (62) 
+
+z = ω2x − 2ρωy + ρ2z + ω2σ2
+
+> w
+
+. (63) Solving (61)-(63) gives 
+
+x = σ2
+
+> w
+
+2 − ω
+
+4 − 3ω , (64) 
+
+y = σ2
+
+> w
+
+ω
+
+4 − 3ω , z = σ2
+
+> w
+
+2ω
+
+4 − 3ω . (65) Therefore, 
+
+Var(˜ gt) = x = A(ω)σ2
+
+> w
+
+, A(ω) ≜ 2 − ω
+
+4 − 3ω . (66) For ω ∈ (0 , 1] , A(ω) ∈ [ 12 , 1] with A(1) = 1 and lim ω→0+ A(ω) = 12 , proving Proposition 4.6. 
+
+C.3. Implication for AdamW’s Second Moment 
+
+AdamW forms the coordinate-wise second moment 
+
+vt = β2vt−1 + (1 − β2)˜ g2 
+
+> t
+
+, ˆvt = vt
+
+1 − βt+1 2
+
+. (67) 
+
+Lemma C.1 (Expectation of Adam’s bias-corrected second moment) . Let vt = β2vt−1 + (1 − β2)˜ g2 
+
+> t
+
+with v−1 = 0 and 
+
+ˆvt = vt/(1 − βt+1 2 ). Then for any process {˜gt},
+
+E[ˆ vt] = 1 − β2
+
+1 − βt+1 2
+
+> t
+
+X
+
+> k=0
+
+βt−k 
+
+> 2
+
+E[˜ g2
+
+> k
+
+].
+
+In particular, if E[˜ g2
+
+> k
+
+] = m2 for all k ≤ t, then E[ˆ vt] = m2 exactly. Proof. Unrolling the recursion yields vt = (1 − β2) Ptk=0 βt−k 
+
+> 2
+
+˜g2
+
+> k
+
+. Taking expectation and dividing by (1 − βt+1 2 ) gives the result. Under a standard local-stationarity approximation in which E[˜ g2 
+
+> t
+
+] is (approximately) constant over the window of interest, unrolling (67) yields E[ˆ vt] ≈ E[˜ g2 
+
+> t
+
+].Now decompose ˜gt = st + nt, where nt is the contribution of the filtered DP noise. By linearity of the filter and (66) ,
+
+E[nt] = 0 and E[n2 
+
+> t
+
+] = A(ω)σ2 
+
+> w
+
+in steady state. Assuming E[stnt] = 0 , we obtain 
+
+E[˜ g2 
+
+> t
+
+] = E[s2 
+
+> t
+
+] + E[n2 
+
+> t
+
+] = E[s2 
+
+> t
+
+] + A(ω)σ2
+
+> w
+
+, (68) which is Proposition C.3. This motivates the filter-aware corrected preconditioner 
+
+¯vt = max  ˆvt − A(ω)σ2
+
+> w
+
+, ϵ v
+
+, (69) used by F IBER. 16 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+C.4. Bias Correction for Gradient State Filter 
+
+We derive the DP noise attenuation factor for the gradient-state EMA used by DiSK. Consider the scalar recursion 
+
+˜gt = (1 − κ)˜ gt−1 + κg t, (70) and assume the input is pure i.i.d. DP noise gt = wt with E[wt] = 0 and Var( wt) = σ2
+
+> w
+
+. Unrolling (70) yields the stationary representation 
+
+˜gt = κ
+
+> ∞
+
+X
+
+> j=0
+
+(1 − κ)j wt−j , (71) which is well-defined for κ ∈ (0 , 1] . Using independence of {wt},
+
+Var(˜ gt) = κ2
+
+> ∞
+
+X
+
+> j=0
+
+(1 − κ)2j Var( wt−j ) = κ2σ2
+
+> w
+> ∞
+
+X
+
+> j=0
+
+(1 − κ)2j
+
+= κ2σ2 
+
+> w
+
+· 11 − (1 − κ)2 = σ2 
+
+> w
+
+· κ
+
+2 − κ . (72) Therefore, the EMA state filter attenuates i.i.d. DP noise by the factor 
+
+Astate (κ) ≜ Var(˜ gt)
+
+σ2
+
+> w
+
+= κ
+
+2 − κ ∈ (0 , 1] , (73) with Astate (κ) → 0 as κ → 0+ and Astate (1) = 1 .Analogous to Appendix C.3, this implies that when AdamW moments are computed from the EMA-filtered gradients, the expected DP noise contribution to the bias-corrected second moment is Astate (κ)σ2
+
+> w
+
+. Thus, a filter-aware correction for DiSK is 
+
+¯v(state)  
+
+> t
+
+≜ max  ˆvt − Astate (κ)σ2
+
+> w
+
+, ϵ v
+
+, (74) which we refer to as DiSK-CORR in the experiments. 
+
+C.5. Finite-time DP noise bound for the innovation filter Lemma C.2 (Finite-time DP noise bound for the innovation filter) . Let ˜wt denote the innovation-filter output driven by i.i.d. 
+
+wt ∼ N (0 , σ 2
+
+> w
+
+I) and initialize ˜g−1 = r−1 = 0 . Then for all t ≥ 0 and each coordinate i,
+
+Var( ˜ wt,i ) ≤ A(ω)σ2
+
+> w
+
+,
+
+and moreover Var( ˜ wt,i ) converges to A(ω)σ2 
+
+> w
+
+at a geometric rate set by the spectral radius of the state matrix. Proof. Define the state zt ≜ [˜ gt, r t]⊤. For noise-only input, the recursion can be written as the linear time-invariant system 
+
+zt = M z t−1 + ωb w t, M ≜
+
+1 − ω 1 − ω
+
+−ω 1 − ω
+
+
+
+, b ≜
+
+11
+
+
+
+.
+
+Let Σt ≜ E[ztz⊤ 
+
+> t
+
+] denote the (uncentered) covariance since E[zt] = 0 . Using independence of wt from zt−1 and 
+
+E[w2 
+
+> t
+
+] = σ2
+
+> w
+
+,
+
+Σt = M Σt−1M ⊤ + Q, Q ≜ ω2σ2 
+
+> w
+
+bb ⊤,
+
+with Σ−1 = 0 .By iterating the recursion, we obtain the closed form 
+
+Σt =
+
+> t
+
+X
+
+> k=0
+
+M kQ(M ⊤)k,
+
+17 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+which is positive semidefinite and nondecreasing in the Loewner order as t increases. Since ω ∈ (0 , 1] , the matrix M
+
+is Schur-stable (its eigenvalues have magnitude √1 − ω < 1), so the infinite series converges to the unique stationary covariance 
+
+Σ∞ =
+
+> ∞
+
+X
+
+> k=0
+
+M kQ(M ⊤)k,
+
+which is equivalently the unique solution to the discrete Lyapunov equation Σ∞ = M Σ∞M ⊤ + Q.Therefore Σt ⪯ Σ∞ for all t, implying 
+
+Var(˜ gt) = e⊤ 
+
+> 1
+
+Σte1 ≤ e⊤ 
+
+> 1
+
+Σ∞e1 = A(ω)σ2
+
+> w
+
+,
+
+where e1 = [1 , 0] ⊤. For the convergence rate, note that 
+
+Σ∞ − Σt =
+
+> ∞
+
+X
+
+> k=t+1
+
+M kQ(M ⊤)k = M t+1 
+
+
+
+> ∞
+
+X
+
+> j=0
+
+M j Q(M ⊤)j
+
+(M ⊤)t+1 = M t+1 Σ∞(M ⊤)t+1 .
+
+Hence, by submultiplicativity, 
+
+∥Σ∞ − Σt∥2 ≤ ∥ M t+1 ∥22 ∥Σ∞∥2.
+
+Since M is Schur-stable ( ρ(M ) = √1 − ω < 1), standard results on matrix powers imply that for any ε > 0 there exists a constant Cε such that ∥M k∥2 ≤ Cε(ρ(M ) + ε)k for all k ≥ 0 (e.g., by Gelfand’s formula). Therefore, 
+
+∥Σ∞ − Σt∥2 ≤ C2 
+
+> ε
+
+∥Σ∞∥2 (ρ(M ) + ε)2( t+1) ,
+
+which establishes geometric convergence. (For ω = 1 , M is nilpotent and the convergence is finite-time.) 
+
+C.6. Second-moment decomposition and the cross term Proposition C.3 (Second-moment decomposition under filtered DP noise) . Let gt = ¯ gt +wt, where {wt} are i.i.d. N (0 , σ 2
+
+> w
+
+),and let ˜gt be the output of a (fixed-initialization) stable linear filter H applied to {gt}. Denote by nt ≜ H(w)t the filter output when driven only by {wt}, and define st ≜ ˜gt − nt so that ˜gt = st + nt. If the DP noise variance gain of H is A in the sense that E[n2 
+
+> t
+
+] = Aσ 2 
+
+> w
+
+in steady state, then 
+
+E[˜ g2 
+
+> t
+
+] = E[s2 
+
+> t
+
+] + Aσ 2 
+
+> w
+
++ 2 E[stnt]. (75) 
+
+In particular, if E[stnt] = 0 (e.g., if st is independent of {wτ }τ ≤t), then 
+
+E[˜ g2 
+
+> t
+
+] = E[s2 
+
+> t
+
+] + Aσ 2
+
+> w
+
+. (76) 
+
+Proof. By linearity of H, ˜gt = H(g)t = H(¯ g)t + H(w)t. With nt = H(w)t and st = ˜ gt − nt, we have ˜gt = st + nt.Expanding the square and taking expectations gives E[˜ g2 
+
+> t
+
+] = E[s2 
+
+> t
+
+] + E[n2 
+
+> t
+
+] + 2 E[stnt]. Substituting E[n2 
+
+> t
+
+] = Aσ 2 
+
+> w
+
+yields (75). If E[stnt] = 0 , (76) follows. 
+
+# D. Algorithm Pseudocode 
+
+DP-SGD Algorithm 2 shows the pseudocode for the DP-SGD optimizer. 
+
+FIBER The pseudocode for the F IBER optimizer is presented in Algorithm 3. 
+
+# E. Additional Numerical Results 
+
+This appendix provides implementation details, hyperparameter choices, and additional experimental results. 18 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Algorithm 2 DP-SGD (per-example clipping + Gaussian noise) (Abadi et al., 2016)  
+
+> 1:
+
+Input: dataset D, steps T , batch size B, clipping C, step sizes {ηt}, noise std σ2 
+
+> w
+
+← (σDP C)2/B 2 where σDP is noise multiplier  
+
+> 2:
+
+Initialize θ0 
+
+> 3:
+
+for t = 0 to T − 1 do  
+
+> 4:
+
+Sample minibatch Bt ⊂ D with |Bt| = B 
+
+> 5:
+
+¯gt ← 1
+
+> B
+
+P 
+
+> ξ∈Bt
+
+clip( ∇f (θt; ξ), C ) 
+
+> 6:
+
+Sample wt ∼ N (0 , σ 2
+
+> w
+
+Id); gt ← ¯gt + wt 
+
+> 7:
+
+θt+1 ← θt − ηtgt 
+
+> 8:
+
+end for  
+
+> 9:
+
+Output: θT
+
+Algorithm 3 FIBER: DP-AdamW with Innovation Filtering and Filter-Aware Bias Correction  
+
+> 1:
+
+Input: θ0, dataset D, steps T , batch size B, lr η, clip C, DP noise σDP , Adam params (β1, β 2, ϵ ), weight decay λ,innovation gain ω, floor ϵv , (optional) two-point (κ, γ ). 
+
+> 2:
+
+Init: ˜g−1 = 0 , r−1 = 0 , m−1 = 0 , v−1 = 0 , d−1 = 0 , σ2 
+
+> w
+
+← (σDP C)2/B 2, A(ω) ← 2−ω 
+
+> 4−3ω
+
+. 
+
+> 3:
+
+for t = 0 , . . . , T − 1 do  
+
+> 4:
+
+Sample minibatch Bt ⊂ D , |Bt| = B. 
+
+> 5:
+
+Privatized gradient observation: 
+
+gt = 1
+
+B
+
+X
+
+> ξ∈Bt
+
+clip 
+
+ 1 − κκγ ∇f (θt + γd t−1; ξ) + 
+
+
+
+1 − 1 − κκγ 
+
+
+
+∇f (θt; ξ), C 
+
+
+
++ wt, wt ∼ N (0 , σ 2
+
+> w
+
+Id). 
+
+> 6:
+
+Innovation filter: νt ← gt − ˜gt−1; rt ← (1 − ω)rt−1 + ων t; ˜gt ← ˜gt−1 + rt. 
+
+> 7:
+
+Adam moments: mt ← β1mt−1 + (1 − β1)˜ gt; vt ← β2vt−1 + (1 − β2)(˜ gt ⊙ ˜gt). 
+
+> 8:
+
+Bias + filter-aware correction: ˆmt ← mt/(1 − βt+1 1 ), ˆvt ← vt/(1 − βt+1 2 ), ¯vt ← max(ˆ vt − A(ω)σ2
+
+> w
+
+, ϵ v ). 
+
+> 9:
+
+Update: θt+1 ← (1 − ηλ )θt − η ˆmt ⊘ (√¯vt + ϵ); dt ← θt+1 − θt. 
+
+> 10:
+
+end for  
+
+> 11:
+
+Output: θT .
+
+E.1. Experiment Details Code and reproducibility. All experiments are conducted in PyTorch (Paszke et al., 2019). F IBER is implemented as a drop-in optimizer that operates on privatized gradients from the same DPtraining pipeline as the baselines, which apply per-example gradient clipping and additive Gaussian noise. For a target (ε, δ ) budget, we compute the required noise multiplier using a RDP accountant (Wang et al., 2019; Bu et al., 2023c), as implemented in standard DP libraries such as Opacus (Yousefpour et al., 2021)and FastDP (Bu et al., 2024b). Full code is available at https://anonymous.4open. science/r/InnoAdamBC-4752 . Our implementation uses FastDP v2.1, Python 3.12, CUDA 12.6, and PyTorch 2.9. Upon acceptance, we will release the full implementation under the MIT License with: • Training scripts for all benchmarks • Hyperparameter configurations • Privacy accounting notebooks • Pre-computed experimental results The repository will be archived on Zenodo for permanent DOI. 
+
+Hardware. Unless otherwise specified, each trial is run on a single GPU. We use RTX 4090 (24GB) or RTX 5090 (32GB) for most benchmarks, and RTX Pro 6000 (96GB) for ImageNet-1k experiments. Training time varies with the dataset and model size; the most expensive setting is ViT-small training on ImageNet-1k, which completes in under 15 days. 19 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Tuning budget and fairness. We allocate a fixed hyperparameter search budget of Ntotal = 100 trials per method for each dataset and privacy setting. Each method is tuned independently within this budget, and results are reported for the best configuration identified under these constraints. For F IBER, we employ a staged search-first selecting (κ, γ ), then tuning 
+
+ω-as a practical strategy for navigating the search space; importantly, this does not increase the total number of trials. The best configuration found within the fixed budget is reported for each method and setting. 
+
+Training recipe. Gradient accumulation is employed to support large effective batch sizes. For training from scratch, the learning rate is warmed up for a fixed fraction of total steps (e.g., 1/20 ), followed by cosine decay. Model- and dataset-specific settings are kept consistent across methods, including data augmentation, normalization, and EMA when applicable. To ensure reproducibility, the random seed is set to 42. 
+
+Metrics. For vision tasks, we report top-1 accuracy, using test accuracy for MNIST and CIFAR datasets and validation accuracy for ImageNet-1k, in accordance with established benchmark practices. For GLUE tasks, we report the official evaluation metric for each task: accuracy for MNLI, QNLI, and SST-2, and F1 score for QQP. For the E2E data, we report standard text-generation metrics including BLEU, ROUGE-L, METEOR, NIST, and CIDEr, as these metrics capture complementary aspects of output quality. These metrics assess various dimensions such as n-gram overlap, recall-oriented overlap, and consensus with reference texts. We use standard benchmark implementations and default settings for all metrics to ensure comparability with prior work. 
+
+E.2. Hyperparameter Selection Main hyperparameters. The primary hyperparameters include the number of epochs E, batch size B, learning rate 
+
+η, and clipping threshold C, as well as the DP noise multiplier σDP computed by the accountant. F IBER introduces additional parameters, including innovation gain ω, two-point parameters (κ, γ ), and a variance floor ϵv to ensure numerical stability in the filter-aware second-moment correction. Unless otherwise specified, we set (κ, γ, ω ) = (0 .6, 0.7, 0.9) as a default because our sensitivity analyses indicate this choice is near-optimal and robust across a broad range of settings (Appendix E.5). For CIFAR and MNIST, we follow prior work (Zhang et al., 2024a) and select hyperparameters on the test set due to the absence of an official validation split. 
+
+Privacy accounting. The noise multiplier is computed using an RDP accountant under fixed batch size sampling without replacement. We use RDP orders α ∈ { 1.1, 1.2, . . . , 10 .0, 12 , 13 , . . . , 63 } and convert to (ε, δ ) via the standard bound 
+
+ε = min α
+
+
+
+ϵRDP (α) + log(1 /δ )
+
+> α−1
+
+
+
+.
+
+Clipping and δ. Normalized ℓ2 clipping is applied as follows: 
+
+clip( g, C ) ≜ g · min 
+
+
+
+1, C
+
+∥g∥2
+
+
+
+. (77) Unless otherwise specified, δ is set to 1/N 1.1. Table 8 provides the δ values for each dataset and task.                                     
+
+> Table 8. Privacy parameter δ= 1 /N 1.1used across datasets/tasks. Dataset/Task δ
+> MNIST 5.5×10 −6
+> CIFAR-10 6.8×10 −6
+> CIFAR-100 6.8×10 −6
+> ImageNet-1k 1.9×10 −7
+> MNLI 6.3×10 −7
+> QNLI 4.8×10 −7
+> SST-2 4.9×10 −6
+> QQP 7.6×10 −7
+> E2E 1.2×10 −5
+> DART 6.1×10 −6
+
+20 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Search grids. Table 9 summarizes hyperparameter grids for vision training from scratch. AdamW defaults (β1, β 2) = (0 .9, 0.999) and ϵ = 10 −8 are used unless otherwise specified. ϵv = 10 −8 is set by default. The detail reason for choosing this value of ϵv = 10 −8 is discussed in Appendix E.6                                                                    
+
+> Table 9. Search grids for vision training-from-scratch (optimal values in bold). We tune (E, B, η )first, then tune (ω, κ, γ )on top of the best base setup. MNIST CIFAR ImageNet-1k Epochs E{1,2,3} × 20 {1,2,3,4} × 40 {3,4} × 40
+> Batch size B{2,5} × 10 3{0.5,1,2,5} × 10 3{5,10 } × 10 3
+> LR η{0.5,0.25 ,0.05 ,0.025 }{0.005 ,0.001 ,0.0005 ,0.0001 }{10 ,3,1,0.3 ,0.1} × 10 −3
+> ω{0.9 }{0.6,0.7,0.8,0.9 ,0.99 }{0.9 }
+> κ{0.6 }{0.5,0.6 ,0.7,0.8,0.9}{0.6 }
+> γ{0.7 }{0.6,0.7 ,0.8,0.9}{0.7 }
+
+E.3. Synthetic Drift Diagnostics for Innovation Filtering 
+
+Table 4 indicates that innovation filtering can substantially help in some regimes (especially when gradients drift), yet it can be less favorable in other regimes where simpler EMA smoothing suffices (e.g., at larger ε in Table 4). To provide direct evidence isolating drift-tracking effects from end-to-end network training, we run a controlled synthetic experiment where the latent (noise-free) gradient signal follows a known drift model, and the observed gradients are corrupted by additive Gaussian noise. We then compare (i) EMA smoothing (DiSK-style) and (ii) our innovation filter (Eqs. (5) – (7) ) on their ability to track the latent signal. 
+
+Generative models. We generate a latent “true” gradient signal {st}Tt=1 ⊂ Rd and noisy observations {gt} via 
+
+gt = st + wt, wt ∼ N (0 , σ 2
+
+> w
+
+I). (78) We consider two canonical drift models: • Constant-velocity (CV) model. The latent signal exhibits trend-like dynamics (second-order drift), i.e., st evolves with approximately constant velocity up to small perturbations. • Random-walk (RW) model. The latent signal follows first-order diffusive dynamics, i.e., st evolves as a random walk (near-stationary increments). We summarize noise conditions using the signal-to-noise ratio (SNR) shown in Fig. 10: 
+
+SNR ≜ σ2 
+
+> s
+
+/σ 2
+
+> w
+
+, (79) where σ2 
+
+> s
+
+denotes the latent signal scale (as instantiated in the synthetic generator) and σ2 
+
+> w
+
+is the observation-noise variance. 
+
+Filters compared. Given observations {gt}, we form filtered estimates {˜gt} using: • EMA (DiSK-style smoothing). A first-order exponential moving average of the observed gradients. • Innovation filter (FIBER). A constant-gain innovation recursion that filters the residual (innovation) stream and integrates it to form ˜gt (Eqs. (5)–(7)). 
+
+Evaluation metrics. For each run, we evaluate tracking quality using the mean-squared error (MSE) against the latent signal: 
+
+MSE(˜ g, s ) = 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+∥˜gt − st∥22. (80) 21 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+We report the relative improvement of innovation filtering over EMA as: 
+
+Improvement(%) ≜ 100 · MSE EMA − MSE Innov 
+
+MSE EMA 
+
+. (81) The percent improvement in Eq. (81) can be unbounded below when MSE EMA is small, meaning large negative values reflect rare but severe failures of innovation filtering in some regimes (particularly under RW dynamics). To provide a robust summary, we also report win rates and medians, and clip heatmap visualizations to [−200% , 100%] for readability. Positive values indicate that innovation filtering improves tracking (i.e., lowers MSE relative to EMA). The win rate is defined as the fraction of evaluated configurations with positive improvement. 
+
+Experiment sweep and privacy budgets. We run the synthetic diagnostic for privacy budgets ε ∈ { 0.5, 1, 2, 4, 8}. For each ε, we evaluate a fixed set of 7 configurations (hence win rates are multiples of 1/7), spanning a range of noise/drift conditions; the corresponding SNR coverage is visualized in Fig. 10. For readability in the heatmaps, we clip displayed improvements to [−200% , 100%] , while summary statistics (Table 10) are computed from the underlying (unclipped) values. 
+
+Aggregate results across privacy budgets. Table 10 summarizes how the innovation filter behaves as the privacy budget varies. Under the CV model, the innovation filter’s win rate increases monotonically with ε (from 3/7 at ε = 0 .5 to 7/7
+
+at ε = 8 ), and the best-case improvement is consistently near 100% across all privacy budgets. However, at very small ε
+
+the average improvement can be dominated by rare catastrophic failures (large negative outliers), yielding a negative mean despite substantial best-case gains; as ε increases, the average improvement becomes positive (e.g., +59 .9% at ε = 4 and 
+
++89 .2% at ε = 8 ). This pattern is consistent with innovation filtering being well-matched to trend-like (CV) dynamics, but requiring sufficient effective SNR and/or conservative gain settings to avoid instability when observation noise dominates. In contrast, under the RW model, innovation filtering is rarely favorable: the win rate is 0/7 for ε ≤ 4, and only 1/7 at 
+
+ε = 8 . The best-case improvement becomes less negative as ε increases (from −1225 .6% at ε = 0 .5 to −15 .4% at ε = 4 ), and becomes positive in a single configuration at ε = 8 (+69 .2% ), but the mean remains strongly negative overall. These results align with the intuition that EMA smoothing is closer to the appropriate constant-gain estimator under RW-like dynamics, whereas innovation filtering is designed to track persistent trend (CV) behavior. 
+
+Qualitative tracking behavior. Fig. 11 illustrates a representative CV run at SNR = 0 .05 , plotting the ℓ2 tracking error over time. EMA error accumulates steadily, reflecting lag under drift, whereas innovation filtering maintains a low and approximately stable error over the entire horizon, directly visualizing the drift-tracking advantage in a regime where the model matches the innovation filter’s inductive bias. The synthetic diagnostic provides controlled support for the regime-dependent behavior seen in network training: innovation filtering is advantageous when gradients exhibit trend-like drift (CV) and the effective SNR is not extremely low, while EMA smoothing can be competitive or preferable under RW-like (diffusive) dynamics. We therefore interpret cases where DiSK outperforms at large ε (e.g., ε = 8 in Table 4) as consistent with a regime where the gradient signal is closer to RW/stationary behavior and additional innovation dynamics are unnecessary.                                                         
+
+> Table 10. Synthetic drift summary across privacy budgets. “Win rate” is the fraction of configurations (out of 7) where innovation filtering improves over EMA (Eq. (81)). “Best” and “Avg” are the best-case and mean improvements (%).
+> εModel Win rate (%) Wins Best (%) Avg (%) 0.5 CV 42.9 3/7 99.59 -388.59 1.0 CV 57.1 4/7 99.90 -189.32 2.0 CV 71.4 5/7 99.97 -26.14 4.0 CV 85.7 6/7 99.99 59.91 8.0 CV 100.0 7/7 100.00 89.23 0.5 RW 0.0 0/7 -1225.59 -1466.996 1.0 RW 0.0 0/7 -781.19 -1396.070 2.0 RW 0.0 0/7 -277.68 -1297.283 4.0 RW 0.0 0/7 -15.40 -1180.544 8.0 RW 14.3 1/7 69.15 -1014.144
+
+22 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction         
+
+> Figure 9. Synthetic drift diagnostic: (left) innovation filter win rate vs. privacy budget ε; (right) best-case improvement vs. ε, for both CV and RW latent dynamics.
+> Figure 10. Improvement heatmaps (clipped to [−200% ,100%] for visualization) across SNR values and privacy budgets ε, shown separately for CV (left) and RW (right) latent dynamics.
+
+E.4. Empirical Assumption Audits Empirical audit of Proposition C.3 assumptions. The filter-aware correction in Proposition C.3 relies on the steady-state second-moment decomposition (Proposition C.3), which assumes the standard uncorrelatedness approximation 
+
+E[st,i nt,i ] = 0 , and on a local-stationarity approximation in Appendix C.3 (treating E[˜ g2
+
+> t,i
+
+] as approximately constant over the averaging window). As also discussed in Section 6, these assumptions are approximate under closed-loop optimization, and may be affected by regimes where DP noise dominates or where clipping/noise is heterogeneous. To quantify the approximation error, we extend the paired-run differencing protocol of Section 5.3 beyond variance attenuation. In addition to estimating the attenuation factor A(ω), we estimate a proxy for the cross term E[stnt] via projected logging. Let u ∈ Rd be a fixed random unit vector shared across runs/projections. We log (i) the projected filtered gradient xt ≜ u⊤ ˜gt during training and (ii) the projected DP noise realization yt ≜ u⊤wt (available at generation time in the code). We then apply the same innovation filter (Eqs. (5) –(7) ) to the noise projection {yt} offline to obtain the projected filtered-noise component n(proj)  
+
+> t
+
+. Finally we define the projected signal proxy s(proj)  
+
+> t
+
+≜ xt − n(proj)  
+
+> t
+
+and compute summary statistics after a warmup period. 
+
+Results. Table 11 reports a representative diagnostic at ω = 0 .9 over T = 800 steps, using a warmup of 100 steps and statistics computed on the remaining 700 steps. We observe that the local-stationarity proxy holds well (coefficient of variation ≈ 0.031 in a sliding-window variance estimate), supporting the use of a steady-state approximation over this window. Regarding uncorrelatedness, the projected correlation is modest ( bρ(s, n ) ≈ 0.140 ), and the normalized cross term is small relative to the filtered-noise energy, bE[sn ] /bE[n2] ≈ 0.1505 . Overall, this diagnostic suggests that while closed-loop coupling is not strictly zero, its magnitude is limited in this setting and is consistent with the approximation used in Proposition C.3. This supports the limitations discussion in Section 6 and motivates reporting assumption-audit diagnostics alongside the correction. 23 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction                   
+
+> Figure 11. Representative CV run at SNR = 0 .05 :ℓ2tracking error over time for EMA vs. innovation filtering (and Kalman reference, if included in the script). Innovation filtering exhibits substantially lower drift-tracking error across the horizon.
+> Table 11. Proxy diagnostics for Proposition C.3 assumptions in one representative run (projection index 0). “Cross-term ratio” is
+> bE[sn ]/bE[n2].Metric Value
+> ω0.9
+> Total steps T800
+> Warmup / steady-state steps 100 /700
+> bρ(s, n )0.1404
+> Cross-term ratio bE[sn ]/bE[n2]0.1505
+> Coeff. of variation (CV) 0.0313
+
+Practical implications and failure-mode guidance. When the cross term is non-negligible, subtracting only A(ω)σ2
+
+> w
+
+(Equation 12) may not fully remove optimizer-state inflation (if E[sn ] > 0) or may over-correct (if E[sn ] < 0). As a conservative safeguard, we recommend (i) reporting the assumption-audit metrics across multiple random projections and seeds, and (ii) monitoring over-correction diagnostics such as the “clamp mass” statistic in Appendix E.6. In regimes where the estimated cross-term ratio is consistently large, we suggest reducing the innovation gain ω, increasing the variance floor 
+
+ϵv , or using layerwise clipping/noise as a robustness test. 
+
+E.5. Hyperparameter Sensitivity 
+
+We investigate the sensitivity of F IBER to the two-point hyperparameters (κ, γ ) using the CNN5 model on the CIFAR-10 dataset. The experiments are conducted under a privacy budget of ε = 4 for 80 epochs. The innovation gain is fixed at 
+
+ω = 0 .9, and a grid search is performed over (κ, γ ), while all other training and differential privacy settings remain constant. Figure 12( a) presents the resulting test accuracy as a function of (κ, γ ). Several notable trends are observed. First, performance varies smoothly across most of the grid, indicating that F IBER does not exhibit excessive sensitivity to moderate changes in (κ, γ ). Second, the optimal region is concentrated around κ ≈ 0.6 and γ ≈ 0.7, where the peak accuracy of 75.44% is observed. Deviation from this region generally results in reduced performance, particularly for larger κ values (e.g., κ ≥ 0.8), where accuracy plateaus in the mid-60% range. Third, very small κ values can be unstable depending on γ. At κ = 0 .5, the accuracy varies substantially (from 52.82% to 73.33%), indicating that overly aggressive two-point mixing may be sensitive when combined with particular extrapolation scales. Recall that the two-point construction uses a mixing coefficient 
+
+a ≜ 1 − κκγ , (82) so that (before clipping/noise) the two-point per-example vector is a weighted combination of a lookahead gradient and a 24 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+current gradient. A natural stability requirement is that this combination remains convex, i.e., 0 ≤ a ≤ 1, which avoids negative weights that can amplify the update norm and interact poorly with clipping. For κ ∈ (0 , 1) and γ > 0, we always have a ≥ 0, and a ≤ 1 is equivalent to the simple constraint 
+
+γ ≥ 1 − κκ . (83) This constraint is particularly meaningful under DP because clipping is nonlinear: if a > 1, the weight on the current gradient becomes negative, which can increase the norm of the combined vector and trigger additional clipping, thereby increasing clipping-induced distortion. Conversely, when a ∈ [0 , 1] (convex mixing), the combined vector cannot exceed the convex hull of the two endpoints, providing a basic guardrail against norm explosion prior to clipping. The observed optimum (κ, γ ) ≈ (0 .6, 0.7) aligns closely with this convex-mixing boundary. Indeed, κ = 0 .6 implies 
+
+(1 − κ)/κ ≈ 0.667 , and γ = 0 .7 lies just above this threshold, yielding a ≈ 0.4/(0 .6 · 0.7) ≈ 0.952 . Therefore, the optimal region corresponds to a near-lookahead update, in which most weight is assigned to the lookahead gradient while retaining a small stabilizing weight on the current gradient. This configuration is consistent with enhanced robustness under clipping and differential privacy noise. At the boundary γ = (1 − κ)/κ , we have a = 1 , i.e., the construction becomes “pure lookahead”; slightly larger γ keeps the mixture as convex ( a < 1) while providing additional robustness. Next, we study sensitivity with respect to the temporal denoising gain by fixing γ = 0 .7 (near-optimal from the previous sweep) and tuning (κ, ω ). Figure 12( b) demonstrates that accuracy generally improves as ω increases from 0.5 to 0.9 across most κ values, which is consistent with the observation that stronger innovation smoothing is beneficial under stringent privacy constraints. The optimal configuration again occurs near κ = 0 .6 with ω = 0 .9 (75.44%), whereas larger κ values result in a marked decrease in accuracy even at high ω. Notably, the landscape remains smooth, indicating that ω can be tuned independently once (κ, γ ) are established within a stable region. In summary, these heatmaps support two practical conclusions: (i) a broad, stable region of strong performance exists around 
+
+(κ, γ ) = (0 .6, 0.7) , and (ii) (κ, γ ) primarily control the two-point construction (including the convex-mixing constraint (83)), while ω governs temporal denoising, with both effects being well-behaved and amenable to independent tuning.               
+
+> (a) Sweep over (κ, γ )with fixed ω= 0 .9.(b) Sweep over (κ, ω )with fixed γ= 0 .7.
+> Figure 12. Hyperparameter sensitivity of F IBER on CIFAR-10 (CNN5, ε= 4 , 80 epochs). Values denote test accuracy (%).
+
+E.6. Choice of ϵv (Variance Floor) Over-correction diagnostics. The filter-aware correction method subtracts A(ω)σ2 
+
+> w
+
+from the bias-corrected second moment in AdamW. If this subtraction is excessively large, or if the variance floor is set too high, the resulting preconditioner may become dominated by the floor value, which effectively reduces adaptivity. To quantify this effect, we monitor a diagnostic metric: the fraction of first-moment mass located on clamped coordinates, 
+
+clamp mass t =
+
+P 
+
+> i
+
+1[¯ vt,i = ϵv ] | ˆmt,i |
+
+P 
+
+> i
+
+| ˆmt,i | .
+
+25 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Interpretation: Clamp mass measures what fraction of the total update magnitude is applied to coordinates whose precondi-tioner has hit the floor. When clamp mass t ≈ 0, the floor is inactive and adaptivity is preserved; when clamp mass t ≈ 1,nearly all updates are applied to floor-clamped coordinates, meaning the optimizer has effectively degraded to a uniform-preconditioner method (loss of adaptivity). Intermediate values indicate partial floor activation. 
+
+Sensitivity to ϵv . Floor sensitivity is evaluated on CIFAR-10 using the CNN5 architecture under ε = 1 .0 with η = 0 .005 ,
+
+(κ, γ, ω ) = (0 .6, 0.7, 0.9) , and 80 training epochs, while varying ϵv across the set {10 −8, 10 −7, 10 −6, 10 −5}. The resulting clamp behavior is illustrated in Figure 13. For small variance floors ( 10 −8 and 10 −7), clamp mass rapidly decreases to near zero following the initial transient phase, indicating that the variance floor functions primarily as a numerical safeguard and does not significantly influence the update direction during the majority of the training process. In this regime, AdamW’s adaptivity is fully preserved: each coordinate receives a step size proportional to 1/√vi rather than the uniform floor value. In contrast, larger floors ( 10 −6 and 10 −5) lead to persistently high clamp mass ( > 0.8 after transient), implying that a substantial fraction of the update magnitude is applied to clamped coordinates. This outcome corresponds to a preconditioner dominated by the floor value: instead of adaptive per-coordinate step sizes, the optimizer applies nearly uniform steps 
+
+∝ 1/√ϵv across most parameters, eliminating the benefits of AdamW’s second-moment adaptation. The floor has effectively converted AdamW into a momentum-SGD-like method with a fixed preconditioner. Based on this sensitivity analysis, we set the default ϵv = 10 −8, which yields stable training with negligible floor activation (clamp mass t < 0.01 after warm-up) and preserves the intended effect of filter-aware variance subtraction.                      
+
+> Figure 13. Sensitivity to the variance floor ϵv(CIFAR-10, CNN5, ε=1). Clamp diagnostics while sweeping ϵv∈{10 −8,10 −7,10 −6,10 −5}with fixed η= 0 .005 and (κ, γ, ω ) = (0 .6,0.7,0.9) . Small floors ( 10 −8,10 −7) yield negligible clamp activity after a short transient, while larger floors ( 10 −6,10 −5) induce a floor-dominated regime.
+
+# F. Computational Resource Analysis 
+
+This appendix analyzes computational costs for F IBER, DiSK, and DP-AdamW on CIFAR-10 (CNN5) across privacy budgets. All experiments used the same hardware and training settings. 
+
+F.1. Measurement Methodology 
+
+We measure computational resources using four complementary metrics: 26 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction                                                                
+
+> Table 12. Computational resource usage on CIFAR-10 (CNN5) across privacy budgets. Measurements on an RTX 5090 GPU with batch size 5000 and 80 epochs. Two-point methods (DiSK, F IBER) use two gradient evaluations per step, yielding ∼1.79 ×wall-clock overhead and ∼0.53 ×throughput relative to DP-AdamW. Memory overhead is minimal ( <0.03 GB). Method εAcc. (%) Time (s) Throughput (K imgs/s) Time/Step (ms) Mem. (GB) DP-AdamW 0.5 42.92 369.0 1194.8 4.18 0.105 DP-AdamW 1.0 48.57 369.1 1195.2 4.18 0.105 DP-AdamW 8.0 64.30 369.0 1197.6 4.18 0.105 DiSK 0.5 61.62 659.4 638.9 7.83 0.110 DiSK 1.0 64.85 659.2 639.3 7.82 0.110 DiSK 8.0 69.50 660.5 639.3 7.82 0.110 FIBER0.5 66.78 659.4 638.4 7.83 0.113 FIBER1.0 70.87 659.4 638.6 7.83 0.113 FIBER8.0 76.75 661.8 638.1 7.84 0.113
+
+1. Wall-clock time : Total training time in seconds, measured from initialization to final evaluation. This reflects real-world latency and includes all overheads (data loading, gradient computation, optimizer updates, privacy accounting). 2. Time per step : Average time per training iteration in seconds. This isolates per-update overhead without amortization effects. 3. Throughput : Training throughput measured in images processed per second. This hardware-dependent metric reflects end-to-end training efficiency. Higher throughput indicates faster training. 4. Peak memory : Maximum GPU memory usage during training in gigabytes. This determines hardware requirements and batch size limits. For two-point methods (F IBER and DiSK), computational costs include both gradient evaluations required for the two-point gradient construction (at θt and θt + γd t−1). Privacy accounting overhead is negligible ( <0.1% of total time) and consistent across all methods. 
+
+F.2. Resource Usage Summary 
+
+Table 12 summarizes costs by method and privacy budget. 
+
+Summary: 
+
+• Two-point overhead: FIBER and DiSK require two gradient evaluations per update, resulting in: 
+
+– 1.787x wall-clock overhead (660s vs 369s) 
+
+– 1.873x time-per-step overhead (7.83ms vs 4.18ms) 
+
+– 0.533x throughput ratio (639K imgs/s vs 1195K imgs/s) The gap between 1.873x per-step overhead and 1.787x wall-clock overhead reflects startup and evaluation time amortization. The observed 1.79x overhead is substantially better than the theoretical 2x maximum, indicating effective GPU parallelization and shared computation between the two gradient evaluations. • Minimal memory overhead: FIBER uses only 0.008 GB more memory (+7.6%) than DP-AdamW, reflecting three extra gradient buffers. • Consistency: Computational metrics are nearly constant across privacy budgets, as the privacy parameter only scales DP noise. • FIBER vs DiSK: Computational profiles are nearly identical. 
+
+– Wall-clock time: 659.4-661.8s (F IBER) vs 659.2-660.5s (DiSK) 
+
+– Throughput: 638.1-638.6 K imgs/s (F IBER) vs 638.9-639.3 K imgs/s (DiSK) 27 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+– Memory: 0.113 GB (F IBER) vs 0.110 GB (DiSK) (+2.7%) FIBER’s innovation filtering and correction add <0.5% overhead beyond dual gradient evaluations. 
+
+F.3. Compute-Accuracy Trade-offs 
+
+We quantify compute efficiency using: Efficiency = Accuracy gain over baseline Time overhead ratio − 1 (84) where time overhead ratio = (method time) / (DP-AdamW time). This measures accuracy points gained per unit of additional computational overhead. Table 13 reports efficiency metrics:     
+
+> Table 13. Compute efficiency of F IBER and DiSK relative to DP-AdamW on CIFAR-10 (CNN5). Efficiency measured as accuracy gain (percentage points) per unit overhead. At tight privacy ( ε≤1), both methods deliver exceptional efficiency (23-30 pts per overhead unit); at loose privacy ( ε= 8 ), efficiency remains substantial (6-16 pts per overhead unit).
+
+Method ε Acc. Gain (pts) Time Overhead Efficiency (pts/unit) DiSK 0.5 +18.70 1.787x 23.76 DiSK 1.0 +16.28 1.786x 20.71 DiSK 8.0 +5.20 1.790x 6.58 FIBER 0.5 +23.86 1.787x 30.31 FIBER 1.0 +22.30 1.786x 28.37 FIBER 8.0 +12.45 1.794x 15.68 
+
+Summary: 
+
+• Tight privacy: At ε = 0 .5, FIBER achieves 30.31 accuracy points per overhead unit; DiSK achieves 23.76. FIBER’s innovation filtering and correction yield +27.6% more efficiency than DiSK. • FIBER consistently outperforms DiSK across the privacy spectrum: – At ε = 0 .5: FIBER 30.31 vs DiSK 23.76 (+27.6% efficiency) 
+
+– At ε = 1 .0: FIBER 28.37 vs DiSK 20.71 (+37.0% efficiency) 
+
+– At ε = 8 .0: FIBER 15.68 vs DiSK 6.58 (+138.3% efficiency) • Loose privacy: At ε = 8 .0, FIBER yields 15.68 points per overhead unit; 12.45 points gained for 1.79x compute-a strong trade-off versus alternatives. • Justified overhead: The 1.79x compute overhead is justified by the substantial accuracy gains across all privacy levels. 
+
+F.4. Throughput and Overhead Analysis 
+
+Figure 14 shows F IBER and DiSK maintain consistent overhead (1.79x time, 0.53x throughput) across privacy budgets, enabling predictable cost estimation. 
+
+Throughput decomposition. Training throughput is determined by: Throughput = Batch size × Steps per second 
+
+1 = 5000 
+
+tstep 
+
+(85) For DP-AdamW: 5000 /0.00418 = 1 , 196 , 000 imgs/s For F IBER/DiSK: 5000 /0.00783 = 638 , 000 imgs/s Ratio: 638 , 000 /1, 196 , 000 = 0 .533 
+
+The reciprocal gives time overhead: 1/0.533 = 1 .876 x, closely matching the measured 1.79x wall-clock overhead (difference due to amortization effects). 28 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction   
+
+> Figure 14. Compute overhead analysis. (a) Wall-clock time overhead ratio-F IBER and DiSK incur consistent 1.79x overhead across privacy budgets, well below theoretical 2x due to GPU parallelization. (b) Relative throughput-two-point methods achieve ∼0.53x throughput (equivalently, 1.87x slowdown), consistent with time overhead measurements. Overhead remains stable regardless of privacy level.
+
+F.5. Comparison to Prior Work 
+
+Our measured overheads are consistent with prior DP optimization literature: • DiSK (Zhang et al., 2024a) : Reported 1.7-1.9x overhead vs DP-AdamW on various tasks. Our measured 1.79x overhead falls within this range, validating both implementations. • DP-AdamBC (Tang et al., 2024) : Reported <5% overhead for bias correction alone (no filtering). This confirms that second-moment calibration is computationally negligible. Our measured overhead comes entirely from the two-point construction. • Correlated noise methods (Choquette-Choo et al., 2024) : Reported similar ∼2x overhead for methods requiring correlated noise generation across iterations. However, their overhead includes matrix factorization costs, while ours is purely gradient computation. • Large-scale DP training (De et al., 2022a) : Reported ImageNet training overhead of ∼2x (8-12 hours DP vs 4-6 hours non-DP on TPUv3). Their overhead includes clipping cost ( ∼1.2-1.3x) plus two-point cost ( ∼1.6-1.7x), totaling 
+
+∼2x, consistent with our measurements. 
+
+F.6. Limitations and Future Directions Hardware-specific measurements. Our measurements are specific to RTX 4090 GPUs. Relative overheads may vary on different hardware: • TPUs : With specialized matmul units and compiler optimizations, overhead may decrease to 1.6-1.7x • CPUs : Limited parallelism may increase overhead to 1.9-2.0x • Multi-GPU : Distributed training may reduce overhead through better parallelization (e.g., pipeline parallelism across gradient evaluations) 29 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Model-size scaling. Our measurements are for CNN5 ( ∼1.2M parameters). Overhead characteristics may differ for larger models: • Very small models ( <100K params): Optimizer overhead dominates, reducing relative cost to 1.3-1.5x • Medium models (10-50M params): Overhead should remain ∼1.8x • Very large models ( >100M params): Overhead may approach 2.0x as gradient computation dominates 
+
+F.7. Summary 
+
+FIBER and DiSK incur 1.79x wall-clock overhead due to two-point gradient construction. This overhead is: • Highly justified at tight privacy (ε ≤ 2): 20-30 accuracy points per overhead unit • Valuable at moderate privacy (2 < ε ≤ 4): 10-20 points per overhead unit • Still worthwhile at loose privacy (ε > 4): 6-16 points per overhead unit • Predictable and consistent : Remains ∼1.79x across all privacy budgets • Near-optimal : 1.79x is substantially better than theoretical 2x maximum • Minimal memory cost : +0.008 GB (7.6% increase), enabling large batch sizes FIBER consistently outperforms DiSK in compute efficiency, especially for ε ≥ 4, with negligible overhead ( <0.5%) beyond the two-point method. Practitioners seeking substantial accuracy gains for 1.79x training time should prefer F IBERover DiSK across all privacy budgets. 
+
+F.8. Additional Vision Results Training ViT-small from scratch on CIFAR-10. To test whether the gains of F IBER extend beyond small CNNs, we additionally train ViT-small from random initialization on CIFAR-10 under DP. Figure 15 shows learning curves at ε = 4 .FIBER improves both convergence speed and final accuracy relative to DPAdam. This suggests that innovation-space denoising and filter-aware second-moment handling are particularly beneficial for transformer-style optimization under DP noise.    
+
+> Figure 15. CIFAR-10 training-from-scratch at ε= 4 : test accuracy vs. training step for ViT-small, comparing DPAdam and F IBER.
+
+Multi-seed evaluation. We report multi-seed results for CNN5 on MNIST/CIFAR-10 and WRN on CIFAR-100, using seeds {42 , 12 , 34 , 56 , 78 }. For each privacy budget ε, we run five independent trials and report the mean, sample standard deviation, and a two-sided 95% confidence interval (CI) computed with the Student-t distribution with n − 1 degrees of 30 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+freedom. Tables 14–16 summarize statistics across privacy budgets for CNN5/CIFAR-10, CNN5/MNIST, and WRN/CIFAR-100 (FU). Across all three settings, accuracy increases monotonically with ε, and the variability across runs remains small: the standard deviation is below 0.3 points on CNN5/CIFAR-10 and below 0.25 points on CNN5/MNIST for all budgets, while WRN/CIFAR-100 exhibits larger variability (up to 0.82 points at ε=8 ), consistent with the higher difficulty and greater noise sensitivity of the task. The corresponding 95% CIs are tight (typically within ±0.1–0.2 points for CNN5 and within ±0.6–1.0 points for WRN/CIFAR-100), suggesting that the observed trends with respect to ε are stable under this protocol.                                                                            
+
+> Table 14. Summary statistics per privacy budget for CNN5/CIFAR-10.
+> εnmean std 95% CI 0.5 566.72 0.08 [66.62, 66.82] 1.0 570.71 0.10 [70.59, 70.84] 2.0 573.95 0.18 [73.72, 74.17] 4.0 575.82 0.27 [75.48, 76.15] 8.0 580.25 0.19 [80.07, 80.43]
+> Table 15. Summary statistics per privacy budget for CNN5/MNIST.
+> εnmean std 95% CI 0.5 592.82 0.22 [92.54, 93.09] 1.0 592.94 0.14 [92.76, 93.11] 2.0 592.96 0.11 [92.82, 93.09] 4.0 593.00 0.10 [92.88, 93.12] 8.0 593.00 0.09 [92.88, 93.11]
+> Table 16. Summary statistics per privacy budget for WRN/CIFAR-100.
+> εnmean std 95% CI 0.5 530.28 0.56 [29.59, 30.97] 1.0 536.33 0.61 [35.57, 37.08] 2.0 541.83 0.46 [41.26, 42.41] 4.0 546.18 0.56 [45.48, 46.87] 8.0 547.46 0.82 [46.44, 48.48]
+
+F.9. Parameter-Efficient Fine-Tuning on GLUE (LoRA) 
+
+RoBERTa-base and RoBERTa-large models are fine-tuned on GLUE using LoRA with rank r = 16 , initialized from HuggingFace checkpoints. The same training scripts and task-level hyperparameter tuning protocol as prior work (Bu et al., 2023a) are followed. For DiSK-LoRA, the hyperparameters (κ, γ ) = (0 .7, 0.5) are used; for F IBER-LoRA, 
+
+(κ, γ, ω ) = (0 .6, 0.7, 0.9) are applied. The results are presented in Table 17. Overall, F IBER-LoRA consistently outperforms standard DP-LoRA across the evaluated tasks and privacy budgets. F IBER-LoRA also achieves performance comparable to DiSK-LoRA(Zhang et al., 2024a). Notably, the performance gap between the two methods on GLUE is smaller than in the vision training-from-scratch experiments, suggesting that parameter-efficient fine-tuning with robust pretrained representations may reduce the potential for further denoising improvements. 
+
+F.10. Comparison to Prior Reported Results 
+
+Table 18 presents a conservative comparison with previously reported results on DP methods. This comparison spans vision and language benchmarks. The table serves a contextual purpose by aggregating representative results from prior studies. It focuses on studies conducted under similar privacy regimes and commonly used training protocols. When a prior result is reported with a different privacy budget (for example, ε = 3 or ε = 8 ), the mismatch is explicitly annotated and the comparison is treated as qualitative rather than strict head-to-head evaluation. Across the settings where privacy budgets and training recipes are closely aligned, F IBER matches or improves upon the strongest previously reported results. When prior work reports results at different privacy budgets, we annotate the reported 31 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Table 17. LoRA fine-tuning on GLUE under DP. Best and second best are highlighted among DP methods (DP-LoRA, DiSK-LoRA, FIBER-LoRA) within each model and privacy budget. 
+
+ε = 1 ε = 6 .7
+
+Algorithm MNLI QNLI SST-2 QQP MNLI QNLI SST-2 QQP 
+
+RoBERTa-base 
+
+AdamW ( ε = ∞) 87.6 92.8 94.8 91.9 87.6 92.8 94.8 91.9 LoRA ( ε = ∞) 87.5 93.3 95.1 90.8 87.5 93.3 95.1 90.8 DP-LoRA 81.1 85.5 90.9 83.9 83.5 87.4 91.5 85.7 DiSK-LoRA 84.7 90.3 92.9 87.8 85.9 90.5 93.1 89.0 FIBER-LoRA 84.8 90.2 93.1 88.5 86.2 91.1 93.1 89.4 RoBERTa-large 
+
+AdamW ( ε = ∞) 90.3 94.7 96.4 92.2 90.3 94.7 96.4 92.2 LoRA ( ε = ∞) 90.6 94.9 96.2 91.6 90.6 94.9 96.2 91.6 DP-LoRA 85.6 89.5 90.9 85.1 87.8 90.8 94.3 87.4 DiSK-LoRA 87.9 92.5 95.2 88.2 89.4 92.6 95.4 89.6 FIBER-LoRA 88.8 92.5 95.3 89.4 89.7 93.7 96.0 90.1 
+
+ε and treat the comparison as qualitative. Overall, the table indicates that the proposed optimizer is competitive with strong DP baselines across vision training-from-scratch, vision fine-tuning, and NLP fine-tuning and generation. 32 FIBER: A Differentially Private Optimizer with Filter-Aware Innovation Bias Correction 
+
+Table 18. Comparison to prior reported DP results. PT = training from scratch; FT = fine-tuning. “Previous SOTA” denotes a value reported in prior work with the closest-matching setup; when ε differs, we annotate it explicitly. Dataset / Task Setting Model ε FIBER (%) DiSK (%) Previous SOTA (%) 
+
+Vision: training from scratch 
+
+CIFAR-10 PT CNN 0.5 66.9 59.7 –CIFAR-10 PT CNN 2.0 74.4 68.8 67.2 (Tramer & Boneh (2020)) CIFAR-100 PT WRN 0.5 29.8 14.7 –CIFAR-100 PT WRN 1.0 35.2 22.7 14.1 (Bao et al. (2022)) CIFAR-100 PT WRN 2.0 40.7 30.0 21.5 CIFAR-100 PT WRN 4.0 45.4 37.1 33.3 CIFAR-100 PT WRN 8.0 47.9 42.0 40.6 (Bao et al. (2022)) ImageNet-1k PT ViT-small 8.0 44.8 36.89 33.56 (De et al. (2022a)) 
+
+Vision: fine-tuning 
+
+CIFAR-100 FT ViT-small 0.5 88.6 83.49 78.3 (Mehta et al. (2023b)) CIFAR-100 FT ViT-small 1.0 89.4 85.36 81.8 (Bao et al. (2022)) CIFAR-100 FT ViT-small 2.0 90.0 86.77 83.5 CIFAR-100 FT ViT-small 4.0 90.4 87.56 84.5 CIFAR-100 FT ViT-small 8.0 90.5 88.49 84.6 
+
+NLP: GLUE fine-tuning 
+
+MNLI FT RoBERTa-base 1.0 84.8 84.7 83.2 ( ε=3 ) (Bu et al. (2022)) QNLI FT RoBERTa-base 1.0 90.2 90.3 87.4 ( ε=3 ) (Bu et al. (2022)) QQP FT RoBERTa-base 1.0 88.5 87.8 85.8 ( ε=3 ) (Bu et al. (2022)) SST-2 FT RoBERTa-base 1.0 93.1 92.9 92.3 ( ε=3 ) (Bu et al. (2022)) MNLI FT RoBERTa-base 6.7 86.2 85.9 83.8 ( ε=8 ) (Bu et al. (2022)) QNLI FT RoBERTa-base 6.7 91.1 90.5 87.9 ( ε=8 ) (Bu et al. (2022)) QQP FT RoBERTa-base 6.7 89.4 89.0 86.6 ( ε=8 ) (Bu et al. (2022)) SST-2 FT RoBERTa-base 6.7 93.1 93.1 93.0 ( ε=8 ) (Li et al. (2022)) MNLI FT RoBERTa-large 1.0 88.8 87.9 86.8 (Yu et al. (2022)) QNLI FT RoBERTa-large 1.0 92.5 92.5 88.0 (Yu et al. (2022)) QQP FT RoBERTa-large 1.0 89.4 88.2 85.2 (Yu et al. (2022)) SST-2 FT RoBERTa-large 1.0 95.3 95.2 93.1 (Yu et al. (2022)) MNLI FT RoBERTa-large 6.7 89.7 89.4 89.0 (Yu et al. (2022)) QNLI FT RoBERTa-large 6.7 93.7 92.6 92.5 (Yu et al. (2022)) QQP FT RoBERTa-large 6.7 90.1 89.6 88.4 (Yu et al. (2022)) SST-2 FT RoBERTa-large 6.7 96.0 95.4 95.3 (Yu et al. (2022)) 
+
+NLG: GPT-2 fine-tuning 
+
+E2E (BLEU) FT GPT-2 3.0 67.57 68.35 61.52 (Li et al. (2022)) E2E (ROUGE-L) FT GPT-2 3.0 69.97 70.23 65.87 (Bu et al. (2024a)) E2E (BLEU) FT GPT-2 8.0 67.90 68.73 63.60 (Bu et al. (2024a)) E2E (ROUGE-L) FT GPT-2 8.0 70.56 70.58 67.53 (Li et al. (2022)) 
+
+33

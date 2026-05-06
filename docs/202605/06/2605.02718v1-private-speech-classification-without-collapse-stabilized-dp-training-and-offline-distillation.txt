@@ -1,0 +1,401 @@
+Title: Private Speech Classification without Collapse: Stabilized DP Training and Offline Distillation
+
+URL Source: https://arxiv.org/pdf/2605.02718v1
+
+Published Time: Tue, 05 May 2026 02:13:05 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# Private Speech Classification without Collapse: Stabilized DP Training and Offline Distillation 
+
+Yadi Wen †1, Tianxin Li †2, Enji Liang 1, Rong Du 1∗, and Yue Fu 1
+
+1. Shanxi Key Laboratory of Industrial Internet Security, Taiyuan University of Technology, China 2. University of Michigan, Ann Arbor, USA Emails: 2023005322@link.tyut.edu.cn, ltianxin@umich.edu, liangenji@tyut.edu.cn, durong@tyut.edu.cn, fuyue@tyut.edu.cn 
+
+Abstract —We study example-level private supervised speech classification under a practical release constraint: training may access privileged side information, but the released model must be audio-only. This setting is important because speech systems can often exploit richer side information during development, whereas deployment and release require a lightweight unimodal model with auditable privacy guarantees. Using DP-SGD on the private dataset Dpriv , we identify a strong-privacy failure mode (ϵ ≤ 1) on imbalanced tasks, where training may collapse to a near single-class predictor, a phenomenon that overall accuracy can obscure. We therefore emphasize Macro-F1, balanced accu-racy, and a simple collapse diagnostic. This failure is especially problematic in our release setting because a collapsed private teacher cannot provide useful supervision for the downstream audio-only student. To address this setting under strong privacy, we propose a two-stage protocol: (i) train a (possibly multimodal) DP teacher on 
+
+Dpriv , and (ii) distill an audio-only student on a fixed, recording-disjoint auxiliary dataset Daux using one-shot offline teacher probability outputs, releasing only the student. The DP guarantee applies only to Dpriv ; we make no DP claim for Daux , and privacy of the released student with respect to Dpriv follows by post-processing. We frame this setting as involving four coupled bottlenecks: speech-induced optimization instability under DP-SGD, minority-class erosion under clipping and noise, teacher over-reliance on privileged modalities unavailable at deployment, and train–deploy modality mismatch. We address them with a DP-stabilizing acoustic front-end (DSAF), minibatch-adaptive bounded loss reweighting (AW-DP), privileged-modality dropout, and offline teacher-to-student distillation. 
+
+I. I NTRODUCTION 
+
+Speech models underpin many multimedia systems, in-cluding spoken-content indexing, recommendation, and voice interaction. Their training data are highly sensitive: user ut-terances reveal not only linguistic content but also speaker identity and incidental context. Meanwhile, trained models are often released as checkpoints or exposed through prediction APIs, making parameters or confidence scores accessible to potentially untrusted parties. Prior work has shown that such artifacts can leak training-set information via membership inference and model inversion attacks [1], [2]. These risks motivate training and release procedures with explicit, au-ditable privacy guarantees. Differential Privacy (DP) bounds the influence of any single example on a released artifact [3]– [5]. In deep learning, example-level DP-SGD enforces this 
+
+This paper has been accepted for publication at the ICME 2026 Workshop. * Corresponding author, † equal contributor. 
+
+guarantee by clipping per-sample gradients and adding Gaus-sian noise to the aggregated update [6]. However, speech mod-els typically operate on log-Mel time-frequency features [7], where variation in utterance length and energy induces sub-stantial gradient-norm heterogeneity, increasing clipping and degrading effective signal-to-noise [8]. Class imbalance further compounds the problem: under private minibatch sampling, minority classes may contribute weak and noisy updates, lead-ing to systematic underfitting [9]. Although adaptive clipping and related scheduling strategies improve robustness [10], [11], strong-privacy training remains especially difficult in speech. We view this as a release-constrained learning problem in which privacy, imbalance, and speech-specific optimization instability interact. A central failure mode in this setting is prediction collapse. On imbalanced speech classification, we observe that DP-SGD under strong privacy (e.g., ϵ ≤ 1 in our setup) can converge to a near single-class, typically majority-class, predictor. Because overall accuracy may remain deceptively high under imbal-ance, we do not treat it as a primary utility metric. Instead, we evaluate utility using Macro-F1 and balanced accuracy (Bal-Acc), the mean per-class recall, and quantify collapse with Maj-Pred, the fraction of predictions assigned to the most frequently predicted class. Maj-Pred is used only as a diagnostic: for a K-class task, a single-class predictor yields 
+
+Bal -Acc = 1/K and Maj -Pred = 1 regardless of class proportions. This failure is consequential not only because it degrades the private model, but also because a collapsed teacher cannot provide informative soft targets for transfer. A second challenge is modality mismatch. In many mul-timedia applications, training can exploit text or metadata, whereas deployment must be audio-only. Paired audio-text or audio-metadata resources are common [12], and multi-modal learning often improves robustness [13]. Under privacy constraints, however, a multimodal teacher cannot simply be exposed after training; any useful information learned from private data must be transferred into a deployable audio-only artifact. This setting naturally connects to Learning Using Privileged Information (LUPI) [14] and knowledge distilla-tion [15], [16]. We therefore adopt the following release protocol: train a (possibly multimodal) DP teacher on private data Dpriv ; obtain teacher probability outputs on a recording-disjoint auxiliary set Daux ; distill an audio-only student on 
+
+Daux ; and release only the student. Because the teacher is  
+
+> arXiv:2605.02718v1 [cs.SD] 4 May 2026 Fig. 1. Workflow of the proposed method.
+
+DP with respect to Dpriv , any artifact computed solely from its outputs inherits the same privacy guarantee by post-processing [5]. Using a fixed, predetermined Daux also avoids adaptive-querying concerns. Our setting differs from three closely related lines of work. First, unlike prior DP-SGD stabilization methods, we study privacy-preserving speech learning under a release constraint: utility must survive transfer to a deployable audio-only model rather than be measured only on the private model. Second, unlike standard distillation or LUPI, the teacher is DP-trained on Dpriv and never released. Third, unlike interactive private prediction settings, we use a one-shot offline labeling protocol on fixed auxiliary data, yielding a simple and auditable release mechanism. The resulting objective is not merely to improve private teacher accuracy, but to maintain stable private optimization, preserve minority-class structure, avoid over-reliance on priv-ileged modalities, and produce soft labels suitable for offline transfer. To this end, we propose a coordinated pipeline: DSAF reduces speech-induced gradient-norm drift before clipping; AW-DP mitigates imbalance-amplified minority erosion during DP training; privileged-modality dropout discourages shortcut reliance on training-only side information; and offline distilla-tion converts the DP teacher into the only deployable artifact, an audio-only released model. The contributions of this paper are three-fold:  
+
+> •
+
+Problem framing and failure mode. We formulate private speech classification under a release constraint where training may use privileged side information but the released model must be audio-only. In this setting, we identify a strong-privacy failure mode of DP-SGD on imbalanced speech tasks: collapse to a near single-class predictor. Accordingly, we emphasize Macro-F1, balanced accuracy, and Maj-Pred rather than overall ac-curacy alone.  
+
+> •
+
+DP release protocol under modality mismatch. We propose a two-stage protocol that trains a (possibly mul-timodal) DP teacher on Dpriv , labels a fixed auxiliary set 
+
+Daux offline, distills an audio-only student, and releases only the student. The privacy guarantee with respect to 
+
+Dpriv follows directly by post-processing.  
+
+> •
+
+Teacher stabilization for transferable private super-vision. We introduce DSAF, AW-DP, and privileged-modality dropout to improve the stability, class balance, and audio-transferability of DP teacher predictions under strong privacy, thereby improving the released student obtained by offline distillation. II. P RELIMINARIES 
+
+A. Setup and release setting 
+
+We study supervised speech classification with training examples {(xi, m i, y i)}Ni=1 , where xi is audio, mi is priv-ileged side information available only during training (e.g., transcript or metadata), and yi ∈ { 1, . . . , K } with K=3 for 
+
+male/female/other . At inference, only x is available, so the released model must be audio-only. We use this 3-way label space as an imbalanced benchmark for analyzing DP-SGD failure modes under modality mismatch. This choice is purely methodological and is not intended to advocate deployment of gender inference systems. We distinguish two datasets. Dpriv is the private in-scope dataset used to train a differentially private teacher. Daux is an auxiliary out-of-scope dataset used to train the released student via distillation. We enforce recording/filename-level disjointness between Dpriv and Daux as an operational safe-guard against overlap-induced leakage and to better reflect deployment transfer; this disjointness is not required for the DP guarantee, which is defined only with respect to Dpriv .
+
+B. Threat model and privacy scope 
+
+The adversary obtains the released student parameters θs
+
+(white-box access), which subsumes black-box access to the released audio-only model fs(·). The privacy scope is Dpriv :our goal is example-level (ϵ, δ )-DP with respect to the inclu-sion or removal of any single record in Dpriv . We release only the student; the teacher is not released. We make no DP claim for Daux , since the student is trained non-privately on Daux ;accordingly, we assume Daux is public or consented for such use. 
+
+C. Example-level differential privacy 
+
+A randomized algorithm A is (ϵ, δ )-differentially private (DP) if for any neighboring datasets D, D ′ differing in one example and any measurable set S,
+
+Pr[ A(D) ∈ S] ≤ eϵ Pr[ A(D′) ∈ S] + δ. (1) We use the post-processing property: if M is (ϵ, δ )-DP, then for any (possibly randomized) transformation T , T ◦M is also 
+
+(ϵ, δ )-DP [5]. In our pipeline, teacher training defines θt ←M(Dpriv ) and student training defines θs ← T (Daux , θ t);therefore releasing θs incurs no additional privacy loss with respect to Dpriv .
+
+D. DP-SGD and privacy accounting 
+
+We instantiate example-level DP using DP-SGD with per-sample ℓ2 clipping and Gaussian noise [5], [6]. Let gi =
+
+∇θ ℓ(θ; xi, m i, y i) and clip( gi, C ) = gi · min {1, C/ ∥gi∥2}.With Poisson subsampling rate q and sampled minibatch B,the privatized update direction is 
+
+˜g = 1
+
+|B| 
+
+X
+
+> i∈B
+
+clip( gi, C ) + N (0 , σ 2C2I)
+
+!
+
+, (2) where C is the clipping threshold and σ is the noise multiplier. We report composed privacy budgets (ϵ, δ ) using an RDP accountant [17] under the exact training configuration (sam-pling rate q, number of steps, C, σ, and δ). To support per-sample gradient computation, our DP teacher models avoid minibatch-coupled state. 
+
+E. Knowledge distillation 
+
+We use standard knowledge distillation to transfer informa-tion from teacher to student [15]. Let pt and ps denote teacher and student class probabilities. With temperature τ and mixing coefficient α, the student objective on the auxiliary dataset is 
+
+LKD = (1 − α) CE( y, p s) + α τ 2 KL( pτt ∥pτs ), (3) where pτ denotes the probability vector under temperature τ .III. M ETHOD 
+
+A. Release protocol 
+
+We consider a release setting in which a teacher is trained on a private dataset Dpriv , while the final released model must be an audio-only classifier. We adopt a two-stage protocol: (i) train a differentially private (DP) teacher on Dpriv ; (ii) query the teacher once on a fixed non-private auxiliary dataset Daux 
+
+and train an audio-only student by offline distillation. Only the student is released. By DP post-processing, releasing θs
+
+incurs no privacy loss beyond that of the DP teacher. 
+
+B. Overview 
+
+Under strong privacy, a teacher may retain non-trivial ac-curacy yet still provide poor supervision for student release: its posterior can become over-smoothed, majority-dominated, overly dependent on privileged inputs, or poorly aligned with the deployment-time audio-only model. We therefore organize the method around four coupled bottlenecks in private speech learning: (1) unstable acoustic inputs under DP-SGD, (2) imbalance-amplified minority suppression under clipping and noise, (3) teacher over-reliance on privileged modalities un-available at deployment, and (4) modality mismatch between a possibly multimodal private teacher and the released audio-only student. Specifically, we combine: (1) DP-Stabilizing Acoustic Front-End (DSAF) to reduce input-induced gradient-norm dispersion; (2) Imbalance-aware Weighted DP-SGD (AW-DP) to preserve minority-class signal under clipping and noise; (3) privileged-modality dropout to discourage shortcut reliance on privileged inputs and improve audio-transferable predictions; and (4) offline teacher-to-student distillation to resolve the train–deploy modality mismatch while preserving privacy by post-processing. Together, these components should be understood as a unified release pipeline rather than as independent add-ons. 
+
+C. Stage I: DP teacher training 
+
+The teacher is trained on Dpriv with DP-SGD. Depending on available inputs, it can be either audio-only or multimodal with privileged side information. Unless disabled in ablations, DSAF and AW-DP are always applied; privileged-modality dropout is used only in the multimodal setting. 
+
+1) Teacher architecture: For the multimodal teacher, we use an audio encoder hx(·), a privileged-information encoder 
+
+hm(·), and a fusion head ϕ(·):
+
+pt(x, m ) = softmax( ϕ([ hx(X); hm(m′)])) , (4) where X is the processed acoustic feature and m′ is the possibly dropped privileged input. Privileged-modality dropout is defined as 
+
+m′ =
+
+(
+
+0, with probability p, m, with probability 1 − p. (5) This discourages over-reliance on privileged cues and pro-motes audio-transferable teacher predictions. For an audio-only teacher, we use 
+
+pt(x) = softmax( ϕ(hx(X))) . (6) 
+
+2) DP-SGD: Each training step uses Poisson minibatch sampling, per-sample gradient computation, global ℓ2 clipping with threshold C, Gaussian noise with multiplier σ, and parameter update. Given per-example gradients gi = ∇θt ℓi,we compute 
+
+¯gi = gi · min 
+
+
+
+1, C
+
+∥gi∥2
+
+
+
+,
+
+and apply the noisy update 
+
+˜g = 1
+
+|B| 
+
+X
+
+> i∈B
+
+¯gi + N (0 , σ 2C2I)
+
+!
+
+. (7) Our method does not alter this privacy mechanism; instead, it improves the stability and usefulness of the signal entering DP-SGD. 
+
+3) DP-Stabilizing Acoustic Front-End (DSAF): Speech in-puts can yield highly variable per-sample gradient norms, increasing over-clipping under DP-SGD. To reduce this effect, we compute log-Mel spectrograms S and apply per-utterance normalization with fixed-length alignment: 
+
+X = FixLen 
+
+ S − μ(S)
+
+σ(S) + η0
+
+, L 
+
+
+
+, (8) where μ(S) and σ(S) are computed from the current utterance, 
+
+η0 > 0 is a stabilizer, and FixLen( ·, L ) truncates or pads to L frames. DSAF is deterministic and per-example, and is therefore fully compatible with DP-SGD. 4) Imbalance-aware Weighted DP-SGD (AW-DP): To mit-igate minority-class suppression under strong privacy, we reweight examples at the loss level before clipping. For minibatch Bt with class counts n(t) 
+
+> k
+
+, we define 
+
+w(t) 
+
+> k
+
+= |B t|
+
+K · n(t) 
+
+> k
+
++ εw
+
+, (9) with εw > 0 and w(t) 
+
+> k
+
+= 1 when n(t) 
+
+> k
+
+= 0 . We then clip the weights: 
+
+w(t) 
+
+> k
+
+← min {wmax , max {wmin , w (t) 
+
+> k
+
+}} . (10) The weighted loss is 
+
+ℓi = w(t) 
+
+> yi
+
+CE  yi, p t(xi, m i), L = 1
+
+|B t|
+
+X
+
+> i∈B t
+
+ℓi. (11) For audio-only teachers, pt(xi, m i) reduces to pt(xi). AW-DP changes only the objective, not the privacy mechanism; the same accountant applies under fixed (q, T, σ, C, δ ).
+
+D. Stage II: Distillation to the released audio-only student 
+
+We train an audio-only student ps(x) on Daux using offline teacher predictions. This stage is the mechanism that resolves the train–deploy modality mismatch: the teacher may use privileged inputs during private training, but the only released artifact is an audio-only student. The teacher is queried once on a fixed Daux and is not released. The effectiveness of this stage depends directly on the quality of the DP teacher outputs. If teacher predictions collapse toward majority classes or rely excessively on priv-ileged information unavailable to the student at deployment, distillation yields limited gains. In contrast, DSAF, AW-DP, and privileged-modality dropout improve the stability, class balance, and transferability of teacher outputs, leading to a stronger released student. Let τ denote the temperature and α the mixing coefficient. We optimize 
+
+LKD = (1 − α) CE( y, p s) + α τ 2 KL( pτt ∥pτs ), (12) where pτ denotes probabilities computed with temperature τ .IV. E XPERIMENTS 
+
+A. Experimental Settings 
+
+All experiments are implemented in Python 3.9.6 using PyTorch and Opacus [18]. 
+
+1) Datasets and Pre-processing: We use the Mozilla Common Voice dataset 1. We exclude samples with miss-ing gender labels and treat gender as a 3-way label space (male/female/other ). We extract log-Mel spectrograms with nmels =40 Mel bands and standardize their length to 
+
+T =100 frames by zero-padding or truncation. Inputs are shaped as [B, 1, 40 , 100] .
+
+> 1http://voice.mozilla.org/
+
+Algorithm 1: DP-SGD training of the teacher. 
+
+Input: Dpriv ; classes K; sampling rate q; steps S; clip 
+
+C; noise multiplier σ; dropout prob. p; DSAF 
+
+(L, η 0); AW-DP (εw, w min , w max ); lr schedule 
+
+{ηt}
+
+Output: DP model parameters θ
+
+Initialize model θ and optimizer; Create a PyTorch DataLoader for Dpriv ;Attach a DP-SGD engine with Poisson subsampling rate q, clipping norm C, and noise multiplier σ;
+
+for t = 1 to S do 
+
+Sample a minibatch B using the configured DP sampler (Poisson rate q); Compute minibatch label counts {n(t) 
+
+> k
+
+}Kk=1 from 
+
+{yi}i∈B ;Set w(t) 
+
+> k
+
+= clip 
+
+ |B|  
+
+> K·n(t)
+> k+εw
+
+, w min , w max 
+
+
+
+(and 
+
+w(t) 
+
+> k
+
+= 1 if n(t) 
+
+> k
+
+= 0 ); 
+
+foreach (xi, m i, y i) ∈ B do 
+
+Compute log-Mel Si and DSAF features 
+
+Xi = FixLen 
+
+ Si−μ(Si) 
+
+> σ(Si)+ η0
+
+, L 
+
+
+
+;Apply privileged-modality dropout (if privileged input exists) to obtain m′
+
+> i
+
+;Compute per-example loss 
+
+ℓi = w(t) 
+
+> yi
+
+CE  yi, p (Xi, m ′
+
+> i
+
+);Backpropagate; the DP-SGD engine computes per-sample gradients, clips to C, adds Gaussian noise with multiplier σ, and updates θ;
+
+return θ;
+
+2) Private/Auxiliary Split: We split the training set into a private subset Dpriv with Npriv = 20 ,000 samples and an auxiliary subset Daux with Naux = 5 ,000 samples, using a recording/filename-level disjoint split. We train the DP teacher on Dpriv and train the student non-DP on Daux ; we release only the student. 
+
+3) Privacy Accounting: We train the teacher with Poisson-subsampled DP-SGD and compute (ϵ, δ ) using an RDP ac-countant with δ = 10 −5. We use Opacus [19] to instrument per-sample gradient computation and DP-SGD updates. The DP guarantee is scoped to teacher training on Dpriv only; the released student incurs no additional privacy loss by post-processing. We report the exact configuration (q, S, σ, C, δ )
+
+in Table I. 
+
+4) Evaluation Metrics: We report Macro-F1 and balanced accuracy (Bal-Acc), defined as the unweighted average of per-class recall. To diagnose collapse, we report Maj-Pred: 
+
+Maj -Pred = 1
+
+N max  
+
+> k∈{ 1,...,K }
+
+#{i : ˆ yi = k}. (13) In our analysis, we flag collapse when Maj -Pred ≥ 0.95 
+
+and Bal -Acc approaches the degenerate baseline ( ≈ 1/K ), indicating a near single-class predictor. TABLE I CORE SETTINGS AND PRIVACY BUDGETS .
+
+Training / accounting settings Privacy budgets at epoch 20 
+
+Npriv /N aux 20k / 5k (recording-disjoint) σ Final ϵ Strong privacy ( ϵ ≤ 1)? Train batch (expected) E[|B| ] ≈ 32 0.5 4.9831 ×Sampling Poisson, q = 32 /N priv = 0 .0016 1.0 0.4967 ✓
+
+Teacher epochs / steps 20 / 12,500 3.0 0.1209 ✓
+
+Clip C 5.0 10.0 0.0386 ✓
+
+Teacher opt AdamW, lr 10 −3, wd 10 −4 Non-private baseline: σ = 0 (no DP). Student KD τ = 2 , α = 0 .7 (+ hard-label CE) Metadata dropout p = 0 .5 (MM teacher) 
+
+Fig. 2. DP teacher (T-Audio (DP)) training dynamics. (left) training accuracy; (middle) test accuracy; (right) composed privacy budget ϵ vs. epoch. TABLE II STRONG PRIVACY RESULTS .Setting σ = 1 (ϵ = 0 .4967 ) σ = 3 (ϵ = 0 .1209 )Macro-F1 ↑ Bal-Acc ↑ Maj-Pred ↓ Macro-F1 ↑ Bal-Acc ↑ Maj-Pred ↓
+
+T-Audio 0.3900 ± 0.0740 0.3955 ± 0.0530 0.9347 ± 0.0513 0.2830 ± 0.0000 0.3333 ± 0.0000 1.0000 ± 0.0000 
+
+S-KD 0.4643 ± 0.0510 0.4453 ± 0.0379 0.8990 ± 0.0291 0.3247 ± 0.0098 0.3538 ± 0.0050 0.9829 ± 0.0043 
+
+T-MM 0.4062 ± 0.0535 0.4042 ± 0.0369 0.9295 ± 0.0344 0.2830 ± 0.0000 0.3333 ± 0.0000 1.0000 ± 0.0000 
+
+S-KD(audio) 0.4868 ± 0.0049 0.4620 ± 0.0085 0.8799 ± 0.0215 0.3115 ± 0.0342 0.3475 ± 0.0177 0.9875 ± 0.0150 
+
+S-KD(priv) 0.4613 ± 0.0293 0.4453 ± 0.0256 0.8882 ± 0.0222 0.3382 ± 0.0586 0.3623 ± 0.0324 0.9836 ± 0.0144 
+
+TABLE III ABLATION STUDY AT TWO NOISE LEVELS .
+
+σ = 1 .0 (DP-direct ϵ=2 .973 ) σ = 3 .0 (DP-direct ϵ=0 .584 )Variant Released (KD) DP-direct Released (KD) DP-direct F1 BalAcc MajPred F1 BalAcc MajPred F1 BalAcc MajPred F1 BalAcc MajPred B0 0.530 0.556 0.960 0.422 0.502 0.999 0.541 0.561 0.950 0.418 0.500 1.000 DSAF 0.592 0.587 0.845 0.418 0.500 1.000 0.571 0.573 0.881 0.418 0.500 1.000 AW 0.599 0.597 0.912 0.429 0.505 0.997 0.652 0.637 0.870 0.418 0.500 1.000 DSAF AW 0.618 0.609 0.838 0.418 0.500 1.000 0.593 0.589 0.862 0.418 0.500 1.000 
+
+5) Compared Methods: Group A: Single-stage release (DP audio-only model). We train an audio-only DP teacher on 
+
+Dpriv and evaluate it directly (T-Audio (DP)). Unless explicitly disabled in ablations, DP training uses DSAF and AW-DP. 
+
+Group B: Two-stage distillation (DP teacher → non-DP student; release student only). We evaluate: (1) T-Audio (DP) as the DP teacher and its distilled student S-KD(T-Audio (DP)); (2) T-MM (DP; audio-only eval) as the DP teacher and its distilled student S-KD(T-MM (DP; audio-only eval); query=audio) (teacher queried with audio only at distillation time); (3) S-KD(T-MM (DP; audio-only eval); query=priv) (teacher queried with privileged inputs at distillation time; teacher outputs are probabilities only). Students are trained non-DP on Daux and are the only released models in Group B. 
+
+B. Results Overview 1) Privacy–Utility Trade-off (Accuracy Context): We track training/test accuracy and the composed privacy budget ϵ over epochs for multiple noise multipliers σ.Fig. 2 visualizes the privacy–optimization–utility coupling in DP-SGD. As the noise multiplier σ increases, training becomes noisier and learning slows (left), and the resulting test accuracy typically degrades (middle), while the composed privacy budget ϵ decreases for a fixed training schedule (right). Importantly, on imbalanced tasks, accuracy alone can obscure a collapse-to-majority solution; therefore we treat accuracy as context only and base utility claims on Macro-F1 and balanced accuracy, together with Maj-Pred as a collapse diagnostic TABLE IV SENSITIVITY TO |DAUX | FOR THE RELEASED STUDENT (KD). 
+
+|Daux | KD Macro-F1 ↑ KD Bal-Acc ↑ KD Maj-Pred ↓
+
+1000 0.572 0.577 0.668 5000 0.559 0.567 0.908 10000 0.610 0.603 0.857 
+
+(Table II). 
+
+2) Failure Mode under Strong Privacy: We define the strong-privacy regime as ϵ ≤ 1. Under our 3-way setup, 
+
+σ = 1 yields ϵ = 0 .4967 and σ = 3 yields ϵ = 0 .1209 
+
+(Table I). In this regime, training may collapse to a near single-class predictor, where Maj-Pred approaches 1 and class-balanced metrics degrade toward degenerate baselines (e.g., 
+
+Bal -Acc → 1/3). 
+
+3) Strong-privacy Results: Distillation Mitigates Collapse: 
+
+Table II compares teacher-only models and distilled students under strong privacy. Distillation reduces collapse (lower Maj-Pred) and improves class-balanced utility relative to single-stage audio-only DP training. Training the DP teacher with privileged metadata can further improve soft-label utility and benefit the released audio-only student. 
+
+C. Supplementary: Collapsed binary-label analysis 
+
+We provide a supplementary binary-label analysis by omit-ting the rare other class ( male/female only). Privacy budgets ϵ are computed under this binary configuration using Opacus’ RDP accountant. B0 in Table III denotes the base variant (no DSAF, no AW); other rows add the indicated components. Table III shows that DP-direct collapses (MajPred 
+
+≈ 1), while offline KD reduces collapse and improves class-balanced utility; DSAF and AW further help. Sensitivity to auxiliary set size |Daux |. Table IV shows that the released student’s performance varies with |Daux |.V. C ONCLUSION 
+
+By combining a DP teacher trained with DP-SGD and an offline distillation step that releases only an audio-only student, our protocol mitigates strong-privacy majority-class collapse on imbalanced speech while preserving an example-level DP guarantee with respect to Dpriv through post-processing. We emphasize that this guarantee does not extend to Daux , which is used for non-private student training. REFERENCES [1] Reza Shokri, Marco Stronati, Congzheng Song, and Vitaly Shmatikov, “Membership inference attacks against machine learning models,” in 
+
+2017 IEEE Symposium on Security and Privacy (SP) . 2017, pp. 3–18, IEEE. [2] Matthew Fredrikson, Somesh Jha, and Thomas Ristenpart, “Model inversion attacks that exploit confidence information and basic coun-termeasures,” in Proceedings of the 22nd ACM SIGSAC Conference on Computer and Communications Security (CCS) . 2015, pp. 1322–1333, ACM. [3] Cynthia Dwork, “Differential privacy,” in Proceedings of the 33rd International Colloquium on Automata, Languages and Programming (ICALP) . 2006, vol. 4052 of LNCS , pp. 1–12, Springer. [4] Cynthia Dwork, “Differential privacy: A survey of results,” in Theory and Applications of Models of Computation (TAMC) . 2008, vol. 4978 of LNCS , pp. 1–19, Springer. [5] Cynthia Dwork and Aaron Roth, The Algorithmic Foundations of Differential Privacy , Now Publishers Inc., 2014. [6] Mart´ ın Abadi, Andy Chu, Ian Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang, “Deep learning with differential privacy,” in Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security (CCS) . 2016, pp. 308–318, ACM. [7] Douglas O’Shaughnessy, Speech Communication: Human and Machine ,Addison-Wesley, 1987. [8] Xiaojing Chen, Stephen Z. Wu, and Mingyi Hong, “Understanding gradient clipping in private SGD: A geometric perspective,” in Advances in Neural Information Processing Systems (NeurIPS) , 2020, vol. 33, pp. 13773–13782. [9] Cuong Tran, Minh Dinh, and Ferdinando Fioretto, “Differentially private deep learning under skewed class distributions,” in Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) , 2021, vol. 35, pp. 9930–9938. [10] Tianhao Xia, Shuo Shen, Shuyuan Yao, et al., “Differentially private learning with per-sample adaptive clipping,” in Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) , 2023, vol. 37, pp. 10444– 10452. [11] S. V. Chilukoti, M. I. Hossen, L. Shan, et al., “DP-SGD-Global-Adapt-V2-S: Triad improvements of privacy, accuracy and fairness via step decay noise multiplier and step decay upper clipping threshold,” 
+
+Electronic Commerce Research and Applications , vol. 70, pp. 101476, 2025. [12] Rosana Ardila, Megan Branson, Kelly Davis, Michael Henretty, Michael Kohler, Josh Meyer, Reuben Morais, Lindsay Saunders, Francis M. Tyers, and Gregor Weber, “Common Voice: A massively-multilingual speech corpus,” in Proceedings of the 12th Language Resources and Evaluation Conference (LREC) , 2020, pp. 4218–4222. [13] Tadas Baltruˇ saitis, Chaitanya Ahuja, and Louis-Philippe Morency, “Mul-timodal machine learning: A survey and taxonomy,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 41, no. 2, pp. 423– 443, 2019. [14] Vladimir Vapnik and Akshay Vashist, “A new learning paradigm: Learning using privileged information,” Neural Networks , vol. 22, no. 5–6, pp. 544–557, 2009. [15] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean, “Distilling the knowledge in a neural network,” arXiv preprint arXiv:1503.02531, 2015. [16] David Lopez-Paz, L´ eon Bottou, Bernhard Sch¨ olkopf, and Vladimir Vap-nik, “Unifying distillation and privileged information,” in International Conference on Learning Representations (ICLR) , 2016. [17] Ilya Mironov, “R´ enyi differential privacy,” in 2017 IEEE 30th Computer Security Foundations Symposium (CSF) , 2017, pp. 263–275. [18] Ashkan Yousefpour, Igor Shilov, Alexandre Sablayrolles, Davide Testug-gine, Karthik Prasad, Mani Malek, John Nguyen, Sayan Ghosh, Akash Bharadwaj, Jessica Zhao, Graham Cormode, and Ilya Mironov, “Opacus: User-friendly differential privacy library in pytorch,” arXiv preprint arXiv:2109.12298 , 2021. [19] Meta Platforms, Inc., “Opacus: Train PyTorch models with differential privacy,” https://opacus.ai/, 2025, Accessed: 2025-12-26.

@@ -1,0 +1,2071 @@
+Title: Graph Reconstruction from Differentially Private GNN Explanations
+
+URL Source: https://arxiv.org/pdf/2605.03388v1
+
+Published Time: Wed, 06 May 2026 00:41:26 GMT
+
+Number of Pages: 29
+
+Markdown Content:
+# Graph Reconstruction from Differentially Private GNN Explanations 
+
+Rishi Raj Sahoo 1,2 Jyotirmaya Shivottam 1,2 Subhankar Mishra 1,21National Institute of Science Education and Research (NISER), Bhubaneswar, India 
+
+> 2
+
+Homi Bhabha National Institute, Mumbai, India 
+
+{rishiraj.sahoo, jyotirmaya.shivottam, smishra}@niser.ac.in 
+
+Abstract 
+
+Regulatory frameworks such as GDPR increasingly require that ML predictions be accompanied by post-hoc explanations, even when raw data and trained models can-not be released. Differential privacy (DP) is the standard mitigation for the residual privacy risk of releasing these explanations. We show that DP is not sufficient: an adversary observing only DP-perturbed GNN explanations can reconstruct hidden graph structure with high accuracy. Our attack, PRIV X, exploits the fact that the Gaussian DP mechanism is a single DDPM forward step at known noise level σ(ε),recasting reconstruction as reverse diffusion conditioned on the corrupted signal, a principled Bayesian denoiser under known DP corruption. We formalise a strati-fied adversary model parameterised by (M, ˆε, ˆδ, S, ρ ) that interpolates between oblivious and oracle attackers, and derive endpoint-matched two-sided bounds on reconstruction AUC. For practitioners, we provide regime-stratified guidance on explainer choice: on homophilic graphs, neighbourhood-aggregating explainers (GraphLIME, GNNExplainer) leak more structure than per-node gradient explain-ers under the same DP budget; on strongly heterophilic graphs the ordering reverses. We introduce PRIV F as an auxiliary diagnostic sharing the same diffusion back-bone to decompose leakage into explainer-induced and intrinsic graph-distribution components. Experiments across seven benchmarks, three DP mechanisms, and three GNN backbones show P RIV X achieves AUC above 0.7 at ε = 5 on five of seven datasets, with the attack succeeding well within typically deployed privacy budgets. 
+
+1 Introduction 
+
+Graph Neural Networks (GNNs) are widely deployed in privacy-sensitive domains: social network analysis, medical record linkage, and financial fraud detection. In these deployments, two constraints typically apply together. First, raw data and trained models cannot be released: training graphs encode sensitive relationships, and access to the model itself enables direct extraction attacks. Second, regulatory frameworks such as the GDPR right to explanation 1 increasingly require that automated decisions be accompanied by a post-hoc explanation. Practitioners are therefore obliged to release exactly one artefact: the explanation. Post-hoc methods such as Grad [ 1], GradInput [ 2], GNNExplainer [3], and GraphLIME [4] produce per-node feature attribution scores that satisfy this requirement. Olatunji et al. [5] show that these explanations can reconstruct hidden graph connectivity with high accuracy when released in the clear, a severe privacy risk when edges encode social relationships or medical associations. The natural mitigation is differential privacy (DP) [ 6], which perturbs 
+
+> 1See e.g. Articles 13–15 and 22 of EU Regulation 2016/679, and analogous provisions in the EU AI Act and various US sectoral regulations. Preprint.
+> arXiv:2605.03388v1 [cs.LG] 5 May 2026
+
+explanation outputs before release. We show that DP at deployed budgets is not sufficient: an adaptive attacker that models the noise distribution can reconstruct graph structure with non-trivial accuracy across all seven benchmarks we evaluate. The risk extends beyond raw edge recovery: even partial reconstruction of graph structure en-ables downstream inference attacks such as community detection, link prediction, and membership inference, amplifying privacy leakage in deployed systems. Understanding and quantifying this 
+
+structural leakage under the only defence the deployment setting allows is therefore critical for privacy-preserving explainable AI. Three important gaps persist in the literature. (i) Existing reconstruction methods are heuristic and ignore the joint distribution p(A, Φ | X), leaving open whether learned global priors offer a quantifiable advantage over similarity-based attacks. (ii) No formal adversary model captures partial 
+
+knowledge of the DP mechanism, yielding threat models that are either oblivious to noise or assume oracle access to (ε, δ ), neither of which corresponds to a realistic attacker. (iii) Reconstruction attacks have been studied almost exclusively on homophilic citation networks, leaving the heterophilic regime, and the relationship between explanation fidelity and edge fidelity in that regime, unexplored. 
+
+Our contributions. 
+
+1. DP-protected GNN explanations remain a viable attack surface. Our main attack P RIV Xrecovers hidden adjacency from explanations released under standard (ε, δ )-DP across seven benchmark graphs, three DP mechanisms, and three GNN backbones. Reconstruction AUC stays substantially above chance for all ε ≥ 0.5 and approaches chance only at ε ≤ 0.1, a regime well below typical deployed budgets. 2. Stratified adversary model and two-sided AUC bounds. We introduce a knowledge tuple 
+
+(M, ˆε, ˆδ, S, ρ ) that interpolates between oblivious (Type I) and oracle (Type III) attackers, and derive endpoint-matched upper and lower bounds on the partition-weighted Type-II AUC RII ,a partition-reweighted proxy for the full-set AUC reported in Section 6 (the two coincide when classifier score distributions are partition-invariant; see Remark 1) (Theorems 1 and 2 and Corol-lary 1). The bracket has width (RIII − RI) · 2ρ(1 − ρ), vanishes at ρ ∈ { 0, 1}, and bounds the realistic partial-adaptive threat model corresponding to a deployed DP explanation API. 3. Diffusion as inverse denoising. We identify the Gaussian DP mechanism with a forward diffusion step at noise level σ(ε), casting graph reconstruction as a posterior inference problem under known corruption. Reverse diffusion thus acts as a principled Bayesian denoiser that captures global dependencies in p(A | ˜s), going beyond local similarity-based heuristics (Section 4). 4. Regime-stratified guidance for the explainer-choice problem. On homophilic graphs, neighbourhood-aggregating explainers leak more structure than per-node gradient explainers under the same DP budget (Lemma 1). On strongly heterophilic graphs (e.g., IMDB, h = 0 .19 )the ordering reverses; on milder heterophily the leakage gap narrows, because label-aligned explanations decorrelate from edge structure (Proposition 2, Section F). This gives practitioners actionable guidance for the only privacy lever they control: which explainer to deploy. 5. PRIV F as a diagnostic for intrinsic vs. explainer-induced leakage (Section D). PRIV F is an auxiliary attack on DP-perturbed raw features that shares the same diffusion architecture as P RIV Xand serves purely as a leakage-decomposition tool: the P RIV X − PRIV F gap separates leakage attributable to the explanation pipeline from leakage already present in the underlying graph distribution. Full methodology, theory, and results are in Section D. 
+
+2 Problem Formulation 
+
+Setup. Let G = ( V, E, X) be a graph with V = {1, . . . , n }, adjacency matrix A ∈ { 0, 1}n×n, and node features X ∈ Rn×d. A GNN fθ is trained on G for C-class node classification. For node v, an explainer yields ϕv = Explainer( fθ , v, X, A) ∈ Rd.
+
+DP mechanisms. We study three standard mechanisms applied to ϕv (explanation) or xv (raw feature): Gaussian : ˜ϕv = ϕv + ηv , ηv ∼ N (0 , σ 2
+
+> G
+
+Id), σG = p2 ln(1 .25 /δ ) ∆ f /ε , satisfying 2(ε, δ )-DP [ 6]; Laplace : ηv ∼ Lap(0 , ∆f /ε )d, pure ε-DP; Rényi (RDP) : σR =
+
+q
+
+α∆2 
+
+> f
+
+/(2 εrdp ) for order α, convertible to (ε, δ )-DP [7]. 
+
+Reconstruction tasks. PRIV X (explanation attack, primary): an adversary observes ˜Φ = { ˜ϕv }v∈S 
+
+and recovers A. This is the deployment-relevant attack: explanations are precisely what regulatory frameworks force the system to release. PRIV F (feature attack, diagnostic): the adversary observes 
+
+˜XS = {xv + ηv }v∈S with no access to any GNN model or explanation, and recovers A. P RIV F is not a competing attack in any deployment scenario; it is purely a diagnostic that uses the same diffusion architecture as P RIV X with DP-perturbed features as input. The P RIV X − PRIV F gap decomposes leakage into explainer-induced and graph-distribution components. Full P RIV F methodology, theory, and results appear in Section D. Performance is measured by Average Precision (AP) and AUC-ROC. 
+
+3 Stratified Adversary Model 
+
+A fundamental gap in prior work is the treatment of the adversary as either naive (ignoring DP) or omniscient (knowing ε, δ exactly). 
+
+Definition 1 (Adversary Knowledge Tuple) . An adversary A is parameterised by K = ( M, ˆε, ˆδ, S, ρ )
+
+where M ∈ { Gaussian , Laplace , RDP , unknown }, ˆε, ˆδ are estimated privacy parameters with relative error κ = |ˆε − ε|/ε , S ⊆ V is the observed subset, and ρ = |S| /n .
+
+Definition 2 (Adversary Types) . Type I (Oblivious) : ignores DP noise; equivalent to Olatunji et al. [5] . Type II (Partial-Adaptive) : knows mechanism type and approximate budget ( κ ≤ κ0), observes fraction ρ ∈ (0 , 1) of nodes. This is the adversary modelled by P RIV X/P RIV F. Type III (Oracle) :exact knowledge, full observation. 
+
+We write RI ≤ Rhalf ≤ RIII for the AUC of the oblivious, half-edge, and oracle classifiers respectively (data-processing inequality; see Section C.1 for precise definitions and Lemma 2 for the edge-partition probabilities used below). 
+
+Theorem 1 (Partial-Adaptive Attacker: Upper Bound) . Let RII denote the partition-weighted AUC of the Type-II classifier (see Section C.1 for the precise definition). Under the standing assumptions, 
+
+RII ≤ RIII · pSS + Rhalf · pSU + RI · pU U . (1) 
+
+In the limit n → ∞ , applying Rhalf ≤ RIII :
+
+RII ≤ RIII 
+
+ 1 − (1 − ρ)2 + RI(1 − ρ)2. (2) 
+
+Theorem 2 (Partial-Adaptive Attacker: Lower Bound) . As κ → 0 (or when ˆσ is consistent for σ), 
+
+RII ≥ RIII · pSS + RI(pSU + pU U ). (3) 
+
+In the limit n → ∞ : RII ≥ RI + ( RIII − RI)ρ2. For finite estimation error κ, replace RIII with 
+
+RSS  
+
+> II
+
+(κ) ≤ RIII , where RIII − RSS  
+
+> II
+
+(κ) ≤ Cdeg · κ for a problem-dependent constant Cdeg .
+
+Corollary 1 (Endpoint-Matched Bracket) . Combining Theorems 1 and 2 in the limit n → ∞ :
+
+RI + ( RIII − RI)ρ2
+
+| {z }
+
+> lower bound
+
+≤ RII ≤ RI + ( RIII − RI)(1 − (1 − ρ)2)
+
+| {z }
+
+> upper bound
+
+. (4) 
+
+The bracket is tight at ρ ∈ { 0, 1} and has maximal width (RIII − RI)/2 at ρ = 12 . As ρ → 0, RII → RI
+
+(oblivious); as ρ → 1, RII → RIII (oracle). The bracket is matched at the endpoints, not uniformly; the ρ = 0 .5 gap quantifies the irreducible uncertainty introduced by partial observation. 
+
+Proofs and elaborating remarks (including the AUC-proxy interpretation and the empirical calibration of the bracket gap) are in Section C. Setting κ0 = 0 .3 and ρ = 0 .5 in our experiments models a realistic deployment where the attacker queries half the nodes and estimates the noise scale from the observed variance of ˜Φ.3Adjacency     
+
+> Matrix
+> Features
+> Graph
+> GNN
+> Model 0
+> 1
+> 0
+> 1
+> 1
+> 0
+> 0
+> 0
+> 0
+> 0
+> 1
+> 0
+> 1
+> 1
+> 1
+> 0
+> 0
+> 1
+> 0
+> 0
+> 1
+> 1
+> 1
+> 0
+> 0
+> 0
+> 1
+> 0
+> 0
+> 1
+> 10010
+> Feature
+> Explanations
+> Label 1
+> Label 2
+> Label 3 0
+> 1
+> 0
+> 1
+> 1
+> 0
+> 0
+> 0
+> 0
+> 0
+> 1
+> 0
+> 1
+> 1
+> 1
+> 0
+> 0
+> 1
+> 0
+> 0
+> 1
+> 1
+> 1
+> 0
+> 0
+> 0
+> 1
+> 0
+> 0
+> 1
+> 10010
+> Noise level
+> Differential Privacy
+> Mechanism
+> Noisy
+> Explanations
+> User-Side
+> Attacker
+> Reconstructed Graph
+> Attention-based Denoising
+> t=0 t=1
+
+# ...  
+
+> t=T Trained Diffusion
+> Model
+> Noisy
+> Adjacency
+> Cosine Similarity
+> Input
+> Denoising Process
+> t=2
+
+Figure 1: Overview of the P RIV X framework for reconstructing graph structure from differentially private explanations. Top (user-side): the input graph is processed by a GNN to produce node-level explanations ϕv , which are perturbed by a differential privacy (DP) mechanism to yield noisy explanations ˜ϕv at a given noise level. An adaptive attacker observes these noisy explanations and constructs an initial noisy adjacency estimate. Bottom (attacker-side): a trained diffusion model performs iterative denoising from timestep t = T to t = 0 , refining a latent adjacency representation 
+
+zt into a reconstructed graph. At each step, the denoiser ϵθ (an attention-based graph transformer) conditions on the noisy explanations via cross-attention and incorporates timestep information, enabling posterior inference under the DP noise model. 
+
+4 Method: Adaptive Diffusion Reconstruction 
+
+4.1 Architecture Overview 
+
+Figure 1 illustrates the P RIV X pipeline. The central architectural principle is that reconstruction is driven entirely by the conditioning signal , while the generative backbone remains unchanged. P RIV Xconditions on noisy explanations ˜ϕv . An auxiliary variant, P RIV F (see Section D), conditions on noisy features ˜xv and shares an identical diffusion backbone; it is used purely as a leakage-decomposition diagnostic and does not correspond to a real deployment scenario. 
+
+4.2 Diffusion as a Denoiser for DP Signals DP noise as forward diffusion. In a DDPM [ 8] with cumulative noise product ¯αt, the forward process satisfies q(zt|z0) = N (√¯αtz0, (1 − ¯αt)I). The Gaussian DP perturbation ˜ϕv = ϕv +
+
+N (0 , σ 2I) corresponds to this process at an effective timestep 
+
+t⋆ = arg min 
+
+> t
+
+(1 − ¯αt) − σ2(ε) . (5) 
+
+Reverse diffusion as posterior inference. Given noisy observations ˜s (either ˜Φ or ˜XS ), recon-struction corresponds to solving the posterior inference problem 
+
+p(A, Φ | ˜Φ) ∝ p( ˜Φ|Φ) p(Φ |A, X) p(A|X). (6) Unlike generative diffusion models that learn p(A), our formulation conditions on the observed corrupted signal and performs inference in p(A | ˜s). Reverse diffusion thus acts as a Bayesian denoiser under a known corruption model, progressively removing DP noise while preserving globally consistent graph structure. The graph-structured analogy to DDRM [9] and discrete-structure considerations are in Section H. 4Algorithm 1 PRIV X (and P RIV F in Section D): Adaptive Diffusion Graph Reconstruction 
+
+Require: Noisy signal ˜s (explanations; or features for P RIV F in Section D), denoiser εθ , steps T ,schedule {αt, β t, σ t}
+
+Ensure: Reconstructed adjacency ˆA 
+
+> 1:
+
+ˆσ2 ← σ2(ˆ ε) ▷ from DP calibration formula for ˆM; see Section 3  
+
+> 2:
+
+t⋆ ← arg min t |(1 − ¯αt) − ˆσ2| 
+
+> 3:
+
+zt⋆ ∼ N (0 , I ) 
+
+> 4:
+
+for t = t⋆, . . . , 1 do  
+
+> 5:
+
+ˆε ← εθ (zt, ˜s, t ) ▷ cross-attend to noisy signal  
+
+> 6:
+
+zt−1 ← 1√αt
+
+
+
+zt − βt√1− ¯αt
+
+ˆε
+
+
+
++ σtη, η ∼ N (0 , I ) 
+
+> 7:
+
+end for  
+
+> 8:
+
+ˆA ← σ(z0) ▷ sigmoid decode + threshold at 0.5  
+
+> 9:
+
+return ˆA
+
+4.3 Denoising Network and Training 
+
+The denoising network εθ is a graph transformer trained via: 
+
+L = EA, ˜s, t 
+
+h
+
+∥ε − εθ (zt, ˜s, t )∥2i
+
+, (7) where ˜s = ˜Φ for P RIV X (or ˜s = ˜X for the P RIV F diagnostic in Section D). At inference, t⋆ is estimated from the observed signal variance: ˆσ2 = Var(˜ s) − dVar( s). The full procedure is given in Algorithm 1. Full architecture details and complexity analysis are in Section H. 
+
+5 Theoretical Analysis 
+
+Definition 3 (Graph Homophily) . h = Pr (u,v )∼E [label( u) = label( v)] .
+
+Definition 4 (Edge-fidelity) . For an explainer producing ϕv ∈ Rd, the edge-fidelity is 
+
+γE := Pr 
+
+> (i,j )∼E
+
+h
+
+⟨ ˆϕi, ˆϕj ⟩ > ⟨ ˆϕi, ˆϕk⟩ for k ∼ Unif( V \ N (i)) 
+
+i
+
+,
+
+where ˆϕ = ϕ/ ∥ϕ∥2. This measures how well the explanation distinguishes connected from discon-nected node pairs, the signal an inner-product reconstruction attacker exploits. 
+
+Definition 5 (Label-fidelity) . γL = Pr v [arg max c ˜y(c) 
+
+> v
+
+= yv ] where ˜y is the prediction restricted to top-k features by |ϕ|. This is the standard interpretability notion used by GNNExplainer and GraphLIME. The two fidelities are aligned on homophilic graphs but can decouple substantially on heterophilic graphs (Section F). 
+
+The bound in Theorem 3 is stated in terms of γE , the attack-relevant fidelity; see Section C for the sign-fidelity γS used in the proof of Lemma 1. 
+
+Theorem 3 (Edge Reconstruction TPR under Gaussian DP) . Let ¯ϕ := E[∥ϕv ∥22]. Under homophily h,edge-fidelity γE , and (ε, δ )-DP with Gaussian noise scale σ(ε), the inner-product threshold attacker satisfies 
+
+Pr[ ˆAij = 1 | Aij = 1] ≥ 1 − 4 Var( ϕ⊤ 
+
+> i
+
+ϕj | Aij = 1) + 8 σ2 ¯ϕ + 4 σ4d
+
+(hγ E ¯ϕ)2 . (8) 
+
+The crossover scale is σ2 
+
+> c
+
+= hγ E ¯ϕ; for Cora ( h = 0 .81 , ˆγE ≈ 0.7) this gives εc ≈ 0.5. Regime and deployment analysis in Section C. 
+
+Proposition 1 (Privacy–Utility Tradeoff) . R(ε) = O(1 /(1 + σ2(ε))) , with R → hγ E as ε → ∞ 
+
+and R → 0 as ε → 0.
+
+55.1 Fidelity Gap Between Explanation Types (Homophilic Regime) Assumption 1 (Gradient Variance) . ∥∇ xℓ∥2 ≤ Sf ; Var( ϕGrad ) = Ω( d−1/2S2 
+
+> f
+
+).
+
+Lemma 1 (Sign-Fidelity Gap, Homophilic Regime) . Fix the homophilic regime h ≥ h0 > 1/2.Under Assumption 1 and Gaussian DP at scale σ, the post-DP per-coordinate sign-fidelities satisfy 
+
+EγLIME  
+
+> S
+
+− γGrad 
+
+> S
+
+ ≥ Ω E[p|N (v)|] − 1
+
+σ√d
+
+!
+
+. (9) 
+
+The advantage stems from neighbourhood aggregation reducing per-coordinate noise variance by a factor |N (v)|. In the heterophilic regime ( h < 1/2) the lemma does not apply: aggregation aligns explanations with class boundaries which on heterophilic graphs decorrelate from edge structure, and the ordering can reverse (Proposition 2, Section F). Expectation is over nodes v ∼ Unif( V) with the graph structure held fixed. 
+
+Corollary 2 (Section C) extends this to an edge-fidelity gap of the same order under a homophilic alignment condition; a regime-dependent remark on the heterophilic inversion is also given there. 
+
+5.2 Heterophilic Reconstruction 
+
+For heterophilic graphs ( h ≪ 1), the lower bound in Theorem 3 degrades. However, connected nodes in heterophilic graphs share dissimilar features, creating a distinguishable anti-correlation signal. 
+
+Proposition 2 (Heterophilic Reconstruction Lower Bound) . Consider a heterophilic graph with heterophily level 1 − h and feature–structure anti-correlation ρ− 
+
+> XA
+
+> 0. Assume that inter-class feature separation exceeds intra-class variance, so that for disconnected node pairs the expected inner product is bounded away from that of true edges. Then 
+
+Pr[ ˆAij = 1 | Aij = 1] ≥ (1 − h) · | ρ−
+
+> XA
+
+| − O(σ2). (10) The separation assumption holds empirically on IMDB and Amazon-Ratings; see Section C for the false-positive analysis. 
+
+5.3 Subgraph Sampling Bias for Large Graphs 
+
+For power-law graphs such as ogbn-arxiv, boundary edges that lie outside the sampled k-hop ego-net introduce a systematic bias that limits reconstruction quality regardless of model capacity; the precise statement and proof are in Section C.6. 
+
+6 Experiments 
+
+6.1 Setup 
+
+We evaluate on seven benchmarks spanning homophilic (Cora, CiteSeer, PubMed), large-scale (ogbn-arxiv), and heterophilic (Chameleon, IMDB, Amazon-ratings) graphs. We consider four explainers (Grad, GradInput, GNNExplainer, GraphLIME) and compare PRIV X against two base-lines: ExplainSim and GSE. Feature-based methods (FeatureSim, SLAPS) and P RIV F results ap-pear in Section D. Experiments use GCN, GIN, and GraphSAGE backbones under DP budgets 
+
+ε ∈ { 0.1, 0.5, 1, 2, 5, 8, 16 } with δ = 10 −5 and Gaussian, Laplace, and Rényi mechanisms. Mod-els are trained with standard settings (3-layer GNNs, hidden dim 256, dropout 0.5, Adam), while the diffusion model uses a 4-layer graph transformer (hidden dim 256, 4 heads, cosine schedule, 
+
+T = 200 ). We evaluate across window sizes k ∈ { 32 , 64 , 128 } and multiple train/test splits. All experiments are conducted on 4 × NVIDIA RTX 6000 Ada GPUs. Full dataset statistics are provided in Appendix Section G, and additional implementation details in Appendix Section H. 
+
+6.2 Result Analysis 
+
+Table 1 reports reconstruction AP and AUC at ε = 5 .0 (Gaussian DP, w = 32 ) for both GCN and GraphSAGE backbones across all seven datasets, comparing ExplainSim, GSE, and P RIV X for each 6Table 1: Graph reconstruction performance at ε = 5 (Gaussian DP, w = 32 ; GCN and GraphSAGE backbones). Bold : best within each method group (ExplainSim/GSE vs. P RIV X). Results are averaged over 5 independent runs, with standard deviation in the range ±0.02 to ±0.04 . OOM: out-of-memory. Feature-based methods (FeatureSim, SLAPS, P RIV F) appear in Table 2.                                                                                                                                                                                                                                                       
+
+> Homophilic Heterophilic
+> Explainer Method Cora CiteSeer PubMed ogbn-arxiv Chameleon IMDB Amz-R
+> AUC AP AUC AP AUC AP AUC AP AUC AP AUC AP AUC AP GRAD
+> ExplainSim 0.534 0.546 0.510 0.531 0.522 0.536 0.477 0.484 0.503 0.506 0.524 0.523 0.493 0.503 GSE 0.480 0.497 0.542 0.610 0.504 0.510 OOM OOM 0.534 0.528 0.475 0.497 0.485 0.485
+> PRIV X-GCN (Ours) 0.736 0.764 0.801 0.824 0.573 0.605 0.558 0.565 0.648 0.627 0.819 0.803 0.570 0.581
+> PRIV X-SAGE (Ours) 0.670 0.669 0.666 0.678 0.709 0.720 0.652 0.657 0.741 0.728 0.755 0.719 0.622 0.630
+> GRAD -INPUT
+> ExplainSim 0.521 0.522 0.547 0.553 0.475 0.494 0.514 0.510 0.514 0.531 0.517 0.516 0.503 0.504 GSE 0.544 0.513 0.581 0.638 0.486 0.493 OOM OOM 0.533 0.521 0.487 0.495 0.506 0.505
+> PRIV X-GCN (Ours) 0.706 0.745 0.793 0.808 0.686 0.700 0.555 0.565 0.544 0.544 0.734 0.720 0.512 0.521
+> PRIV X-SAGE (Ours) 0.652 0.658 0.665 0.681 0.729 0.745 0.650 0.656 0.674 0.676 0.715 0.677 0.596 0.616
+> GRAPH -LIME ExplainSim 0.520 0.558 0.516 0.527 0.465 0.494 0.500 0.499 0.518 0.523 0.532 0.532 0.511 0.517 GSE 0.506 0.518 0.541 0.608 0.497 0.502 OOM OOM 0.519 0.544 0.520 0.527 0.520 0.525
+> PRIV X-GCN (Ours) 0.717 0.751 0.665 0.701 0.560 0.586 0.516 0.525 0.515 0.548 0.472 0.512 0.512 0.522
+> PRIV X-SAGE (Ours) 0.705 0.710 0.683 0.700 0.745 0.756 0.653 0.665 0.594 0.611 0.732 0.698 0.592 0.609
+> GNNE X-
+> PLAINER
+> ExplainSim 0.473 0.513 0.510 0.500 0.489 0.508 0.502 0.504 0.489 0.527 0.526 0.517 0.503 0.508 GSE 0.496 0.512 0.553 0.629 0.497 0.502 OOM OOM 0.536 0.545 0.511 0.506 0.529 0.518
+> PRIV X-GCN (Ours) 0.836 0.860 0.897 0.909 0.701 0.715 0.515 0.524 0.586 0.589 0.483 0.515 0.512 0.524
+> PRIV X-SAGE (Ours) 0.774 0.771 0.685 0.700 0.710 0.733 0.645 0.647 0.800 0.785 0.751 0.738 0.601 0.615
+
+explainer. Bold entries indicate the best within each explainer group (ExplainSim/GSE vs. P RIV X); OOM denotes out-of-memory or unavailable results. Feature-based baselines (FeatureSim, SLAPS) and P RIV F results appear in Table 2 (Section D). 
+
+(1) GraphSAGE consistently improves over GCN. PRIV X-SAGE outperforms P RIV X-GCN across all datasets. The gains are largest on heterophilic datasets: on Chameleon, P RIV X-SAGE (GNNExplainer) achieves AP = 0 .785 vs. GCN’s 0.589 (+19 .6 pp). GraphSAGE’s mean-pooling aggregation yields smoother, more discriminative node representations that better preserve structural signal after DP noise. P RIV F results showing the same backbone effect are in Table 2 (Section D). 
+
+(2) Diffusion outperforms all heuristic baselines by large margins. PRIV X substantially improves over ExplainSim and GSE: on Cora, P RIV X-SAGE with GNNExplainer achieves AP = 0 .775 vs. ExplainSim = 0 .513 (+51% ) and GSE = 0 .497 (+56% ). Feature-based baseline comparisons are in Table 2 (Section D). 
+
+(3) On homophilic graphs, surrogate explainers leak more. GNNExplainer and GraphLIME PRIV X variants outperform Grad and GradInput on every homophilic dataset, confirming Lemma 1. On Cora with GraphSAGE, P RIV X-SAGE GNNExplainer AP = 0 .775 vs. P RIV X-SAGE Grad =0.639 (+13 .6 pp). The gap narrows on heterophilic datasets (Chameleon, IMDB, Amazon-ratings); on IMDB the ordering reverses, with Grad-P RIV X-GCN (AP = 0 .803 ) substantially exceeding GNNExplainer-P RIV X-GCN (AP = 0 .515 ). This is the empirical signature of Proposition 2: when the GNN classifies via dissimilar-feature neighbours, surrogate explanations align with label boundaries that decorrelate from edge structure, while gradient explanations expose the anti-correlation signal that drives heterophilic reconstruction. Section F develops this finding in detail. 
+
+(4) DP alone is not sufficient at deployed budgets. PRIV X achieves AP ≥ 0.6 in 42 of 56 (explainer, dataset, backbone) configurations at ε = 5 , and AP ≥ 0.7 in 24 of 56. AP remains above chance at 
+
+ε = 0 .5 on both Cora and IMDB, collapsing only at ε = 0 .1, consistent with εc ≈ 0.5 (Theorem 3). 
+
+(5) Decomposing total leakage with P RIV F (Section D). On homophilic graphs (Cora, CiteSeer), PRIV X modestly exceeds P RIV F (surrogate explanations add structural signal); on IMDB, P RIV Xtrails P RIV F (most recoverable structure is in the graph distribution). Full results in Table 2; DP on explanations protects less total leakage than a naive view suggests. 
+
+6.3 Privacy Budget Analysis 
+
+Figure 2 shows AP increases monotonically with ε on both Cora and IMDB. On Cora, GNNExplainer dominates (highest SNR after aggregation, confirming Lemma 1); on IMDB the explainer gap narrows 70.1 0.5 1.0 2.0 5.0 8.0 16.0 
+
+> Privacy Budget
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> Average Precision (AP)
+
+Cora (Homophilic)       
+
+> Grad
+> GradInput
+> GraphLIME
+> GNNExplainer
+> 0.1 0.5 1.0 2.0 5.0 8.0 16.0
+> Privacy Budget
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> Average Precision (AP)
+
+IMDB (Heterophilic) 
+
+AP vs. Privacy Budget (GCN, Gaussian DP, w = 32 )Figure 2: Reconstruction AP vs. privacy budget ε for four explainers on Cora (homophilic) and IMDB (heterophilic) (GraphSAGE backbone, Gaussian DP, w = 32 ). AP increases monotonically with ε in both settings, consistent with Proposition 1. On Cora, GNNExplainer dominates gradient-based explainers, consistent with the homophilic edge-fidelity gap (Lemma 1); on heterophilic IMDB the ordering narrows and partially reverses. 32 64 128      
+
+> Window Size w
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> Average Precision (AP)
+> Cora
+> Grad
+> GNNExplainer
+> 32 64 128
+> Window Size w
+> 0.52
+> 0.54
+> 0.56
+> 0.58
+> Average Precision (AP)
+> Amazon-ratings
+> Grad
+> GNNExplainer
+> AP vs. Window Size at =5.0 (GCN, Gaussian DP)
+
+(a) Window size vs. AP 0.1 0.5 1.0 2.0 5.0 8.0 16.0         
+
+> Privacy Budget
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> Average Precision (AP)
+> Cora
+> Gaussian
+> Laplacian
+> Rényi
+> 0.1 0.5 1.0 2.0 5.0 8.0 16.0
+> Privacy Budget
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> Average Precision (AP)
+> CiteSeer
+> Gaussian
+> Laplacian
+> Rényi
+> AP vs. by DP Mechanism (GraphLime, GCN, w=32)
+
+(b) DP mechanism vs. AP 
+
+Figure 3: Left: AP vs. subgraph window size k at ε = 5 .0. Performance saturates near k = 128 
+
+on Cora and earlier on Amazon-ratings, consistent with Section 5.3. Right: AP vs. ε across three DP mechanisms (GraphLIME, GCN, w = 32 ). Laplace achieves slightly higher AP for the same nominal ε due to heavier tails preserving more high-frequency structure signal. because the anti-correlation signal is uniformly accessible across explainer families. Even at ε = 0 .1,AP remains above 0.52 on both datasets; typical deployed budgets ( ε ∈ [1 , 8] ) sit well above the crossover εc ≈ 0.5 predicted by Theorem 3. 
+
+6.4 Adaptive Attacker Analysis 
+
+Table 7 and Figure 7 (Section I.4) present the adaptive attacker ablation on Cora (GNNExplainer, GraphSAGE backbone, ε = 5 .0). Four patterns confirm Theorems 1 and 2: (i) Smooth degradation with κ: AP drops only 3.5 pp from κ = 0 to κ = 1 .0, confirming Cdeg ≲ 0.035 . (ii) Monotonic gain with ρ: AP rises +10 .2 pp from ρ = 0 .25 to 1.0, consistent with the ρ2 lower bound in Corollary 1. (iii–iv) The ρ-gain is stronger on Cora (homophilic) than on Amazon-ratings where it is non-monotonic; GraphSAGE explanations yield higher AP at every (ρ, κ ) point than GCN. Full tables in Section I.2. 
+
+6.5 Ablation Studies Window size. AP increases with k but saturates near k = 128 for Cora (earlier at k = 64 for Amazon-ratings), consistent with Section 5.3. Increasing k from 32 to 128 yields only 1–2 pp on Cora, confirming k = 32 already captures most recoverable structural signal as shown in Figure 3a. 8DP mechanism. Laplace consistently outperforms Gaussian and Rényi at the same ε (+1 –3 pp AP), as its heavier tails corrupt fewer low-magnitude explanation coordinates as shown in Figure 3b. Rényi DP is preferred for sequential composition; Laplace is most exploitable for one-shot release. 
+
+GNN backbone. Figure 8 (Section I) compares GCN, GIN, and GraphSAGE; GraphSAGE consis-tently achieves the highest AP due to its mean-pooling providing natural noise-averaging. 
+
+Decomposition via P RIV F. Full P RIV X vs. P RIV F decomposition results are in Section D (Figure 5 and Table 2). 
+
+7 Discussion 
+
+Implications for privacy-preserving XAI. Practitioners deploying GNN explanation systems under regulatory mandates have, in practice, only two privacy levers: the choice of explainer and the choice of DP budget. Our results give regime-stratified guidance for both. On homophilic graphs (citation networks, social networks where homophily exceeds 0.6), gradient-based explainers should be preferred for privacy over surrogate methods at any DP budget, neighbourhood-aggregating surrogates leak substantially more structure under the same noise calibration, and this gap survives standard DP deployments. On heterophilic graphs (heterogeneous information networks, fraud graphs where labels anti-correlate across edges), the explainer choice has minimal effect on leakage; explainer selection should be governed by interpretability and faithfulness criteria. Across both regimes, DP budgets above ε ≈ 1 provide negligible structural privacy; meaningful protection requires ε ≤ 0.5, which most current deployments do not approach. 
+
+What our attack does and does not show. PRIV X establishes a necessary condition for privacy: any defence that fails against our attack is broken. It does not establish a sufficient condition: a defence that defeats P RIV X may still be vulnerable to attacks we have not considered. Practitioners should treat AP at P RIV X as a lower bound on the leakage of the deployed system, not an upper bound. 
+
+Limitations. (i) Dense reconstruction is O(T n 2), limiting applicability to graphs beyond ∼10 3
+
+nodes without subgraph sampling. Sparse or hierarchical diffusion is a natural extension. (ii) Our heterophilic bound (Proposition 2) requires non-trivial feature–structure anti-correlation; when |ρ−
+
+> XA
+
+|
+
+is near zero, reconstruction degrades toward chance. (iii) We study Gaussian, Laplace, and Rényi DP; adaptive mechanisms such as f -DP [ 10 ] and training-time perturbation merit future analysis. (iv) 
+
+The P RIV X vs. P RIV F decomposition (Section D) is informative but not exhaustive: leakage may also depend on the explainer’s training procedure, the GNN architecture, and the specific subset of nodes queried. 
+
+Broader impact. DP on explanations protects a smaller fraction of total leakage than expected; see Section A for recommendations. 
+
+8 Conclusion 
+
+We introduced P RIV X, a reverse-diffusion attack that reconstructs hidden graph structure from DP GNN explanations, and P RIV F (Section D), an auxiliary diagnostic that decomposes leakage into intrinsic and explainer-induced components. Our key findings are: (1) DP on explanations alone is insufficient at typical budgets ( ε ∈ [1 , 8] ), with P RIV X achieving above-chance reconstruction across datasets and mechanisms; (2) on homophilic graphs, surrogate explainers leak more, while on heterophilic graphs the ordering reverses due to label-edge decorrelation (Lemma 1, Proposition 2); 
+
+(3) heterophilic reconstruction remains feasible via anti-correlation; (4) explainer choice admits regime-dependent guidance: gradient-based under homophily and tight budgets, interpretability-driven under heterophily; (5) the P RIV X–P RIV F decomposition shows DP on explanations mitigates only a limited fraction of total leakage, as much structure is inherent to the graph distribution. All findings are supported by formal guarantees and empirical validation. We hope P RIV X provides a rigorous foundation for privacy auditing in graph-based machine learning systems under regulatory explanation-release mandates. 9References 
+
+[1] Karen Simonyan, Andrea Vedaldi, and Andrew Zisserman. Deep inside convolutional networks: Visualising image classification models and saliency maps. Workshop at the International Conference on Learning Representations (ICLR) , 2014. [2] Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In Proceedings of the 34th International Conference on Machine Learning (ICML) , pages 3319–3328, 2017. [3] Rex Ying, Dylan Bourgeois, Jiaxuan You, Marinka Zitnik, and Jure Leskovec. GNNExplainer: Generating explanations for graph neural networks. In Advances in Neural Information Pro-cessing Systems (NeurIPS) , volume 32, 2019. [4] Qiang Huang, Makoto Yamada, Yuan Tian, Danica Singh, Dawei Yin, and Yi Chang. GraphLIME: Local interpretable model explanations for graph neural networks. IEEE Transac-tions on Knowledge and Data Engineering , 2022. [5] Iyiola E. Olatunji, Wolfgang Nejdl, and Meike Khosla. Private graph extraction via feature explanations. In Proceedings on Privacy Enhancing Technologies (PoPETS) , 2023. [6] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. Calibrating noise to sensitivity in private data analysis. In Theory of Cryptography Conference (TCC) , pages 265–284. Springer, 2006. [7] Ilya Mironov. Rényi differential privacy. In IEEE 30th Computer Security Foundations Symposium (CSF) , pages 263–275. IEEE, 2017. [8] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems (NeurIPS) , 33:6840–6851, 2020. [9] Bahjat Kawar, Michael Elad, Stefano Ermon, and Jiaming Song. Denoising diffusion restoration models. In Advances in Neural Information Processing Systems (NeurIPS) , volume 35, 2022. [10] Jinshuo Dong, Aaron Roth, and Weijie J. Su. Gaussian differential privacy. Journal of the Royal Statistical Society: Series B , 84(1):3–37, 2022. [11] Xinlei He, Jinyuan Jia, Michael Backes, Neil Zhenqiang Gong, and Yang Zhang. Stealing links from graph neural networks. In Proceedings of the 30th USENIX Security Symposium , 2021. [12] Zaixi Zhang, Qi Liu, Zhenya Huang, Hao Wang, Chengqiang Lu, Chuanren Liu, and Enhong Chen. GraphMI: Extracting private graph data from graph neural networks. In Proceedings of the 30th International Joint Conference on Artificial Intelligence (IJCAI) , 2021. [13] Vasisht Duddu, Antoine Boutet, and Virat Shejwalkar. Quantifying privacy leakage in graph embedding. In Privacy Enhancing Technologies Symposium (PETS) , 2020. [14] Yang Zhang et al. Graph embedding reconstruction attack. In Advances in Neural Information Processing Systems (NeurIPS) , 2024. NeurIPS 2024. [15] Jeremiah Blocki, Avrim Blum, Anupam Datta, and Or Sheffet. Johnson covering numbers, approximate differential privacy, and applications. In Proceedings of the 4th Conference on Innovations in Theoretical Computer Science (ITCS) , 2012. [16] Vishesh Karwa, Sofya Raskhodnikova, Adam Smith, and Grigory Yaroslavtsev. Private analysis of graph structure. In ACM Transactions on Database Systems , volume 39, 2014. [17] Ameya Daigavane, Gagan Madan, Aditya Aggarwal, Anirban Agarwal, Prateek Gupta, Prateek Jain, and Mausam. Node-level differentially private graph neural networks. In Workshop on Privacy in Machine Learning (PriML), NeurIPS , 2021. [18] Sina Sajadmanesh, Stan Matwin, Majid Nategh, and Ali Mohammadi. GAP: Differentially private graph neural networks with aggregation perturbation. In Proceedings of the 32nd USENIX Security Symposium , 2023. [19] Wenxuan Zhu et al. Private Gomory–Hu trees. In Advances in Neural Information Processing Systems (NeurIPS) , 2025. NeurIPS 2025. [20] Catarina Meng, Mia Rinberg, and Michael Kearns. Interpretability and privacy in machine learn-ing: Studying the trade-off through attribution methods. In Workshop on Privacy-Preserving Machine Learning, NeurIPS , 2022. 10 [21] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In 
+
+International Conference on Learning Representations (ICLR) , 2021. [22] Jacob Austin, Daniel D. Johnson, Jonathan Ho, Daniel Tarlow, and Rianne van den Berg. Struc-tured denoising diffusion models in discrete state-spaces. In Advances in Neural Information Processing Systems (NeurIPS) , volume 34, 2021. [23] Jaehyeong Jo, Seul Lee, and Sung Ju Hwang. Score-based generative modeling of graphs via the system of stochastic differential equations. In International Conference on Machine Learning (ICML) , 2022. [24] Gang Liu, Eric Hu, Jiaxin Zeng, and Meng Jiang. Graphrcg: Self-conditioned graph generation. In International Conference on Machine Learning (ICML) , 2024. [25] Fan Chung and Linyuan Lu. The average distances in random graphs with given expected degrees. Proceedings of the National Academy of Sciences , 99(25):15879–15882, 2002. [26] Andrew Kachites McCallum, Kamal Nigam, Jason Rennie, and Kristie Seymore. Automating the construction of internet portals with machine learning. volume 3, pages 127–163, 2000. [27] Prithviraj Sen, Galileo Namata, Mustafa Bilgic, Lise Getoor, Brian Galligher, and Tina Eliassi-Rad. Collective classification in network data. volume 29, pages 93–106, 2008. [28] Galileo Namata, Ben London, Lise Getoor, Bert Huang, and UMD. Query-driven active surveying for collective classification. Technical report, 10th International Workshop on Mining and Learning with Graphs, 2012. [29] Weihua Hu, Matthias Fey, Marinka Zitnik, Yuxiao Dong, Hongyu Ren, Bowen Liu, Michele Catasta, and Jure Leskovec. Open graph benchmark: Datasets for machine learning on graphs. 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 33:22118–22133, 2020. [30] Benedek Rozemberczki, Carl Allen, and Rik Sarkar. Multi-scale attributed node embedding. 
+
+Journal of Complex Networks , 9(2), 2021. [31] Oleg Platonov, Denis Kuznedelev, Artem Babenko, and Liudmila Prokhorenkova. A critical look at the state of self-supervised learning for graphs. In International Conference on Learning Representations (ICLR) , 2023. [32] Bahare Fatemi, Layla El Asri, and Seyed Mehran Kazemi. SLAPS: Self-supervision improves structure learning for graph neural networks. In Advances in Neural Information Processing Systems (NeurIPS) , volume 34, 2021. 
+
+A Broader Impact 
+
+PRIV X is designed as a privacy-auditing tool to quantify the residual structural leakage of deployed GNN explanation systems under DP. By demonstrating that DP applied to explanations does not provide meaningful structural privacy at deployed budgets on graphs with non-trivial homophily structure, our results inform two practical recommendations: (a) for homophilic deployments with sensitive edges (e.g., social-network or medical-association graphs), prefer gradient-based explainers and budgets ε ≤ 0.5; (b) for heterophilic deployments, the explainer choice has limited effect on leakage and should be governed by interpretability and faithfulness rather than privacy. We do not anticipate misuse beyond the threat models studied; the attack requires access to a deployed explanation API that already represents an adversarial surface existing privacy-auditing frameworks must address. 
+
+B Related Work 
+
+Privacy attacks on GNNs. He et al. [11] extract GNN parameters via black-box queries. Zhang et al. [12] demonstrate model-inversion attacks recovering node features. Duddu et al. [13] quantify membership inference risks in GNNs. Zhang et al. [14] recover graph structure from embeddings. Most closely related, Olatunji et al. [5] show that explanation outputs can reconstruct edges; we formalise and substantially extend this setting with DP-aware diffusion, a stratified adversary model, and heterophilic coverage. 11 Differential privacy for graphs. Blocki et al. [15] provide the first DP graph-statistics algorithms. Karwa et al. [16] study subgraph counting under DP. Daigavane et al. [17] introduce node-level DP for GNN training. Sajadmanesh et al. [18] propose GAP for edge-level DP with decoupled architectures. Zhu et al. [19] give near-optimal bounds for private Gomory-Hu trees. Meng et al. [20] analyse gradient perturbation for interpretable models. 
+
+Diffusion models for graphs. Score-based models [ 21 ] and DDPMs [ 8] have been adapted to graph generation via discrete diffusion [ 22 ], continuous relaxations [ 23 ], and hierarchical methods [ 24 ]. DDRM [ 9] establishes the general principle of inverting linear degradation operators via reverse diffusion, our key technical leverage. 
+
+C Proofs 
+
+We collect here complete proofs for all propositions, lemmas, and theorems stated in the main text. Notation follows Sections 3 and 5; we write Φ0(·) for the standard normal CDF and σ = σ(ε, δ ) for the Gaussian DP noise scale throughout. 
+
+C.1 Proofs of Theorems 1 and 2 and Corollary 1 and Lemma 2 Lemma 2 (Edge Partition Probabilities) . Under uniform random sampling of S with |S| = ρn , each edge (i, j ) ∈ E falls into ESS , ESU , EU U with probabilities 
+
+pSS = ρn (ρn − 1) 
+
+n(n − 1) , pSU = 2ρn (n − ρn )
+
+n(n − 1) , pU U = (n − ρn )( n − ρn − 1) 
+
+n(n − 1) .
+
+As n → ∞ with ρ fixed, these tend to ρ2, 2ρ(1 − ρ), (1 − ρ)2 respectively. 
+
+Here Rhalf is the AUC of the Bayes-optimal classifier on half-edges (i, j ) ∈ E SU using ˜ϕi alone; RI
+
+is the oblivious AUC using only graph statistics, hence RI ≥ 1/2.We define the partition-weighted AUC precisely: 
+
+RII := ES [AUC II (ESS ) pemp  
+
+> SS
+
++ AUC II (ESU ) pemp  
+
+> SU
+
++ AUC II (EU U ) pemp  
+
+> U U
+
+] ,
+
+where pemp  
+
+> P
+
+is the empirical edge-fraction in partition P and AUC II (EP ) is the AUC of the Type-II classifier restricted to edges in EP .
+
+Proof of Lemma 2. For a fixed edge (i, j ), the probability that a uniform ρn -subset of V contains both endpoints is   n−2
+
+> ρn −2
+
+  nρn 
+
+ = ρn (ρn − 1) /(n(n − 1)) . The remaining cases follow by analogous counting arguments. As n → ∞ with ρ fixed, pSS → ρ2, pSU → 2ρ(1 − ρ), pU U → (1 − ρ)2.
+
+Proof of Theorem 1 (Upper Bound). The graph A is fixed; randomness is over S and DP noise. By data-processing applied per partition (AUC is monotone under information reduction): • On ESS : both endpoints are observed and the noise model is known to the Type-II attacker. The Type-III oracle has strictly more information (exact ε, δ vs. estimated), so AUC II (ESS ) ≤ RIII .• On ESU : only ˜ϕi is observed for the observed endpoint i ∈ S . The half-edge Bayes-optimal classifier achieves at most Rhalf , so AUC II (ESU ) ≤ Rhalf .• On EU U : no DP-perturbed signal is available, so AUC II (EU U ) ≤ RI.Substituting into the definition of RII gives Equation (1). Applying Rhalf ≤ RIII and ρ2 +2 ρ(1 −ρ) = 1 − (1 − ρ)2 gives Equation (2). 
+
+Boundary cases. At ρ = 0 : pSS = pSU = 0 , so the bound collapses to RII ≤ RI. At ρ = 1 :
+
+pSU = pU U = 0 , so RII ≤ RIII .12 Proof of Theorem 2 (Lower Bound). Consider the following explicit Type-II strategy: on e ∈ E SS ,run the Bayes-optimal classifier under the Type-II attacker’s mechanism estimate ˆσ, achieving 
+
+AUC SS  
+
+> II
+
+(κ); on e ∈ E SU ∪ E U U , fall back to the Type-I oblivious classifier, which achieves AUC 
+
+≥ RI on each partition (the Type-II attacker may choose to ignore ˜ϕi on ESU ). The partition-weighted AUC of this explicit strategy is at least 
+
+AUC SS  
+
+> II
+
+(κ) · pSS + RI · (pSU + pU U ).
+
+Since RII is the AUC of the best Type-II strategy, RII is at least this value, proving Equation (3). As κ → 0, AUC SS  
+
+> II
+
+(κ) → RIII . In the limit n → ∞ with κ → 0: RII ≥ RIII ρ2 + RI(1 − ρ2) = 
+
+RI + ( RIII − RI)ρ2.
+
+Degradation with κ. The Type-II attacker estimates ˆσ = σ(1 + δσ ) where |δσ | ≤ κ/ 2 + O(κ2)
+
+(since σ ∝ 1/ε and a κ relative error in ε gives ≈ κ/ 2 relative error in σ). The AUC of the resulting mismatched classifier satisfies RIII − AUC SS  
+
+> II
+
+(κ) ≤ Cdeg · κ, where Cdeg depends on the smoothness of the optimal decision boundary. Empirically, GNNExplainer on Cora drops by only 0.035 from 
+
+κ = 0 to κ = 1 .0 (Table 7), giving Cdeg ≲ 0.035 .
+
+Proof of Corollary 1. Combine Theorems 1 and 2 in the limit n → ∞ and note (1 −(1 −ρ)2)−ρ2 =2ρ(1 − ρ).
+
+Remark 1 (Partition-weighted vs. full-set AUC) . RII is a partition-weighted proxy for the full-set AUC reported in Section 6; the two coincide when the classifier’s score distribution is identical across partitions. The bounds in Theorems 1 and 2 should therefore be read as structural results bounding this proxy, not as direct predictions of the tabulated AUC values. 
+
+Remark 2 (Gap width at ρ = 0 .5). At the canonical experimental setting κ0 = 0 .3, ρ = 0 .5, the bracket gap equals (RIII − RI)/2. Using empirical values from Table 1 (GNNExplainer/GraphSAGE on Cora: AUC ≈ 0.774 for RIII , ExplainSim AUC ≈ 0.534 as a proxy for RI), the gap is ≈ 0.12 AUC points, comparable to the key empirical differences reported in the paper. 
+
+Remark 3 (Why the lower bound is conservative on ESU ). The lower bound Equation (3) treats 
+
+ESU as if no information is available. A tighter lower bound requires Rhalf > R I, i.e. that ˜ϕi
+
+alone carries usable information about Aij . This holds for surrogate explainers (GraphLIME, GNNExplainer) whose outputs encode aggregate neighbourhood information, but not for purely local gradient explainers (Grad), for which Rhalf ≈ RI. The data-processing inequality gives only 
+
+I(Aij ; ˜ϕi) ≤ I(Aij ; ϕi), not a lower bound; hence the original paper’s Ω( γ/σ ) half-edge advantage was not rigorously established. The refined half-edge AUC for surrogate explainers is given by Lemma 3 below. 
+
+Lemma 3 (Refined Half-Edge AUC) . Suppose the explainer satisfies the structural-encoding con-dition : ∥μ1 − μ0∥2 ≥ ∆ > 0 where μa := E[ϕi | Aij = a], and the within-class covariance Σϕ is dominated by σ2Id. Then under Gaussian DP, 
+
+Rhalf ≥ Φ0
+
+ ∆
+
+σ√2
+
+
+
+,
+
+yielding the refined lower bound RII ≥ RIII pSS + Φ 0(∆ /(σ√2)) · pSU + RIpU U .Proof. Under Σϕ ≪ σ2Id, the conditional law of ˜ϕi given Aij = a is approximately N (μa, σ 2Id).The Bayes-optimal AUC between two isotropic Gaussians with mean separation ∆ is Φ0(∆ /(σ√2)) ,obtained by projecting onto the discriminant direction and computing Pr[ N (∆ , 2σ2) > 0] . Since 
+
+∥μ1 − μ0∥2 ≥ ∆, the actual AUC is at least this value. 
+
+Remark 4 (Surrogate vs. gradient explainers) . For surrogate explainers, ϕi aggregates over |N L(i)|
+
+neighbours; if j ∈ N L(i) then Aij = 1 shifts the aggregate by Ω( ∥ϕ∥2/p|N L(i)|), giving ∆ > 0.For purely local gradient explainers, ϕi depends only on xi, so ∆ = 0 and Φ0(0) = 1 /2 ≤ RI:Lemma 3 provides no improvement over Theorem 2 in this case. 
+
+13 C.2 Proof of Theorem 3 
+
+Proof. Let (i, j ) ∈ E be a true edge. We bound Pr[ ˆAij = 1 | Aij = 1] for the inner-product threshold attacker ˆAij = 1[ ˜ϕ⊤ 
+
+> i
+
+˜ϕj > τ ], and write ¯ϕ := E[∥ϕv ∥22].
+
+Mean of the inner product under Aij = 1 . Since ˜ϕv = ϕv + ηv with ηv ∼ N (0 , σ 2I) indepen-dently, 
+
+E[ ˜ϕ⊤ 
+
+> i
+
+˜ϕj | Aij = 1] = E[ϕ⊤ 
+
+> i
+
+ϕj | Aij = 1] + E[η⊤ 
+
+> i
+
+ηj ]
+
+| {z }
+
+> =0
+
+. (11) Under homophily h, nodes i, j share the same class label with probability ≥ h. The edge-fidelity 
+
+γE implies that explanation coordinates co-activate on connected pairs at a rate ≥ γE , so E[ϕ⊤ 
+
+> i
+
+ϕj |
+
+Aij = 1] ≥ hγ E ¯ϕ.
+
+Variance under Aij = 1 . The conditional variance decomposes into the pre-noise variance 
+
+Var( ϕ⊤ 
+
+> i
+
+ϕj | Aij = 1) plus the noise terms. Following the same derivation as in the proof of Proposition 3, each cross-noise term contributes σ2 ¯ϕ, and the noise-noise term contributes σ4d. Total: 
+
+Var( ˜ϕ⊤ 
+
+> i
+
+˜ϕj | Aij = 1) = Var( ϕ⊤ 
+
+> i
+
+ϕj | Aij = 1) + 2 σ2 ¯ϕ + σ4d. 
+
+Threshold setting and Chebyshev bound. Set τ = hγ E ¯ϕ/ 2. The gap between E[W | Aij = 1] 
+
+and τ is at least hγ E ¯ϕ/ 2 > 0. Chebyshev’s inequality gives 
+
+Pr[ ˜ϕ⊤ 
+
+> i
+
+˜ϕj ≤ τ | Aij = 1] ≤ 4 Var( ϕ⊤ 
+
+> i
+
+ϕj | Aij = 1) + 2 σ2 ¯ϕ + σ4d
+
+(hγ E ¯ϕ)2 ,
+
+which yields the stated bound. 
+
+Sub-regime analysis. When σ2 ≪ hγ E ¯ϕ, the noise terms are dominated by the constant pre-noise variance, giving Pr[ ˆAij = 1 | Aij = 1] ≥ 1 − O(σ2/(h2γ2 
+
+> E
+
+)) . When σ2 ≳ hγ E ¯ϕ, the bound becomes vacuous; this defines the crossover scale σ2 
+
+> c
+
+= hγ E ¯ϕ.
+
+Remark 5 (Deployment regime) . The bound is informative in the moderate-noise regime ε ∈ [0 .5, 5] 
+
+that brackets typical deployments: above εc, DP provides little structural protection; below εc,reconstruction collapses, but ε values that low also destroy explanation utility. For Cora ( h = 0 .81 ,
+
+ˆγE ≈ 0.7), εc ≈ 0.5, consistent with Figure 2. 
+
+C.3 Proof of Proposition 3 
+
+Proof. Let W := ˜ x⊤ 
+
+> i
+
+˜xj = ( xi + ηi)⊤(xj + ηj ) = x⊤ 
+
+> i
+
+xj + x⊤ 
+
+> i
+
+ηj + η⊤ 
+
+> i
+
+xj + η⊤ 
+
+> i
+
+ηj .
+
+Mean. By independence of ηi, η j from x and from each other, and E[η] = 0 , the cross-noise terms have zero mean. By Definition 8: 
+
+E[W | Aij = 1] = E[x⊤ 
+
+> i
+
+xj | Aij = 1] = hX S2
+
+> x
+
+.
+
+Variance. The four terms in W are pairwise uncorrelated. Computing each: Var( x⊤ 
+
+> i
+
+xj | Aij =1) = Cx; conditional on xi, x⊤ 
+
+> i
+
+ηj ∼ N (0 , σ 2∥xi∥22), so by the law of total variance and ex-changeability, Var( x⊤ 
+
+> i
+
+ηj | Aij = 1) = σ2S2
+
+> x
+
+; similarly Var( η⊤ 
+
+> i
+
+xj | Aij = 1) = σ2S2
+
+> x
+
+; for 
+
+η⊤ 
+
+> i
+
+ηj = P 
+
+> k
+
+η(k) 
+
+> i
+
+η(k) 
+
+> j
+
+, each summand is a product of independent zero-mean Gaussians with variance 
+
+σ4, giving Var( η⊤ 
+
+> i
+
+ηj ) = dσ 4. Total: 
+
+Var( W | Aij = 1) = Cx + 2 σ2S2 
+
+> x
+
++ σ4d. 
+
+Chebyshev bound. With threshold τ = hX S2
+
+> x
+
+/2, the gap E[W | Aij = 1] − τ = hX S2
+
+> x
+
+/2 > 0
+
+(using hX > 0). By Chebyshev’s inequality: 
+
+Pr[ W ≤ τ | Aij = 1] ≤ Cx + 2 σ2S2 
+
+> x
+
++ σ4d
+
+(hX S2
+
+> x
+
+/2) 2 = 4( Cx + 2 σ2S2 
+
+> x
+
++ σ4d)
+
+h2 
+
+> X
+
+S4
+
+> x
+
+,
+
+yielding Equation (20). In the regime σ2 = o(S2
+
+> x
+
+) and σ4d = o(S4
+
+> x
+
+), the bound simplifies to 
+
+1 − O(σ2/h 2 
+
+> X
+
+).14 Heterophilic case. When hX < 0, the threshold rule is flipped to ˆAij = 1[˜ x⊤ 
+
+> i
+
+˜xj < h X S2
+
+> x
+
+/2] .Now E[W | Aij = 1] = hX S2 
+
+> x
+
+< 0 and the gap from τ = hX S2
+
+> x
+
+/2 is |hX |S2
+
+> x
+
+/2 > 0. The same Chebyshev argument gives the bound under |hX |, recovering the spirit of Proposition 2 for the feature-only setting. 
+
+Remark 6 (P RIV F vs. P RIV X ordering and aggregation gain) . Define the neighbourhood aggregation factor g := pEv [|N L(v)|] for surrogate explainers (GraphLIME, GNNExplainer) and g := 1 for gradient explainers (Grad, GradInput). This formalises the SNR improvement in Lemma 1: surrogate methods aggregate over |N L(v)| neighbours, boosting post-DP SNR by p|N L(v)| relative to local gradient methods. In the moderate-noise regime, the leading constants of the TPR lower bounds satisfy h · γ · g ≥ hX as a heuristic sufficient condition for PRIV X to dominate PRIV F. This condition is readily met for surrogate explainers on homophilic graphs (large g, h ≈ 1, γ ≈ 1) but not for gradient explainers (g=1, moderate γ), consistent with the empirical gap in Section 6. This derivation relies on an informal substitution γeff = γg and should be read as a guide to regimes rather than a tight threshold. 
+
+C.4 Proof of Proposition 2 
+
+Proof. Let (i, j ) ∈ E be a true edge in a heterophilic graph where Pr[label( i)̸ = label( j) | Aij =1] = 1 − h.
+
+Anti-correlation signal. When label( i)̸ = label( j), features are class-discriminative, meaning 
+
+ϕi and ϕj point in opposing directions in feature space. Define the anti-correlation coefficient 
+
+ρ− 
+
+> XA
+
+= −E [ ˆϕ⊤ 
+
+> i
+
+ˆϕj | Aij = 1 , label( i)̸ = label( j)] > 0, where ˆϕv = ϕv / ∥ϕv ∥2. Then 
+
+E[ ˜ϕ⊤ 
+
+> i
+
+˜ϕj | Aij = 1] = (1 − h)( −| ρ−
+
+> XA
+
+| ∥ ϕ∥22) + h · E [ϕ⊤ 
+
+> i
+
+ϕj | same class ] + O(σ2). (12) In the regime h ≪ 1 (strong heterophily), the anti-correlation term dominates: E[ ˜ϕ⊤ 
+
+> i
+
+˜ϕj | Aij = 1] ≈−(1 − h)|ρ−
+
+> XA
+
+| ∥ ϕ∥22 < 0.
+
+Negative-threshold attacker. The attacker uses ˆAij = 1[ ˜ϕ⊤ 
+
+> i
+
+˜ϕj ≤ −τ ] with τ = (1 −
+
+h)|ρ−
+
+> XA
+
+| ∥ ϕ∥22 /2 > 0. By an argument symmetric to the homophilic proof, 
+
+Pr[ ˆAij = 1 | Aij = 1] ≥ (1 − h)|ρ−
+
+> XA
+
+| − O(σ2), (13) giving the stated bound. Note that for h → 1 (near-homophilic graph) this collapses to zero, consistent with the interpretation that the anti-correlation signal vanishes as the graph becomes homophilic. 
+
+False positives under Aij = 0 . For a non-edge (i, j ) /∈ E , disconnected nodes have no structural reason for anti-correlated explanations, so E[ ˜ϕ⊤ 
+
+> i
+
+˜ϕj | Aij = 0] ≈ 0. The false-positive rate is O(σ2),the same order as the homophilic case. 
+
+C.5 Proof of Lemma 1 Definition 6 (Sign-fidelity) . γS := Pr[sign( ϕ(k) 
+
+> v
+
+) = sign( ∇x(k)
+
+> v
+
+ℓ)] averaged over nodes and features. We use γS in this proof to distinguish from γE (edge-fidelity, Definition 4) and γL (label-fidelity, Definition 5). Proof. We bound the per-coordinate sign-fidelity γ(k) 
+
+> S
+
+:= Pr[sign( ˜ϕ(k) 
+
+> v
+
+) = sign( ϕ(k) 
+
+> v
+
+)] for each explainer family. The edge-fidelity γE is monotone in γS when explanations are aligned across connected nodes (homophilic regime, h ≥ h0 > 1/2): coordinates whose sign survives the noise contribute coherently to the inner product ⟨ ˆϕi, ˆϕj ⟩ for Aij = 1 , while coordinates whose sign is flipped contribute incoherently. A gap in γS of order Ω(1 /(σ√d)) therefore implies a gap in γE of the same order in the homophilic regime; we present the per-coordinate analysis below. 15 Gradient-based explanations. For the Grad explainer, ϕ(k) 
+
+> v
+
+= ∂ℓ/∂x (k) 
+
+> v
+
+. Under Assumption 1, 
+
+∥∇ xℓ∥2 ≤ Sf almost surely, so |ϕ(k) 
+
+> v
+
+| ≤ Sf /√d on average by Cauchy-Schwarz. After adding Gaussian DP noise η(k) 
+
+> v
+
+∼ N (0 , σ 2), the per-coordinate SNR is 
+
+SNR (k)Grad = |ϕ(k) 
+
+> v
+
+|
+
+σ ≤ Sf
+
+σ√d . (14) The fidelity is γ = Pr[sign( ˜ϕ(k) 
+
+> v
+
+) = sign( ϕ(k) 
+
+> v
+
+)] = 2Φ 0(SNR /√2) − 1 for a Gaussian channel, giving γGrad ≤ 2Φ 0(Sf /(σ√2d)) − 1.
+
+GradInput explanations. GradInput computes ϕ(k) 
+
+> v
+
+= x(k) 
+
+> v
+
+· ∂ℓ/∂x (k) 
+
+> v
+
+. The multiplicative factor 
+
+x(k) 
+
+> v
+
+introduces additional variance but does not systematically increase SNR; in the worst case (sparse features) it may even decrease it. Hence γGradInput ≈ γGrad for typical graph datasets. 
+
+Surrogate-based explanations (GraphLIME, GNNExplainer). These explainers aggregate in-formation over the neighbourhood N (v). GraphLIME solves a local regression over |N (v)| + 1 
+
+samples; GNNExplainer optimises a mask over the computational graph of depth L. In both cases, the effective signal for feature k incorporates contributions from all |N (v)| neighbours, each carrying an O(γ) co-activation signal with v. By the law of large numbers, averaging over |N (v)| independent co-activations reduces variance by |N (v)|1/2:
+
+SNR (k)LIME = |ϕ(k) 
+
+> v
+
+|p|N (v)|
+
+σ . (15) 
+
+Gap computation. The fidelity gap between GraphLIME and Grad is 
+
+γLIME − γGrad =
+
+
+
+2Φ 0
+
+ SNR LIME 
+
+√2
+
+
+
+− 1
+
+
+
+−
+
+
+
+2Φ 0
+
+ SNR Grad 
+
+√2
+
+
+
+− 1
+
+
+
+(16) 
+
+= 2 
+
+"
+
+Φ0
+
+|ϕ(k) 
+
+> v
+
+|p|N (v)|
+
+σ√2
+
+!
+
+− Φ0
+
+|ϕ(k) 
+
+> v
+
+|
+
+σ√2
+
+!# 
+
+. (17) Applying the mean value theorem and using Φ′
+
+> 0
+
+(z) = (2 π)−1/2e−z2/2, the difference is 
+
+Ω
+
+ |ϕ(k)  
+
+> v|(|N (v)|1/2−1)
+> σ√2π
+
+
+
+. Since |ϕ(k) 
+
+> v
+
+| ≥ Ω( Sf /√d) and |N (v)| ≥ 1, this is Ω(1 /(σ√d)) , estab-lishing the stated gap. 
+
+Corollary 2 (Edge-Fidelity Gap) . Under the conditions of Lemma 1 and the additional alignment condition E[⟨ϕi, ϕ j ⟩ | Aij = 1] ≥ c · E [∥ϕ∥2] for some c > 0, a sign-fidelity gap δS := E[γLIME  
+
+> S
+
+−
+
+γGrad  
+
+> S
+
+] ≥ Ω
+
+ E[√|N (v)|]−1
+
+> σ√d
+
+
+
+implies an edge-fidelity gap of the same order: E[γLIME  
+
+> E
+
+− γGrad  
+
+> E
+
+] ≥
+
+Ω( δS ).
+
+Remark 7. Surrogate methods aggregate information across neighbourhoods, amplifying low-frequency structural signals that survive DP perturbation, while gradient-based methods concentrate signal in high-variance per-coordinate components more easily suppressed by isotropic noise. This is a regime-dependent observation: on heterophilic graphs surrogate aggregation can reduce the attack-relevant signal (Section F). 
+
+C.6 Proof of Section 5.3 
+
+Proof. Let Gk(v) denote the k-hop ego-net of node v with adjacency matrix Ak ∈ { 0, 1}k×k induced by the k nodes closest to v in BFS order. 
+
+Error decomposition. The total reconstruction error decomposes as 
+
+A − ˆA 2
+
+> F
+
+= Ak − ˆAk
+
+> 2
+> F
+
+| {z }
+
+> within-window error
+
++ ∥A ⊖ Ak∥2
+
+> F
+
+| {z } 
+
+> boundary error ∆boundary
+
+, (18) where A ⊖ Ak denotes the submatrix of A corresponding to edges with at least one endpoint outside 
+
+Gk(v) (i.e., cut edges at the window boundary). 16 Counting cut edges via the Chung–Lu model. For a graph drawn from the Chung–Lu random graph model [ 25 ] with expected degree sequence {di} following a power law Pr[deg = k] ∝ k−β
+
+with exponent β > 1, the fraction of edges cut by a k-hop BFS ball satisfies the following. The volume of the ball grows as Θ( kβ ) (since power-law graphs have small diameter), while the total volume is Θ( n). The number of boundary edges is proportional to the product of ball-volume and complement-volume divided by total volume, giving a boundary fraction 
+
+|cut edges ||E| = Θ 
+
+ kβ (n − kβ )
+
+n · m/n 
+
+
+
+= Ω( k−β ), (19) where the last step uses kβ = o(n) for reasonable k. Hence ∆boundary = Ω( k−β ).
+
+Implication for ogbn-arxiv. The ogbn-arxiv citation graph has β ≈ 1.8 (empirically estimated from its degree distribution). Substituting k = 32 and k = 128 gives ∆boundary (32) /∆boundary (128) = (128 /32) 1.8 = 4 1.8 ≈ 12 .1, predicting a 12 × larger boundary error at k = 32 than k = 128 . Yet our ablation (Figure 3) shows only modest AP improvement when increasing k from 32 to 128 (less than 1 pp), suggesting that the within-window reconstruction error also shrinks — i.e., boundary bias and within-window model accuracy trade off as k increases. 
+
+D Additional Details on P RIV F
+
+D.1 Feature-Based Reconstruction without Explanations 
+
+PRIV F as illustrated in 4 considers a stricter adversarial setting in which no explanation mechanism or trained GNN is available. Instead, the attacker only observes differentially private node features 
+
+˜XS = {xv + ηv }v∈S .
+
+Motivation. PRIV F does not correspond to a deployable attack in the regulatory setting that motivates DP explanations: raw features are not released. We use it as a diagnostic. The total leakage observable to the P RIV X attacker decomposes into (a) leakage encoded in the underlying graph distribution (which DP applied to explanations cannot remove, because the underlying graph is the object being reconstructed) and (b) leakage induced by the explanation pipeline. Comparing P RIV Xto P RIV F on the same dataset isolates component (b). 
+
+Pipeline. The reconstruction pipeline mirrors P RIV X, with the only difference being the condition-ing signal: • Input signal: ˜XS instead of ˜ΦS
+
+• No GNN/explainer: bypasses model-dependent transformations • Same diffusion backbone: identical denoising architecture and training objective 
+
+Inference. Given noisy features, the attacker estimates the noise level ˆσ2 = Var( ˜X) − dVar( X) and initializes reverse diffusion at timestep t⋆ corresponding to the DP noise scale, following Equation (3). 
+
+Interpretation. PRIV F measures the structural leakage attributable to the underlying graph dis-tribution alone. When P RIV X exceeds P RIV F, the gap measures additional leakage attributable to the explanation pipeline. When P RIV F matches or exceeds P RIV X, the bulk of recoverable structure is encoded in the underlying graph and DP applied to explanations cannot prevent that recovery, regardless of explainer choice. 
+
+D.2 Formal Definitions and Theoretical Guarantees Definition 7 (P RIV F Adversary) . A PRIV F adversary observes ˜XS = {xv + ηv }v∈S with ηv ∼N (0 , σ 2I) and no access to any GNN or explanation. The reconstruction map is ˆA = AF ( ˜XS ).
+
+Definition 8 (Feature–Structure Correlation) . Under the exchangeability assumption (i.e. S2 
+
+> x
+
+:= 
+
+E[∥xv ∥22] is uniform across nodes), the feature–structure correlation is 
+
+hX := E[x⊤ 
+
+> i
+
+xj | Aij = 1] 
+
+S2
+
+> x
+
+∈ [−1, 1] .
+
+17 Adjacency 
+
+> Matrix
+> Features
+> Graph
+> Noise level
+> Differential Privacy
+> Mechanism
+> User-Side
+> Attacker
+> Reconstructed Graph
+> Attention-based Denoising
+> t=0 t=1
+
+# ...  
+
+> t=T Trained Diffusion
+> Model
+> Noisy
+> Adjacency
+> Cosine Similarity
+> Input
+> Denoising Process
+> t=2
+> Noisy
+> Features
+
+Figure 4: Overview of the P RIV F framework for reconstructing graph structure from differentially private node features. Top (user-side): raw node features xv are directly perturbed by a differential privacy (DP) mechanism to obtain noisy features ˜xv , without requiring a GNN or explanation module. An adaptive attacker observes these noisy features and constructs an initial noisy adjacency estimate. 
+
+Bottom (attacker-side): the same diffusion-based reconstruction pipeline as P RIV X is applied, where a denoising network ϵθ iteratively refines a latent adjacency representation zt from t = T to 
+
+t = 0 . The model conditions on ˜xv via cross-attention, enabling posterior inference of graph structure under feature-level DP noise. 
+
+On homophilic graphs hX > 0; on heterophilic graphs hX can be negative. 
+
+Remark 8 (Exchangeability) . The exchangeability assumption holds exactly for graphs with i.i.d. feature distributions and for stochastic block models conditioned on class membership. On real-world graphs it is an approximation; the bounds below should be read as leading-order in this approximation. 
+
+Proposition 3 (P RIV F Reconstruction Bound) . Let the adversary use the inner-product threshold rule ˆAij = 1[˜ x⊤ 
+
+> i
+
+˜xj > h X S2
+
+> x
+
+/2] with hX > 0 (Definition 8), and let Cx := Var( x⊤ 
+
+> i
+
+xj | Aij = 1) .Under Gaussian DP with noise scale σ,
+
+Pr[ ˆAij = 1 | Aij = 1] ≥ 1 − 4Cx + 8 σ2S2 
+
+> x
+
++ 4 σ4dh2 
+
+> X
+
+S4
+
+> x
+
+(20) 
+
+(to be read as max(0 , ·)). In the regime σ2 = o(S2
+
+> x
+
+) and σ4d = o(S4
+
+> x
+
+), this simplifies to 1 −
+
+O(σ2/h 2 
+
+> X
+
+). When hX < 0 (heterophilic graphs), flip the threshold to ˜x⊤ 
+
+> i
+
+˜xj < h X S2
+
+> x
+
+/2; the TPR bound holds under |hX |. (Proof in Section C.3.) 
+
+Comparing P RIV X to P RIV F on the same graph decomposes the leakage observed by P RIV X into (a) the component attributable to the underlying graph distribution and (b) the component attributable to the explanation pipeline. When P RIV X substantially exceeds P RIV F, the explanation pipeline contributes meaningfully to leakage; when P RIV X matches or trails P RIV F, most of the recoverable structure is already encoded in the graph itself, and DP applied to explanations cannot prevent that recovery. 
+
+D.3 Feature-Based Baselines and P RIV F Results 
+
+Table 2 reports reconstruction performance for the feature-based methods (FeatureSim, SLAPS, and PRIV F) at ε = 5 .0 alongside the main P RIV X results for reference. FeatureSim and SLAPS operate on raw DP-perturbed features without a learned denoiser; P RIV F uses the full diffusion backbone 18 Table 2: Feature-based method performance at ε = 5 (Gaussian DP, w = 32 ; GCN and GraphSAGE backbones). Bold : best within the feature-method group. OOM: out-of-memory. Note: P RIV F is a diagnostic tool only; raw features are not released in the regulated deployment setting that motivates this work.                                                                              
+
+> Homophilic Heterophilic
+> Method Cora CiteSeer PubMed ogbn-arxiv Chameleon IMDB Amz-R
+> AUC AP AUC AP AUC AP AUC AP AUC AP AUC AP AUC AP FeatureSim 0.498 0.494 0.611 0.656 0.508 0.504 0.501 0.500 0.511 0.534 0.519 0.516 0.512 0.503 SLAPS 0.427 0.464 0.597 0.647 0.492 0.495 OOM OOM 0.517 0.521 0.499 0.505 0.523 0.513
+> PRIV F-GCN (Ours) 0.826 0.850 0.907 0.915 0.724 0.733 0.550 0.570 0.636 0.616 0.824 0.802 0.572 0.586
+> PRIV F-SAGE (Ours) 0.853 0.883 0.912 0.930 0.759 0.775 0.598 0.628 0.821 0.808 0.863 0.850 0.606 0.626
+
+with the same architecture as P RIV X, demonstrating the gain from principled denoising even in the feature-only setting. 
+
+E GNN Explainers: Background and Leakage Analysis 
+
+We provide a unified description of the four GNN explainers used in our experiments, analyse their structural information content under Gaussian DP, and explain why different explainer families yield different reconstruction susceptibility. 
+
+E.1 Explainer Taxonomy 
+
+GNN explainers assign an importance score ϕ(k) 
+
+> v
+
+∈ R to each input feature k for a given node v,summarising which features most influenced the GNN’s prediction ˆyv = fθ (X, A)v . We categorise the four explainers along two axes: gradient-based vs. surrogate-based , and local (per-node) vs. 
+
+neighbourhood-aggregated .Table 3: Explainer categorisation. Neighbourhood size |N (v)| determines the effective noise-reduction factor under DP. 
+
+Explainer Family Aggregation DP-SNR scaling Leakage (empirical) 
+
+Grad Gradient Local ( v only) Sf /(σ√d) Low GradInput Gradient Local ( v only) Sf |xv |/(σ√d) Low–Medium GraphLIME Surrogate Neighbourhood ( N (v)) Sf
+
+p|N (v)|/(σ√d) High GNNExplainer Surrogate Computation graph ( L-hop) Ω( p|N L(v)|/σ ) High 
+
+E.2 Gradient-Based Explainers Grad. The simplest explainer computes the gradient of the loss ℓ(fθ (X, A), y v ) with respect to the input features: 
+
+ϕGrad  
+
+> v
+
+= ∇xv ℓ(fθ (X, A), y v ) ∈ Rd. (21) This is a purely local quantity: it depends only on the first-layer weight matrix and the node’s own features, not on any message-passing from neighbours. As a result, adjacent nodes i and j have largely independent gradient explanations even if they share features, because the gradient is dominated by the loss curvature at xv rather than by structural signal. This independence is precisely why Grad leaks the least structure under DP: the attacker gains little from comparing ˜ϕi and ˜ϕj .
+
+GradInput. GradInput multiplies the gradient elementwise by the input: 
+
+ϕGradInput  
+
+> v
+
+= xv ⊙ ∇ xv ℓ = xv ⊙ ϕGrad  
+
+> v
+
+. (22) This “saliency map” weights features by their magnitude, suppressing near-zero inputs. On sparse graphs (e.g., bag-of-words features on Cora) the multiplication can both amplify informative features and zero out noise features. The structural leakage is marginally higher than Grad because the amplification correlates explanations with the original feature distribution, which itself correlates with the graph structure via homophily. 19 E.3 Surrogate-Based Explainers GraphLIME [ 4]. GraphLIME fits a local nonlinear surrogate model to approximate fθ in the neighbourhood of v. Concretely, it solves the Hilbert-Schmidt Independence Criterion (HSIC) Lasso over the computation subgraph GL(v) induced by the L-hop neighbourhood: 
+
+ϕLIME  
+
+> v
+
+= arg min 
+
+> ϕ
+
+Ky − X
+
+> k
+
+ϕ(k)Kx(k)
+
+> 2
+> F
+
++ λ ∥ϕ∥1 , (23) where Ky , K x(k) are kernel matrices evaluated over nodes in GL(v). The solution aggregates feature information from all |N L(v)| nodes, effectively averaging out idiosyncratic noise. After DP perturbation, this averaging gives GraphLIME a p|N L(v)|-fold improvement in SNR over pure gradient methods (Lemma 1), explaining its higher empirical leakage. 
+
+GNNExplainer [ 3]. GNNExplainer learns a soft edge mask M ∈ [0 , 1] n×n and feature mask 
+
+F ∈ [0 , 1] d that maximise the mutual information between the masked subgraph prediction and the original prediction: 
+
+max  
+
+> M,F
+
+I(fθ (XF , A ⊙ M )v , f θ (X, A)v ) . (24) The resulting feature mask F (our ϕGNN  
+
+> v
+
+) reflects which features collectively determine the prediction over the entire computation graph. Because GNNExplainer explicitly optimises for faithfulness to the GNN output across the L-hop subgraph, its explanation carries the most structural information of all four methods: the feature mask is high precisely on features that, combined with the graph topology, explain the prediction. After DP noise, this concentrated structural signal remains partially recoverable, making GNNExplainer the highest-leakage explainer in our experiments — particularly on homophilic datasets where the graph structure strongly shapes predictions. 
+
+E.4 Explainer Leakage Under Differential Privacy 
+
+The fidelity analysis of Lemma 1 characterises leakage via the post-DP SNR. Here we provide additional intuition. 
+
+Why does aggregation help the attacker? When node v has degree dv , its surrogate explanation aggregates dv neighbourhood samples. Even though DP noise is applied after the explanation is computed, the noise acts on a signal that already encodes dv graph edges — making each unit of noise “worth less” to the attacker. Formally, the marginal information about edge (i, j ) encoded in ˜ϕi
+
+is 
+
+I(Aij ; ˜ϕLIME  
+
+> i
+
+) ≥ I(Aij ; ˜ϕGrad  
+
+> i
+
+) + Ω 
+
+ γ2(|N (i)| − 1) 2σ2d
+
+
+
+. (25) This shows that the information gap grows with the degree |N (i)| and shrinks with dimension d and noise σ2.
+
+Practical implication. For a practitioner releasing DP-protected explanations: releasing gradient-based (Grad, GradInput) explanations is less dangerous than releasing surrogate-based ones at the same ε. However, the DP noise scale should be calibrated to the worst-case explainer’s sensitivity, not the expected one, to guard against an attacker who knows the explainer type. 
+
+PrivF as a leakage-decomposition diagnostic. PRIV F demonstrates that, even without any expla-nation, raw DP features admit non-trivial reconstruction. This establishes that the underlying graph distribution (via the feature–homophily correlation) is partially recoverable independent of the chosen explainer. The gap P RIV X − PRIV F quantifies the explanation pipeline’s contribution to leakage: positive when the explainer adds signal beyond the underlying graph, near-zero when the underlying graph already exposes most of the recoverable structure. 
+
+F Fidelity vs. Reconstruction AP Analysis 
+
+A key theoretical claim of this paper is Lemma 1: under DP noise, surrogate-based explainers leak more structure than gradient-based ones on homophilic graphs because neighbourhood aggregation 20 Cora CiteSeer PubMed ogbn-arxiv Chameleon IMDB Amazon-     
+
+> ratings
+> Dataset
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Average Precision (AP)
+> 0.759
+> 0.865
+> 0.669
+> 0.557
+> 0.627
+> 0.788
+> 0.592
+> 0.657
+> 0.708
+> 0.552
+> 0.511
+> 0.613
+> 0.753
+> 0.515
+> 0.763
+> 0.837
+> 0.661
+> 0.509
+> 0.568
+> 0.518
+> 0.515
+> Homophilic Heterophilic
+> PrivX vs. PrivF: AP at = 5.0 (GCN, Gaussian DP, w= 128 )
+> PrivF
+> PrivX-Grad
+> PrivX-GNNExplainer
+
+Figure 5: P RIV X vs. P RIV F AP at ε = 5 .0 across all seven datasets. P RIV F (blue) exceeds P RIV X on IMDB and is competitive on PubMed and ogbn-arxiv, while P RIV X (GNNExplainer, green) exceeds PRIV F on homophilic citation networks. We use this decomposition diagnostically: the gap separates leakage attributable to the explanation pipeline (positive when P RIV X exceeds P RIV F) from leakage attributable to the underlying graph distribution (revealed when P RIV F matches or exceeds P RIV X). increases the post-DP edge-fidelity γE (Definition 4). On heterophilic graphs, Proposition 2 predicts a different regime: surrogate explainers achieve high label-fidelity γL (Definition 5) but low γE , because the GNN classifies via dissimilar-feature neighbours and the explanation aligns with class boundaries that decorrelate from edge structure. Here we verify both predictions empirically. The reported γ in Table 4 is label-fidelity γL (the quantity practitioners measure as the standard interpretability score); edge-fidelity γE would track AP much more closely by construction and is reported separately in Figure 6 where annotated. The decoupling between γL and reconstruction AP on heterophilic graphs is exactly the empirical signature of the γE̸ = γL phenomenon. 0.0 0.2 0.4 0.6 0.8 1.0      
+
+> Explanation Fidelity
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> Average Precision (AP)
+> GCN
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Explanation Fidelity
+> 0.625
+> 0.650
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> 0.775
+> Average Precision (AP)
+> GraphSAGE
+> Grad
+> GradInput
+> GraphLime
+> GNNExplainer
+> Homophilic
+> Heterophilic
+
+Fidelity vs. Reconstruction AP at = 5.0 , w = 32 
+
+Figure 6: Explanation fidelity γ vs. reconstruction AP at ε = 5 .0, w = 32 . Each point is a (dataset, ex-plainer) pair. Marker shape: explainer family (circle=Grad, square=GradInput, triangle=GraphLIME, diamond=GNNExplainer). Edge colour: blue=homophilic dataset, red=heterophilic dataset. Left: 
+
+GCN backbone. Right: GraphSAGE backbone. On homophilic datasets, fidelity and AP are pos-itively correlated (high-fidelity GNNExplainer points sit top-right). On heterophilic datasets, the relationship inverts : high-fidelity GNNExplainer points cluster bottom-right, while low-fidelity Grad sits top-left. 
+
+Homophilic setting (Cora): label-fidelity and AP are positively correlated. On Cora, GNNEx-plainer achieves label-fidelity γL = 0 .983 (GCN) and γL = 0 .947 (SAGE), and correspondingly 21 Table 4: Label-fidelity γL and reconstruction AP at ε = 5 .0, w = 32 for selected (dataset, explainer, backbone) combinations. On Cora (homophilic), γL tracks γE and both correlate with AP. On IMDB and Amazon-ratings (heterophilic), γL and γE decouple, and AP follows γE (not reported here) rather than γL.                                                     
+
+> Dataset Explainer Backbone Fidelity γLAP
+> Cora (homo) Grad GCN 0.336 0.764 Cora (homo) GNNExplainer GCN 0.983 0.860 Cora (homo) Grad SAGE 0.187 0.669 Cora (homo) GNNExplainer SAGE 0.947 0.771 IMDB (het) Grad GCN 0.325 0.803 IMDB (het) GNNExplainer GCN 0.974 0.515 IMDB (het) Grad SAGE 0.347 0.719 IMDB (het) GNNExplainer SAGE 0.999 0.738 Amazon-R (het) Grad GCN 0.798 0.581 Amazon-R (het) GNNExplainer GCN 0.885 0.524 Amazon-R (het) Grad SAGE 0.770 0.630 Amazon-R (het) GNNExplainer SAGE 0.999 0.615
+
+the highest AP among all explainers ( 0.860 and 0.771 ). Grad sits at γL = 0 .336 /0.187 and AP 
+
+= 0 .764 /0.669 . On homophilic graphs, γL and γE are aligned: both are high for surrogate explainers because neighbourhood averaging implicitly reduces noise by p|N (v)|, boosting both prediction fidelity and edge fidelity. Lemma 1 predicts this regime. 
+
+Heterophilic setting (IMDB): γL and AP decouple. On IMDB, the relationship between γL
+
+and AP inverts. GNNExplainer GCN achieves γL = 0 .974 (near-perfect label prediction) yet reconstruction AP = 0 .515 , barely above chance. Grad GCN has γL = 0 .325 (much lower) yet AP = 0 .803 . This is the empirical signature of Proposition 2: on heterophilic graphs, high γL
+
+does not imply high γE , because the GNN classifies nodes by dissimilar-feature neighbours and its explanations align with class boundaries rather than edge structure. Gradient explanations, which capture raw input–output sensitivity rather than label-aligned feature attributions, better expose the anti-correlation signal ρ− 
+
+> XA
+
+that drives heterophilic reconstruction. 
+
+GraphSAGE partially closes the gap. With GraphSAGE as backbone, GNNExplainer SAGE on IMDB recovers to AP = 0 .738 vs. GCN’s 0.515 (+22 .3 pp), while Grad SAGE drops slightly ( 0.719 
+
+vs. GCN 0.803 ). The AP gap between the two explainers therefore narrows from 28 .8 pp (GCN) to just 1.9 pp (SAGE). GraphSAGE’s mean-pooling produces smoother representations that, even for surrogate-based explainers, retain some of the structural anti-correlation signal on heterophilic graphs, partially closing the γL-AP gap. 
+
+Amazon-ratings: intermediate regime. Amazon-ratings (heterophilic, h = 0 .38 , milder than IMDB’s h = 0 .19 ) shows a weaker decoupling: GNNExplainer GCN γL = 0 .885 vs. AP 0.524 ;Grad GCN γL = 0 .798 vs. AP 0.581 . The γL gap is smaller ( 0.087 ) and the AP gap is only 5.7 pp. This intermediate behaviour is consistent with Amazon-ratings having a higher homophily coefficient than IMDB, meaning both label-alignment and anti-correlation signals coexist. 
+
+Practical implication. The relationship between γL (the standard interpretability score) and re-construction AP is dataset-dependent. Deploying a high-γL surrogate explainer (GNNExplainer, GraphLIME) is most dangerous on homophilic graphs, where high γL tracks high γE and amplifies structural leakage. On heterophilic graphs, the same surrogate explainer with high γL may have low 
+
+γE and leak less structure than a low-γL gradient explainer. Privacy auditors should therefore report reconstruction AP stratified by graph homophily, not averaged across datasets, and should track γE
+
+(the attack-relevant fidelity) rather than γL alone. 22 Table 5: Dataset statistics. h: homophily coefficient. Het: heterophilic.                                                         
+
+> Dataset Type Nodes Edges Features Classes hSource
+> Cora Homo 2,708 10,556 1,433 70.81 McCallum et al. [26] CiteSeer Homo 3,327 9,104 3,703 60.74 Sen et al. [27] PubMed Homo 19,717 88,648 500 30.80 Namata et al. [28] ogbn-arxiv Large 169,343 1,166,243 128 40 0.65 Hu et al. [29] Chameleon Het 2,277 31,421 2,325 50.23 Rozemberczki et al. [30] IMDB Het 4,278 13,222 401 30.19 (movie network) Amazon-ratings Het 24,492 93,050 300 50.38 Platonov et al. [31]
+
+G Dataset Statistics H Implementation Details 
+
+Hardware. All experiments were run on a server with 4 × NVIDIA RTX 6000 Ada Generation GPUs (48 GB VRAM each), 192 GB CPU RAM, and an AMD EPYC 7443 processor. Total GPU-hours: approximately 1,200 across all datasets, backbones, explainers, DP mechanisms, window sizes, and random seeds. Per-run training times range from ≈20 min (Cora, GCN, k = 32 ) to ≈6 h (ogbn-arxiv, GraphSAGE, k = 128 ). 
+
+GNN backbone. All experiments use 3-layer GNNs (GCN, GIN, GraphSAGE) with hidden dim 256, dropout 0.5, 200 epochs, and Adam ( lr = 0 .01 ). GraphSAGE consistently achieves the highest reconstruction AP due to its mean-pooling providing a natural noise-averaging effect under DP; GIN’s sum-aggregation produces higher-variance representations that DP noise corrupts more severely ( 1–3 pp below GCN). 
+
+Diffusion model architecture and complexity. The denoiser εθ is a 4-layer graph transformer with cross-attention to ˜s: h(l+1)  
+
+> v
+
+= Attn( h(l) 
+
+> v
+
+, ˜s, γ t) + MLP( h(l) 
+
+> v
+
+), where γt = MLP( temb ). Complexity is O(T · n2) dense or O(T · |E| ) sparse. For Type-II attackers, the mismatch |ˆσ2 − σ2| ≤ Cdeg · κ
+
+(Theorem 2) and reconstruction degrades gracefully; see Table 7 for empirical degradation. 
+
+Connection to inverse problems. This setting is the graph-structured analogue of DDRM [ 9 ]: the DP mechanism acts as a diagonal degradation operator ( H = I, noise η ∼ N (0 , σ 2I)), and reverse diffusion approximately inverts this corruption without retraining per noise level. Unlike standard image restoration, the unknown is a discrete relational structure , making global consistency essential for accurate recovery. 
+
+Why diffusion (motivation). DP perturbations disrupt the pairwise similarity structure encoding graph connectivity, making reconstruction a global inverse problem rather than a pointwise denoising task. Classical methods (cosine similarity, thresholding) operate locally over node pairs and fail to capture higher-order dependencies in p(A | ˜s). Diffusion models leverage iterative refinement and attention-based conditioning to recover a globally coherent structure, enabling accurate reconstruction under high noise. 
+
+Diffusion model. 4-layer graph transformer; hidden dim 256; 4 attention heads; cosine noise schedule; T = 200 steps; AdamW ( lr = 2 × 10 −4); 500 epochs; cross-attention dim 128. Message passing uses sparse edge-index operations compatible with all three GNN backbones. 
+
+Subgraph sampling. Ego-net BFS sampling; window sizes k ∈ { 32 , 64 , 128 }; train/test splits 
+
+{20 /80 , 40 /60 , 60 /40 , 80 /20 }; duplicate detection via adjacency hash. 
+
+DP noise scales. Gaussian: σG = p2 ln(1 .25 /δ ) · ∆f /ε , δ = 10 −5. Laplace: scale = ∆ f /ε .Rényi ( α = 10 ): εrdp = max( ε − ln(1 /δ )/(α − 1) , 0.01) , σR =
+
+q
+
+α∆2 
+
+> f
+
+/(2 εrdp ).
+
+Baselines. All baselines use the same GNN backbone and explanation extractor. ExplainSim/GSE follow Olatunji et al. [5]; SLAPS follows Fatemi et al. [32]. 23 Table 6: Graph reconstruction performance at ε = 8 (Gaussian DP, w = 32 ; GCN and GraphSAGE backbones). Bold : best within each method group (ExplainSim/GSE vs. P RIV X). OOM: out-of-memory / not available. Feature-based methods (FeatureSim, SLAPS, P RIV F) follow the same pattern as at ε = 5 (Table 2) with uniformly higher AP.                                                                                                                                                                                                                                                       
+
+> Homophilic Heterophilic
+> Explainer Method Cora CiteSeer PubMed ogbn-arxiv Chameleon IMDB Amz-R
+> AUC AP AUC AP AUC AP AUC AP AUC AP AUC AP AUC AP GRAD
+> ExplainSim 0.498 0.490 0.514 0.520 0.518 0.518 0.495 0.499 0.479 0.499 0.548 0.549 0.512 0.527 GSE 0.528 0.523 0.587 0.662 0.503 0.513 OOM OOM 0.560 0.562 0.474 0.491 0.490 0.498
+> PRIV X-GCN (Ours) 0.742 0.772 0.810 0.828 0.581 0.612 0.557 0.567 0.648 0.624 0.833 0.814 0.577 0.588
+> PRIV X-SAGE (Ours) 0.676 0.667 0.669 0.683 0.718 0.725 0.651 0.657 0.746 0.732 0.763 0.725 0.626 0.633
+> GRAD INPUT
+> ExplainSim 0.492 0.519 0.490 0.501 0.548 0.550 0.502 0.504 0.511 0.523 0.559 0.548 0.520 0.511 GSE 0.499 0.550 0.521 0.572 0.477 0.494 OOM OOM 0.519 0.531 0.493 0.493 0.488 0.495
+> PRIV X-GCN (Ours) 0.718 0.755 0.799 0.813 0.684 0.701 0.557 0.567 0.555 0.551 0.756 0.743 0.512 0.522
+> PRIV X-SAGE (Ours) 0.657 0.656 0.670 0.688 0.740 0.753 0.651 0.657 0.697 0.694 0.720 0.683 0.599 0.618
+> GRAPH LIME ExplainSim 0.474 0.517 0.496 0.520 0.469 0.497 0.498 0.499 0.496 0.513 0.557 0.577 0.495 0.507 GSE 0.506 0.538 0.573 0.630 0.504 0.514 OOM OOM 0.527 0.553 0.479 0.478 0.463 0.474
+> PRIV X-GCN (Ours) 0.746 0.772 0.693 0.734 0.576 0.600 0.516 0.525 0.513 0.546 0.469 0.510 0.511 0.522
+> PRIV X-SAGE (Ours) 0.714 0.716 0.698 0.715 0.766 0.771 0.653 0.662 0.591 0.606 0.739 0.701 0.599 0.618
+> GNNE XPLAINER
+> ExplainSim 0.459 0.498 0.502 0.526 0.509 0.524 0.499 0.498 0.522 0.533 0.533 0.540 0.488 0.503 GSE 0.532 0.535 0.555 0.620 0.504 0.514 OOM OOM 0.494 0.526 0.533 0.523 0.494 0.511
+> PRIV X-GCN (Ours) 0.847 0.871 0.917 0.927 0.700 0.714 0.517 0.527 0.590 0.593 0.482 0.515 0.511 0.522
+> PRIV X-SAGE (Ours) 0.778 0.773 0.692 0.704 0.718 0.739 0.651 0.651 0.809 0.794 0.759 0.742 0.616 0.631
+
+I Additional Results 
+
+I.1 Main Table at ε = 8 .0
+
+Table 6 reports reconstruction AP and AUC at the relaxed privacy budget ε = 8 .0 (Gaussian DP, 
+
+w = 32 , GCN and GraphSAGE). 
+
+Effect of relaxing the privacy budget from ε = 5 to ε = 8 . Comparing Tables 1 and 6 reveals a consistent and substantial improvement as the privacy budget relaxes. 
+
+(1) P RIV X with GNNExplainer achieves the largest gains. On Cora, GNNExplainer P RIV Ximproves from AP = 0 .763 at ε = 5 to AP = 0 .871 at ε = 8 (+10 .8 pp), the largest absolute increase of any method. On CiteSeer, the same method reaches AP = 0 .927 , nearly saturation. This rapid improvement confirms that the Gaussian noise reduction from σ(5) → σ(8) disproportionately benefits high-SNR surrogate explainers whose signal is already near the denoising threshold. 
+
+(2) P RIV F confirms substantial intrinsic graph leakage (Section D). At ε = 8 , P RIV F achieves AP = 0 .899 on Cora and AP = 0 .943 on CiteSeer (see Table 2), comparable to or exceeding PRIV X variants at ε = 5 . This confirms the decomposition observation: the underlying graph distribution alone supports substantial reconstruction. While raw features are not released in regulated deployments, this measurement establishes a floor on leakage that DP applied to explanations cannot reach regardless of explainer choice. 
+
+(3) Heterophilic datasets show muted gains. On Chameleon, IMDB, and Amazon-ratings, the AP improvement from ε = 5 to ε = 8 is smaller (1–5 pp on average) than on homophilic datasets (3–11 pp). This asymmetry arises because heterophilic reconstruction relies on an anti-correlation signal (Proposition 2), which saturates at lower noise levels than the co-activation signal exploited on homophilic graphs. 
+
+(4) ogbn-arxiv remains approximately flat. At ε = 8 , ogbn-arxiv AP values are within 1 pp of the 
+
+ε = 5 values for all methods (e.g., P RIV X-SAGE Grad: 0.657 vs. 0.652 ). This confirms Section 5.3: boundary bias at k = 32 on a power-law graph dominates the total reconstruction error, making additional noise reduction from ε = 5 → 8 nearly irrelevant. 
+
+(5) GradInput P RIV X on PubMed emerges at ε = 8 . GradInput achieves AP = 0 .701 at ε = 8 vs. 
+
+0.606 at ε = 5 (+9.5 pp), overtaking GNNExplainer ( 0.714 vs. 0.661 ) and approaching GraphLIME. This suggests that GradInput’s feature-magnitude weighting becomes informative once the noise level drops sufficiently to preserve the relative feature magnitudes. 24 0.0 0.1 0.3 1.0             
+
+> (Estimation Error)
+> 0.25
+> 0.5
+> 0.75
+> 1.0
+> (Observation Fraction)
+> 0.634 0.634 0.634 0.635
+> 0.653 0.653 0.654 0.641
+> 0.667 0.668 0.668 0.662
+> 0.657 0.656 0.656 0.643
+
+Cora Grad                
+
+> 0.0 0.1 0.3 1.0
+> (Estimation Error)
+> 0.25
+> 0.5
+> 0.75
+> 1.0
+> (Observation Fraction)
+> 0.673 0.676 0.676 0.666
+> 0.716 0.716 0.718 0.696
+> 0.742 0.741 0.741 0.719
+> 0.775 0.774 0.773 0.740
+
+Cora GNNExplainer                
+
+> 0.0 0.1 0.3 1.0
+> (Estimation Error)
+> 0.25
+> 0.5
+> 0.75
+> 1.0
+> (Observation Fraction)
+> 0.643 0.643 0.643 0.634
+> 0.640 0.641 0.639 0.628
+> 0.630 0.629 0.629 0.621
+> 0.632 0.633 0.635 0.622
+
+Amazon-ratings Grad                
+
+> 0.0 0.1 0.3 1.0
+> (Estimation Error)
+> 0.25
+> 0.5
+> 0.75
+> 1.0
+> (Observation Fraction)
+> 0.640 0.640 0.639 0.625
+> 0.626 0.625 0.623 0.607
+> 0.615 0.614 0.613 0.596
+> 0.621 0.620 0.616 0.608
+
+Amazon-ratings GNNExplainer 
+
+> 0.600
+> 0.625
+> 0.650
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> 0.775
+> Average Precision (AP)
+
+Adaptive Attacker Analysis: AP at = 5.0 (GCN, Gaussian DP) 
+
+: estimation error, : fraction of explanations observed Figure 7: Adaptive attacker AP as a function of observation fraction ρ (rows) and estimation error κ
+
+(columns) at ε = 5 .0, Gaussian DP. AP degrades smoothly as κ increases and ρ decreases, with no sharp cliff, validating Theorems 1 and 2 and Corollary 1. Cora/GNNExplainer (top-right) shows a larger ρ-dependency than Amazon-ratings, reflecting higher homophily enabling better cross-node information transfer. Table 7: Adaptive attacker AP for GNNE XPLAINER on Cora at ε = 5 (GCN, Gaussian DP). Rows: 
+
+ρ (fraction of explanations observed); Cols: κ (estimation error). Bold = best. 
+
+ρ \ κ κ = 0 .0 κ = 0 .1 κ = 0 .3 κ = 1 .00.25 0.673 0.676 0.676 0.666 
+
+0.5 0.716 0.716 0.718 0.696 
+
+0.75 0.742 0.741 0.741 0.719 
+
+1.0 0.775 0.774 0.773 0.740 
+
+I.2 Adaptive Attacker: Full Tables 
+
+Tables 7 to 12 report the full (ρ, κ ) grid for all four explainers on Cora and for GNNExplainer and Grad on Amazon-ratings at ε = 5 .0.
+
+Cora: effect of observation fraction ρ. Across all four explainers on Cora, reconstruction AP increases monotonically with ρ for most configurations. For GNNExplainer, moving from ρ = 0 .25 
+
+to ρ = 1 .0 at κ = 0 yields AP 0.673 → 0.775 (+10 .2 pp), the largest gain among explainers. For Grad, the improvement is smaller ( 0.634 → 0.657 , +2 .3 pp), consistent with Grad’s lower structural signal. GradInput and GraphLIME show intermediate gains ( 2.7 pp and 5.9 pp respectively), tracking their respective SNR levels from Lemma 1. The Grad attacker peaks at ρ = 0 .75 rather than ρ = 1 .0
+
+25 Table 8: Adaptive attacker AP for G RAD on Cora at ε = 5 (GCN, Gaussian DP). Rows: ρ (fraction of explanations observed); Cols: κ (estimation error). Bold = best. 
+
+ρ \ κ κ = 0 .0 κ = 0 .1 κ = 0 .3 κ = 1 .00.25 0.634 0.634 0.634 0.635 
+
+0.5 0.653 0.653 0.654 0.641 
+
+0.75 0.667 0.668 0.668 0.662 
+
+1.0 0.657 0.656 0.656 0.643 Table 9: Adaptive attacker AP for G RAD INPUT on Cora at ε = 5 (GCN, Gaussian DP). Rows: ρ
+
+(fraction of explanations observed); Cols: κ (estimation error). Bold = best. 
+
+ρ \ κ κ = 0 .0 κ = 0 .1 κ = 0 .3 κ = 1 .00.25 0.628 0.628 0.629 0.630 
+
+0.5 0.642 0.644 0.645 0.630 
+
+0.75 0.640 0.642 0.643 0.637 
+
+1.0 0.655 0.657 0.658 0.651 (AP 0.668 vs. 0.656 at κ = 0 .3), suggesting diminishing returns: once a sufficient neighbourhood fraction is observed, additional nodes contribute redundant information under a gradient-based signal. 
+
+Cora: robustness to estimation error κ. All methods show strong robustness to moderate es-timation error. At κ = 0 .3 (30% error in ˆε), AP drops by at most 0.004 relative to κ = 0 for GNNExplainer and less than 0.002 for gradient-based explainers. This validates Theorem 2: a 30% 
+
+error in ˆε translates to only a small change in the estimated σ (since σ ∝ plog(1 /δ )/ε for Gaussian DP, a 30% error in ε gives ≈15% error in σ), keeping Cdeg · κ small. The degradation becomes severe only at κ = 1 .0 (100% error), where AP drops by 0.033 for GNNExplainer ( 0.775 → 0.740 ), 0.016 
+
+for GraphLIME, and less than 0.015 for gradient-based methods. This confirms that the attacker’s noise-model knowledge provides significant but not decisive advantage; even an order-of-magnitude wrong estimate still yields non-trivial reconstruction. 
+
+Amazon-ratings: qualitatively different ρ behaviour. On Amazon-ratings (heterophilic), both 
+
+GNNExplainer and Grad show non-monotonic behaviour in ρ: the highest AP is achieved at ρ = 0 .25 
+
+for GNNExplainer ( 0.640 vs. 0.621 at ρ = 1 .0) and at ρ = 0 .25 for Grad ( 0.643 vs. 0.632 at 
+
+ρ = 1 .0). This counter-intuitive pattern arises from the heterophilic reconstruction mechanism: the anti-correlation signal (Proposition 2) is most informative at the boundary of the observed set (where observed and unobserved nodes meet), not in the interior. When ρ = 1 .0, all nodes are observed, eliminating this boundary effect and reducing AP below the ρ = 0 .25 level. This is a novel empirical finding with direct practical implications: on heterophilic graphs, a partial-adaptive attacker with limited observation ( ρ ≈ 0.25 ) can outperform one with full observation. 
+
+I.3 GNN Backbone Comparison GCN vs. GIN vs. GraphSAGE: analysis. Figure 8 plots GCN and GIN on Cora and IMDB; GraphSAGE results appear in Table 1. GCN and GIN yield similar AP curves: the maximum gap between them is < 0.01 AP on Cora and < 0.015 AP on IMDB, consistent with the theoretical prediction that leakage depends on fidelity γ and noise scale σ(ε) rather than backbone architecture per se. GIN shows slightly lower AP ( ≈ 1–2 pp below GCN), attributable to its sum-aggregation which accumulates noise linearly with degree rather than averaging it, producing less stable explanation vectors under DP perturbation. GraphSAGE, however, breaks this near-equivalence: it achieves 
+
+3–19 pp higher AP than GCN across all datasets (see Table 1). The mean-pooling aggregation in GraphSAGE averages over neighbourhood signals, effectively reducing the per-node explanation noise by O(d−1/2 
+
+> v
+
+) where dv is the node degree, consistent with the SNR analysis in Lemma 1. This reveals a non-obvious privacy risk: deploying a more expressive backbone increases structural leakage even at the same DP budget, because the backbone’s own aggregation acts as an implicit noise-reduction step before explanation computation. 26 Table 10: Adaptive attacker AP for G RAPH LIME on Cora at ε = 5 (GCN, Gaussian DP). Rows: ρ
+
+(fraction of explanations observed); Cols: κ (estimation error). Bold = best. 
+
+ρ \ κ κ = 0 .0 κ = 0 .1 κ = 0 .3 κ = 1 .00.25 0.649 0.648 0.653 0.644 
+
+0.5 0.657 0.657 0.659 0.644 
+
+0.75 0.681 0.678 0.676 0.659 
+
+1.0 0.708 0.706 0.700 0.665 Table 11: Adaptive attacker AP for GNNE XPLAINER on Amazon-ratings at ε = 5 (GCN, Gaussian DP). Rows: ρ (fraction of explanations observed); Cols: κ (estimation error). Bold = best. 
+
+ρ \ κ κ = 0 .0 κ = 0 .1 κ = 0 .3 κ = 1 .00.25 0.640 0.640 0.639 0.625 
+
+0.5 0.626 0.625 0.623 0.607 
+
+0.75 0.615 0.614 0.613 0.596 
+
+1.0 0.621 0.620 0.616 0.608 
+
+I.4 Adaptive Attacker Detailed Results 
+
+The heatmaps in Figure 7 and the tables in Section I.2 are generated using GraphSAGE as the backbone, which yields higher absolute AP and more pronounced (ρ, κ )-sensitivity than GCN, making the attacker trade-offs more clearly visible. Table 7 shows the main body table used in Section 6. 
+
+Reading the heatmaps. Each cell (i, j ) shows AP at observation fraction ρi and estimation error 
+
+κj (GraphSAGE, GNNExplainer, ε = 5 .0). The colour gradient (blue = low, red = high) reveals the dominant axis of attacker improvement: on Cora (homophilic), the vertical axis ( ρ) drives most of the variation, while the horizontal axis ( κ) has only minor effect, indicating the attacker is robust to noise-model uncertainty on homophilic graphs. On Amazon-ratings (heterophilic), the pattern changes: ρ shows non-monotonic behaviour (best AP at ρ = 0 .25 ), arising from the boundary-effect mechanism described in Section I.2, while κ remains secondary across all settings. 
+
+J Diffusion Identification for Non-Gaussian DP Mechanisms 
+
+The DP-as-DDPM-step identification in Section 4 is exact for Gaussian DP, since the DDPM forward kernel q(zt|z0) is Gaussian. For Laplace DP, no such exact identification exists; we provide a moment-matching approximation with error bounds in KL and TV. For Rényi DP the mechanism is itself a Gaussian mechanism [7], so the identification is exact. 
+
+J.1 Generalised Effective Timestep Definition 9 (Effective Gaussian timestep, generalised) . For any DP mechanism M with per-coordinate noise variance σ2 
+
+> M
+
+:= E[η(k)2 ], define 
+
+t⋆(M) := min 
+
+(
+
+arg min  
+
+> t∈{ 1,...,T }
+
+(1 − ¯αt) − σ2
+
+> M
+
+)
+
+.
+
+For the Laplace mechanism with scale b = ∆ f /ε , σ2 
+
+> L
+
+= 2 b2. For Rényi DP with calibrated σR,
+
+σ2 
+
+> R
+
+= σ2 
+
+> R
+
+and the identification is exact. If σ2 
+
+> M
+
+> 1 − ¯αT (noise exceeds the noisiest DDPM timestep), set t⋆ = T ; the moment-matching approximation may degrade at very low privacy budgets 
+
+ε ≪ 1.
+
+J.2 Per-Coordinate Laplace–Gaussian KL Divergence Lemma 4 (Per-coordinate Laplace–Gaussian KL) . Let Lb(x) = (2 b)−1 exp( −| x|/b ) be the centred Laplace density with scale b (variance 2b2), and G2b2 (x) the centred Gaussian with the same second 
+
+27 Table 12: Adaptive attacker AP for G RAD on Amazon-ratings at ε = 5 (GCN, Gaussian DP). Rows: 
+
+ρ (fraction of explanations observed); Cols: κ (estimation error). Bold = best. 
+
+ρ \ κ κ = 0 .0 κ = 0 .1 κ = 0 .3 κ = 1 .00.25 0.643 0.643 0.643 0.634 
+
+0.5 0.640 0.641 0.639 0.628 
+
+0.75 0.630 0.629 0.629 0.621 
+
+1.0 0.632 0.633 0.635 0.622 0.5 1.0 2.0 5.0 8.0        
+
+> Privacy Budget
+> 0.575
+> 0.600
+> 0.625
+> 0.650
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> 0.775
+> Average Precision (AP)
+> Cora
+> GCN
+> GIN
+> GraphSAGE
+> 0.5 1.0 2.0 5.0 8.0
+> Privacy Budget
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> Average Precision (AP)
+> IMDB
+> GCN
+> GIN
+> GraphSAGE
+> AP vs. : GCN / GIN / GraphSAGE (Grad, Gaussian DP, w= 32 )
+
+Figure 8: AP vs. ε for GCN and GIN backbones using the Grad explainer (Gaussian DP, w = 32 )on Cora (left) and IMDB (right). GraphSAGE results are reported in the main table (Table 1). GCN and GIN show similar leakage, while GraphSAGE consistently exceeds both, revealing an architecture-dependent privacy risk. 
+
+moment 2b2. Then 
+
+KL( Lb ∥ G2b2 ) = 12 (ln π − 1) ≈ 0.0724 , (26) 
+
+independent of b and hence of the privacy budget. Proof. The differential entropy of the centred Laplace is H(Lb) = ln(2 b) + 1 . The cross-entropy is 
+
+H(Lb, G 2b2 ) = 12 ln(4 πb 2) + ELb [X2]/(4 b2) = 12 ln(4 πb 2) + 12 , using ELb [X2] = 2 b2. Therefore 
+
+KL( Lb∥G2b2 ) = H(Lb, G 2b2 ) − H(Lb) = 12 ln(4 πb 2) + 12 − ln(2 b) − 1 = 12 ln π − 12 .
+
+J.3 Multi-Dimensional Bound and Reconstruction Gap Proposition 4 (d-dimensional Laplace forward-kernel approximation) . For any fixed z0 ∈ Rd, let 
+
+qL be the law of z0 + ηL with ηL
+
+k
+
+iid 
+
+∼ Lb, and qG the law of z0 + ηG with ηG ∼ N (0 , 2b2Id). By tensorisation: 
+
+KL( qL∥qG ) = d
+
+2 (ln π − 1) , TV( qL, q G ) ≤ min 
+
+
+
+1,
+
+q d
+
+4 (ln π − 1) 
+
+
+
+. (27) 
+
+Proof. Both kernels factorise across coordinates; KL of product measures equals the sum of per-coordinate KLs, giving d · 12 (ln π − 1) . The TV bound combines Pinsker’s inequality TV ≤ pKL /2
+
+with the trivial TV ≤ 1.
+
+Theorem 4 (Reconstruction TPR gap under Laplace DP) . Let RL and RG denote the reconstruction TPRs at the same fixed decision rule f : Rd → { 0, 1} under Laplace and matched-Gaussian DP at the same per-coordinate variance. Then 
+
+RL − RG ≤ TV( qL, q G ) ≤ min 
+
+
+
+1,
+
+q d
+
+4 (ln π − 1) 
+
+
+
+. (28) 
+
+The bound also holds when RL and RG are each evaluated at their respective Bayes-optimal classifiers. 
+
+28 Proof. Fixed rule. The variational characterisation of TV gives |E qL [f ] − E qG [f ]| ≤ TV( qL, q G )
+
+directly. 
+
+Bayes-optimal classifiers. Let f L, f G minimise classification error under qL, q G respectively at a common prior. Since f G is feasible (not necessarily optimal) under qL:
+
+RL = EqL [f L] ≥ E qL [f G ] ≥ E qG [f G ] − TV( qL, q G ) = RG − TV .
+
+The symmetric argument gives |RL −RG | ≤ TV ; substituting Proposition 4 yields Equation (28). 
+
+Remark 9 (High-dimensional caveat) . For d ≥ 28 , p(d/ 4)(ln π − 1) ≥ 1, making Equation (28) 
+
+vacuous. All benchmark feature dimensions ( d ∈ { 128 , 401 , 500 , 1433 , 3703 }) exceed this threshold, so the worst-case TV bound does not predict the empirically observed 1–3 pp Laplace–Gaussian gap (Figure 3b). That gap reflects average-case behaviour driven by the structured signal in the true mean; a tighter bound exploiting decision-boundary smoothness (e.g. via Wasserstein distance) is left as future work. 
+
+Remark 10 (Why Laplace empirically helps the attacker) . The TV bound Equation (28) is symmetric and does not predict the sign of RL − RG . Mechanistically, Laplace places more mass near zero than the matched Gaussian: for small t/b , Pr Lb [|η| < t ] ≈ t/b while Pr N (0 ,2b2)[|η| < t ] ≈ t/ (b√π),a ratio of √π ≈ 1.77 . Hence under Laplace, more explanation coordinates retain near-original magnitudes, which the inner-product attacker exploits for higher TPR. 
+
+Corollary 3 (Algorithm 1 well-defined under any finite-variance DP) . The variance estimator 
+
+ˆσ2 = Var(˜ s) − dVar( s) in line 1 of Algorithm 1 estimates σ2
+
+> M
+
+, which by Definition 9 determines 
+
+t⋆(M). The approximation gap is: 
+
+• Gaussian DP : forward kernel is exactly Gaussian; zero approximation gap. 
+
+• Rényi DP : the Rényi mechanism is a Gaussian mechanism calibrated to order α [ 7] with η ∼N (0 , σ 2
+
+> R
+
+I); zero approximation gap. 
+
+• Laplace DP : approximation gap bounded by Theorem 4; vacuous for d ≥ 28 (all our benchmarks), but the empirical 1–3 pp gap is much smaller than worst-case TV. 
+
+29

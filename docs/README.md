@@ -6,70 +6,80 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-07
-- 运行时间：2026-05-07 20:23:33 UTC
+- 最新运行日期：2026-05-08
+- 运行时间：2026-05-08 20:17:05 UTC
 - 运行状态：成功
-- 本次总论文数：16
-- 精读区：5
+- 本次总论文数：20
+- 精读区：9
 - 速读区：11
 
 ### 今日简报（AI）
-今日精选 16 篇论文，重点突破医疗影像分割与单细胞数据分析中的联邦学习隐私瓶颈。
-核心关注 MuCALD-SplitFed 的因果潜变量扩散模型及 FL-Sailer 的自适应采样技术，两者均实现了隐私与效率的高分平衡。
-建议读者深入探索联邦学习与生成式模型、去中心化架构的结合，以应对多任务及复杂智能体场景。
-- 详情：[/202605/07/README](/202605/07/README)
+今日精选 20 篇前沿成果，深度解析了隐私保护联邦学习与差分隐私博弈等
+- 详情：[/202605/08/README](/202605/08/README)
 
 ### 精读区论文标签
-1. [MuCALD-SplitFed: Causal-Latent Diffusion for Privacy-Preserving Multi-Task Split-Federated Medical Image Segmentation](/202605/07/2605.04108v1-mucald-splitfed-causal-latent-diffusion-for-privacy-preserving-multi-task-split-federated-medical-image-segmentation)  
+1. [Adaptive Selection of LoRA Components in Privacy-Preserving Federated Learning](/202605/08/2605.05769v1-adaptive-selection-of-lora-components-in-privacy-preserving-federated-learning)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：差分隐私联邦微调中隐私噪声与准确率的权衡
+2. [Differential Privacy in the Extensive-Form Bandit Problem](/202605/08/2605.05266v1-differential-privacy-in-the-extensive-form-bandit-problem)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：隐私保护的多任务拆分联邦学习
-2. [FL-Sailer: Efficient and Privacy-Preserving Federated Learning for Scalable Single-Cell Epigenetic Data Analysis via Adaptive Sampling](/202605/07/2605.04519v1-fl-sailer-efficient-and-privacy-preserving-federated-learning-for-scalable-single-cell-epigenetic-data-analysis-via-adaptive-sampling)  
+   evidence：广义博弈多臂老虎机问题中的本地差分隐私
+3. [$α$-Wasserstein Mechanism for Rényi Pufferfish Privacy](/202605/08/2605.05723v1--wasserstein-mechanism-for-rnyi-pufferfish-privacy)  
    标签：评分：9.0/10、query:dml-dp
-   evidence：针对高维表观遗传数据的隐私保护联邦学习框架
-3. [PERFECT: Personalized Federated Learning for CBRS Radar Detection](/202605/07/2605.03199v1-perfect-personalized-federated-learning-for-cbrs-radar-detection)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：用于传感器数据隐私的联邦学习框架
-4. [Replacing Parameters with Preferences: Federated Alignment of Heterogeneous Vision-Language Models](/202605/07/2605.03426v1-replacing-parameters-with-preferences-federated-alignment-of-heterogeneous-vision-language-models)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：隐私敏感领域的联邦对齐框架
-5. [DeFed-GMM-DaDiL: A Decentralized Federated Framework for Domain Adaptation](/202605/07/2605.04324v1-defed-gmm-dadil-a-decentralized-federated-framework-for-domain-adaptation)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：保护客户端隐私的去中心化联邦框架
+   evidence：用于Rényi Pufferfish隐私的alpha-Wasserstein机制
+4. [A Privacy-Preserving Machine Learning Framework for Edge Intelligence: An Empirical Analysis](/202605/08/2605.05751v1-a-privacy-preserving-machine-learning-framework-for-edge-intelligence-an-empirical-analysis)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：包含差分隐私的隐私保护机器学习框架
+5. [Quadratic Objective Perturbation: Curvature-Based Differential Privacy](/202605/08/2605.05905v1-quadratic-objective-perturbation-curvature-based-differential-privacy)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：用于差分隐私机器学习的二次目标扰动机制
+6. [Trade-off Functions for DP-SGD with Subsampling based on Random Shuffling: Tight Upper and Lower Bounds](/202605/08/2605.06259v1-trade-off-functions-for-dp-sgd-with-subsampling-based-on-random-shuffling-tight-upper-and-lower-bounds)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：对DP-SGD权衡函数的紧致分析
+7. [Beyond Rigid Alignment: Graph Federated Learning via Dual Manifold Calibration](/202605/08/2605.06260v1-beyond-rigid-alignment-graph-federated-learning-via-dual-manifold-calibration)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：具有隐私保护的图联邦学习
+8. [Privacy by Postprocessing the Discrete Laplace Mechanism](/202605/08/2605.06502v1-privacy-by-postprocessing-the-discrete-laplace-mechanism)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：对离散拉普拉斯机制进行后处理以实现隐私
+9. [FedAttr: Towards Privacy-preserving Client-Level Attribution in Federated LLM Fine-tuning](/202605/08/2605.06596v1-fedattr-towards-privacy-preserving-client-level-attribution-in-federated-llm-fine-tuning)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：联邦大语言模型微调中的隐私保护客户端归因
 
 ### 速读区论文标签
-1. [DeRelayL: Sustainable Decentralized Relay Learning](/202605/07/2605.02935v1-derelayl-sustainable-decentralized-relay-learning)  
+1. [Enabling Federated Inference via Unsupervised Consensus Embedding](/202605/08/2605.05718v1-enabling-federated-inference-via-unsupervised-consensus-embedding)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：隐私保护分布式推理框架
+2. [FAB: A First-Order AB-based Gradient Algorithm for Distributed Bilevel Optimization over Time-Varying Directed Graphs](/202605/08/2605.06328v1-fab-a-first-order-ab-based-gradient-algorithm-for-distributed-bilevel-optimization-over-time-varying-directed-graphs)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：时变有向图上的分布式优化
+3. [PACZero: PAC-Private Fine-Tuning of Language Models via Sign Quantization](/202605/08/2605.06505v1-paczero-pac-private-fine-tuning-of-language-models-via-sign-quantization)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：用于微调的PAC隐私零阶机制
+4. [Breaking the Quality-Privacy Tradeoff in Tabular Data Generation via In-Context Learning](/202605/08/2605.04911v1-breaking-the-quality-privacy-tradeoff-in-tabular-data-generation-via-in-context-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：协作模型训练与联邦学习范式
-2. [Dependency-Aware Privacy for Multi-turn Agents](/202605/07/2605.03188v1-dependency-aware-privacy-for-multi-turn-agents)  
+   evidence：打破数据生成中的质量与隐私权衡
+5. [FedeKD: Energy-Based Gating for Robust Federated Knowledge Distillation under Heterogeneous Settings](/202605/08/2605.05553v1-fedekd-energy-based-gating-for-robust-federated-knowledge-distillation-under-heterogeneous-settings)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：多轮智能体的度量差分隐私
-3. [Graph Reconstruction from Differentially Private GNN Explanations](/202605/07/2605.03388v1-graph-reconstruction-from-differentially-private-gnn-explanations)  
+   evidence：无需直接参数共享的联邦知识蒸馏
+6. [VARS-FL: Validation-Aligned Client Selection for Non-IID Federated Learning in IoT Systems](/202605/08/2605.05896v1-vars-fl-validation-aligned-client-selection-for-non-iid-federated-learning-in-iot-systems)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：攻击差分隐私GNN解释
-4. [A Hierarchical Sampling Framework for bounding the Generalization Error of Federated Learning](/202605/07/2605.03499v1-a-hierarchical-sampling-framework-for-bounding-the-generalization-error-of-federated-learning)  
+   evidence：联邦学习客户端选择框架
+7. [FedFrozen: Two-Stage Federated Optimization via Attention Kernel Freezing](/202605/08/2605.06446v1-fedfrozen-two-stage-federated-optimization-via-attention-kernel-freezing)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：联邦学习泛化界与分层采样框架
-5. [Surviving the Edge: Federated Learning under Networking and Resource Constraints](/202605/07/2605.03870v1-surviving-the-edge-federated-learning-under-networking-and-resource-constraints)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：网络和资源受限下的联邦学习
-6. [Distributed TD Tracking with Linear Function Approximation over Directed Communication Networks](/202605/07/2605.04466v1-distributed-td-tracking-with-linear-function-approximation-over-directed-communication-networks)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：多智能体强化学习的分布式算法
-7. [Trustworthy Federated Label Distribution Learning under Annotation Quality Disparity](/202605/07/2605.04827v1-trustworthy-federated-label-distribution-learning-under-annotation-quality-disparity)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：面向隐私敏感应用的联邦学习框架
-8. [A Pragmatic Comparison of Cryptographic Computation Technologies for Machine Learning](/202605/07/2605.04858v1-a-pragmatic-comparison-of-cryptographic-computation-technologies-for-machine-learning)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：用于隐私保护机器学习的密码学计算技术
-9. [SprayCheck: Finding Gray Failures in Adaptive Routing Networks](/202605/07/2605.03702v1-spraycheck-finding-gray-failures-in-adaptive-routing-networks)  
+   evidence：针对异构客户端的联邦优化
+8. [Trustworthy AI Suffers from Invariance Conflicts and Causality is The Solution](/202605/08/2605.02640v1-trustworthy-ai-suffers-from-invariance-conflicts-and-causality-is-the-solution)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：数据中心网络中的分布式机器学习训练
-10. [Mechanical Conscience: A Mathematical Framework for Dependability of Machine Intelligenc](/202605/07/2605.03847v1-mechanical-conscience-a-mathematical-framework-for-dependability-of-machine-intelligenc)  
+   evidence：可信AI中隐私与效用之间的权衡
+9. [Stable Multimodal Graph Unlearning via Feature-Dimension Aware Quantile Selection](/202605/08/2605.03303v1-stable-multimodal-graph-unlearning-via-feature-dimension-aware-quantile-selection)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：分布式协作智能与联邦学习架构
-11. [Federated Learning for Early Prediction of EV Charging Demand](/202605/07/2605.04993v1-federated-learning-for-early-prediction-of-ev-charging-demand)  
+   evidence：隐私保护的图机器卸载框架
+10. [Learned Neighbor Trust for Collaborative Deployment in Model-Agnostic Decentralized Learning](/202605/08/2605.05009v1-learned-neighbor-trust-for-collaborative-deployment-in-model-agnostic-decentralized-learning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于分布式需求预测的联邦学习应用
+   evidence：模型无关知识交换的去中心化学习协议
+11. [Privacy Without Losing Place: A Paradigm for Private Retrieval in Spatial RAGs](/202605/08/2605.05459v1-privacy-without-losing-place-a-paradigm-for-private-retrieval-in-spatial-rags)  
+   标签：评分：6.0/10、query:dml-dp
+   evidence：与差分隐私相关的地理位置隐私机制
 
 
 <div class="dpr-home-promo-card">

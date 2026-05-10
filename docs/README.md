@@ -6,35 +6,35 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-09
-- 运行时间：2026-05-09 19:57:21 UTC
+- 最新运行日期：2026-05-10
+- 运行时间：2026-05-10 19:58:14 UTC
 - 运行状态：成功
 - 本次总论文数：4
-- 精读区：0
-- 速读区：4
+- 精读区：1
+- 速读区：3
 
 ### 今日简报（AI）
-今日速览具身智能隐私博弈、大规模多智能体协作及联邦学习安全优化。
-核心结论指出具身智能必须在效用与隐私间寻找平衡，并展示了通过平均场理论解决大规模智能体去中心化决策的新路径。
-推荐关注 AI 落地中的隐私合规挑战及云边协同下的实时入侵检测技术。
-- 详情：[/202605/09/README](/202605/09/README)
+- 今日共生成 4 篇推荐（精读 1 篇，速读 3 篇）
+- 精读：《Knowledge-Free Correlated Agreement for Incentivizing Federated Learning》（8.0/10）
+- 速读：《ZeRO-Prefill: Zero Redundancy Overheads in MoE Prefill Serving》（7.0/10）, 《Private Structured-Subset Retrieval》（6.0/10）, 《Quantizing With Randomized Hadamard Transforms: Efficient Heuristic Now Proven》（6.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202605/10/README](/202605/10/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Knowledge-Free Correlated Agreement for Incentivizing Federated Learning](/202605/10/2605.04747v1-knowledge-free-correlated-agreement-for-incentivizing-federated-learning)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：在没有地面真值的情况下激励联邦学习中的客户端贡献
 
 ### 速读区论文标签
-1. [Position: Embodied AI Requires a Privacy-Utility Trade-off](/202605/09/2605.05017v1-position-embodied-ai-requires-a-privacy-utility-trade-off)  
+1. [ZeRO-Prefill: Zero Redundancy Overheads in MoE Prefill Serving](/202605/10/2605.02960v1-zero-prefill-zero-redundancy-overheads-in-moe-prefill-serving)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：敏感环境下的隐私与效用权衡
-2. [MEMOA: Massive Mixtures of Online Agents via Mean-Field Decentralized Nash Equilibria](/202605/09/2605.05492v1-memoa-massive-mixtures-of-online-agents-via-mean-field-decentralized-nash-equilibria)  
+   evidence：大规模机器学习模型的分布式执行
+2. [Private Structured-Subset Retrieval](/202605/10/2605.05160v1-private-structured-subset-retrieval)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于训练大规模AI智能体群体的联邦学习工具
-3. [AoI-Guided Client Selection for Robust and Timely Federated Intrusion Detection in Cloud-Edge Security Analytics](/202605/09/2605.05644v1-aoi-guided-client-selection-for-robust-and-timely-federated-intrusion-detection-in-cloud-edge-security-analytics)  
+   evidence：分布式环境下副本服务器的隐私检索
+3. [Quantizing With Randomized Hadamard Transforms: Efficient Heuristic Now Proven](/202605/10/2605.06014v1-quantizing-with-randomized-hadamard-transforms-efficient-heuristic-now-proven)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于分布式入侵检测的联邦学习框架
-4. [Federation of Experts: Communication Efficient Distributed Inference for Large Language Models](/202605/09/2605.06206v1-federation-of-experts-communication-efficient-distributed-inference-for-large-language-models)  
-   标签：评分：6.0/10、query:dml-dp
-   evidence：大语言模型的分布式推理架构
+   evidence：分布式执行中的梯度压缩与量化
 
 
 <div class="dpr-home-promo-card">

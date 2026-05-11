@@ -1,0 +1,1066 @@
+Title: Differentially Private Auditing Under Strategic Response
+
+URL Source: https://arxiv.org/pdf/2605.07674v1
+
+Published Time: Mon, 11 May 2026 01:28:21 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+# Differentially Private Auditing Under Strategic Response ∗Florian A. D. Burnat † Brittany I. Davidson ‡
+
+## May 11, 2026 
+
+Abstract 
+
+Regulatory audits of AI systems increasingly rely on differential privacy (DP) to protect training data and model internals. We study audit design when the au-dited developer can strategically respond to the privacy-constrained audit interface. We formalize privacy-constrained auditing as a bilevel Stackelberg game, in which an auditor commits to a query policy and DP budget allocation across harm di-mensions, and a strategic developer reallocates mitigation efforts in response. We introduce the welfare-weighted under-detection gap 𝐵 𝑤 , the welfare-weighted true residual harm the audit fails to detect at the developer’s strategic best response, and prove that naive DP auditing (uniform or harm-proportional allocation) in-duces a strictly larger 𝐵 𝑤 than any non-strategic mitigation baseline whenever effective detectability is heterogeneous, the welfare weights are not comonotone with detectability, and the developer’s optimum is interior. We characterize the optimal auditor allocation as a four-factor balance of welfare weight, audit miss-probability, detectability elasticity, and mitigation-cost curvature, and provide a single-level reformulation of the bilevel problem via the developer’s KKT system. We propose Strategic Private Audit Design (SPAD), a projected-gradient algorithm with hypergradients computed through the developer’s best response. We specify a synthetic evaluation protocol across harm dimensions, developer behaviors, and pri-vacy budgets under quadratic mitigation costs and exponential residual-harm reduc-tion; preliminary experiments show that SPAD reduces the welfare-weighted under-detection gap 𝐵 𝑤 by 5–14% under uniform welfare and 20–44% under non-uniform welfare across the tested privacy-budget regimes, beating welfare-proportional allo-cation by 13–20% in the non-uniform-welfare case. 
+
+Keywords: differential privacy, auditing, strategic response, Stackelberg games, mechanism design 
+
+> ∗
+
+TODO: acknowledgements and funding information. 
+
+> †
+
+University of Bath, fadb20@bath.ac.uk .
+
+> ‡
+
+University of Bath, bid23@bath.ac.uk .
+
+> arXiv:2605.07674v1 [cs.GT] 8 May 2026
+
+# 1 Introduction 
+
+Differential privacy is standard for protecting individuals during audits of machine learn-ing systems. From fairness audits assessing algorithmic bias to safety evaluations probing model robustness, privacy-preserving mechanisms ensure auditors cannot infer sensitive information about data points or models. However, this protection has a subtle cost. Allocating privacy budgets across harm dimensions creates uneven observability : some dimensions become harder to detect due to variations in query frequency, privacy budget, or detection sensitivity. This asymmetry protects privacy but creates strategic incentives for the audited system. Consider a strategic developer operating the audited system, facing queries about performance failures across dimensions, like false positive rates on subgroups or safety lapses in corner cases. We use developer for this strategic agent, whether an ML platform, model provider, or in-house team. If the developer anticipates some dimensions will be noisier, less frequently queried, or assigned smaller privacy budgets, it has an incentive to reallocate mitigation efforts away from low-detectability regions and concentrate harms there. The privacy mechanism, meant to protect privacy during audits, creates an oppor-tunity for the developer to hide failures in less observable areas. This tension between privacy as protection and audit evasion defines the core problem we address. We ask: if an auditor knows the developer will behave strategically in response to the audit interface, how should the auditor design queries and privacy budgets to minimize true undetected harm? Strategic responses to evaluations have been studied in the context of classifier games and strategic classification (Hardt et al., 2016; Dong et al., 2018), where agents learn to manipulate their features when they know they will be evaluated. Audit games have been modeled as bilevel competitions between an auditor who chooses what to inspect and an adversary who reallocates defensive resources in response (Blocki et al., 2015). Privacy auditing has simultaneously grown into a mature empirical field, with demon-strated attacks on trained models showing that information leakage is detectable and 1closely tracked by theoretical differential privacy (DP) bounds (Tramèr et al., 2022; Nasr, Hayes, et al., 2023). However, no prior work jointly models the critical combination of three structural elements: (a) DP composition and the auditor’s allocation of privacy budgets across multiple harm dimensions; (b) the auditor’s commitment to a fixed query policy and privacy allocation, which the strategic developer can observe before choosing its own actions; and (c) the strategic developer’s best-response reallocation of mitigation effort, subject to a cost budget and aiming to minimize audit exposure. The gap is struc-tural. Privacy-auditing papers design audits without modeling the strategic response to the audit interface itself. Strategic-classification papers model agent responses but as-sume fully observed features, not privacy-noised observations. Audit-game papers do not incorporate DP constraints at all and thus do not capture how detectability heterogene-ity created by privacy noise changes incentives. The triple intersection—DP-constrained observation, auditor commitment, and strategic developer response—remains unexplored and is the setting of this study. We formalize this gap as a Stackelberg game between an auditor and a developer. The auditor first commits to a query policy 𝜋 (specifying the probability of querying each harm dimension) and a privacy budget allocation 𝜀 = (𝜀 1, … , 𝜀 𝑑 ) across 𝑑 dimen-sions, subject to a total privacy budget constraint and standard composition rules. Astrategically rational developer, anticipating this commitment and knowing which dimen-sions are noisier and less queried, solves its own optimization problem: it reallocates mitigation efforts to minimize expected audit exposure (weighted by detectability) plus mitigation cost, thereby concentrating residual harm in dimensions where the effective detectability 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) is lowest. We introduce the welfare-weighted under-detection gap ,
+
+𝐵 𝑤 (𝜋, 𝜀) = ∑ 
+
+> 𝑗
+
+𝑤 𝑗 (1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )) 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗𝑗 (𝜋, 𝜀)), 
+
+This measures the welfare-weighted true residual harm that the audit fails to detect. 𝐵 𝑤 
+
+is non-negative under DP, and the substantive question is whether strategic reallocation by the developer makes 𝐵 𝑤 strictly larger than under a non-strategic baseline mitigation. 2When the developer concentrates residual harm in low-detectability regions, the audit’s miss-probability 1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) constructively couples with the inflated 𝑔 𝑗 to enlarge 𝐵 𝑤 .Our contributions are threefold. First , we formalise privacy-constrained auditing as a Stackelberg game over per-dimension query and privacy-budget allocation against a strategic developer, and define the welfare-weighted under-detection gap 𝐵 𝑤 as the central object of audit quality. Second , we prove naïve DP auditing (uniform or harm-proportional) induces strictly larger 𝐵 𝑤 than non-strategic baselines under heterogeneous detectability, non-comonotone welfare weights, and interior solutions, and show optimal audit design is non-harm-proportional — it depends jointly on 𝛼 𝑗 , 𝑤 𝑗 , and mitigation-cost elasticity. Third , we derive a single-level reformulation via the developer’s KKT conditions and propose SPAD for computing near-optimal allocations; we specify a syn-thetic evaluation protocol and report a single preliminary ablation in §5.1 grounding the abstract’s quantitative claim, with broader empirical validation deferred to a companion paper. §2–5 formalise the model, prove the strategic blind-spot result, present SPAD, and report a preliminary ablation; §6 covers related work, scope, and future directions. 
+
+# 2 Model 
+
+We formalize privacy-constrained auditing as a bilevel game in which an auditor allocates queries and privacy budgets across harm dimensions, anticipating a strategic developer who reallocates mitigation efforts in response to the resulting audit interface. 
+
+## 2.1 Setup: harm space and welfare 
+
+We model a system that can cause harm across 𝑑 dimensions. Let 𝑗 ∈ {1, … , 𝑑} index these dimensions, which may represent demographic subgroups, failure modes, or other sensitive attributes. Let ℎ ∈ ℝ 𝑑 + denote the baseline harm vector, where ℎ𝑗 is the latent harm in dimension 𝑗 in the absence of any mitigation. Let 𝑤 ∈ ℝ 𝑑 + be a welfare weight vector, where 𝑤 𝑗 reflects the social importance of reducing harm in dimension 𝑗 .3The auditor’s welfare-relevant objective is to minimize the sum of welfare-weighted residual harms: 𝐿(ℎ res ) = ∑ 𝑑 𝑗=1 𝑤 𝑗 ℎres  
+
+> 𝑗
+
+, where ℎres ∈ ℝ 𝑑 + is the residual harm vector after the developer’s mitigation. Vector 𝑤 represents the priorities of an external auditor or regulator, not the developer’s objectives. We treat the auditor as a normative welfare planner: the framework asks how a regulator who genuinely cares about welfare-weighted harm should design audits, not how any specific real-world regulator currently behaves; the latter is a positive question we leave to follow-up work and discuss as a misuse pathway in Appendix D. 
+
+## 2.2 Auditor: query and privacy-budget allocation 
+
+The auditor’s action consists of two choices: a query policy 𝜋 ∈ Δ 𝑑 specifying the dis-tribution of audit queries over the 𝑑 harm dimensions ( 𝜋 𝑗 is the probability of querying dimension 𝑗 ), and a privacy budget allocation 𝜀 = (𝜀 1, … , 𝜀 𝑑 ) ∈ ℝ 𝑑 +, where 𝜀 𝑗 is the DP budget for queries to dimension 𝑗 . These choices are subject to 
+
+> 𝑑
+
+∑
+
+> 𝑗=1
+
+𝜀 𝑗 ≤ 𝜀 tot , 𝜋 ∈ Δ 𝑑 , 𝜀 𝑗 ≥ 0. 
+
+For each query to dimension 𝑗 , the audit interface returns a noisy observation 𝑦 𝑗 =𝑀 𝑗 (ℎ res  
+
+> 𝑗
+
+; 𝜀 𝑗 ), where 𝑀 𝑗 is a differentially private mechanism, and whose accuracy improves with 𝜀 𝑗 . We abstract its behavior via a detectability function. 
+
+Assumption 2.1. For each dimension 𝑗 there exists a detectability function 𝛼 𝑗 ∶ ℝ + →[0, 1] that is strictly increasing and continuously differentiable, with 𝛼 𝑗 (0) = 0 and lim 𝜀→∞ 𝛼 𝑗 (𝜀) = 1 . The function 𝛼 𝑗 (𝜀 𝑗 ) captures the effective sensitivity of the audit outcome in dimension 𝑗 to true residual harm. The detectability function is a reduced-form encoding of how the privacy–utility trade-off translates into observability, calibrated at a fixed reference operating point ℎres ,0 𝑗 (Ap-pendix B gives explicit constructions for the Gaussian, Laplace, and randomised-response mechanisms). Holding 𝛼 𝑗 as a function of 𝜀 𝑗 alone — rather than the full ̃ 𝛼 𝑗 (𝜀 𝑗 , ℎ res  
+
+> 𝑗
+
+) — is a modelling abstraction that preserves Theorem 3.2’s qualitative conclusion but changes 4quantitative outcomes; the full coupling is treated as future work. In the local DP setting, 
+
+𝛼 𝑗 (𝜀 𝑗 ) relates to the asymptotic detection rate of private estimators (Duchi et al., 2013; Bun et al., 2018); in the global DP regime, it depends on composition bounds (Bassily et al., 2016; Bu et al., 2020). 
+
+## 2.3 Developer: mitigation under a cost budget 
+
+The developer chooses a mitigation allocation 𝑚 ∈ ℝ 𝑑 +, where 𝑚 𝑗 is the effort directed at reducing harm in dimension 𝑗 , subject to a total cost budget 𝐵 :
+
+𝑚 𝑗 ≥ 0 for all 𝑗, 𝐶(𝑚) = 
+
+> 𝑑
+
+∑
+
+> 𝑗=1
+
+𝑐 𝑗 (𝑚 𝑗 ) ≤ 𝐵, 
+
+with 𝑐 𝑗 ∶ ℝ + → ℝ + the cost function for mitigation in dimension 𝑗 . Residual harm is determined jointly by baseline harm and mitigation: ℎres  
+
+> 𝑗
+
+≡ ℎ res  
+
+> 𝑗
+
+(𝑚 𝑗 ) ∶= 𝑔 𝑗 (ℎ 𝑗 , 𝑚 𝑗 ),with 𝑔 𝑗 decreasing in its second argument and 𝑔 𝑗 (ℎ 𝑗 , 0) = ℎ 𝑗 (we suppress the fixed argument ℎ𝑗 and write ℎres  
+
+> 𝑗
+
+or ℎres  
+
+> 𝑗
+
+(𝑚 𝑗 ) interchangeably). Standard examples include 
+
+ℎres  
+
+> 𝑗
+
+= ℎ 𝑗 exp (−𝛽 𝑗 𝑚 𝑗 ) or ℎres  
+
+> 𝑗
+
+= max {ℎ 𝑗 − 𝛾 𝑗 𝑚 𝑗 , 0} .
+
+Assumption 2.2. Each cost function 𝑐 𝑗 is strictly increasing, strictly convex, and coer-cive ( 𝑐 𝑗 (𝑚 𝑗 ) → ∞ as 𝑚 𝑗 → ∞ ) with 𝑐 𝑗 (0) = 0 . The residual harm function 𝑔 𝑗 (⋅, 𝑚 𝑗 ) is strictly convex in 𝑚 𝑗 for each fixed ℎ𝑗 > 0 .The coercivity of 𝑐 𝑗 rules out cost functions with bounded growth (it holds for power-law 𝑐 𝑗 (𝑚 𝑗 ) = 𝑚 𝑝 𝑗 /𝑝 with 𝑝 > 1 and is needed for compact sublevel sets in Lemma 3.1). The strict convexity of 𝑔 𝑗 (ℎ 𝑗 , ⋅) implies a diminishing marginal effectiveness of the miti-gation effort, and the strict convexity of 𝑐 𝑗 captures an increasing marginal cost. 
+
+## 2.4 Developer’s objective: minimize audit exposure plus cost 
+
+The central asymmetry is that the developer does not minimize welfare-weighted resid-ual harm; it minimizes expected audit exposure. The harm detected in dimension 𝑗 is 5DetHarm 𝑗 (𝜋, 𝜀, 𝑚) = 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )ℎ res  
+
+> 𝑗
+
+(𝑚 𝑗 ). The developer solves 
+
+𝑚 ∗(𝜋, 𝜀) ∈ arg min 
+
+> 𝑚∈ℝ 𝑑 +∶𝐶(𝑚)≤𝐵 𝑑
+
+∑
+
+> 𝑗=1
+
+𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )𝑔 𝑗 (ℎ 𝑗 , 𝑚 𝑗 ) + 𝐶(𝑚). (2.1) This best response minimizes the developer’s exposure—detected harm plus mitigation cost—not welfare-weighted true residual harm. This misalignment generates strategic blind spots. 
+
+## 2.5 Auditor’s objective: bilevel optimization 
+
+The auditor anticipates the developer’s response and solves the bilevel problem min  
+
+> 𝜋∈Δ 𝑑 , 𝜀≥0∶∑ 𝑗 𝜀 𝑗 ≤𝜀 tot
+
+𝐵 𝑤 (𝜋, 𝜀), 𝐵 𝑤 ∶= ∑ 
+
+> 𝑗
+
+𝑤 𝑗 (1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )) 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗(𝜋, 𝜀) 𝑗 ), (2.2) the welfare-weighted under-detection gap (Definition 2.5). We retain TRH (𝜋, 𝜀) ∶= ∑𝑗 𝑤 𝑗 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗𝑗 ) as a diagnostic and as the basis for Proposition 4.3; 𝐵 𝑤 ≤ TRH point-wise. The Stackelberg structure parallels strategic classification (Hardt et al., 2016; Dong et al., 2018) and security games (Blocki et al., 2015; Korzhyk et al., 2011; Schlenker et al., 2017). 
+
+## 2.6 Detected harm and the blind-spot gap 
+
+Definition 2.3 (Detected harm) . DH (𝜋, 𝜀, 𝑚) = ∑ 𝑑 𝑗=1 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )𝑔 𝑗 (ℎ 𝑗 , 𝑚 𝑗 ). 
+
+Definition 2.4 (True residual harm) . TRH (𝜋, 𝜀) = ∑ 𝑑 𝑗=1 𝑤 𝑗 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗(𝜋, 𝜀) 𝑗 ). 
+
+Definition 2.5 (Welfare-weighted under-detection gap) .
+
+𝐵 𝑤 (𝜋, 𝜀) = 
+
+> 𝑑
+
+∑
+
+> 𝑗=1
+
+𝑤 𝑗 (1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )) 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗(𝜋, 𝜀) 𝑗 ). 𝐵 𝑤 is the welfare-weighted true residual harm that the audit fails to detect, with 𝑤 𝑗 
+
+giving the welfare weight and 1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) being the audit miss probability. 𝐵 𝑤 ≥ 0 
+
+under DP, with equality only when the audit coverage is perfect on every dimension 6with positive residual harm; the substantive question (Theorem 3.2) is whether strategic 
+
+reallocation makes 𝐵 𝑤 strictly larger than under a non-strategic baseline. 
+
+## 2.7 A worked example with three dimensions 
+
+Consider 𝑑 = 3 harm dimensions with ℎ = (1, 1, 1) , heterogeneous welfare weights 𝑤 = (3, 1, 1) , 𝜀 tot = 3 , 𝛼 𝑗 (𝜀 𝑗 ) = 1− exp (−𝜀 𝑗 ), smooth residual harm 𝑔 𝑗 (ℎ 𝑗 , 𝑚 𝑗 ) = ℎ 𝑗 exp (−𝑚 𝑗 ),
+
+𝑐 𝑗 (𝑚 𝑗 ) = 𝑚 2𝑗 /2 , and developer cost budget 𝐵 = 1.5 . The numerics were computed using an exact KKT solver (script in the replication package). Under the naïve uniform allocation ( 𝜋 𝑗 = 1/3 , 𝜀 𝑗 = 1 ), 𝛼 𝑗 (1) ≈ 0.632 on every dimen-sion; the developer’s interior best response is 𝑚 ∗𝑗 ≈ 0.177 uniformly, with ℎres  
+
+> 𝑗
+
+≈ 0.838 ,DH ≈ 0.530 , TRH ≈ 4.191 , and 𝐵 𝑤 ≈ 3.308 . Under a welfare-aware policy 𝜋 = (0.6, 0.2, 0.2) , 𝜀 = (2.4, 0.3, 0.3) , the detectabilities become 𝛼 = (0.909, 0.259, 0.259) . The strategic developer concentrates mitigation on the high-detectability dimension ( 𝑚 ∗ ≈(0.375, 0.049, 0.049) ), so ℎres ≈ (0.687, 0.952, 0.952) : residual harm shifts toward the low-detectability dimensions, but those have small welfare weights; therefore, TRH drops to ≈ 3.966 and 𝐵 𝑤 to ≈ 2.742 (∼17% reduction). The mechanism: the auditor coordi-nates queries, privacy budget, and welfare prioritization jointly with anticipated developer adaptation. 
+
+# 3 Strategic Blind Spots Under Naïve Auditing 
+
+This section establishes the core negative result: under privacy-constrained auditing, non-strategic (uniform or harm-proportional) audit policies create systematic gaps between the detected and true residual harm. The key insight is that DP induces uneven observ-ability across dimensions, which strategically rational developers exploit by migrating residual harm toward low-detectability regions. 73.1 Developer best response under fixed audit policy 
+
+Fix an audit policy (𝜋, 𝜀) . Given the lower-level problem (2.1), the developer’s objective is convex on a convex feasible region. We have: 
+
+Lemma 3.1 (Existence and uniqueness of best response) . Suppose Assumptions 2.1–2.2 hold and that 𝑐 𝑗 are strictly convex and 𝑔 𝑗 (ℎ 𝑗 , ⋅) strictly convex in 𝑚 𝑗 . For any fixed (𝜋, 𝜀) 
+
+with 𝜋 ∈ Δ 𝑑 and 𝜀 ≥ 0 , the developer’s lower-level problem admits a unique best-response mitigation allocation 𝑚 ∗(𝜋, 𝜀) .Proof sketch. The objective in (2.1) is a sum of strictly convex per-dimension terms (𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )𝑔 𝑗 (ℎ 𝑗 , ⋅) + 𝑐 𝑗 (⋅) ) over the convex feasible set {𝑚 ≥ 0 ∶ 𝐶(𝑚) ≤ 𝐵} . Strict convexity provides at most one minimizer. Existence follows because 𝑐 𝑗 (𝑚 𝑗 ) → ∞ as 
+
+𝑚 𝑗 → ∞ (strict convexity of 𝑐 𝑗 with 𝑐 𝑗 (0) = 0 implies coercivity); thus, the sublevel sets of the objective are compact in the feasible set. Hence, 𝑚 ∗(𝜋, 𝜀) exists and is unique. At an interior optimum where 𝑚 ∗𝑗 > 0 , the first-order condition for dimension 𝑗 is 
+
+𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) ∣ 𝜕𝑔 𝑗 
+
+𝜕𝑚 𝑗 
+
+∣ = (1 + 𝜆) 𝑐 ′𝑗 (𝑚 𝑗 ), (3.1) where 𝜆 ≥ 0 is the multiplier on the cost budget constraint 𝐶(𝑚) ≤ 𝐵 . The marginal cost of mitigation in dimension 𝑗 has two components: the soft cost 𝑐 ′𝑗 (𝑚 𝑗 ) from the additive 𝐶(𝑚) term in the developer’s objective and the shadow price 𝜆𝑐 ′𝑗 (𝑚 𝑗 ) of the hard budget; together, they give (1 + 𝜆) 𝑐 ′𝑗 (𝑚 𝑗 ). The developer equalizes the marginal reduction in detectability-weighted exposure per unit (soft + shadow) cost across active dimensions; dimensions with high 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) require more mitigation effort. 
+
+## 3.2 The mechanism of blind spots 
+
+Consider two dimensions, 𝑗, 𝑘 with equal welfare and baseline harm but different de-tectability: 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) > 𝜋 𝑘 𝛼 𝑘 (𝜀 𝑘 ). By (3.1), the developer chooses 𝑚 ∗𝑗 > 𝑚 ∗𝑘 , that is, more mitigation in the high-detectability dimension. This produces unequal residual 8harm, ℎres  
+
+> 𝑘
+
+> ℎ res  
+
+> 𝑗
+
+, indicating that the low-detectability dimension retains larger residual harm. The auditor detects harm DH (𝜋, 𝜀, 𝑚 ∗) = ∑ ℓ 𝜋 ℓ𝛼 ℓ(𝜀 ℓ)ℎ res  
+
+> ℓ
+
+by weighting residuals by detectability; thus, the term for dimension 𝑘 is the product of large residual harm and small detectability weight. In contrast, the welfare-relevant TRH (𝜋, 𝜀) = ∑ ℓ 𝑤 ℓℎres 
+
+> ℓ
+
+weights by welfare, not detectability. Misalignment produces a blind spot. 
+
+## 3.3 Theorem 1: naïve DP auditing induces a positive blind-spot gap 
+
+Theorem 3.2 (Strategic blind spots under naïve auditing) . Suppose Assumptions 2.1– 2.2 hold, and that (i) ℎ𝑗 > 0 for all 𝑗 ; (ii) 𝑤 𝑗 > 0 for all 𝑗 ; (iii) effective detectability is heterogeneous, i.e. there exist 𝑗, 𝑘 with 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) ≠ 𝜋 𝑘 𝛼 𝑘 (𝜀 𝑘 ); (iv) the welfare weights 𝑤 and effective detectability 𝛿 = (𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )) 𝑗 are not comonotone on the support of the residual-harm vector at the developer’s best response; (v) the developer’s lower-level problem has an interior optimum: 𝑚 ∗𝑗 > 0 for all 𝑗 ; (vi) residual harm at the strategic best response is anti-monotone with effective detectability on the active set: 𝛿 𝑗 > 𝛿 𝑘 ⇒ 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗𝑗 ) < 𝑔 𝑘 (ℎ 𝑘 , 𝑚 ∗𝑘 ).1 Let (𝜋 naive , 𝜀 naive ) be either the uniform (𝜋 𝑗 = 1/𝑑, 𝜀 𝑗 = 𝜀 tot /𝑑) or any harm-proportional (𝜋 𝑗 ∝ ℎ 𝑗 , 𝜀 𝑗 ∝ ℎ 𝑗 ) allocation, and let 𝑚 ns be any budget-exhausting non-strategic mitigation: 𝑚 ns depends only on (ℎ, 𝑤, 𝑐, 𝐵) (not on 𝛿 ) and satisfies 𝐶(𝑚 ns ) = 𝐵 
+
+(e.g. 𝑚 ns  
+
+> 𝑗
+
+∝ ℎ 𝑗 or ∝ 𝑤 𝑗 ℎ𝑗 , rescaled). Then 
+
+𝐵 𝑤 (𝜋 naive , 𝜀 naive )∣ 𝑚=𝑚 ∗
+
+> 𝐵 𝑤 (𝜋 naive , 𝜀 naive )∣ 𝑚=𝑚 ns 
+
+.
+
+Proof sketch. Let 𝛿 ℓ ∶= 𝜋 naive  
+
+> ℓ
+
+𝛼 ℓ(𝜀 naive  
+
+> ℓ
+
+), ℎres  
+
+> ℓ
+
+∶= 𝑔 ℓ(ℎ ℓ, 𝑚 ∗ℓ), ℎns  
+
+> ℓ
+
+∶= 𝑔 ℓ(ℎ ℓ, 𝑚 ns  
+
+> ℓ
+
+), and 
+
+𝑢 ℓ ∶= 𝑤 ℓ(1 − 𝛿 ℓ). Since 𝜋 naive , 𝜀 naive are fixed, 𝐵 𝑤 depends on 𝑚 only through ℎres ,and the difference decomposes as 𝐵 𝑤 (𝑚 ∗) − 𝐵 𝑤 (𝑚 ns ) = ∑ ℓ 𝑢 ℓ (ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+). Hypothe-sis (vi) supplies anti-monotonicity of ℎres with 𝛿 on the active set; together with budget          
+
+> 1Sufficient under homogeneous (𝑔, 𝑐, ℎ) . Under heterogeneous parameters, (vi) is violated in ∼50% of pairs under naive auditing, yet the theorem’s conclusion 𝐵 𝑤 (𝑚 ∗) > 𝐵 𝑤 (𝑚 ns )holds in 1600/1600 verified cells for both 𝑚 ns ∝ ℎ and ∝ 𝑤ℎ baselines ( scripts/verify_theorem1_conclusion.py ), indicating a weaker net-rearrangement hypothesis is operative; details in Appendix A.
+
+9exhaustion of 𝑚 ns and the developer’s FOC, ℎres − ℎ ns is positive on low-𝛿 dimensions and negative on high-𝛿 dimensions. Hypothesis (iv) (non-comonotonicity of 𝑤 and 𝛿 )carries to 𝑢 , so the large 𝑢 ℓ values pair with the positive (ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+) entries; the strict rearrangement inequality then yields ∑ℓ 𝑢 ℓ(ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+) > 0 . A full argument is provided in Appendix A. 
+
+## 3.4 What drives the gap: detectability, cost, and budget 
+
+Three factors determine the magnitude of the strategic gap. Detectability heterogeneity: 
+
+if 𝛿 ℓ ∶= 𝜋 ℓ𝛼 ℓ(𝜀 ℓ) is constant, the strategic and non-strategic responses coincide and the gap collapses; larger heterogeneity widens it. Cost-curvature heterogeneity: cheaper mitigation on high-detectability dimensions amplifies reallocation. Budget tightness: the gap scales with relative heterogeneity 𝜋 𝑗 𝛼 𝑗 /𝜋 𝑘 𝛼 𝑘 , not absolute 𝜀 tot .
+
+## 3.5 Corollary: harm-proportional allocation is not optimal 
+
+Corollary 3.3 (Harm-proportional allocation is suboptimal) . Under Assumptions 2.1– 2.2, heterogeneous detectability {𝛼 𝑗 (⋅)} , and an interior best response, the harm-proportional policy (𝜋 hp  
+
+> 𝑗
+
+, 𝜀 hp  
+
+> 𝑗
+
+) ∝ ℎ 𝑗 does not minimize 𝐵 𝑤 (𝜋, 𝜀) ; there exists a feasible perturbation 
+
+(𝜋 hp + 𝜏Δ𝜋, 𝜀 hp + 𝜏Δ𝜀) with 𝜏 > 0 small such that 𝐵 𝑤 (𝜋 hp + 𝜏 Δ𝜋, 𝜀 hp + 𝜏 Δ𝜀) < 𝐵 𝑤 (𝜋 hp , 𝜀 hp ).Proof sketch. The perturbation Δ𝜀 with +1 in 𝑗 ∗ = arg max ℓ 𝛼 ′ℓ(𝜀 hp  
+
+> ℓ
+
+) and −1 in 𝑘 ∗ =
+
+arg min ℓ 𝛼 ℓ(𝜀 hp  
+
+> ℓ
+
+) has a strictly negative directional derivative for 𝐵 𝑤 at (𝜋 hp , 𝜀 hp ): the direct effect tightens audit coverage on the high-elasticity dimension faster than it loosens it on the low-coverage one, and the indirect (developer-response) effect inherits the same sign as for TRH. Full computation in Appendix A. 
+
+# 4 Optimal Private Audit Design 
+
+We now characterize the optimal audit design, which is the allocation that minimizes the welfare-weighted under-detection gap 𝐵 𝑤 when the developer responds rationally. We 10 show three results: (i) the optimal design is fundamentally non-proportional to baseline harm (Theorem 4.1); (ii) the bilevel problem admits a tractable single-level reformulation via the developer’s KKT conditions (Theorem 4.2); and (iii) we provide an algorithm, Strategic Private Audit Design (SPAD). 
+
+## 4.1 Theorem 2: optimal allocation is non-harm-proportional 
+
+Theorem 4.1 (Non-proportionality of optimal allocation) . Let (𝜋 ⋆, 𝜀 ⋆) minimize 𝐵 𝑤 (𝜋, 𝜀) 
+
+over the feasible set {𝜋 ∈ Δ 𝑑 , 𝜀 ≥ 0, ∑ 𝑗 𝜀 𝑗 ≤ 𝜀 tot } under Assumptions 2.1–2.2. Then 
+
+(𝜋 ⋆, 𝜀 ⋆) is not generically harm-proportional: there exist parameter profiles such that 
+
+𝜋 ⋆𝑗 ≠ ℎ𝑗 
+
+∑𝑘 ℎ𝑘 
+
+and 𝜀 ⋆𝑗 ≠ 𝜀 tot ℎ𝑗 
+
+∑𝑘 ℎ𝑘 
+
+.
+
+Proof sketch. The gradient of 𝐵 𝑤 has a direct term in (𝜋, 𝜀) through the audit-coverage factor 1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) and an indirect term through 𝑚 ∗(𝜋, 𝜀) . Combining the auditor’s first-order conditions with the implicit differentiation of the developer’s FOC (3.1) yields a four-factor optimality condition balancing the welfare weight 𝑤 𝑗 , audit miss-probability 
+
+1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ), detectability elasticity 𝛼 ′𝑗 (𝜀 𝑗 ), and the effective marginal-mitigation-cost curvature 𝐷 𝑗 that combines harm-curvature |𝜕 2𝑔 𝑗 /𝜕𝑚 2𝑗 | and cost-curvature 𝑐 ″𝑗 contribu-tions; harm-proportional allocation violates it generically. Full derivation, exact 𝐷 𝑗 , and a 𝑑=2 counter-example with 𝜅 1 ≠ 𝜅 2: Appendix A. 
+
+Qualitative structure. Dimensions with large 𝑤 𝑗 𝛼 𝑗 (𝜀 𝑗 ) justify larger budgets; cheap-mitigation dimensions (low 𝑐 ″𝑗 ) need a lighter touch. The welfare–detectability mismatch drives the gap, paralleling Stackelberg security game design (Korzhyk et al., 2011; Blocki et al., 2015; Schlenker et al., 2017). 
+
+## 4.2 Theorem 3: bilevel reduction via KKT substitution 
+
+Theorem 4.2 (Single-level reduction via KKT substitution) . Suppose Assumptions 2.1– 2.2 hold, with 𝑐 𝑗 and 𝑔 𝑗 twice continuously differentiable and the developer’s lower-level 
+
+11 problem strictly convex with a unique interior optimum. Then, the auditor’s bilevel problem (2.2) admits an equivalent single-level reformulation obtained by substituting the developer’s KKT conditions: 
+
+min 
+
+> 𝜋,𝜀,𝑚,𝜇 𝑑
+
+∑
+
+> 𝑗=1
+
+𝑤 𝑗 (1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ))𝑔 𝑗 (ℎ 𝑗 , 𝑚 𝑗 ) (4.1) 
+
+s.t. 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) 𝜕𝑔 𝑗 
+
+> 𝜕𝑚 𝑗
+
++ (1 + 𝜇) 𝑐 ′𝑗 (𝑚 𝑗 ) = 0 ∀𝑗, (𝜇 is the cost-budget multiplier, = 𝜆 in (3.1) ), 
+
+(4.2) 
+
+∑
+
+> 𝑗
+
+𝑐 𝑗 (𝑚 𝑗 ) ≤ 𝐵, 𝑚 𝑗 ≥ 0, (4.3) 
+
+𝜇 ≥ 0, 𝜇(𝐵 − ∑ 
+
+> 𝑗
+
+𝑐 𝑗 (𝑚 𝑗 )) = 0, (4.4) 
+
+𝜋 ∈ Δ 𝑑 , 𝜀 ≥ 0, ∑ 
+
+> 𝑗
+
+𝜀 𝑗 ≤ 𝜀 tot . (4.5) 
+
+This is a mathematical program with complementarity constraints (MPCC). Under MPEC-LICQ and strict complementarity at the optimum—both generic in (ℎ, 𝑤, 𝛼, 𝑐, 𝜀 tot , 𝐵) but not automatic—it reduces locally to a smooth NLP whose KKT points are S-stationary points of the MPCC. We assume strict complementarity at the optimum throughout; if it fails (e.g., the developer’s cost budget is slack at 𝑚 ∗, so 𝜇 = 0 and complementarity is degenerate), gradient methods may converge to W-stationary points that are not KKT points of the original bilevel problem. We discuss this regime in §6. Proof sketch. The developer’s KKT conditions are necessary and sufficient based on strict convexity (Lemma 3.1); imposing them yields an equivalent MPCC. The MPEC-LICQ and generic strict complementarity arguments are deferred to Appendix A. 
+
+Computational consequence. The single-level reformulation enables standard gradi-ent methods. ∇𝐵 𝑤 admits an analytical form ( 𝑑×𝑑 KKT linear solve for the indirect term plus the closed-form direct term) and a numerical variant via 2𝑑 forward finite-difference perturbations through the developer’s best response (more robust near the active-set boundary; used in our preliminary implementation). Random restarts mitigate spurious local optima; penalty relaxation or NLP solvers (IPOPT, SNOPT) are alternatives if 12 MPEC-LICQ is in doubt. 
+
+## 4.3 Algorithm: Strategic Private Audit Design (SPAD) 
+
+Algorithm 1 Strategic Private Audit Design (SPAD) 
+
+Input: harm prior ℎ, welfare weights 𝑤 , detectability functions {𝛼 𝑗 }, mitigation costs {𝑐 𝑗 },total privacy budget 𝜀 tot , developer type 𝜃 , tolerance 𝛿 , step size 𝜂 .
+
+Output: optimized 𝜋 ⋆, 𝜀 ⋆. 
+
+> 1:
+
+Initialize 𝜋 (0) ∈ Δ 𝑑 , 𝜀 (0) ∈ ℰ where ℰ ≔ {𝜀 ∈ ℝ 𝑑 + ∶ ∑ 𝑗 𝜀 𝑗 ≤ 𝜀 tot }. Set 𝑡 ← 0 . 
+
+> 2:
+
+while not converged do  
+
+> 3:
+
+Inner solver: compute 𝑚 ⋆(𝜋 (𝑡) , 𝜀 (𝑡) ) by a convex program (projected gradient or interior point).  
+
+> 4:
+
+Objective: 𝐵 (𝑡) 𝑤 ← ∑ 𝑗 𝑤 𝑗 (1 − 𝜋 (𝑡) 𝑗 𝛼 𝑗 (𝜀 (𝑡) 𝑗 )) 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ⋆𝑗 ). 
+
+> 5:
+
+Hypergradient: compute ∇𝜋,𝜀 𝐵 (𝑡) 𝑤 as the sum of the direct term in the audit-coverage factor and the indirect term through 𝑚 ⋆, either via implicit differentiation of the developer’s KKT system ( 𝑑 × 𝑑 linear solve) or via 2𝑑 forward finite-difference perturbations of the developer best response.  
+
+> 6:
+
+Projected step: (𝜋 (𝑡+1) , 𝜀 (𝑡+1) ) ← Proj Δ𝑑 ×ℰ ((𝜋 (𝑡) , 𝜀 (𝑡) ) − 𝜂∇𝐵 (𝑡) 𝑤 ). 
+
+> 7:
+
+Check ‖∇𝐵 (𝑡) 𝑤 ‖ ≤ 𝛿 . 𝑡 ← 𝑡 + 1 . 
+
+> 8:
+
+end while  
+
+> 9:
+
+return (𝜋 (𝑡) , 𝜀 (𝑡) ).
+
+Complexity. ̃ 𝑂(𝑇 𝑑 3) analytically or ̃ 𝑂(𝑇 𝑑 4) with finite differences ( 𝑇 = 10 –50 suf-fices in moderate dimensions); DP composition constraints (Bassily et al., 2016; Liu and Talwar, 2019; Lee and Kifer, 2018; Bu et al., 2020) can be added as conic constraints. 
+
+## 4.4 Robust variant: uncertainty over developer types 
+
+When the developer’s type 𝜃 (cost budget, rationality) is uncertain, we formulate min 𝜋,𝜀 max 𝜃∈Θ 𝐵 𝑤 (𝜋, 𝜀; 
+
+For finite or sample-approximated Θ, the sample average approximation yields a tractable surrogate. Alternatively, alternating min–max iterates (i) in the auditor step via SPAD with 𝜃 fixed and (ii) in the adversary step via gradient ascent over Θ, typically converging in 5–20 iterations in our setting; convergence guarantees and duality-gap bounds for this scheme are deferred to future work. 13 4.5 Lower bound under tight privacy budgets 
+
+We give an informal lower bound for the tight-budget regime at 𝑑 = 2 and state the open generalization. Both rely on the threshold 
+
+𝜀 †(ℎ, 𝛼, 𝑐, 𝐵) ≔ min  
+
+> 𝑘∈{1,2}
+
+𝛼 −1 𝑘 (𝑐 ′𝑘 (𝐵/𝑑)/ℎ 𝑘 ), 
+
+which depends on the developer’s parameters only ( ℎ, 𝛼 , 𝑐 , 𝐵 ) and not on the welfare weights 𝑤 . The threshold is well-defined whenever 𝑐 ′𝑘 (𝐵/𝑑) < ℎ 𝑘 , which holds under Assumption 2.2 for sufficiently large 𝐵/𝑑 relative to 𝑐 ; we assume this regularity condition explicitly. Each 𝛼 𝑘 is invertible on its image under Assumption 2.1 (strictly increasing, 
+
+𝐶 1). 
+
+Proposition 4.3 (Unavoidable harm at 𝑑 = 2 , tight-budget regime) . Fix Assump-tions 2.1–2.2 with 𝑑 = 2 and assume 𝑐 ′𝑘 (𝐵/𝑑) < ℎ 𝑘 for 𝑘 ∈ {1, 2} , so that 𝜀 † > 0 
+
+is well-defined. For every 𝜀 tot < 2 𝜀 † and every feasible (𝜋, 𝜀) with ∑𝑗 𝜀 𝑗 ≤ 𝜀 tot ,
+
+TRH (𝜋, 𝜀) ≥ min (𝑤 1ℎ1, 𝑤 2ℎ2) − 𝑜(1) as 𝜀 tot → 0, 
+
+where the 𝑜(1) term vanishes uniformly over the feasible (𝜋, 𝜀) .Conjecture 4.4 (Unavoidable harm in general 𝑑 ). The bound of Proposition 4.3 extends to 𝑑 ≥ 3 as TRH ≥ min 𝑘 𝑤 𝑘 ℎ𝑘 − 𝑜(1) under a concavity-style condition controlling how effective detectability ∑𝑗 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) can be concentrated into a single dimension under 
+
+∑𝑗 𝜀 𝑗 ≤ 𝜀 tot .
+
+Proof idea. For 𝑑 = 2 , any feasible (𝜋, 𝜀) has min 𝑘 𝜀 𝑘 ≤ 𝜀 tot /2 < 𝜀 †. We choose 𝑘 0 that achieves this minimum; under the developer’s corrected interior FOC (3.1), 𝑚 ∗𝑘 0 → 0 as 
+
+𝜀 tot → 0 because the LHS detectability factor 𝛿 𝑘 0 = 𝜋 𝑘 0 𝛼 𝑘 0 (𝜀 𝑘 0 ) vanishes faster than the RHS (1 + 𝜆) 𝑐 ′𝑘 0 (𝑚 ∗𝑘 0 ) would require. Hence 𝑔 𝑘 0 (ℎ 𝑘 0 , 𝑚 ∗𝑘 0 ) → ℎ 𝑘 0 , so TRH ≥ 𝑤 𝑘 0 ℎ𝑘 0 −𝑜(1) . The auditor minimizes this lower bound by concentrating 𝑘 0 on the smaller-𝑤 𝑘 ℎ𝑘 
+
+dimension, yielding TRH ≥ min (𝑤 1ℎ1, 𝑤 2ℎ2) − 𝑜(1) . The full proof is in Appendix A; 14 the general-𝑑 extension requires a uniform bound on detectability concentration, which is still open. 
+
+# 5 Synthetic Evaluation Protocol 
+
+The protocol below grounds empirical follow-up work; we report a single preliminary ab-lation in §5.1 to ground the abstract’s quantitative claim. The protocol validates SPAD’s optimisation given the model’s strategic-developer assumption; whether real developers behave strategically in DP-audited settings is an empirical question for follow-up work. 
+
+The protocol isolates the strategic phenomena of §3–§4 and provides access to the ground-truth TRH and DH for the direct measurement of 𝐵 𝑤 (𝜋, 𝜀) . The environments span 𝑑 ∈ {5, 10, 20} with sparse/diffuse harm priors; detectability 𝛼 𝑗 (𝜀 𝑗 ) = 1− exp (−𝜅 𝑗 𝜀 𝑗 )
+
+(Duchi et al., 2013; Bu et al., 2020) with 𝜅 𝑗 ∈ [0.1, 2.0] ; cost families linear, quadratic, and power-law; 𝜀 tot ∈ {0.1, 0.5, 1, 2, 5} . Developer types: fully strategic (FS), bound-edly rational (BR; 𝐾=50 steps), and non-strategic (NS; mitigation ∝ 𝑤 𝑗 ℎ𝑗 ). Auditor baselines: UNIF, HP, WP, uncertainty-focused, and Oracle ( 𝜀 tot = ∞ ). Metrics: DH, TRH, 𝐵 𝑤 (absolute and relative). Pre-registered ablations sweep (𝜀 tot , 𝑑, 𝜅 𝑗 , dev , ℎ, 𝑐) .Full parameterization, statistical methodology, and complete tables are provided in the Appendix C. 
+
+## 5.1 Preliminary ablation: SPAD versus naïve baselines 
+
+A1 (uniform 𝑤 ) and A1b (Dirichlet 𝑤 ) each sweep 𝜀 tot ∈ {0.1, 0.5, 1, 2, 5} across 𝑑 ∈ {5, 10} , 50 seeds, dense ℎ, quadratic costs, FS+BR developers, baselines UNIF/HP/WP/SPAD; 
+
+8000 total evaluations, ∼ 15 min on a Mac Mini M4 (Appendix C: bootstrap CIs, 𝑡 -tests, full sweeps). Headline (FS, 𝜀 tot ≥ 0.5 ). Uniform 𝑤 : SPAD reduces 𝐵 𝑤 by 5–14% vs UNIF and 5–12% vs HP (WP = UNIF mechanically). Dirichlet 𝑤 : SPAD reduces 𝐵 𝑤 by 20–44% vs UNIF, 20–41% vs HP, and 13–20% vs WP — the SPAD-vs-WP gap isolates strategic-aware optimisation beyond welfare-targeted budgeting. All gaps exceed boot-strap 95% CIs by an order of magnitude. At 𝜀 tot = 0.1 Proposition 4.3 bites all baselines; 15 BR developers shrink the magnitudes but preserve the sign. Single-environment ablations under quadratic costs and exponential residual harm; broader validation is deferred to an empirical companion paper. 
+
+# 6 Related Work 
+
+Privacy and audit-policy literatures. DP-specific audits (Fredrikson et al., 2015; Shokri, 2015; Nasr, Shokri, et al., 2019; Ye et al., 2022; Carlini et al., 2023; Tramèr et al., 2022; Nasr, Hayes, et al., 2023; Kong et al., 2024; Jia et al., 2019; Naseri et al., 2022; Ponomareva et al., 2023) test whether implementations satisfy DP guarantees ; we instead use DP as an observability constraint in audits of downstream harms against a developer that reallocates defenses. Yang et al. (2023) adopt a Stackelberg DP-auditing framing focused on herd auditing (not per-dimension budget allocation); Das et al. (2026) study principal–agent audit-policy design with adversarial equilibrium selection but without DP composition. 
+
+Strategic agents, audit games, and privacy mechanisms. Strategic classification (Hardt et al., 2016; Dong et al., 2018; Chen et al., 2018) and performative prediction (Perdomo et al., 2020) model agent gaming but not multidimensional reallocation under noised audits; audit games (Blocki et al., 2015) and security games (Korzhyk et al., 2011; Schlenker et al., 2017; Yan et al., 2019) supply the bilevel template but assume clean observations. Privacy-aware mechanism design and adaptive composition (Nissim et al., 2012; Ghosh and Ligett, 2013; Duchi et al., 2013; Bun et al., 2018; Bassily et al., 2016; Bu et al., 2020; Dwork et al., 2019) treat 𝜀 as a budget, not a per-dimension Stackelberg choice. MPC-based fairness monitoring (He et al., 2026) targets post-market fairness audits in algorithmic hiring under MPC threat models, and is complementary to our DP-noised strategic-developer regime. No prior work jointly addresses DP composition, per-dimension commitment, and strategic mitigation reallocation. Limitations: one-shot commitment, exact best-response, mitigation-only adaptation; relaxations (repeated au-dits, noisy 𝜀 , concealment, bounded rationality) preserve Theorem 3.2 but not SPAD 16 optimality. 
+
+# References 
+
+Bassily, R., Nissim, K., Smith, A., Steinke, T., Stemmer, U., and Ullman, J. (2016) Al-gorithmic Stability for Adaptive Data Analysis. In: ACM Symposium on Theory of Computing (STOC) . Available at: https://doi.org/10.1145/2897518.2897566. Blocki, J., Christin, N., Datta, A., Procaccia, A. D., and Sinha, A. (2015) Audit Games with Multiple Defender Resources. In: AAAI Conference on Artificial Intelligence .Available at: https://doi.org/10.1609/aaai.v29i1.9317. Bu, Z., Dong, J., Long, Q., and Su, W. J. (2020) Deep Learning with Gaussian Differ-ential Privacy. Harvard Data Science Review . Available at: https://doi.org/10.1162/ 99608f92.cfc5dd25. Bun, M., Nelson, J., and Stemmer, U. (2018) Heavy Hitters and the Structure of Local Privacy. In: ACM Symposium on Theory of Computing (STOC) . Available at: https: //doi.org/10.1145/3196959.3196981. Carlini, N., Hayes, J., Nasr, M., Jagielski, M., Sehwag, V., Tramèr, F., Balle, B., Ip-polito, D., and Wallace, E. (2023) Extracting Training Data from Diffusion Models. In: USENIX Security Symposium . Available at: https://doi.org/10.48550/arxiv.2301. 13188. Chen, Y., Podimata, C., Procaccia, A. D., and Shah, N. (2018) Strategyproof Linear Regression in High Dimensions. In: ACM Conference on Economics and Computation (EC) . Available at: https://doi.org/10.1145/3219166.3219175. Das, S., Yu, F.-Y., and Zhang, Y. (2026) Optimally Auditing Adversarial Agents. In: 
+
+AAAI Conference on Artificial Intelligence . Available at: https://doi.org/10.1609/ aaai.v40i20.38722. Dong, J., Roth, A., Schutzman, Z., Waggoner, B., and Wu, Z. S. (2018) Strategic Classi-fication from Revealed Preferences. In: ACM Conference on Economics and Compu-tation (EC) . Available at: https://doi.org/10.1145/3219166.3219193. 17 Duchi, J. C., Jordan, M. I., and Wainwright, M. J. (2013) Local Privacy and Statistical Minimax Rates. In: IEEE Symposium on Foundations of Computer Science (FOCS) .Available at: https://doi.org/10.1109/focs.2013.53. Dwork, C., Kohli, N., and Mulligan, D. (2019) Differential Privacy in Practice: Expose your Epsilons! Journal of Privacy and Confidentiality . Available at: https://doi.org/ 10.29012/jpc.689. Fredrikson, M., Jha, S., and Ristenpart, T. (2015) Model Inversion Attacks that Exploit Confidence Information and Basic Countermeasures. In: ACM Conference on Com-puter and Communications Security (CCS) . Available at: https://doi.org/10.1145/ 2810103.2813677. Ghosh, A., and Ligett, K. (2013) Privacy and Coordination: Computing on Databases with Endogenous Participation. In: ACM Conference on Economics and Computation (EC) . Available at: https://doi.org/10.1145/2482540.2482585. Hardt, M., Megiddo, N., Papadimitriou, C., and Wootters, M. (2016) Strategic Classifi-cation. In: ACM Conference on Innovations in Theoretical Computer Science (ITCS) .Available at: https://doi.org/10.1145/2840728.2840730. He, C., Baranowska, N., Castañeira, J. A. E., Escriba, G., Juentgen, M., Via, A., Borge-sius, F. Z., and Biega, A. J. (2026) Co-designing for Compliance: Multi-party Com-putation Protocols for Post-Market Fairness Monitoring in Algorithmic Hiring. arXiv preprint . Available at: https://doi.org/10.48550/arXiv.2602.01837. Jia, J., Salem, A., Backes, M., Zhang, Y., and Gong, N. Z. (2019) MemGuard: Defending against Black-Box Membership Inference Attacks via Adversarial Examples. In: ACM Conference on Computer and Communications Security (CCS) . Available at: https: //doi.org/10.1145/3319535.3363201. Kong, W., Medina, A. M., and Ribero, M. (2024) DP-Auditorium: A Large-Scale Library for Auditing Differential Privacy. In: Proceedings of the IEEE Symposium on Security and Privacy (S&P) . Available at: https://doi.org/10.1109/sp54263.2024.00195. Korzhyk, D., Yin, Z., Kiekintveld, C., Conitzer, V., and Tambe, M. (2011) Stackelberg vs. Nash in Security Games: An Extended Investigation of Interchangeability, Equiva-18 lence, and Uniqueness. Journal of Artificial Intelligence Research . Available at: https: //doi.org/10.1613/jair.3269. Lee, J., and Kifer, D. (2018) Concentrated Differentially Private Gradient Descent with Adaptive per-Iteration Privacy Budget. In: ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD) . Available at: https://doi.org/10. 1145/3219819.3220076. Liu, J., and Talwar, K. (2019) Private Selection from Private Candidates. In: ACM Sym-posium on Theory of Computing (STOC) . Available at: https://doi.org/10.1145/ 3313276.3316377. Luo, Z.-Q., Pang, J.-S., and Ralph, D. (2015) Mathematical programs with equilibrium constraints . Cambridge, England: Cambridge University Press. Mironov, I. (2017) Rényi Differential Privacy. In: IEEE Computer Security Foundations Symposium (CSF) . Available at: https://doi.org/10.1109/CSF.2017.11. Naseri, M., Hayes, J., and Cristofaro, E. D. (2022) Local and Central Differential Privacy for Robustness and Privacy in Federated Learning. In: Network and Distributed System Security Symposium (NDSS) . Available at: https://doi.org/10.14722/ndss.2022.23054. Nasr, M., Hayes, J., Steinke, T., Hayase, J., Jagielski, M., Thakurta, A., Oprea, A., Terzis, A., Marfo, A., and Tramèr, F. (2023) Tight Auditing of Differentially Private Machine Learning. In: Proceedings of the 32nd USENIX Security Symposium . Available at: https://doi.org/10.48550/arxiv.2302.07956. Nasr, M., Shokri, R., and Houmansadr, A. (2019) Comprehensive Privacy Analysis of Deep Learning. In: IEEE Symposium on Security and Privacy (SP) . Available at: https://doi.org/10.1109/sp.2019.00065. Nissim, K., Orlandi, C., and Smorodinsky, R. (2012) Privacy-aware Mechanism Design. In: ACM Conference on Economics and Computation (EC) . Available at: https://doi. org/10.1145/2229012.2229073. Perdomo, J. C., Zrnic, T., Mendler-Dünner, C., and Hardt, M. (2020) Performative Predic-tion. In: International Conference on Machine Learning (ICML) . Available at: https: //doi.org/10.48550/arxiv.2002.06673. 19 Ponomareva, N., Hazimeh, H., Kurakin, A., Xu, Z., Denison, C. E., McMahan, H. B., Vassilvitskii, S., Chien, S., and Thakurta, A. (2023) How to DP-fy ML: A Practical Guide to Machine Learning with Differential Privacy. Journal of Artificial Intelligence Research . Available at: https://doi.org/10.1613/jair.1.14649. Schlenker, A., Xu, H., Guirguis, M., Kiekintveld, C., Sinha, A., Tambe, M., Sonya, S., Balderas, D., and Dunstatter, N. (2017) Don’t Bury your Head in Warnings: A Game-Theoretic Approach for Intelligent Allocation of Cyber-Security Alerts. In: Interna-tional Joint Conference on Artificial Intelligence (IJCAI) . Available at: https://doi. org/10.24963/ijcai.2017/54. Shokri, R. (2015) Privacy Games: Optimal User-Centric Data Obfuscation. Proceedings on Privacy Enhancing Technologies . Available at: https://doi.org/10.1515/popets-2015-0024. Tramèr, F., Terzis, A., Steinke, T., Song, S., Jagielski, M., and Carlini, N. (2022) De-bugging Differential Privacy: A Case Study for Privacy Auditing . Available at: arXiv preprint arXiv:2202.12219. Available at: https://doi.org/10.48550/arxiv.2202.12219. Yan, C., Li, B., Vorobeychik, Y., Laszka, A., Fabbri, D., and Malin, B. (2019) A Game-Theoretic Approach for Database Audit Workload Prioritization. ACM Transactions on Privacy and Security . Available at: https://doi.org/10.1145/3323924. Yang, Y., Zhang, T., and Zhu, Q. (2023) A Game-Theoretic Analysis of Auditing Dif-ferentially Private Algorithms with Epistemically Disparate Herd. In: Decision and Game Theory for Security (GameSec) . Lecture Notes in Computer Science. Available at: https://doi.org/10.1007/978-3-031-50670-3_18. Ye, J., Maddi, A., Murakonda, S. K., and Shokri, R. (2022) Enhanced Membership Infer-ence Attacks against Machine Learning Models. In: ACM Conference on Computer and Communications Security (CCS) . Available at: https://doi.org/10.1145/3548606. 3560675. 20 A Proofs 
+
+## A.1 Proof of Theorem 3.2 
+
+Setup. By Lemma 3.1, 𝑚 ∗(𝜋 naive , 𝜀 naive ) exists and is unique. We write 𝛿 ℓ ∶= 𝜋 naive  
+
+> ℓ
+
+𝛼 ℓ(𝜀 naive  
+
+> ℓ
+
+)
+
+for the effective detectability and ℎres  
+
+> ℓ
+
+∶= 𝑔 ℓ(ℎ ℓ, 𝑚 ∗ℓ) for the residual harm at the devel-oper’s strategic best response; let ℎns  
+
+> ℓ
+
+∶= 𝑔 ℓ(ℎ ℓ, 𝑚 ns  
+
+> ℓ
+
+) denote the residual harm under any non-strategic mitigation 𝑚 ns that does not depend on 𝛿 (e.g., 𝑚 ns  
+
+> 𝑗
+
+∝ ℎ 𝑗 scaled to 
+
+𝐶(𝑚 ns ) = 𝐵 ). The proof has three steps: (i) decompose the difference 𝐵 𝑤 (𝑚 ∗)−𝐵 𝑤 (𝑚 ns )
+
+as a sum of (1 − 𝛿 ℓ)-weighted differences; (ii) show that the developer’s FOC orders ℎres 
+
+in strict reverse to 𝛿 on the active set; and (iii) apply the strict rearrangement inequality. 
+
+Step (i): Gap-difference identity. By Definition 2.5, 
+
+𝐵 𝑤 (𝑚 ∗) − 𝐵 𝑤 (𝑚 ns ) = 
+
+> 𝑑
+
+∑
+
+> ℓ=1
+
+𝑤 ℓ (1 − 𝛿 ℓ) (ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+). 
+
+Both 𝑚 ∗ and 𝑚 ns satisfy the cost budget 𝐶(𝑚) ≤ 𝐵 . Two regimes: (a) 𝐶(𝑚 ∗) = 𝐵 
+
+binding ( 𝜆 > 0 in (3.1)), so ∑ℓ 𝑐 ℓ(𝑚 ∗ℓ) = ∑ ℓ 𝑐 ℓ(𝑚 ns  
+
+> ℓ
+
+) = 𝐵 when 𝑚 ns is chosen to also exhaust the budget (e.g., 𝑚 ns  
+
+> 𝑗
+
+∝ ℎ 𝑗 scaled to 𝐶(𝑚 ns ) = 𝐵 ); (b) 𝐶(𝑚 ∗) < 𝐵 slack ( 𝜆 = 0 ), in which case the strategic developer is at the unconstrained optimum of audit-exposure-plus-soft-cost and ∑ℓ 𝑐 ℓ(𝑚 ∗ℓ) may be smaller than ∑ℓ 𝑐 ℓ(𝑚 ns  
+
+> ℓ
+
+). In both regimes, the strategic shift redistributes residual harm across dimensions; the magnitude of the shift is bounded by the strict convexity of 𝑔 ℓ. We seek a strict inequality on the (1−𝛿) -weighted aggregate independent of the regime .Equivalently, defining the welfare-weighted detection-shortfall vector 𝑢 ℓ ∶= 𝑤 ℓ(1 − 𝛿 ℓ),
+
+𝐵 𝑤 (𝑚 ∗) − 𝐵 𝑤 (𝑚 ns ) = 
+
+> 𝑑
+
+∑
+
+> ℓ=1
+
+𝑢 ℓ (ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+). (A.1) 
+
+Step (ii): Anti-monotonicity of ℎres in 𝛿 (hypothesis (vi)). Hypothesis (vi) supplies the ordering 𝛿 𝑗 > 𝛿 𝑘 ⇒ ℎ res  
+
+> 𝑗
+
+< ℎ res  
+
+> 𝑘
+
+on the active set. We provide the standard sufficient conditions under which (vi) follows from (i)–(v). By hypothesis (v) the optimum 21 is interior, so the FOC (3.1) applies on every dimension: 
+
+𝛿 𝑗 |𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |(𝑚 ∗𝑗 ) = (1 + 𝜆) 𝑐 ′𝑗 (𝑚 ∗𝑗 ), 𝛿 𝑘 |𝜕𝑔 𝑘 /𝜕𝑚 𝑘 |(𝑚 ∗𝑘 ) = (1 + 𝜆) 𝑐 ′𝑘 (𝑚 ∗𝑘 ), 
+
+with the same multiplier 𝜆 ≥ 0 on the cost-budget constraint. 
+
+Homogeneous sub-case ( 𝑔 𝑗 ≡ 𝑔 , 𝑐 𝑗 ≡ 𝑐 , ℎ𝑗 ≡ ℎ , 𝑤 𝑗 ≡ 𝑤 ). Suppose for contradiction 
+
+𝛿 𝑗 > 𝛿 𝑘 but 𝑚 ∗𝑗 ≤ 𝑚 ∗𝑘 . Strict convexity of 𝑔(ℎ, ⋅) and 𝑐 gives |𝜕𝑔/𝜕𝑚|(𝑚 ∗𝑗 ) ≥ |𝜕𝑔/𝜕𝑚|(𝑚 ∗𝑘 )
+
+and 𝑐 ′(𝑚 ∗𝑗 ) ≤ 𝑐 ′(𝑚 ∗𝑘 ), with both equalities iff 𝑚 ∗𝑗 = 𝑚 ∗𝑘 . Dividing the FOCs (common 
+
+(1 + 𝜆) cancels): 
+
+|𝜕𝑔/𝜕𝑚|(𝑚 ∗𝑗 )|𝜕𝑔/𝜕𝑚|(𝑚 ∗𝑘 ) = 𝛿 𝑘 
+
+𝛿 𝑗 
+
+⋅ 𝑐 ′(𝑚 ∗𝑗 )𝑐 ′(𝑚 ∗𝑘 ) < 𝑐 ′(𝑚 ∗𝑗 )𝑐 ′(𝑚 ∗𝑘 ) ≤ 1, 
+
+contradiction. Hence 𝛿 𝑗 > 𝛿 𝑘 ⇒ 𝑚 ∗𝑗 > 𝑚 ∗𝑘 ⇒ ℎ res  
+
+> 𝑗
+
+< ℎ res  
+
+> 𝑘
+
+.
+
+Heterogeneous case. With heterogeneous ℎ𝑗 (or heterogeneous 𝑔 𝑗 , 𝑐 𝑗 ), the FOC rear-ranges to ℎres  
+
+> 𝑗
+
+= (1+𝜆) 𝑐 ′𝑗 (𝑚 ∗𝑗 )/𝛿 𝑗 ⋅|𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |(𝑚 ∗𝑗 )−1 ⋅𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗𝑗 ); for the exponential family 
+
+𝑔 𝑗 (ℎ, 𝑚) = ℎ𝑒 −𝑚 used in our experiments and the canonical DP instantiations of Ap-pendix B, this collapses to ℎres  
+
+> 𝑗
+
+= (1 + 𝜆) 𝑐 ′𝑗 (𝑚 ∗𝑗 )/𝛿 𝑗 , and pairwise anti-monotonicity in 𝛿 𝑗 
+
+holds whenever the ratio 𝑐 ′𝑗 (𝑚 ∗𝑗 )/𝛿 𝑗 is strictly decreasing in 𝛿 𝑗 along the active set. Empiri-cal observation. Running this check across all 4,000 A1 + 4,000 A1b configurations (script: 
+
+scripts/verify_hypothesis_vi.py , output: results/tables/hypothesis_vi_check.csv ), pairwise (vi) is satisfied by 61.3% of SPAD allocations at 𝜀 tot ≥ 0.5 but is violated under the naive baselines, whose hypotheses (i)–(v) the theorem assumes. The conclusion of Theorem 3.2 is nonetheless empirically observed in every cell ( 𝐵 𝑤 at 𝑚 ∗ exceeds 𝐵 𝑤 at 
+
+𝑚 ns for all reported (𝜋 naive , 𝜀 naive )): the rearrangement sum is strictly positive even when individual pairs violate strict monotonicity. (vi) is thus a sufficient proof-step condition; a tighter net-positive-rearrangement hypothesis weakens (vi) without changing the theorem statement and is left to follow-up work. 
+
+Step (iii): Strict rearrangement inequality on 𝑢 ℓ and ℎres  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+. Recall 𝑢 ℓ =𝑤 ℓ(1 − 𝛿 ℓ). Under hypothesis (iv), that is, when 𝑤 and 𝛿 are not comonotone, the vector 
+
+𝑢 is not comonotone with 𝛿 either (multiplying 𝑤 ℓ by 1−𝛿 ℓ, a strictly decreasing function 22 of 𝛿 ℓ when 𝑤 ℓ is held fixed, can only further break comonotonicity with 𝛿 ). Hence, the dimension that yields the largest 𝑢 ℓ — high welfare combined with low detectability 𝛿 ℓ
+
+— is among the least detectable by the active set. As in Step (ii), ℎres is antimonotone in 𝛿 on the active set: high-𝛿 dimensions receive more strategic mitigation, leaving lower residual harm. Consequently, ℎres − ℎ ns is signed: at high-𝛿 dimensions, the strategic developer mitigates more than the non-strategic base-line (so, ℎres  
+
+> ℓ
+
+< ℎ ns  
+
+> ℓ
+
+), and at low-𝛿 dimensions, the strategic developer mitigates less (so, 
+
+ℎres  
+
+> ℓ
+
+> ℎ ns  
+
+> ℓ
+
+). Combined with the cost-budget identity ∑ℓ 𝑐 ℓ(𝑚 ∗ℓ) ≤ ∑ ℓ 𝑐 ℓ(𝑚 ns  
+
+> ℓ
+
+) (and equality when 𝑚 ∗ exhausts the budget), the strategic shifts must redistribute residual harm from high-𝛿 to low-𝛿 dimensions without strictly increasing the total cost. The strict convexity of 𝑔 ℓ(ℎ ℓ, ⋅) ensures that each individual shift is bounded. Therefore, the vector ℎres − ℎ ns has positive entries on low-𝛿 dimensions (where 𝑢 ℓ =𝑤 ℓ(1 − 𝛿 ℓ) is large) and negative entries on high-𝛿 dimensions (where 𝑢 ℓ is small). Pairing the large 𝑢 ℓ values with the positive (ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+) entries gives 
+
+∑
+
+> ℓ
+
+𝑢 ℓ (ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+) > 0, (A.2) and combined with (A.1), 
+
+𝐵 𝑤 (𝑚 ∗) − 𝐵 𝑤 (𝑚 ns ) = ∑ 
+
+> ℓ
+
+𝑢 ℓ (ℎ res  
+
+> ℓ
+
+− ℎ ns  
+
+> ℓ
+
+) > 0, 
+
+proving the theorem. The argument applies pairwise: consider any inverted pair (𝑗, 𝑘) 
+
+with 𝛿 𝑗 > 𝛿 𝑘 but 𝑢 𝑗 < 𝑢 𝑘 (which exists by hypothesis (iv)), so ℎres  
+
+> 𝑗
+
+< ℎ ns  
+
+> 𝑗
+
+and ℎres  
+
+> 𝑘
+
+> ℎ ns  
+
+> 𝑘
+
+,and the contribution 𝑢 𝑘 (ℎ res  
+
+> 𝑘
+
+− ℎ ns  
+
+> 𝑘
+
+) − 𝑢 𝑗 (ℎ ns  
+
+> 𝑗
+
+− ℎ res  
+
+> 𝑗
+
+) > 0 when 𝑢 𝑘 > 𝑢 𝑗 and the magnitude of the strategic shift is preserved by cost-budget feasibility. Summing over all inverted pairs yields strict positivity of the entire sum (A.2). The harm-proportional case ( 𝜀 naive  
+
+> ℓ
+
+∝ ℎ ℓ) is analogous: 𝛿 ℓ ∝ ℎ ℓ but step (ii) forces 
+
+ℎres to be anti-monotone in 𝛿 relative to ℎns ; thus, the same pairwise comparison applies. The argument holds for every 𝑑 ≥ 2 , where the 𝑑 = 2 case is a direct two-element rearrangement and 𝑑 ≥ 3 extends by summing pairwise inversions. 23 Degenerate-parameter remark. Hypothesis (iv), 𝑤 and 𝛿 are not comonotone on the support of ℎres , is essential: when 𝑤 and 𝛿 are comonotone, 𝑢 = 𝑤(1 − 𝛿) may also be comonotone with 𝛿 (it is for symmetric 𝑤 ), and the strict inequality in (A.2) can collapse to equality. This parameter set has a Lebesgue measure of zero in (𝑤, 𝛼, 𝜋) but is not automatically excluded by Assumptions 2.1–2.2. Hypothesis (v), that the interior 
+
+𝑚 ∗ > 0 exists, is required because the FOC argument in Step (ii) is stated only for active dimensions; on the boundary 𝑚 ∗𝑗 = 0 the implicit anti-monotonicity may fail. 
+
+## A.2 Proof of Corollary 3.3 
+
+By Theorem 3.2, residual harm under (𝜋 hp , 𝜀 hp ) concentrates in 𝑘 ∗ = arg min ℓ 𝛼 ℓ(𝜀 hp  
+
+> ℓ
+
+).Choose 𝑗 ∗ = arg max ℓ 𝛼 ′ℓ(𝜀 hp  
+
+> ℓ
+
+) and let Δ𝜀 be the unit vector with +1 in coordinate 𝑗 ∗, −1 
+
+in coordinate 𝑘 ∗, and zero elsewhere; let Δ𝜋 = 0 . The perturbation respects ∑𝑗 𝜀 𝑗 ≤ 𝜀 tot .Implicit differentiation of (3.1) at an interior optimum (active set locally constant; budget multiplier 𝜆 varying smoothly) gives 
+
+𝜕𝑚 ∗ℓ
+
+𝜕𝜀 ℓ
+
+= 𝜋 ℓ 𝛼 ′ℓ(𝜀 ℓ) |𝜕𝑔 ℓ/𝜕𝑚 ℓ|(𝑚 ∗ℓ)𝜋 ℓ 𝛼 ℓ(𝜀 ℓ) |𝜕 2𝑔 ℓ/𝜕𝑚 2ℓ |(𝑚 ∗ℓ) + (1 + 𝜆) 𝑐 ″ℓ (𝑚 ∗ℓ) > 0, 
+
+In other words, a greater privacy budget at dimension ℓ increases mitigation there (the multiplier-fixed approximation is valid for small perturbations at an interior solution with a regular active set; the exact magnitude couples through the 𝑑 -dimensional Jacobian, but the sign is unambiguous). For 𝐵 𝑤 (𝜋, 𝜀) = ∑ ℓ 𝑤 ℓ(1 − 𝜋 ℓ𝛼 ℓ(𝜀 ℓ)) 𝑔 ℓ(ℎ ℓ, 𝑚 ∗ℓ) the per-coordinate derivative decomposes into a direct and an indirect term: 
+
+𝜕𝐵 𝑤 
+
+𝜕𝜀 ℓ
+
+= − 𝑤 ℓ𝜋 ℓ 𝛼 ′ℓ(𝜀 ℓ) 𝑔 ℓ(ℎ ℓ, 𝑚 ∗ℓ)⏟⏟⏟⏟⏟⏟⏟⏟⏟⏟⏟ 
+
+> direct (coverage)
+
++ 𝑤 ℓ(1 − 𝜋 ℓ𝛼 ℓ(𝜀 ℓ)) 𝜕𝑔 ℓ
+
+𝜕𝑚 ℓ
+
+𝜕𝑚 ∗ℓ
+
+𝜕𝜀 ℓ⏟⏟⏟⏟⏟⏟⏟⏟⏟⏟⏟ 
+
+> indirect (developer response)
+
+.
+
+Both terms are strictly negative (direct: 𝛼 ′ℓ > 0 and 𝑔 ℓ > 0 ; indirect: 𝜕𝑔 ℓ/𝜕𝑚 ℓ < 0 and 
+
+𝜕𝑚 ∗ℓ/𝜕𝜀 ℓ > 0 ), so the directional derivative  
+
+> 𝑑 𝑑𝜏
+
+𝐵 𝑤 ∣𝜏=0 + = 𝜕𝐵 𝑤 
+
+𝜕𝜀 𝑗 ∗
+
+− 𝜕𝐵 𝑤 
+
+𝜕𝜀 𝑘 ∗
+
+24 is strictly negative whenever 𝛼 ′𝑗 ∗ (𝜀 hp  
+
+> 𝑗 ∗
+
+) > 𝛼 ′𝑘 ∗ (𝜀 hp  
+
+> 𝑘 ∗
+
+) (generic heterogeneity): the magnitude of 𝜕𝐵 𝑤 /𝜕𝜀 𝑗 ∗ exceeds that of 𝜕𝐵 𝑤 /𝜕𝜀 𝑘 ∗ in both terms, since 𝛼 ′𝑗 ∗ scales the direct term, and the indirect term inherits the same ordering through 𝜕𝑚 ∗𝑗 ∗ /𝜕𝜀 𝑗 ∗ . Hence (𝜋 hp , 𝜀 hp ) is not a local minimizer of 𝐵 𝑤 .
+
+## A.3 Proof of Theorem 4.1 
+
+The gradient of 𝐵 𝑤 has direct and indirect components, 
+
+𝜕𝐵 𝑤 
+
+𝜕𝜀 𝑗 
+
+= −𝑤 𝑗 𝜋 𝑗 𝛼 ′𝑗 (𝜀 𝑗 ) 𝑔 𝑗 + 𝑤 𝑗 (1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )) 𝜕𝑔 𝑗 
+
+𝜕𝑚 𝑗 
+
+𝜕𝑚 ⋆𝑗 
+
+𝜕𝜀 𝑗 
+
+,𝜕𝐵 𝑤 
+
+𝜕𝜋 𝑗 
+
+= −𝑤 𝑗 𝛼 𝑗 (𝜀 𝑗 ) 𝑔 𝑗 + 𝑤 𝑗 (1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )) 𝜕𝑔 𝑗 
+
+𝜕𝑚 𝑗 
+
+𝜕𝑚 ⋆𝑗 
+
+𝜕𝜋 𝑗 
+
+.
+
+Implicit differentiation of the developer’s FOC (3.1) at an interior optimum (active set locally constant, cost-budget multiplier 𝜆 varying smoothly) gives 
+
+𝜕𝑚 ⋆𝑗 
+
+𝜕𝜀 𝑗 
+
+= 𝜋 𝑗 𝛼 ′𝑗 (𝜀 𝑗 ) |𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |𝐷 𝑗 (𝑚 ⋆𝑗 , 𝜆) , 𝜕𝑚 ⋆𝑗 
+
+𝜕𝜋 𝑗 
+
+= 𝛼 𝑗 (𝜀 𝑗 ) |𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |𝐷 𝑗 (𝑚 ⋆𝑗 , 𝜆) ,
+
+where 𝐷 𝑗 (𝑚 ⋆𝑗 , 𝜆) ∶= 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) |𝜕 2𝑔 𝑗 /𝜕𝑚 2𝑗 |(𝑚 ⋆𝑗 ) + (1 + 𝜆) 𝑐 ″𝑗 (𝑚 ⋆𝑗 ) > 0 by strict convexity of 𝑔 𝑗 and 𝑐 𝑗 (Assumption 2.2). Substituting and using 𝜕𝑔 𝑗 /𝜕𝑚 𝑗 = −|𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |, the auditor’s 𝜀 -stationarity condition becomes 
+
+𝑤 𝑗 𝜋 𝑗 𝛼 ′𝑗 (𝜀 𝑗 ) [ 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ⋆𝑗 ) + (1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 )) |𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |2
+
+𝐷 𝑗 (𝑚 ⋆𝑗 , 𝜆) ] = 𝜆 𝜀 ∀𝑗 ∈ active .
+
+This is a four-factor balance — welfare weight 𝑤 𝑗 , query rate 𝜋 𝑗 , detectability elasticity 
+
+𝛼 ′𝑗 (𝜀 𝑗 ), and the bracketed effective-coverage–cost term combining residual harm, miss-probability 1 − 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ), marginal mitigation effectiveness |𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |, and the curvature-aggregate 𝐷 𝑗 . (Setting 𝜋 𝑗 𝛼 𝑗 ≡ 0 recovers the three-factor TRH stationarity reported in earlier drafts.) Harm-proportional allocation generically violates this condition: it equates 𝜀 𝑗 ∝ ℎ 𝑗 across dimensions, which the four-factor balance demands only on a measure-zero set of parameter profiles. Counter-example: 𝑑 = 2 , ℎ = (1, 1) , 𝑤 = (1, 1) ,
+
+𝛼 𝑗 (𝜀 𝑗 ) = 1 − 𝑒 −𝜅 𝑗 𝜀 𝑗 with 𝜅 1 = 2, 𝜅 2 = 1 , 𝑐 𝑗 (𝑚 𝑗 ) = 𝑚 2𝑗 /2 , 𝑔 𝑗 (ℎ 𝑗 , 𝑚 𝑗 ) = ℎ 𝑗 𝑒 −𝑚 𝑗 (smooth, 25 strictly convex; cf. Appendix B). Harm-proportional gives 𝜀 = (1, 1) ; numerically solving the four-factor stationarity above yields 𝜀 ⋆1 > 𝜀 ⋆2 (the auditor pours additional budget into the higher-elasticity dimension, where both the direct and indirect 𝐵 𝑤 effects are larger), so harm-proportional is not optimal. 
+
+## A.4 Proof of Theorem 4.2 
+
+The developer’s lower-level problem is strictly convex (Lemma 3.1), so its KKT conditions— stationarity (4.2), primal feasibility (4.3), and complementary slackness (4.4)—are nec-essary and sufficient for 𝑚 = 𝑚 ∗(𝜋, 𝜀) . Substituting them into the auditor’s problem yields (4.1), which is equivalent to (2.2). The complementarity 𝜇(𝐵 − ∑ 𝑗 𝑐 𝑗 (𝑚 𝑗 )) = 0 
+
+makes the reformulation an MPCC, which generically violates the MFCQ. MPEC-LICQ holds at points where the active set of 𝑚 𝑗 ≥ 0 and the cost-budget complementarity are regular; at such points strong stationarity of the MPCC coincides with KKT of the local NLP obtained by fixing the active set (cf. Luo et al. (2015)). Strict complementarity at the optimum is generic in (ℎ, 𝑤, 𝛼, 𝑐, 𝜀 tot , 𝐵) ; it fails only on a finite union of algebraic varieties, which has Lebesgue measure zero. 
+
+## A.5 Proof of Proposition 4.3 ( 𝑑 = 2 lower bound) 
+
+Fix Assumptions 2.1–2.2 with 𝑑 = 2 and assume 𝑐 ′𝑘 (𝐵/𝑑) < ℎ 𝑘 for 𝑘 ∈ {1, 2} , so 𝜀 †
+
+is well-defined. The proof has three steps: (i) any feasible audit allocation has at least one dimension with low effective detectability; (ii) the developer’s mitigation in that dimension vanishes as 𝜀 tot → 0 ; and (iii) the auditor minimizes the resulting TRH by leaving the smaller-𝑤 𝑘 ℎ𝑘 dimension unmitigated. 
+
+Step (i): Tight-budget allocation has a low-𝜀 dimension. For any feasible 
+
+(𝜋, 𝜀) with ∑𝑗 𝜀 𝑗 ≤ 𝜀 tot , min 𝑘 𝜀 𝑘 ≤ 𝜀 tot /2 < 𝜀 †. Pick 𝑘 0 achieving this minimum; by Assumption 2.1, 𝛼 𝑘 0 (𝜀 𝑘 0 ) < 𝛼 𝑘 0 (𝜀 †) = 𝑐 ′𝑘 0 (𝐵/𝑑)/ℎ 𝑘 0 , so the effective detectability 
+
+𝛿 𝑘 0 = 𝜋 𝑘 0 𝛼 𝑘 0 (𝜀 𝑘 0 ) < 𝜋 𝑘 0 𝑐 ′𝑘 0 (𝐵/𝑑)/ℎ 𝑘 0 ≤ 𝑐 ′𝑘 0 (𝐵/𝑑)/ℎ 𝑘 0 .
+
+Step (ii): Mitigation vanishes in the low-𝛿 dimension. For 𝜀 tot in the regime 
+
+0 < 𝜀 tot < 2 𝜀 † but bounded away from zero (so the developer’s interior FOC applies; 26 we approach the limit 𝜀 tot → 0 from above), the developer’s FOC (3.1) at 𝑚 ∗𝑘 0 yields 
+
+𝛿 𝑘 0 |𝜕𝑔 𝑘 0 /𝜕𝑚 𝑘 0 |(𝑚 ∗𝑘 0 ) = (1+𝜆) 𝑐 ′𝑘 0 (𝑚 ∗𝑘 0 ). Since |𝜕𝑔 𝑘 0 /𝜕𝑚 𝑘 0 |(0) ≤ ℎ 𝑘 0 (mitigation cannot generate negative residual harm) and |𝜕𝑔 𝑘 0 /𝜕𝑚 𝑘 0 | is monotone non-increasing in 𝑚 , we have 𝛿 𝑘 0 ℎ𝑘 0 ≥ (1 + 𝜆) 𝑐 ′𝑘 0 (𝑚 ∗𝑘 0 ) ≥ 𝑐 ′𝑘 0 (𝑚 ∗𝑘 0 ). Combining with Step (i): 
+
+𝑐 ′𝑘 0 (𝑚 ∗𝑘 0 ) ≤ 𝛿 𝑘 0 ℎ𝑘 0 < 𝑐 ′𝑘 0 (𝐵/𝑑). 
+
+Strict monotonicity of 𝑐 ′𝑘 0 (Assumption 2.2) gives 𝑚 ∗𝑘 0 < 𝐵/𝑑 . As 𝜀 tot → 0 , 𝜀 𝑘 0 → 0 and 
+
+𝛿 𝑘 0 → 0 (since 𝛼 𝑘 0 (0) = 0 ), so 𝑐 ′𝑘 0 (𝑚 ∗𝑘 0 ) → 0 and 𝑚 ∗𝑘 0 → 0 (using 𝑐 ′𝑘 0 (0) = 0 ). Hence 
+
+𝑔 𝑘 0 (ℎ 𝑘 0 , 𝑚 ∗𝑘 0 ) → ℎ 𝑘 0 .
+
+Step (iii): Auditor’s optimal lower bound. The auditor selects (𝜋, 𝜀) to minimize TRH. By Step (ii), at least one dimension 𝑘 0 has 𝑔 𝑘 0 (ℎ 𝑘 0 , 𝑚 ∗𝑘 0 ) → ℎ 𝑘 0 , contributing 
+
+𝑤 𝑘 0 ℎ𝑘 0 − 𝑜(1) to TRH. The auditor minimizes this contribution by concentrating the audit budget on the larger-𝑤 𝑘 ℎ𝑘 dimension, leaving the smaller-𝑤 𝑘 ℎ𝑘 dimension as 𝑘 0.Therefore: TRH (𝜋, 𝜀) ≥ min (𝑤 1ℎ1, 𝑤 2ℎ2) − 𝑜(1) as 𝜀 tot → 0, 
+
+with the 𝑜(1) term vanishing uniformly over feasible (𝜋, 𝜀) by the uniform convergence 
+
+𝑚 ∗𝑘 0 → 0 established in Step (ii). This proves the proposition. 
+
+## A.6 Note on Conjecture 4.4 ( 𝑑 ≥ 3 )
+
+The general-𝑑 extension requires a uniform bound on how much effective detectability 
+
+∑𝑗 𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ) can be concentrated into a single dimension 𝑘 0 under the budget constraint 
+
+∑𝑗 𝜀 𝑗 ≤ 𝜀 tot . A natural sufficient condition is the concavity of 𝜀 ↦ 𝛼 𝑗 (𝜀) on [0, 𝜀 tot ]
+
+(which fails for the exponential family 𝛼 𝑗 (𝜀) = 1 − exp (−𝜅 𝑗 𝜀) near 𝜀 = 0 , motivating the threshold 𝜀 †). This conjecture remains open for general 𝛼 𝑗 under Assumption 2.1 alone. 27 B Concrete DP mechanism instantiations 
+
+The main text abstracts the differentially private observation channel via the detectability function 𝛼 𝑗 (𝜀 𝑗 ), which, by Assumption 2.1 maps ℝ+ → [0, 1] with 𝛼 𝑗 (0) = 0 and lim 𝛼 𝑗 =1. For canonical DP mechanisms, the natural detection-probability function depends jointly on the privacy budget and residual harm: ̃ 𝛼 𝑗 (𝜀 𝑗 , ℎ res  
+
+> 𝑗
+
+). We treat 𝛼 𝑗 (𝜀 𝑗 ) as the 
+
+reduced-form local sensitivity of ̃ 𝛼 𝑗 at a fixed reference operating point ℎres ,0 𝑗 — typically the prior expected residual harm 𝔼[𝑔 𝑗 (ℎ 𝑗 , 𝑚 ns  
+
+> 𝑗
+
+)] under a budget-exhausting non-strategic baseline. The displayed 𝛼 𝑗 (𝜀 𝑗 ) below should be read as 𝛼 𝑗 (𝜀 𝑗 ) ∶= rescale (̃𝛼 𝑗 (𝜀 𝑗 , ℎ res ,0 𝑗 )) ,where the affine rescaling subtracts the test-level baseline and renormalizes to satisfy Assumption 2.1 exactly. The approximation error from holding ℎres  
+
+> 𝑗
+
+at ℎres ,0 𝑗 instead of the equilibrium 𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗𝑗 ) scales as 𝑂(|ℎ res  
+
+> 𝑗
+
+− ℎ res ,0 𝑗 | 𝜕̃𝛼 𝑗 /𝜕ℎ res  
+
+> 𝑗
+
+), which is not pointwise small in our ablations (see “Implications” below); the reduced-form is a modelling choice rather than a small perturbation. 
+
+Gaussian mechanism (approximate DP). For a query with 𝐿 2-sensitivity Δ𝑗 , the Gaussian mechanism adds noise 𝒩(0, 𝜎 2𝑗 𝐼) with 𝜎 𝑗 = Δ 𝑗 √2 ln (1.25/𝛿)/𝜀 𝑗 for (𝜀 𝑗 , 𝛿) -DP. Under a one-sided 𝑧 -test of 𝐻 0 ∶ ℎ res  
+
+> 𝑗
+
+= 0 versus 𝐻 1 ∶ ℎ res  
+
+> 𝑗
+
+> 0 at level 𝑎 ,̃𝛼 𝑗 (𝜀 𝑗 , ℎ res  
+
+> 𝑗
+
+) = Φ( 𝜀 𝑗 ℎres 
+
+> 𝑗
+
+Δ𝑗 √2 ln (1.25/𝛿) − 𝑧 1−𝑎 ) . 
+
+At the reference ℎres ,0 𝑗 , the local reduced-form 𝛼 𝑗 (𝜀 𝑗 ) ∶= (̃𝛼 𝑗 (𝜀 𝑗 , ℎ res ,0 𝑗 )−𝑎)/(1−𝑎) satisfies 
+
+𝛼 𝑗 (0) = 0 and lim 𝜀 𝑗 →∞ 𝛼 𝑗 (𝜀 𝑗 ) = 1 as Assumption 2.1 requires. Under Rényi DP with order 𝛼 , one substitutes the tighter noise calibration from the RDP accountant (Mironov, 2017). 
+
+Laplace mechanism (pure DP). For sensitivity Δ𝑗 , the Laplace mechanism adds Lap (Δ 𝑗 /𝜀 𝑗 ). For a one-sided threshold test against null 𝑐 with ℎres  
+
+> 𝑗
+
+> 𝑐 ,̃𝛼 𝑗 (𝜀 𝑗 , ℎ res  
+
+> 𝑗
+
+) = 1 − 12 exp (−𝜀 𝑗 (ℎ res  
+
+> 𝑗
+
+− 𝑐)/Δ 𝑗 ). 
+
+28 At reference ℎres ,0 𝑗 , the rescaled 𝛼 𝑗 (𝜀 𝑗 ) ∶= 2̃ 𝛼 𝑗 (𝜀 𝑗 , ℎ res ,0 𝑗 ) − 1 satisfies Assumption 2.1. 
+
+Randomised response (local DP). Under local DP (Duchi et al., 2013), each indi-vidual answers truthfully with a probability 𝑒 𝜀 𝑗 /(𝑒 𝜀 𝑗 + 1) . Aggregating 𝑛 responses, the CLT signal-to-noise ratio gives ̃𝛼 𝑗 (𝜀 𝑗 , ℎ res  
+
+> 𝑗
+
+) ≈ Φ( √𝑛 ℎ res  
+
+> 𝑗
+
+tanh (𝜀 𝑗 /2) − 𝑧 1−𝑎 ) , 
+
+strictly increasing in both arguments. The same affine rescaling at the reference yields a reduced-form 𝛼 𝑗 (𝜀 𝑗 ) satisfying Assumption 2.1. The exponential family 𝛼 𝑗 (𝜀 𝑗 ) = 1 − 
+
+exp (−𝜅 𝑗 𝜀 𝑗 ) used in our synthetic evaluation (§5) approximates the Gaussian instantiation at moderate 𝜀 𝑗 via 𝜅 𝑗 = ℎ res ,0 𝑗 /𝜎 𝑗 (𝜀 𝑗 = 1) , calibrating the reduced form to a fixed operating point. 
+
+Implications for the bilevel analysis. Treating 𝛼 𝑗 as a function of 𝜀 𝑗 alone is a mod-elling abstraction; the canonical DP mechanisms above produce ̃ 𝛼 𝑗 (𝜀 𝑗 , ℎ res  
+
+> 𝑗
+
+), and across our ablations, the equilibrium ℎres  
+
+> 𝑗
+
+varies by 𝑂(1) relative to a fixed reference (median deviation ≈ 1.07 , script: scripts/verify_local_approx.py ). We adopt the reduced-form 𝛼 𝑗 (𝜀 𝑗 ) for tractability: the developer’s FOC (3.1) and the auditor’s stationarity conditions hold exactly, and Theorem 3.2’s qualitative conclusion (welfare-detectability misalignment ⇒ strategic blind spots) is preserved. Generalizing to ̃ 𝛼 𝑗 (𝜀 𝑗 , ℎ res  
+
+> 𝑗
+
+) replaces the FOC’s 𝛿 𝑗 |𝜕𝑔 𝑗 /𝜕𝑚 𝑗 | term with 𝜋 𝑗 (𝜕̃𝛼 𝑗 /𝜕ℎ res  
+
+> 𝑗
+
+)𝑔 𝑗 + 𝜋 𝑗 ̃ 𝛼 𝑗 |𝜕𝑔 𝑗 /𝜕𝑚 𝑗 |, complicating the four-factor stationarity of Theorem 4.1 and changing the quantitative SPAD allocation. The full coupling is future work. 
+
+# C Full experiment setup 
+
+This appendix instantiates the synthetic evaluation protocol of §5 with all design choices fixed, enabling an independent reproduction. 29 Simulation environment. All experiments used Python 3.12 with NumPy and SciPy (SLSQP for the developer’s lower-level problem). The hypergradients were computed us-ing forward finite differences with a step size of 10 −3 through the developer best response. Each configuration runs with 50 independent seeds drawn from a fixed seed sequence. Code and seeds will be released at acceptance. 
+
+Parameterisation. Harm-space dimensionality 𝑑 ∈ {5, 10, 20} . Baseline harm ℎ is drawn either sparsely (component-wise Beta (0.5, 2) ) or densely (component-wise Uniform [0.5, 1.5] ), with the resulting vector normalized to ‖ℎ‖ 1 = 𝑑 . Detectability uses the exponential family 𝛼 𝑗 (𝜀 𝑗 ) = 1 − exp (−𝜅 𝑗 𝜀 𝑗 ) with 𝜅 𝑗 ∼ Uniform [0.1, 2.0] in heterogeneous regimes and 𝜅 𝑗 = 1.0 in homogeneous controls. Mitigation costs come from a quadratic family 
+
+𝑐 𝑗 (𝑚) = 𝑚 2/2 and a power-law family 𝑐 𝑗 (𝑚) = 𝑚 𝑝 /𝑝 with 𝑝 ∈ {1.5, 3} . Developer cost budget 𝐵 ∈ {0.5𝑑, 𝑑, 2𝑑} . Total DP budget 𝜀 tot ∈ {0.1, 0.5, 1, 2, 5} , spanning tight to loose regimes. Welfare weights 𝑤 are drawn either uniformly ( 𝑤 𝑗 = 1/𝑑 ) or non-uniformly (𝑤 ∼ Dirichlet (𝛼 = 0.5) ). 
+
+Developer types. Fully strategic (FS): solves the lower-level program (2.1) to KKT optimality via CVXPY/CLARABEL with gradient tolerance 10 −6 . This is the model assumed by SPAD. Boundedly rational (BR): runs 𝐾 = 50 projected-gradient steps from a uniform initialisation 𝑚 (0) = (𝐵/𝑑) 1, with step size 𝜂 = 0.05 and Armijo backtracking; represents a developer with limited optimisation capacity. Non-strategic (NS): sets 𝑚 𝑗 ∝𝑤 𝑗 ℎ𝑗 , ignoring the audit interface. 
+
+Auditor baselines. Uniform (UNIF): 𝜋 𝑗 = 1/𝑑 , 𝜀 𝑗 = 𝜀 tot /𝑑 . Harm-proportional (HP): 𝜋 𝑗 ∝ ℎ 𝑗 , 𝜀 𝑗 ∝ ℎ 𝑗 , normalised. Welfare-proportional (WP): analogous with 𝑤 𝑗 .
+
+Uncertainty-focused (UF): 𝜀 𝑗 proportional to the prior standard deviation of ℎ𝑗 across seeds. Oracle (ORC): 𝜀 tot = ∞ , used only as an upper-bound reference; not feasible. 
+
+SPAD: Algorithm 1 with 𝜂 = 0.1 ⋅ 𝜀 tot (decayed by 0.95 every 20 outer iterations), 𝛿 = 10 −4 , 𝑇 max = 200 , and 5 random restarts (best 𝐵 𝑤 reported). 30 Convergence and projection. Convergence criterion ‖∇𝐵 (𝑡) 𝑤 ‖ ≤ 𝛿 or 𝑇 ≥ 𝑇 max .Inner-problem solver is warm-started from the previous outer iterate. Each hypergra-dient evaluation requires 2𝑑 forward finite-difference perturbations, each re-solving the developer’s lower-level problem. Projection onto Δ𝑑 uses the standard simplex projection; projection onto the 𝜀 feasible set {𝜀 ≥ 0, ∑ 𝑗 𝜀 𝑗 ≤ 𝜀 tot } clamps to non-negativity then rescales when the budget is violated. 
+
+Metrics. Welfare-weighted under-detection gap 𝐵 𝑤 (𝜋, 𝜀) = ∑ 𝑗 𝑤 𝑗 (1−𝜋 𝑗 𝛼 𝑗 (𝜀 𝑗 ))𝑔 𝑗 (ℎ 𝑗 , 𝑚 ∗𝑗 )
+
+(the auditor’s objective), reported in absolute terms and as the relative ratio 𝐵 𝑤 /TRH; we also track detected harm DH (𝜋, 𝜀, 𝑚 ∗) and true residual harm TRH (𝜋, 𝜀) as diagnostics. SPAD efficiency gain is reported as (𝐵 𝑤, UNIF − 𝐵 𝑤, SPAD )/𝐵 𝑤, UNIF × 100% . Developer-type degradation: Δ𝐵 𝑤 when SPAD is optimized assuming FS, but the realized developer is BR. 
+
+Statistical methodology. All metrics are reported as mean ± one standard deviation across 50 seeds, with 95% bootstrap confidence intervals (10,000 resamples). Pairwise comparisons (SPAD versus each baseline) use two-sided paired 𝑡 -tests with the normality assumption checked by Shapiro–Wilk; if normality is rejected, the Wilcoxon signed-rank test is used. Effect sizes are reported as Cohen’s 𝑑 . Multiple-comparison correction across the five baseline comparisons per configuration uses the Holm–Bonferroni procedure. 
+
+Ablation design. Six axes are varied independently with the remaining parameters fixed at the default values (𝑑 = 10, 𝜀 tot = 1, FS developer , quadratic cost ). A1 — Privacy budget: 𝜀 tot ∈ {0.1, 0.5, 1, 2, 5} . A2 — Dimensionality: 𝑑 ∈ {5, 10, 20} . A3 — Detectability heterogeneity: 𝜅 uniform vs. spread. A4 — Developer type: FS vs. BR vs. NS. A5 — Harm concentration: sparse vs. dense ℎ. A6 — Cost curvature: 𝑝 ∈ {1.5, 2, 3} .
+
+Compute. Each configuration runs in less than 2 min on a single CPU core. The full ablation (six axes × 50 seeds, with three values per axis on average) requires approxi-mately 8 CPU-h. No GPU is required. 31 D Broader Impacts 
+
+This work is motivated by the growing deployment of differential privacy in AI governance contexts, including fairness audits under data-protection regulation and safety evaluations of high-risk AI systems. The primary positive impact is analytical: by demonstrating that a naïve DP audit design can systematically miss harm concentrated in low-detectability dimensions, the paper provides a principled basis for regulatory bodies to demand strate-gic audit design. SPAD could be adopted by independent audit firms and compliance teams as a practical tool for allocating limited audit budgets across regulatory harm dimensions (e.g., demographic subgroups, failure modes, and protected attributes). We identify two potential negative societal impacts that warrant discussion. First, adversarial use by auditors. An auditor with strategic interests—for example, an indus-try self-regulator with commercial ties to the developer—could misuse SPAD to design audits that minimize regulatory exposure rather than true harm. The framework’s as-sumption that the auditor’s welfare weights 𝑤 reflect genuine social priorities is critical; if 𝑤 is manipulated, the SPAD optimum can be gamed by the auditor rather than by the developer. Safeguards such as independent certification of 𝑤 and public disclosure of audit-design parameters are warranted in practice. 
+
+Second, strategic complexity as a barrier to adoption. The SPAD algorithm requires knowledge of the developer’s cost structure (𝑐 𝑗 , 𝑔 𝑗 ) and mitigation budget 𝐵 to solve the bilevel problem. Regulators with limited technical capacity may find the framework inaccessible relative to simpler heuristic policies. We recommend that future work de-velop simplified audit-design rules, for example, threshold-based budget allocation, that preserve most of the blind-spot reduction achievable by SPAD without requiring full developer-type knowledge. This study did not involve human subjects, personal data, or systems deployed in production; the synthetic evaluation protocol used only simulated harm spaces. 32 E Code and data availability 
+
+An anonymous reproducibility artifact is available at: https://anonymous.4open.science/r/neurips-2026-strategic-dp-auditing-artifact-3952/ The artifact includes the strategic_dp package (model layer, developer best responses, SPAD algorithm), the experiment runner, all figures and tables in this paper, and three verification scripts checking the empirical claims associated with Theorem 3.2 hypoth-esis (vi), the conclusion 𝐵 𝑤 (𝑚 ∗) > 𝐵 𝑤 (𝑚 ns ), and the local-approximation regime of Appendix B. A Makefile provides reproduction targets ( make help ); the full pipeline runs in approximately 25 minutes on a single CPU core. 33

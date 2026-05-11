@@ -1,0 +1,2516 @@
+Title: Modulated learning for private and distributed regression with just a single sample per client device
+
+URL Source: https://arxiv.org/pdf/2605.07233v1
+
+Published Time: Mon, 11 May 2026 00:41:06 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# Modulated learning for private and distributed regression with just a single sample per client device 
+
+## Praneeth Vepakomma 1,2, Amirhossein Reisizadeh 1,Samuel Horváth 2, Munther Dahleh 11Massachusetts Institute of Technology (MIT) 
+
+2Mohamed bin Zayed University of Artificial Intelligence (MBZUAI) 
+
+Abstract 
+
+This work focuses on the question of learning from a large number of devices with each device holding only a single sample of data. Several real-world applications exist to this one sample per client setup up including learning from fitness trackers, data/app usage aggregators, body-worn sensing devices, and daily event monitors to name a few. When a client has only one sample, the standard federated learning paradigm breaks down as a local update based on that single point is far from being useful, especially in the earlier rounds for estimation of the model coefficients. This utility is further weakened by the privacy-inducing noise applied at every round. This work caters to this problem to enable such clients to collaboratively contribute to effectively learn a global model without leaking the privacy of their data. The proposed approach injects a single, carefully calibrated noisy perturbation to transform the sample at each client, followed by a post-processed representation which is shared with the server. These representations aggregated at the server are processed to obtain an unbiased gradient update that in expectation matches the non-private centralized gradient while preserving data privacy. This approach is different than traditional private federated learning, where the communication payloads involve model coefficients as opposed to privately transformed data samples. This method enables devices with extremely limited data to collaborate and learn accurate, privacy-preserving models without requiring large local datasets or sacrificing individual privacy. 
+
+# 1 Introduction 
+
+Privacy-preserving federated learning typically assumes that each client holds a local dataset large enough to compute meaningful updates over multiple gradient steps. However, in many real-world applications (mobile health apps, fitness trackers, body worn sensing, or daily event monitors) each single client may hold only a few or in the extreme, often just a single data point. In such regimes, existing mechanisms like differentially private stochastic gradient descent (DP-SGD) based federated learning schemes become substantially ineffective 1
+
+> arXiv:2605.07233v1 [cs.LG] 8 May 2026
+
+as local updates are noisy and unreliable as they are learned from a single sample. On top of this, the privacy-inducing noise injected into this system further exacerbates this problem. This paper thereby asks: can we enable useful, differentially private distributed learning when each client contributes only one example data point? We address this challenge by designing a cosine-modulated, contractive transformation followed by a privacy-preserving Gaussian perturbation. These transformed data points are then further processed with a specific functional form to create an intermediate result that assists the server in estimat-ing the gradient of the learning loss. The scheme enables the server to obtain an unbiased gradient update that in expectation matches the non-private centralized gradient update, while still preserving data privacy. This approach is different from traditional private fed-erated learning, where the communication payloads involve model coefficients as opposed to privately transformed data samples. Building upon the unbiasedness of our estimator, we further derive the covariance of the stochastic gradient updates and establish the asymptotic normality of our model estimator. This facilitates asymptotically valid inference, such as hy-pothesis testing, on the underlying regression coefficients within our distributed framework. The remainder of the paper is organized as follows. Section 2 fixes the privacy definitions and background needed for the method. Section 3 develops the core single-vector modulated pro-tocol and shows how the server recovers an unbiased gradient estimator from privatized client messages. Sections 4–6 present a non-iterative variant, a reconstruction lower bound, and a multi-vector refinement. Sections 7–9 analyze variance, convergence, and design trade-offs, and the appendices collect proofs, experiments, and supporting background. 
+
+# 2 Preliminaries 
+
+Before introducing the protocol itself, we fix the privacy and learning notions used throughout the paper. This section provides the minimum background needed to state the client mechanism and server correction cleanly. In this section, we list the relevant prelim-inaries and related works on differential privacy, private linear regression and some existing paradigms for collaborative machine learning, before presenting the proposed methods. 
+
+## 2.1 Differential Privacy 
+
+Because privacy in the proposed protocol is enforced through the client-side transforma-tion and its sensitivity, we begin with the relevant local-DP definitions. The main takeaway of this subsection is that once the client map has a sensitivity bound, the Gaussian mech-anism and post-processing properties maintain the privacy guarantee used throughout the paper. 
+
+Definition 2.1. (Differential privacy [Dwo06; DR+14]) A randomized algorithm often called a mechanism M : X → Y satisfies ε-local differential privacy (or ε- local DP) if, for every pair of possible inputs x, x ′ ∈ X and every possible set of outputs S ⊆ Y , we have 
+
+Pr[ M(x) ∈ S] ≤ eε · Pr [ M (x′) ∈ S] + δ. 
+
+Here, ε controls the privacy leakage (smaller being more private), and δ captures a small prob-ability of failure, where DP does not hold. When δ = 0 , this reduces to pure DP; otherwise, it 
+
+2is referred to as approximate DP. The goal of DP is to ensure that the inclusion or exclusion of a single individual’s data does not significantly affect the output of an mechanism, thereby protecting privacy. 
+
+We now describe certain properties of DP that are quite useful. Differential privacy is closed under postprocessing as any function applied to the output of a DP mechanism does not degrade the privacy guarantee. 
+
+Theorem 2.2 (Immunity to postprocessing) . If M is (ε, δ )-DP and g is any (randomized or deterministic) function, then g ◦ M is also (ε, δ )-DP. 
+
+This essentially means that differential privacy is preserved under post-processing, and so any deterministic computation on the privatized outputs does not degrade the privacy guarantee. A classical way to obtain a differentially private mechanism for real-valued queries is to use carefully callibrated additive noise from a Gaussian distribution (for approximate DP) or a Laplace distribution (for pure DP). The amount of noise needed, depends on the notion of a global sensitivity of the query, that we define below. 
+
+Definition 2.3. (Global sensitivity) Global sensitivity is the maximum change in the output of a function ∆MG when applied to any two neighboring datasets D, D ′ ∈ D (or records in a special case), differing by a single element (or by a small amount in any chosen norm) as 
+
+∆MG = max  
+
+> D,D ′∈D
+
+∥M (D) − M (D′)∥p
+
+Hence, it is independent of any specific dataset and is instead a query-dependent measure of the maximum change in the output of a function M over all possible neighboring datasets. 
+
+That said, several other equivalent definitions (or different variants) of (ε, δ )-differentially privacy also exist in the literature, some of which are detailed in Appendix E. 
+
+## 2.2 Collaborative learning 
+
+Popular collaborative machine learning paradigms [BH19] include federated learning [Kon+16; Kai+21; McM+17; Bon+19], split learning [Vep+18; GR18; Tha+22], and local parallelism [Las+20] where client devices hold local data, and only intermediate computations such as model gradients or intermediate representations such as activations are shared by them with a central server. These model updates (gradients or intermediate representations) from each client are aggregated at the server to improve the global model over multiple such rounds of interaction. The clients then download the current model from central server and continue to improve it locally by further updating their model weights based on their local data and are again sent back to the server for aggregation and this process continues. There is no explicit sharing of raw data in this setup and other such methods include [Zha+17; Ass+19; SD18; Gu+23]. 32.3 Linear regression 
+
+In linear regression, the relationship between a response y ∈ R and covariates x ∈ Rd is given by 
+
+y = x⊤β + ϵ, ϵ ∼ N (0 , σ 2).
+
+Given n i.i.d. samples {(xi, y i)}ni=1 from this model, with X ∈ Rn×d denoting the design matrix and Y denoting the response, the ordinary least squares (OLS) estimator of β is 
+
+ˆβOLS = ( X⊤X)−1X⊤Y, 
+
+and defined when X has full column rank. Under Gaussian errors and fixed design, OLS is minimax optimal and achieves the Cramér-Rao lower bound, with the minimax risks as detailed in Appendix F. 
+
+# 3 One (or few) private sample(s) per client 
+
+With the preliminaries in place, we now turn to the main regime of interest: many clients, each holding only private one sample. The goal of this section is to show that even in this extreme setting, privatized client messages can be designed so that the server recovers an unbiased centralized gradient in expectation. We provide two variants of the protocol with the first being the single vector modulated pri-vate FL mechanism where the sample on each client is privately transformed using a proposed map while ensuring (ε, δ )-differential privacy. This is then released for post-processing at the server, to achieve predictive utility in a privacy-preserving manner. The post-processing is designed so that the server’s aggregate of transformed data representations received from all the clients helps recover an unbiased estimate of the centralized non-private gradient in expectation, although while preserving privacy. We generalize this core methodology to a multi-vector framework, utilizing multiple orthonormal vectors to modulate the privacy in-ducing transformation of our sample, and rigorously establish its efficacy in reducing the mean squared error beyond the original formulation. 
+
+## 3.1 Modulated learning 
+
+We first develop the basic modulated-learning construction that underlies the rest of the paper. The plan is to define the client-side map, quantify its sensitivity, and then show how the server debiases the received statistics to obtain a usable gradient estimate. We start with the definition of the prescribed modulating map and correspondingly explain the role of various parameters used in this mapping. 
+
+3.1.1 Single vector modulated DP 
+
+At round t of the protocol, the server maintains the global model βt and selects a mod-ulation direction vt ∈ Rd with ∥vt∥2 = 1 and vt ⊥ βt. The tuple (βt, v t), along with chosen parameters (α, λ, ω ) and the privacy inducing noise level σ that is needed, is broadcast to 4all the clients. Upon receiving (βt, v t), client i draws ϕ(t) 
+
+> i
+
+∼ Unif[0 , 2π] and computes the modulated transformation given below. 
+
+g(t) 
+
+> i
+
+= (1 − α)xi + λ cos  ω⟨xi, v t⟩ + ϕ(t)
+
+> i
+
+vt. (1) The parameters of α, λ and ω impact the global sensitivity of the transformation g(·), which will allow us to calibrate the variance of the additive noise σ2 that needs to be used to induce differential privacy. This result is formalized in the lemma 3.1 below. 
+
+3.1.2 Role of α, λ and v
+
+Lemma 3.1 (Lipschitz continuity of g). Let 0 < α < 1, λ > 0, ω > 0, v ∈ Rd with ∥v∥2 = 1 
+
+and ϕ0 ∈ [0 , 2π]. Define 
+
+g(x) = (1 − α) x + λ cos  ω ⟨x, v ⟩ + ϕ0
+
+ v + η0, where η0 ∼ N (0 , σ 2Id) (2) 
+
+Then g devoid of the noise η0 is globally Lipschitz with constant 
+
+L = |1 − α| + λ ω. 
+
+That is, ∥g(x) − g(y)∥2 ≤ L ∥x − y∥2 for all x, y ∈ Rd.Proof. Decompose g(x) − g(y):
+
+g(x) − g(y) = (1 − α)( x − y) + λcos( ω⟨x, v ⟩ + ϕ0) − cos( ω⟨y, v ⟩ + ϕ0) v. 
+
+Taking ℓ2–norms and using ∥v∥2 = 1 together with the triangle inequality, 
+
+∥g(x) − g(y)∥2 ≤ | 1 − α| ∥ x − y∥2 + λ cos( ω⟨x, v ⟩ + ϕ0) − cos( ω⟨y, v ⟩ + ϕ0) .
+
+Since cos t is 1–Lipschitz, | cos u − cos w| ≤ | u − w| for all u, w ∈ R. With u = ω⟨x, v ⟩ + ϕ0
+
+and w = ω⟨y, v ⟩ + ϕ0, |u − w| = ω |⟨ x − y, v ⟩| ≤ ω ∥x − y∥2. Substituting gives 
+
+∥g(x) − g(y)∥2 ≤  |1 − α| + λω  ∥x − y∥2 ,
+
+so L = |1−α|+λω is a valid Lipschitz constant, and the global sensitivity under the adjacency relation of x ∼ y being neighbors when ∥x − y∥2 ≤ 1.Therefore, there are several choices of these parameter values such that the Lipschitz con-stant is strictly less than 1, resulting in a corresponding transformation that is a contractive map. 
+
+3.1.3 Client-side broadcast 
+
+This Lipschitz bound (in this case, the global sensitivity) is needed to induce privacy, as it quantifies the maximum change in output g(x) for neighboring inputs. To be more precise for the given L, the Gaussian mechanism [Dwo+16] to induces differential privacy, by applying an additive Gaussian noise ξ(t) 
+
+> i
+
+∼ N (0 , σ 2Id) with σ = Lp2 ln(1 .25 /δ )/ε . The noised version of this transformed data on each client given by, ˜g(t) 
+
+> i
+
+= g(t) 
+
+> i
+
++ ξ(t) 
+
+> i
+
+is then (ε, δ )-differentially private. This ˜gi, is then sent to the server for a specific post-processing that enables the regression task. The client-side of the mechanism is summarized below. 5Algorithm 1 Single-Vector: Client Protocol  
+
+> 1:
+
+Input: Private data (xi, y i), (α, λ, ω, σ 2
+
+> DP
+
+), v 
+
+> 2:
+
+Sample ϕi ∼ Unif [0 , 2π] 
+
+> 3:
+
+gi ← (1 − α)xi + λ cos( ω⟨xi, v ⟩ + ϕi)v 
+
+> 4:
+
+ξi ∼ N (0 , σ 2
+
+> DP
+
+Id) 
+
+> 5:
+
+˜gi ← gi + ξi 
+
+> 6:
+
+Send (˜ gi, y i) to the server. 
+
+3.1.4 Server-side aggregation 
+
+The server aggregates these received updates as follows. 
+
+eΣg = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+˜g(t) 
+
+> i
+
+˜g(t)⊤ 
+
+> i
+
+. (3) The server then post-processes this eΣg to get 
+
+bΣx = 1(1 − α)2
+
+eΣg − λ2
+
+2 vv ⊤ − σ2
+
+> DP
+
+Id
+
+
+
+. (4) This quantity enables it to obtain an unbiased estimate of the non-private centralized gra-dient, while still preserving privacy. This is because the privatized matrix bΣx can be post-processed using yi (which is considered to be non-sensitive in our setting), ˜gi which is already a privatized vector, and β which is a privatized vector in any round as follows 
+
+Z ← 11 − α
+
+1
+
+K
+
+> K
+
+X
+
+> i=1
+
+yi ˜gi
+
+G ← eΣxβ − Z
+
+(5) to obtain a G such that in expectation, it forms an unbiased estimate of the gradient of the loss function. This server side of the mechanism is summarized in the algorithm 2 below. We clip the coefficients (projection onto the ball of radius c), every round as needed to enable convergence analysis, later on. We now show that this algorithm on the server side does result in an unbiased estimate of the gradient while preserving differential privacy. To do so, we first note the following expansion of the expected value E[eΣg]. The perturbed feature covariance eΣg is computed from the noisy modulated features ˜gi sent by the clients. Its expectation can be decomposed into contributions from the noise-free modulated features gi
+
+and the differential privacy (DP) noise ξi.6Algorithm 2 Single-Vector: Server Protocol 
+
+1: Input: {(˜ gi, y i)}Ki=1 , β, (α, λ, σ 2
+
+> DP
+
+)
+
+2: eΣg ← 1
+
+> K
+
+PKi=1 ˜gi ˜g⊤
+
+> i
+
+3: eΣx ← 1(1 −α)2
+
+eΣg − λ2 
+
+> 2
+
+vv ⊤ − σ2
+
+> DP
+
+Id
+
+
+
+4: Z ← 11−α
+
+> 1
+> K
+
+PKi=1 yi ˜gi
+
+5: G ← eΣxβ − Z
+
+6: β ← β − ηG 
+
+7: β = β
+
+> max
+
+(1,∥β∥2/c )
+
+8: Broadcast the updated regression coefficients β and also send new v ⊥ β to the clients. 
+
+E[eΣg] = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+E[˜ gi ˜g⊤ 
+
+> i
+
+]= 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+E[( gi + ξi)( gi + ξi)⊤]= 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+E[gig⊤ 
+
+> i
+
+] + σ2
+
+> DP
+
+I. (6) The cross terms vanish because the DP noise ξi is zero-mean and independent of gi, leaving only the covariance of gi and the isotropic noise variance. Now we compute the expectation of the noise-free modulated feature covariance: 
+
+1
+
+K
+
+> K
+
+X
+
+> i=1
+
+E[gig⊤ 
+
+> i
+
+] = (1 − α)2 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+xix⊤ 
+
+> i
+
++ λ2 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+E[cos 2(ω⟨xi, v ⟩ + ϕi)] vv ⊤
+
+= (1 − α)2 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+xix⊤ 
+
+> i
+
++ λ2
+
+2 vv ⊤ (7) The second equality uses the fact that E[cos 2(θ)] = 12 when θ is uniformly distributed over 
+
+[0 , 2π]. Thus, the cosine modulation contributes a fixed rank-one term scaled by λ2/2.Putting these together, 
+
+E[eΣg] = (1 − α)2 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+xix⊤ 
+
+> i
+
++ λ2
+
+2 vv ⊤ + σ2
+
+> DP
+
+I (8) or, equivalently, after applying the server’s debiasing step: 
+
+E[eΣx] = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+xix⊤ 
+
+> i
+
+(9) 7since Σx = 1
+
+> K
+
+P 
+
+> i
+
+xix⊤ 
+
+> i
+
+, showing that eΣx is an unbiased estimator of the true data covariance 
+
+Σx, with the modulation and noise terms removed via algebraic correction. Similarly, 
+
+E[Z] = 11 − α
+
+1
+
+K
+
+> K
+
+X
+
+> i=1
+
+E[yi ˜gi] (10) 
+
+= 11 − α
+
+1
+
+K
+
+> K
+
+X
+
+> i=1
+
+(1 − α)yixi + λE[cos( ω⟨xi, v ⟩ + ϕi)] yiv (11) 
+
+= 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+yixi (12) The cosine term vanishes in expectation because E[cos( ·)] = 0 under uniform phase ϕi. Thus, 
+
+Z is an unbiased estimator of 1
+
+> K
+
+P 
+
+> i
+
+yixi. Therefore, 
+
+E[G] = E[eΣxβ − Z] = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+xix⊤ 
+
+> i
+
+β − 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+yixi = 1
+
+K X⊤Xβ − 1
+
+K X⊤Y (13) 
+
+L(β) = 12K
+
+> K
+
+X
+
+> i=1
+
+(x⊤ 
+
+> i
+
+β − yi)2, ∇L(β) = 1
+
+K X⊤Xβ − 1
+
+K X⊤Y = E[G] (14) Thus, G is an unbiased estimator for the gradient ∇L(β), ensuring that the server’s update direction is correct in expectation while preserving differential privacy. That requires the server to have a private estimate of Σx, as that is the only term in the bias correction function that depends on the raw sensitive data. In order to estimate it privately, we thereby show the following relation between eΣg and Σx where eΣg is obtained as a post-processing of a privatized quantity ˜g(t) 
+
+> i
+
+while −λ2 
+
+> 2
+
+vv ⊤ − σ2DP Id is already private, as it is data independent and public information known to the server. eΣg can be obtained as a post-processing of ˜g(t) 
+
+> i
+
+as shown in the result below, which provides a private estimator for 
+
+Σx as a corollary. 
+
+Corollary 3.2 (Covariance Estimator) . The sample covariance of perturbed features is defined as eΣg = 1
+
+> K
+
+PKi=1 ˜gi ˜g⊤ 
+
+> i
+
+, and the estimator 
+
+bΣx = 1(1 − α)2
+
+eΣg − λ2
+
+2 vv ⊤ − σ2DP Id
+
+
+
+converges almost surely to Σx as K → ∞ .
+
+84 Privacy accounting 
+
+It is straightforward as follows, unlike DP-SGD’s moments accountant. For round i, we achieve a ρi-zCDP guarantee by adding zero-mean Gaussian noise with variance 
+
+σ2 
+
+> i
+
+= ∆2
+
+2ρi
+
+,
+
+where ∆ is the sensitivity. Since each client operates on a distinct local dataset, parallel composition applies within each round, so the privacy parameter ρi does not accumulate across clients. Any subsequent computation on the released output is covered by post-processing , which leaves ρi unchanged. Across rounds, the sequential composition theorem for zCDP gives 
+
+ρ1: T =
+
+> T
+
+X
+
+> i=1
+
+ρi,
+
+so after rounds i and i + 1 the cumulative budget is simply ρi + ρi+1 . This is significantly 
+
+tighter than composition under (ε, δ )-DP (even via the Advanced Composition theorem, which incurs an O(√T ) overhead in ε), and also tighter than Rényi-DP composition, which requires a subsequent conversion step back to (ε, δ )-DP that introduces additional slack. 
+
+# 5 Non-iterative scheme 
+
+The previous section develops an iterative gradient-based protocol. We now show that the same modulated representation can also support a one-shot estimator. We now present our non-iterative estimator for the linear regression parameter β∗. The key insight is that we can leverage the modulated features hi and responses yi to construct unbiased moment estimators without requiring multiple rounds of iteration, where hi are computed as follows: 
+
+hi = (1 − α)xi + λ cos( ω⟨xi, v ⟩ + ϕi)v + ηi.
+
+This approach provides significant advantages in terms of not having to perform privacy composition across iterations. To obtain the estimator, we first compute the modulated feature-response products, zi = hiyi. These products capture the covariance structure be-tween the modulated features and responses. Next, we average these products across all samples 
+
+¯z = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+zi.
+
+Finally, we correct for the modulation bias to obtain our moment estimator, 
+
+bΓ = 11 − α ¯z. 
+
+9The unbiasedness of this estimator follows from careful analysis of the cross-moment: 
+
+E[hiyi] = E [((1 − α)xi + λ cos( ω⟨xi, v ⟩ + ϕi)v + ηi) ( ⟨xi, β ∗⟩ + εi)] = E [(1 − α)xi⟨xi, β ∗⟩] + E [(1 − α)xiεi]+ E [λ cos( ω⟨xi, v ⟩ + ϕi)v⟨xi, β ∗⟩] + E [λ cos( ω⟨xi, v ⟩ + ϕi)vε i]+ E [ηi⟨xi, β ∗⟩] + E [ηiεi] .
+
+(15) Now upon expanding each term, we get the following. 
+
+E [(1 − α)xi⟨xi, β ∗⟩] = (1 − α)E[xix⊤ 
+
+> i
+
+]β∗ = (1 − α)Σ xβ∗.
+
+Since εi is zero-mean and independent of xi we have, 
+
+E [(1 − α)xiεi] = 0 .
+
+As ϕi is uniform on [0 , 2π], making cos( ω⟨xi, v ⟩ + ϕi) zero-mean and independent of xi we have 
+
+E [λ cos( ω⟨xi, v ⟩ + ϕi)v⟨xi, β ∗⟩] = 0 .
+
+Similarly, as ηi is zero-mean and independent of xi we have, E [λ cos( ω⟨xi, v ⟩ + ϕi)vε i] = 0 ,
+
+E [ηi⟨xi, β ∗⟩] = 0 , and E [ηiεi] = 0 . Therefore, E[hiyi] = (1 − α)Σ xβ∗, which demonstrates that bΓ provides an unbiased estimate of the population moment as 
+
+E[bΓ] = Σ xβ∗.
+
+The final parameter estimate thereby is obtained by solving the following using our covariance estimator and the cross-moment bΓ.Solve ˆβ = bΣ−1 
+
+> x
+
+bΓ to recover β∗.
+
+This one-step procedure avoids the privacy accumulation of iterative methods due to privacy properties under composition. That said, practically obtaining a good solution is also con-tingent on the matrix inverse and on dealing with the overall conditioning of this system. The estimate of bΣx can be computed from corollary 3.3 where hi is used in place of ˜gi. As 
+
+hi in non-iterative version and ˜gi in iterative version are exactly the same. 
+
+# 6 Reconstruction error lower bound 
+
+The preceding sections establish that the protocol is useful in the sense that the server recovers an unbiased gradient in expectation, while protecting the privacy. We now ask the complementary question from an adversary’s perspective: given what a client transmits, how accurately can an attacker reconstruct that client’s private feature vector? We derive a Cramér–Rao lower bound on the mean squared reconstruction error achievable by any unbiased attacker, thereby quantifying the protocol’s privacy protection directly in terms of its parameters. 10 Setup. Under the single-vector protocol, client i transmits 
+
+(˜ gi, y i), ˜gi = gi + ξi, gi = (1 − α)xi + λ cos( θi) v, θi = ω⟨xi, v ⟩ + φi, (16) where ξi ∼ N (0 , σ 2DP Id), εi ∼ N (0 , σ 2 
+
+> y
+
+), and φi ∼ Unif[0 , 2π] are all mutually independent. The attacker is assumed to know all public parameters: β, v, α, λ, ω, σ2DP , β∗, and σ2 
+
+> y
+
+. Their goal is to construct an unbiased estimator ˆx of xi from the observation (˜ gi, y i).
+
+Information decomposition. Because ˜gi and yi are conditionally independent given xi
+
+(their randomness comes from independent sources: φi and ξi for ˜gi, and εi for yi), the total Fisher information about xi decomposes additively: 
+
+I(˜ gi, y i)(xi) = I˜gi (xi) + Iyi (xi). (17) We compute each term via the following auxiliary lemmas. 
+
+Lemma 6.1 (Fisher information for a Gaussian-perturbed map) . Let ˜g = f (x) + ξ where 
+
+ξ ∼ N (0 , σ 2Id) and f : Rd → Rd is differentiable with Jacobian Jf (x). Then the Fisher information matrix for x given observation ˜g is 
+
+I˜g(x) = 1
+
+σ2 Jf (x)⊤Jf (x).
+
+Proof. Conditioned on x, we have ˜g | x ∼ N (f (x), σ 2Id) with log-likelihood log p(˜ g | x) = const − 12σ2 ∥˜g − f (x)∥2. The score is ∇x log p(˜ g | x) = 1 
+
+> σ2
+
+Jf (x)⊤(˜ g − f (x)) . Since ˜g − f (x) = 
+
+ξ ∼ N (0 , σ 2Id),
+
+I˜g(x) = E∇x log p · (∇x log p)⊤ = 1
+
+σ4 Jf (x)⊤ E[ξξ ⊤] Jf (x) = 1
+
+σ2 Jf (x)⊤Jf (x)
+
+Lemma 6.2 (Jacobian of the client map) . Fix the phase φi and let θi = ω⟨xi, v ⟩ + φi. The Jacobian of xi 7 → gi is 
+
+Jg(xi) = (1 − α)Id − λω sin( θi) vv ⊤.
+
+Consequently, 
+
+Jg(xi)⊤Jg(xi) = (1 − α)2Id + c1(xi) vv ⊤,
+
+where 
+
+c1(xi) := −2λω (1 − α) sin( θi) + λ2ω2 sin 2(θi).
+
+Proof. Differentiating gi = (1 − α)xi + λ cos( ω⟨xi, v ⟩ + φi) v with respect to xi gives Jg(xi) = (1 − α)Id − λω sin( θi) vv ⊤. Expanding the product and using ∥v∥ = 1 (so (vv ⊤)2 = vv ⊤), 
+
+J⊤ 
+
+> g
+
+Jg = (1 − α)Id − λω sin( θi) vv ⊤2
+
+= (1 − α)2Id − 2λω (1 − α) sin( θi) vv ⊤ + λ2ω2 sin 2(θi) vv ⊤
+
+= (1 − α)2Id + c1(xi) vv ⊤
+
+11 Theorem 6.3 (Conditional reconstruction lower bound) . Under the single-vector protocol, fix the client phase φi and let θi = ω⟨xi, v ⟩ + φi. For any unbiased estimator ˆx of xi constructed from (˜ gi, y i), the per-dimension mean squared reconstruction error satisfies 
+
+1
+
+d E∥ˆx − xi∥2 ≥ 11
+
+σ2DP 
+
+
+
+(1 − α)2 + c1(xi)
+
+d
+
+
+
++ ∥β∗∥2
+
+d σ 2
+
+> y
+
+, (18) 
+
+where c1(xi) = −2λω (1 − α) sin( θi) + λ2ω2 sin 2(θi).Proof. Fisher information from ˜gi can be written upon conditioning on the fixed phase φi,as the map xi 7 → gi is deterministic and differentiable based on lemmas 6.1 and 6.2 as, 
+
+I˜gi (xi | φi) = 1
+
+σ2DP 
+
+(1 − α)2Id + c1(xi) vv ⊤.
+
+Now, the Fisher information from yi, based on yi | xi ∼ N (⟨β∗, x i⟩, σ 2 
+
+> y
+
+), the score is 
+
+∇xi log p(yi | xi) = 1
+
+> σ2
+> y
+
+(yi − ⟨ β∗, x i⟩)β∗, can be stated as, 
+
+Iyi (xi) = 1
+
+σ2
+
+> y
+
+β∗β∗⊤ .
+
+The total Fisher information therefore, is 
+
+I(xi) = 1
+
+σ2DP 
+
+(1 − α)2Id + c1(xi) vv ⊤ + 1
+
+σ2
+
+> y
+
+β∗β∗⊤ .
+
+For any unbiased ˆx, the Cramér–Rao inequality given by Cov(ˆ x) ⪰ I (xi)−1, gives E[∥ˆx −
+
+xi∥2] = tr(Cov(ˆ x)) ≥ tr( I(xi)−1). Applying the matrix-trace inequality tr( A−1) ≥ d2/tr( A)
+
+for any positive definite A ∈ Rd×d yields the stated inequality (18) as, 
+
+tr( I(xi)) = (1 − α)2d + c1(xi)
+
+σ2DP 
+
++ ∥β∗∥2
+
+σ2
+
+> y
+
+.
+
+Corollary 6.4 (Phase-averaged reconstruction lower bound) . Taking the expectation of the denominator of (18) over the uniform phase φi ∼ Unif[0 , 2π], and using Eφi [sin θi] = 0 and 
+
+Eφi [sin 2 θi] = 12 , we obtain 
+
+Eφi [c1(xi)] = λ2ω2
+
+2 ≥ 0.
+
+Hence the following unconditional lower bound holds: 
+
+1
+
+d E∥ˆx − xi∥2 ≥ 1(1 − α)2
+
+σ2DP 
+
++ λ2ω2
+
+2d σ 2DP 
+
++ ∥β∗∥2
+
+d σ 2
+
+> y
+
+. (19) 
+
+This closed-form bound depends only on the protocol parameters and is straightforward to evaluate and optimize. The modulation term λ2ω2/(2 dσ 2DP ) is always non-negative, con-firming that the cosine modulation never harms the attacker’s lower bound on average, and improves it whenever λω > 0.
+
+12 6.1 Interpretation 
+
+The bound (18) holds at each fixed realization of the phase φi, through the dependence of c1(xi) on θi = ω⟨xi, v ⟩ + φi. The effects can be concluded based on the denominator. Increasing σ2DP shrinks the first denominator term, directly increasing the lower bound and making reconstruction harder for any attacker. Similarly, when sin θi > 0 and the cross term 
+
+2λω (1 − α) sin θi dominates, c1(xi) is negative. This reduces the Fisher information from ˜gi
+
+below the no-modulation level (1 −α)2d/σ 2DP , providing an additional layer of protection along the modulation direction v beyond the Gaussian noise alone. The term ∥β∗∥2/(dσ 2 
+
+> y
+
+) reflects information about xi that leaks through the response yi. Since yi is treated as non-sensitive in the protocol, this part is irreducible. 
+
+# 7 Bias reduction by O(√m) with multiple orthonormal vectors 
+
+We now describe a variant of this protocol that further reduces the bias, faster by using a set of multiple vectors Vt = {vt,j }mj=1 instead of the single-vector version that we described in section 3.1.1. To summarize the results that follow, we show that the multi-vector version results in a lower Lipschitz constant, thereby resulting in requiring a smaller amount of noise for differential privacy than the single-vector version. We also show that bias obtained on the multi-vector version prior to the server-side correction reduces faster by an order of the square root of the data dimension, √m. Fix integers d ≥ 1 and m ∈ { 1, . . . , d }. Let K ≥ 1
+
+clients each hold a single pair (xi, y i) with xi ∈ Rd and yi ∈ R. In each round t, the server holds βt ∈ Rd and selects an orthonormal set 
+
+Vt := {vt, 1, . . . , v t,m } ⊂ Rd, v⊤ 
+
+> t,j
+
+vt,k = δjk .
+
+Algorithm 3 Multi-Vector: Client Protocol  
+
+> 1:
+
+Input: Private data (xi, y i), (α, λ, ω, σ 2
+
+> DP
+
+), β, V = {vj }mj=1  
+
+> 2:
+
+Sample ϕi,j ∼ Unif[0 , 2π] for each j = 1 , . . . , m  
+
+> 3:
+
+gi ← (1 − α)xi + λ
+
+√m
+
+Pmj=1 cos( ω⟨xi, v j ⟩ + ϕi,j )vj 
+
+> 4:
+
+ξi ∼ N (0 , σ 2
+
+> DP
+
+Id) 
+
+> 5:
+
+˜gi ← gi + ξi 
+
+> 6:
+
+Send (ui, ˜gi) to the server 13 Algorithm 4 Multi-Vector: Server Protocol  
+
+> 1:
+
+Input: {(˜ gi, y i)}Ki=1 , β, (α, λ, σ 2DP ), V = {vj }mj=1  
+
+> 2:
+
+Compute projection matrix: PV ← Pmj=1 vj v⊤ 
+
+> j
+> 3:
+
+eΣg ← 1
+
+K
+
+PKi=1 ˜gi ˜g⊤ 
+
+> i
+> 4:
+
+eΣx ← 1(1 − α)2
+
+eΣg − λ2
+
+2mPV − σ2DP I
+
+ 
+
+> 5:
+
+Z ← 11 − α · 1
+
+K
+
+PKi=1 yi ˜gi 
+
+> 6:
+
+G ← eΣxβ − Z 
+
+> 7:
+
+β ← β − η G  
+
+> 8:
+
+β = β
+
+> max
+
+(1,∥β∥2/c ) 
+
+> 9:
+
+Broadcast updated β and new orthonormal set V ⊥ β to clients Let Vt ∈ Rd×m denote the matrix with columns vt, 1, . . . , v t,m , and define the rank-m
+
+orthogonal projector 
+
+PVt := VtV ⊤ 
+
+> t
+
+=
+
+> m
+
+X
+
+> j=1
+
+vt,j v⊤ 
+
+> t,j
+
+.
+
+Optionally, the server may impose vt,j ⊥ βt for all j; if βt̸ = 0 this forces m ≤ d − 1.Privacy is defined with respect to the client feature xi using the adjacency relation x ∼ x′
+
+if ∥x − x′∥2 ≤ 1. Throughout, yi is treated as non-sensitive/public (as in the draft’s “new” single-vector protocol), and privacy is required only for xi.
+
+Definition 7.1 (Multi-vector modulated client map and privatized transmission) . Fix pa-rameters α ∈ (0 , 1) , λ > 0, and ω > 0. For a given orthonormal set V = {v1, . . . , v m},a phase vector ϕ = ( ϕ1, . . . , ϕ m) ∈ [0 , 2π]m, and an input x ∈ Rd, define the noise-free 
+
+modulated map 
+
+gV (x; ϕ) := (1 − α)x + λ
+
+√m
+
+> m
+
+X
+
+> j=1
+
+cos  ω ⟨x, v j ⟩ + ϕj
+
+ vj . (20) 
+
+Given a noise scale σDP > 0, define the privatized output 
+
+˜gV (x; ϕ) := gV (x; ϕ) + ξ, ξ ∼ N (0 , σ 2DP Id), (21) 
+
+where ξ is independent of (x, ϕ ). In round t, client i samples i.i.d. phases 
+
+ϕ(t) 
+
+> i,j
+
+∼ Unif[0 , 2π], j = 1 , . . . , m, 
+
+forms g(t) 
+
+> i
+
+= gVt (xi; ϕ(t) 
+
+> i
+
+) and ˜g(t) 
+
+> i
+
+= ˜ gVt (xi; ϕ(t) 
+
+> i
+
+), and transmits only 
+
+ ˜g(t) 
+
+> i
+
+, y i
+
+ (22) 
+
+to the server. 
+
+14 Theorem 7.2 (Global ℓ2 sensitivity of the multi-vector map) . Fix an orthonormal set V =
+
+{v1, . . . , v m} and any phase vector ϕ ∈ [0 , 2π]m. Let gV (·; ϕ) be defined in (20) . Then for all 
+
+x, x ′ ∈ Rd,
+
+∥gV (x; ϕ) − gV (x′; ϕ)∥2 ≤ L ∥x − x′∥2 ,
+
+where one may take 
+
+L := |1 − α| + λω 
+
+r sm, s := sup 
+
+> h̸=0
+
+∥PV h∥22
+
+∥h∥22
+
+.
+
+Moreover, for orthonormal V , PV is an orthogonal projector and ∥PV ∥op = 1 , hence s = 1 
+
+and 
+
+L = |1 − α| + λω 
+
+√m.
+
+In particular, under the adjacency relation x ∼ x′ iff ∥x − x′∥2 ≤ 1, the ℓ2-sensitivity is bounded by ∆2 ≤ L.Proof. Fix x, x ′ ∈ Rd and let h := x − x′. For j ∈ { 1, . . . , m } define 
+
+θj := ω ⟨x, v j ⟩ + ϕj , θ′ 
+
+> j
+
+:= ω ⟨x′, v j ⟩ + ϕj .
+
+Then 
+
+gV (x; ϕ) − gV (x′; ϕ) = (1 − α)h + λ
+
+√m
+
+> m
+
+X
+
+> j=1
+
+ cos θj − cos θ′
+
+> j
+
+ vj .
+
+By the triangle inequality, 
+
+∥gV (x; ϕ) − gV (x′; ϕ)∥2 ≤ | 1 − α| ∥ h∥2 + λ
+
+√m
+
+> m
+
+X
+
+> j=1
+
+(cos θj − cos θ′ 
+
+> j
+
+)vj
+
+> 2
+
+.
+
+Since cos( ·) is 1-Lipschitz on R, | cos u − cos w| ≤ | u − w| for all u, w ∈ R. Therefore, 
+
+| cos θj − cos θ′ 
+
+> j
+
+| ≤ | θj − θ′ 
+
+> j
+
+| = ω |⟨ h, v j ⟩| .
+
+Set cj := cos θj − cos θ′ 
+
+> j
+
+. Then |cj | ≤ ω|⟨ h, v j ⟩| and, using orthonormality, 
+
+> m
+
+X
+
+> j=1
+
+cj vj
+
+> 22
+
+=
+
+> m
+
+X
+
+> j=1
+
+c2 
+
+> j
+
+≤ ω2
+
+> m
+
+X
+
+> j=1
+
+⟨h, v j ⟩2 = ω2 ∥PV h∥22 .
+
+Taking square roots yields 
+
+> m
+
+X
+
+> j=1
+
+cj vj
+
+> 2
+
+≤ ω ∥PV h∥2 ≤ ω√s ∥h∥2 ,
+
+where s = sup h̸=0 ∥PV h∥22 / ∥h∥22. Substituting back gives 
+
+∥gV (x; ϕ) − gV (x′; ϕ)∥2 ≤
+
+
+
+|1 − α| + λω 
+
+q sm
+
+
+
+∥h∥2 ,
+
+which proves the first claim with L := |1 − α| + λω ps/m .If V is orthonormal then PV is an orthogonal projector, hence ∥PV ∥op = 1 and s = 1 .The sensitivity statement for adjacency ∥x − x′∥2 ≤ 1 is immediate. 15 Corollary 7.3 (Per-round local differential privacy via the Gaussian mechanism) . Let ∆2 ≤
+
+L be the sensitivity bound from Theorem 7.2. Fix ε > 0 and δ ∈ (0 , 1) and set 
+
+σDP := Lp2 ln(1 .25 /δ )
+
+ε . (23) 
+
+Then, for each round and each client, the randomized mapping x 7 → ˜gV (x; Φ) of (21) , where 
+
+Φ is the client-sampled random phase vector and ξ is Gaussian noise with variance σ2DP , is 
+
+(ε, δ )-locally differentially private with respect to x.Proof. Condition on an arbitrary realization of the phases Φ = ϕ. The map x 7 → gV (x; ϕ) is deterministic and has ℓ2-sensitivity at most L by Theorem 7.2. By the standard Gaussian mechanism for vector-valued queries with ℓ2-sensitivity L, adding ξ ∼ N (0 , σ 2DP Id) with σDP 
+
+as in (23) yields (ε, δ )-DP conditional on Φ = ϕ. Since Φ is sampled independently of x
+
+and DP is preserved under additional randomness independent of the private input, the unconditional mechanism x 7 → ˜gV (x; Φ) is also (ε, δ )-locally differentially private. 
+
+Lemma 7.4 (Second-moment identity for ˜gi). Fix any client i and treat (xi, y i) as fixed. Let ˜gi be generated according to Definitions 7.1 using orthonormal V = {vj }mj=1 , i.i.d. phases 
+
+ϕi,j ∼ Unif[0 , 2π], and independent Gaussian noise ξi ∼ N (0 , σ 2DP Id). Then 
+
+E˜gi ˜g⊤ 
+
+> i
+
+xi
+
+ = (1 − α)2xix⊤ 
+
+> i
+
++ λ2
+
+2mPV + σ2DP Id, (24) 
+
+where the expectation is over the internal randomness (ϕi, ξ i).Proof. Write ˜gi = gi + ξi with E[ξi] = 0 and E[ξiξ⊤ 
+
+> i
+
+] = σ2DP Id. Then 
+
+E[˜ gi ˜g⊤ 
+
+> i
+
+| xi] = E[gig⊤ 
+
+> i
+
+| xi] + E[ξiξ⊤ 
+
+> i
+
+] + E[giξ⊤ 
+
+> i
+
+| xi] + E[ξig⊤ 
+
+> i
+
+| xi].
+
+The cross terms vanish because ξi is independent of gi and mean-zero, hence E[giξ⊤ 
+
+> i
+
+| xi] = 
+
+E[gi | xi]E[ξi]⊤ = 0 and similarly E[ξig⊤ 
+
+> i
+
+| xi] = 0 . Therefore, 
+
+E[˜ gi ˜g⊤ 
+
+> i
+
+| xi] = E[gig⊤ 
+
+> i
+
+| xi] + σ2DP Id.
+
+Next decompose gi = Ai + Bi where 
+
+Ai := (1 − α)xi, Bi := λ
+
+√m
+
+> m
+
+X
+
+> j=1
+
+cos( θi,j ) vj , θi,j := ω ⟨xi, v j ⟩ + ϕi,j .
+
+Then 
+
+E[gig⊤ 
+
+> i
+
+| xi] = AiA⊤ 
+
+> i
+
++ E[BiB⊤ 
+
+> i
+
+| xi] + E[AiB⊤ 
+
+> i
+
+| xi] + E[BiA⊤ 
+
+> i
+
+| xi].
+
+Since ϕi,j is uniform on [0 , 2π] and independent of xi, E[cos( θi,j ) | xi] = 0 , so E[Bi | xi] = 0 .Hence E[AiB⊤ 
+
+> i
+
+| xi] = AiE[B⊤ 
+
+> i
+
+| xi] = 0 and similarly E[BiA⊤ 
+
+> i
+
+| xi] = 0 . Thus, 
+
+E[gig⊤ 
+
+> i
+
+| xi] = AiA⊤ 
+
+> i
+
++ E[BiB⊤ 
+
+> i
+
+| xi] = (1 − α)2xix⊤ 
+
+> i
+
++ E[BiB⊤ 
+
+> i
+
+| xi].
+
+16 It remains to compute E[BiB⊤ 
+
+> i
+
+| xi]. Expanding, 
+
+BiB⊤ 
+
+> i
+
+= λ2
+
+m
+
+> m
+
+X
+
+> j=1
+> m
+
+X
+
+> k=1
+
+cos( θi,j ) cos( θi,k ) vj v⊤ 
+
+> k
+
+.
+
+For j̸ = k, independence of ϕi,j and ϕi,k implies E[cos( θi,j ) cos( θi,k ) | xi] = E[cos( θi,j ) |
+
+xi]E[cos( θi,k ) | xi] = 0 . For j = k, uniformity of ϕi,j implies θi,j (mod 2 π) is uniform on 
+
+[0 , 2π], so 
+
+E[cos 2(θi,j ) | xi] = 12π
+
+Z 2π
+
+> 0
+
+cos 2(u) du = 12.
+
+Therefore, 
+
+E[BiB⊤ 
+
+> i
+
+| xi] = λ2
+
+m
+
+> m
+
+X
+
+> j=1
+
+12 vj v⊤ 
+
+> j
+
+= λ2
+
+2m
+
+> m
+
+X
+
+> j=1
+
+vj v⊤ 
+
+> j
+
+= λ2
+
+2mPV .
+
+Substituting into the earlier identity yields (24). 
+
+Corollary 7.5 (Reduction to the single-vector protocol) . If m = 1 and V = {v}, then 
+
+PV = vv ⊤, the client map (20) becomes g(x) = (1 − α)x + λ cos( ω⟨x, v ⟩ + ϕ)v, the sensitivity bound reduces to L = |1 − α| + λω , and with the server side processing reduces to 
+
+bΣx = 1(1 − α)2
+
+
+
+Σ˜g − λ2
+
+2 vv ⊤ − σ2DP Id
+
+
+
+,
+
+which is exactly the structure of the draft’s single-vector “new” protocol. Proof. All identities follow by substituting m = 1 into Definitions 7.1 and observing that 
+
+PV = P1 
+
+> j=1
+
+vj v⊤ 
+
+> j
+
+= vv ⊤.
+
+# 8 Convergence 
+
+[Nem+09] Having established unbiasedness of the gradient estimator, we next quantify its stochastic variability. This section derives the variance decomposition of the estimator, which is then used as a key input needed for understanding the convergence guarantee of our updates. To start with, the gradient estimator is given by 
+
+G = bΣxβ − Z, Z = 11 − α · 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+yi ˜gi,
+
+which satisfies E[G] = ∇L(β). We now derive the total variance of this estimator. Define the residual vector r := Xβ − Y ∈ RK , so ri = ⟨xi, β ⟩ − yi. Let C ∈ RK have entries 
+
+Ci := cos( ω⟨xi, v ⟩ + ϕi), let Ξ ∈ RK×d be the noise matrix whose rows are the ξ⊤ 
+
+> i
+
+, and set 
+
+q := Ξ β ∈ RK , so qi = ξ⊤ 
+
+> i
+
+β. All phases ϕi and all rows of Ξ are mutually independent. The final formula involves only three scalar data-dependent constants: 
+
+S2 
+
+> r
+
+:= 1
+
+K ∥r∥2, β⊤Σrx := 1
+
+K β⊤X⊤r, tr(Σ x) := 1
+
+K ∥X∥2
+
+> F
+
+17 Theorem 8.1. Under the assumption v ⊥ β with fixed data (x1, y 1), . . . , (xK , y K )
+
+σ2 
+
+> g
+
+(β) = E∥G − ∇ L(β)∥2
+
+= S2
+
+> r
+
+ λ2 
+
+> 2
+
++ dσ 2DP 
+
+ + 2 σ2DP β⊤Σrx + σ2DP ∥β∥2 tr(Σ x)
+
+K(1 − α)2
+
++ ∥β∥2 λ2σ2DP  
+
+> 2
+
++ ( d + 1) σ4DP 
+
+
+
+K(1 − α)4 . (25) 
+
+Proof. By the centering identity of A.1, 
+
+G − ∇ L(β) = T1 + T2
+
+K(1 − α) + T3
+
+K(1 − α)2 ,
+
+where T1, T 2, T 3 are the mean-zero random vectors defined in (A.1)–(A.3). Squaring and taking expectations yields 
+
+σ2 
+
+> g
+
+(β) = E[∥T1 + T2∥2]
+
+K2(1 − α)2 + E[∥T3∥2]
+
+K2(1 − α)4 ,
+
+because the cross term E[( T1 + T2)⊤T3] = 0 (Theorem C.2). Lemma C.1 gives 
+
+E[∥T1 + T2∥2] = ∥r∥2
+
+λ2
+
+2 + dσ 2DP 
+
+
+
++ 2 Kσ 2DP β⊤Σrx + Kσ 2DP ∥β∥2tr(Σ x).
+
+Lemma D.2 gives 
+
+E[∥T3∥2] = K∥β∥2
+
+λ2σ2DP 
+
+2 + ( d + 1) σ4DP 
+
+
+
+.
+
+Substituting above two equations into the expression for σ2 
+
+> g
+
+and using ∥r∥2 = KS 2 
+
+> r
+
+yields the stated formula. 
+
+# 9 Uniform Variance Bound and Convergence 
+
+Corollary 9.1. Suppose ∥βt∥ ≤ B, ∥xi∥ ≤ R, and |yi| ≤ M for all i and t. Then σ2 
+
+> g
+
+(βt) ≤ ¯σ2
+
+> g
+
+where 
+
+¯σ2 
+
+> g
+
+= (RB + M )2 λ2 
+
+> 2
+
++ dσ 2DP 
+
+ + 2 σ2DP BR (RB + M ) + σ2DP B2R2
+
+K(1 − α)2 + B2 λ2σ2DP  
+
+> 2
+
++ ( d + 1) σ4DP 
+
+
+
+K(1 − α)4 .
+
+Proof. Since |ri| = |⟨ xi, β ⟩ − yi| ≤ ∥ xi∥∥ β∥ + |yi| ≤ RB + M , we have S2 
+
+> r
+
+≤ (RB + M )2. By Cauchy-Schwarz, |β⊤Σrx | ≤ ∥ β∥∥ Σrx ∥ ≤ B · R(RB + M ), and tr(Σ x) ≤ R2. Substituting these bounds into Theorem 8.1 gives the claimed bound. 
+
+Theorem 9.2. Under the assumptions of Theorem 8.1 and Corollary 9.1, with step size 
+
+η = 1 /L DP where LDP = λmax (Σ x), and ¯βT = P 
+
+> t
+
+βt/T , we have 
+
+E[Fe( ¯βT )] − Fe(β∗) ≤ LDP ∥β0 − β∗∥2
+
+2T + ¯σ2
+
+> g
+
+2LDP K .
+
+18 Proof. This follows from standard theory of projected stochastic gradient descent on the set 
+
+β : || β|| <= c [Nem+09] ¯σ2 
+
+> g
+
+with smoothness constant LDP . The first term decays as O(1 /T )
+
+while the second term is the irreducible variance floor set by the privacy noise and protocol parameters. 
+
+# 10 Parameters 
+
+With privacy, unbiasedness, and convergence in place, we can now interpret the formulas at a design level, to help guide the user on choosing their values. This roughly translates the theory into practical guidance on how α, λ, ω, m, d , and K shape the privacy-utility trade-off. Since, σ2DP ∝ L2/ε 2 with L = |1 − α| + λω , the dominant cost terms scale as dσ 2DP /(1 − α)2
+
+and (d+1) σ4DP /[K(1 −α)4]. Reducing L directly reduces σ2DP and both terms simultaneously. With m orthonormal modulation vectors the Lipschitz constant becomes L = |1 − α| +
+
+λω/ √m, so σ2DP decreases with m. Every σ2DP -dependent term therefore benefits from using more vectors. Increasing α lowers L (and hence σ2DP ), but the denominators (1 − α)2 and 
+
+(1 − α)4 simultaneously amplify the variance. The optimal α balances these opposing effects. The dimension appears linearly in both the dσ 2DP S2 
+
+> r
+
+and (d + 1) σ4DP terms, confirming a linear curse of dimensionality. 
+
+# Experiments 
+
+We evaluate the proposed modulated learner on five real regression tasks in the one-sample-per-client regime. Each training example is treated as a separate client. We compare the iterative modulated estimator from Algorithms 3.1–3.2, the one-shot estimator from Section 5 with ridge stabilization, and a tuned DP-SGD FedAvg baseline. The purpose of this appendix is to compare whether the privacy-utility trade-offs achieved by these methods in practice. 
+
+Methods. Modulated iterative is the multi-round server-side update induced by the client mechanism of Algorithm 3.1 and the server correction of Algorithm 3.2. At round t, each client sends (˜ gi, y i); the server forms the debiased covariance estimate bΣx and corrected first moment Z, and updates 
+
+β ← β − η bΣxβ − Z.
+
+Modulated one-shot ridge uses the Section 5 moment estimator together with a ridge term (like in ridge regression) when solving the linear model. DP-SGD FedAvg performs one clipped and Gaussian-perturbed local gradient step per client per round, followed by server averaging. All methods are operated over the common privacy values ϵ ∈ { 0.5, 0.75 , 1.0, 1.25 , . . . , 10 .0}
+
+while using a public validation split. For modulated iterative we tune the scalar factor c in the adaptive rule ηt = c/ ∥bΣx,t ∥op . For the one-shot estimator we tune the ridge parameter 
+
+γ. For DP-SGD we tune the clipping norm C jointly with the learning rate. Each plotted curve therefore corresponds to one dataset-specific hyperparameter configuration held fixed across the entire privacy sweep. 19 (a) CO 2 (b) Fair (years married)     
+
+> (c) ModeChoice (d) RandHIE ( lncoins )
+> (e) RandHIE ( fmde )
+
+Figure 1: Jointly tuned test-set R2 curves on five representative real tasks. Each panel compares modulated iterative, modulated one-shot ridge, and tuned DP-SGD FedAvg over the same privacy grid. The dashed horizontal line is the non-private OLS reference. The common pattern is that the one-shot modulated estimator is strongest at the smallest ϵ values, while the modulated iterative estimator improves more rapidly once the privacy budget is large enough to support repeated rounds. 
+
+Privacy accounting. We follow the privacy convention used by the algorithm: privacy is imposed on the client feature vector xi, while yi is treated as public in the server correction 20 Table 1: Real datasets used in the appended comparison. Each training example is treated as one client. Dataset n d OLS R2
+
+CO2 2284 7 0.999 Fair (yrs_married) 6366 8 0.853 ModeChoice 840 7 0.967 RandHIE (lncoins) 20190 9 0.406 RandHIE (fmde) 20190 9 0.389 term. Smaller ϵ means stronger privacy and larger ϵ means weaker privacy. For the modu-lated methods, the client map is calibrated by the Gaussian mechanism using the sensitivity bound from Theorem 3.1. Since every client participates in every round, privacy composes sequentially across rounds under zCDP: if the per-round budget is ρt, then ρ1: T = PTt=1 ρt
+
+and the corresponding (ϵ, δ ) guarantee is recovered through ϵ = ρ1: T + 2 pρ1: T log(1 /δ ). The iterative method uses T = 10 rounds; the one-shot estimator uses a single private release. DP-SGD is evaluated with the same full-participation zCDP accountant over T = 10 rounds, with per-round sensitivity 2C for the clipped gradient. There is no subsampling amplification because every client participates in every round. That said, it could still be applied to all the methods to obtain a similar conclusion on their performance. 
+
+Datasets and preprocessing. Each task is split once into train, validation, and test subsets. Features are standardized on the training split. The response is standardized for fitting, and R2 is reported on the standardized test target. The dashed horizontal reference in every panel is the non-private OLS fit computed on the same split. 
+
+Results. The five tasks show the same qualitative pattern. At the strongest privacy levels, the one-shot modulated estimator is often strongest because it uses a single private release and therefore avoids inter-round composition. As the privacy budget increases, the iterative estimator improves steadily and eventually overtakes the one-shot alternative on most tasks. The gain is largest on ModeChoice, where multi-round correction produces a clear advantage once the privacy budget is large enough to support repeated optimization. The two RandHIE targets have weaker linear signal, so the separation between methods is smaller, but the same transition remains visible. DP-SGD is a meaningful baseline throughout, especially on the easiest tasks, but in this regime it pays the full cost of ten rounds of composition while using only one clipped example per client per round. When the needed privacy is high (low ϵ), the one-shot modulated estimator fared as the better choice because it extracts as much utility as possible from a single private release. As privacy weakens, the iterative modulated estimator becomes preferable because it can convert additional privacy budget into useful optimization progress over multiple rounds. 21 Table 2: Jointly tuned hyperparameters over the considered range of ϵ values. The iterative column reports the selected step factor c, the one-shot column reports the selected ridge parameter γ, and the DP-SGD columns report the selected clipping norm C and learning rate. Dataset Iterative c One-shot γ DP-SGD C DP-SGD step CO2 0.80 2.00 2.249 0.05 Fair (yrs_married) 0.80 1.00 2.059 0.10 ModeChoice 1.00 0.50 1.816 0.05 RandHIE (lncoins) 0.80 0.50 2.270 0.10 RandHIE (fmde) 0.50 0.50 2.256 0.10 
+
+# A Centering Identity 
+
+This appendix proves the centering identity used to decompose the gradient noise in the variance analysis. The purpose of the result is to separate the random contributions into blocks that can be analyzed independently. 
+
+Lemma A.1 (Centering identity) . Define the three Rd-valued random vectors 
+
+T1 := λ(C⊤r) v + Ξ ⊤r, (26) 
+
+T2 := X⊤q, (27) 
+
+T3 := λ(C⊤q) v + Ξ ⊤q − Kσ 2DP β. (28) 
+
+Each of T1, T2, T3 has mean zero, and 
+
+G − ∇ L(β) = T1 + T2
+
+K(1 − α) + T3
+
+K(1 − α)2 .
+
+Proof. Recall from Algorithm 3.2 of the main paper that G = bΣxβ − Z, where bΣx = 
+
+> 1(1 −α)2
+
+(eΣg − λ2 
+
+> 2
+
+vv ⊤ − σ2DP I), eΣg = 1
+
+> K
+
+P 
+
+> i
+
+˜gi ˜g⊤ 
+
+> i
+
+, and Z = 1(1 −α)K
+
+P 
+
+> i
+
+yi ˜gi.Since ˜gi = (1 − α)xi + λC iv + ξi and v ⊥ β, the inner product ˜g⊤ 
+
+> i
+
+β simplifies to 
+
+˜g⊤ 
+
+> i
+
+β = (1 − α)( x⊤ 
+
+> i
+
+β) + λC i (v⊤β)
+
+| {z } 
+
+> = 0
+
++ξ⊤ 
+
+> i
+
+β = (1 − α)( x⊤ 
+
+> i
+
+β) + qi.
+
+Using this, ˜gi(˜ g⊤ 
+
+> i
+
+β) = [(1 − α)xi + λC iv + ξi][(1 − α)( x⊤ 
+
+> i
+
+β) + qi]. Expanding, averaging over 
+
+i, and noting that λ2 
+
+> 2
+
+vv ⊤β = 0 since v ⊥ β, gives 
+
+bΣxβ = Σ xβ + X⊤q
+
+(1 − α)K + λ(C⊤Xβ ) v
+
+(1 − α)K + λ(C⊤q) v
+
+(1 − α)2K (29) 
+
++ Ξ⊤Xβ 
+
+(1 − α)K + Ξ⊤q
+
+(1 − α)2K − σ2DP β
+
+(1 − α)2
+
+Substituting ˜gi into Z gives 
+
+Z = X⊤YK + λ(C⊤Y ) v
+
+(1 − α)K + Ξ⊤Y
+
+(1 − α)K
+
+22 Since ∇L(β) = Σ xβ − 1 
+
+> K
+
+X⊤Y , the zeroth-order terms in bΣxβ − Z cancel ∇L(β) exactly. Using C⊤Xβ − C⊤Y = C⊤r and Ξ⊤Xβ − Ξ⊤Y = Ξ ⊤r, the remaining terms collect as 
+
+G − ∇ L(β) = λ(C⊤r) v + Ξ ⊤r + X⊤qK(1 − α) + λ(C⊤q) v + Ξ ⊤q − Kσ 2DP βK(1 − α)2
+
+= T1 + T2
+
+K(1 − α) + T3
+
+K(1 − α)2
+
+Each vector has mean zero: E[T1] = 0 because E[Ci] = 0 and E[ξi] = 0 ; E[T2] = 0 because 
+
+E[qi] = 0 ; and E[T3] = 0 because E[Ξ ⊤q] = Kσ 2DP β (by B.1) is exactly cancelled by the 
+
+−Kσ 2DP β term. 
+
+# B Scalar Moments 
+
+Lemma B.1 (Scalar moments) . For all i, j and any fixed a ∈ Rd:
+
+E[CiCj ] = 12 δij , E[Ci] = 0 , (30) 
+
+E[qiqj ] = σ2DP ∥β∥2 δij , E[qi] = 0 , (31) 
+
+Eqi(ξ⊤ 
+
+> i
+
+a) = σ2DP (β⊤a), (32) 
+
+E(ξ⊤ 
+
+> i
+
+β) ∥ξi∥2 = 0 , (33) 
+
+E(ξ⊤ 
+
+> i
+
+β)2 ∥ξi∥2 = σ4DP (d + 2) ∥β∥2 . (34) 
+
+Proof. Equations (30) and (31) are standard. For (32), note that qi = ξ⊤ 
+
+> i
+
+β, so 
+
+E[qi(ξ⊤ 
+
+> i
+
+a)] = X
+
+> b,c
+
+βbacE[ξib ξic ] = σ2DP β⊤a, 
+
+since E[ξib ξic ] = σ2DP δbc . For (33), expand E[( ξ⊤ 
+
+> i
+
+β) ∥ξi∥2] = P 
+
+> a,b
+
+βb E[ξib ξ2
+
+> ia
+
+]. When b̸ = a this equals E[ξib ]E[ξ2
+
+> ia
+
+] = 0 , and when b = a it equals βaE[ξ3
+
+> ia
+
+] = 0 by Gaussian symmetry. For (34), the Isserlis theorem gives E[ξib ξic ξia ξia ] = σ4DP (δbc + 2 δba δca ). Summing over a and then over b, c with weights βbβc yields σ4DP (d ∥β∥2 + 2 ∥β∥2).
+
+# C Block 1: E[∥T1 + T2∥2]
+
+Lemma C.1. 
+
+E[∥T1 + T2∥2] = ∥r∥2
+
+λ2
+
+2 + dσ 2DP 
+
+
+
++ 2 Kσ 2DP β⊤Σrx + Kσ 2DP ∥β∥2 tr(Σ x).
+
+Proof. We use the expansion E[∥T1 + T2∥2] = E[∥T1∥2] + 2 E[T ⊤ 
+
+> 1
+
+T2] + E[∥T2∥2] and compute each term separately. 
+
+Term E[∥T1∥2]. Since T1 = λ(C⊤r)v + Ξ ⊤r and ∥v∥ = 1 ,
+
+∥T1∥2 = λ2(C⊤r)2 + 2 λ(C⊤r)( v⊤Ξ⊤r) + Ξ⊤r 2 .
+
+23 The first term satisfies E[λ2(C⊤r)2] = λ2 P 
+
+> i,j
+
+rirj E[CiCj ] = λ2 
+
+> 2
+
+∥r∥2 by (30). The middle term vanishes since C is independent of Ξ and E[C] = 0 . Writing Ξ⊤r 2 = P 
+
+> i,j
+
+rirj (ξ⊤ 
+
+> i
+
+ξj ),independence of distinct rows kills all off-diagonal expectations, while E[∥ξi∥2] = dσ 2DP gives 
+
+E[ Ξ⊤r 2] = dσ 2DP ∥r∥2 ,
+
+so altogether E[∥T1∥2] = ∥r∥2  λ2 
+
+> 2
+
++ dσ 2DP 
+
+.
+
+Term E[T ⊤ 
+
+> 1
+
+T2]. Expanding, 
+
+T ⊤ 
+
+> 1
+
+T2 = λ(C⊤r)( v⊤X⊤q) + r⊤ΞX⊤q. 
+
+The first summand has zero expectation since C is independent of q and E[C] = 0 . Writing the second as r⊤ΞX⊤q = P 
+
+> i,j
+
+riqj (ξ⊤ 
+
+> i
+
+xj ), off-diagonal terms ( i̸ = j) vanish by independence, and on the diagonal (32) with a = xi gives E[qi(ξ⊤ 
+
+> i
+
+xi)] = σ2DP (β⊤xi), so 
+
+E[T ⊤ 
+
+> 1
+
+T2] = σ2DP 
+
+X
+
+> i
+
+ri(β⊤xi) = Kσ 2DP β⊤Σrx .
+
+Term E[∥T2∥2]. Since ∥T2∥2 = q⊤XX ⊤q and E[qq ⊤] = σ2DP ∥β∥2 IK by (31), 
+
+E[∥T2∥2] = σ2DP ∥β∥2 tr( XX ⊤) = Kσ 2DP ∥β∥2 tr(Σ x).
+
+Adding the three contributions gives the stated formula. 
+
+Theorem C.2. E[T ⊤ 
+
+> 1
+
+T3] = 0 and E[T ⊤ 
+
+> 2
+
+T3] = 0 .Proof. E[T ⊤ 
+
+> 1
+
+T3] = 0 . Substituting (26) and (28) and expanding gives 
+
+T ⊤ 
+
+> 1
+
+T3 = λ2(C⊤r)( C⊤q) + λ(C⊤r)( v⊤Ξ⊤q) − λKσ 2DP (C⊤r)( v⊤β)+ λ(C⊤q)( r⊤Ξv) + r⊤ΞΞ ⊤q − Kσ 2DP r⊤Ξβ. 
+
+We verify each of the six terms has zero expectation. The first term factors as 
+
+λ2 X
+
+> i,j
+
+rj E[CiCj ]E[qi]
+
+which vanishes since C and q are independent and E[qi] = 0 . The second and fourth terms both vanish because C is independent of Ξ and E[C] = 0 . The third term is zero since v ⊥ β.For the fifth term, write r⊤ΞΞ ⊤q = P 
+
+> i,j
+
+riqj (ξ⊤ 
+
+> i
+
+ξj ). When i̸ = j the rows ξi and ξj are independent, so E[ξ⊤ 
+
+> i
+
+ξj ] = 0 . When i = j,
+
+Eri qi ∥ξi∥2 = ri E(ξ⊤ 
+
+> i
+
+β) ∥ξi∥2 = 0 by (33). The sixth term satisfies E[−Kσ 2DP r⊤Ξβ] = −Kσ 2DP 
+
+P 
+
+> i
+
+riE[qi] = 0 .
+
+Similarly, E[T ⊤ 
+
+> 2
+
+T3] = 0 . Substituting (27) and (28) and expanding gives 
+
+T ⊤ 
+
+> 2
+
+T3 = λ(C⊤q)( q⊤Xv ) + q⊤XΞ⊤q − Kσ 2DP q⊤Xβ. 
+
+24 The first term vanishes since Ci is independent of all ξ-quantities and E[Ci] = 0 . For the second, write q⊤XΞ⊤q = P 
+
+> i,j
+
+qiqj (x⊤ 
+
+> i
+
+ξj ). When i̸ = j, qi = ξ⊤ 
+
+> i
+
+β is independent of (ξj , q j )
+
+and E[qi] = 0 , so the term vanishes. When i = j,
+
+Eq2 
+
+> i
+
+(x⊤ 
+
+> i
+
+ξi) = x⊤ 
+
+> i
+
+E(ξ⊤ 
+
+> i
+
+β)2ξi
+
+ = 0 
+
+by the same odd-moment argument as (33). The third term satisfies 
+
+E−Kσ 2DP q⊤Xβ  = −Kσ 2DP (Xβ )⊤E[q] = 0 
+
+and hence, E[( T1 + T2)⊤T3] = 0 .
+
+# D E[∥T3∥2]
+
+Write T3 = λs v + ( w − Kσ 2DP β) where s := C⊤q ∈ R and w := Ξ ⊤q ∈ Rd.
+
+Lemma D.1. The scalar s and vector w satisfy 
+
+E[s] = 0 , E[s2] = Kσ 2DP ∥β∥2
+
+2 , (35) 
+
+Es(v⊤w) = 0 , (36) 
+
+E w − Kσ 2DP β 2 = Kσ 4DP ∥β∥2 (d + 1) . (37) 
+
+Proof. Proof of (35) . Since E[Ci] = 0 we have E[s] = 0 . For E[s2], expand s2 = P 
+
+> i,j
+
+CiCj qiqj .Using independence of C and q together with (30) and (31), 
+
+E[CiCj qiqj ] = E[CiCj ] E[qiqj ] = 12 δij · σ2DP ∥β∥2 δij ,
+
+which is nonzero only when i = j. Summing over i gives E[s2] = Kσ 2DP ∥β∥2 
+
+> 2
+
+.
+
+Proof of (36) . Write s(v⊤w) = P 
+
+> i,j
+
+Ciqiqj (ξ⊤ 
+
+> j
+
+v). Since each Ci is independent of all ξ-quantities and E[Ci] = 0 , every term vanishes. 
+
+Proof of (37) . Expand the squared norm as 
+
+E w − Kσ 2DP β 2 = E[∥w∥2] − 2Kσ 2DP β⊤E[w] + K2σ4DP ∥β∥2 .
+
+Applying (32) componentwise gives E[w] = E[Ξ ⊤q] = Kσ 2DP β, so β⊤E[w] = Kσ 2DP ∥β∥2.To compute E[∥w∥2], write ∥w∥2 = P 
+
+> i,j
+
+qiqj (ξ⊤ 
+
+> i
+
+ξj ) and split into diagonal and off-diagonal parts. For i = j, (34) gives 
+
+Eq2 
+
+> i
+
+∥ξi∥2 = E(ξ⊤ 
+
+> i
+
+β)2 ∥ξi∥2 = σ4DP (d + 2) ∥β∥2 ,
+
+so the K diagonal terms contribute Kσ 4DP (d + 2) ∥β∥2. For i̸ = j, independence of rows gives 
+
+Eqiqj (ξ⊤ 
+
+> i
+
+ξj ) =  E[qiξi]⊤E[qj ξj ] = ( σ2DP β)⊤(σ2DP β) = σ4DP ∥β∥2 ,
+
+and there are K(K − 1) such pairs. Adding both contributions, 
+
+E[∥w∥2] = Kσ 4DP (d + 2) ∥β∥2 + K(K − 1) σ4DP ∥β∥2 = Kσ 4DP (d + K + 1) ∥β∥2 .
+
+25 Substituting back, 
+
+E w − Kσ 2DP β 2 = Kσ 4DP (d + K + 1) ∥β∥2 −
+
+2K2σ4DP ∥β∥2 + K2σ4DP ∥β∥2 = Kσ 4DP (d + 1) ∥β∥2 .
+
+Lemma D.2. E[∥T3∥2] = K ∥β∥2
+
+λ2σ2DP 
+
+2 + ( d + 1) σ4DP 
+
+
+
+.Proof. Since ∥v∥ = 1 , expanding the squared norm of T3 = λs v + ( w − Kσ 2DP β) gives 
+
+∥T3∥2 = λ2s2 + 2 λs v ⊤(w − Kσ 2DP β) + w − Kσ 2DP β 2 .
+
+Taking expectations of each term in turn: 
+
+E[λ2s2] = λ2Kσ 2DP ∥β∥2
+
+2 by (35), 
+
+E2λs v ⊤(w − Kσ 2DP β) = 2 λ E[s v ⊤w] − Kσ 2DP (v⊤β) E[s] = 0 by (36) and E[s] = 0 ,
+
+E w − Kσ 2DP β 2 = Kσ 4DP (d + 1) ∥β∥2 by (37). Adding the three contributions gives the stated formula. 
+
+Lemma D.3 (Expected Expansion) . Let x, x ′ ∈ Rd be two points with difference h =
+
+x − x′, and let v ∈ Rd be a fixed unit vector (i.e., ∥v∥ = 1 ). Let ϕ ∼ Unif[0 , 2π], and for parameters α ∈ (0 , 1) , λ > 0, and ω > 0. Then the expected squared distance between the transformed points satisfies 
+
+Eϕ
+
+∥g(x) − g(x′)∥2 = (1 − α)2∥h∥2 + 2 λ2 sin 2
+
+ δ
+
+2
+
+
+
+,
+
+where δ = ω⟨h, v ⟩.
+
+Proof. Define h = x − x′ and let 
+
+θ = ω⟨x, v ⟩ + ϕ, θ′ = ω⟨x′, v ⟩ + ϕ = θ − δ, δ = ω⟨h, v ⟩.
+
+Then the difference between outputs is 
+
+g(x) − g(x′) = (1 − α)h + λ [cos( θ) − cos( θ − δ)] v. 
+
+Using the identity cos( θ) − cos( θ − δ) = 2 sin   δ
+
+> 2
+
+ sin  θ − δ
+
+> 2
+
+, we obtain 
+
+g(x) − g(x′) = (1 − α)h + 2 λ sin 
+
+ δ
+
+2
+
+
+
+sin 
+
+
+
+θ − δ
+
+2
+
+
+
+v. 
+
+26 The squared norm is 
+
+∥g(x) − g(x′)∥2 = (1 − α)2∥h∥2 + 4 λ2 sin 2
+
+ δ
+
+2
+
+
+
+sin 2
+
+
+
+θ − δ
+
+2
+
+
+
++ cross terms .
+
+The cross terms vanish in expectation since Eϕ[sin( ·)] = 0 . Also, θ − δ 
+
+> 2
+
+∼ Unif[0 , 2π], so 
+
+Eϕ
+
+
+
+sin 2
+
+
+
+θ − δ
+
+2
+
+ 
+
+= 12.
+
+Therefore, 
+
+Eϕ
+
+∥T (x) − T (x′)∥2 = (1 − α)2∥h∥2 + 2 λ2 sin 2
+
+ δ
+
+2
+
+
+
+.
+
+# E Some equivalences to (ϵ, δ )-differential privacy 
+
+## E.1 Equivalence as a Hypothesis Test 
+
+Given the output of a differentially private mechanism M , an attacker’s error rates in leaking the privacy (via attacks such as the membership inference attack) are controlled for with differential privacy as follows by equivalently viewing it as a binary hypothesis test of the following kind, with a corresponding control on error rates of the attacker. (i) Null Hypothesis ( H0) Attacker observes M (D), to conclude that Alice is not in the dataset. (ii) Alternative Hypothesis ( H1): Attacker observes M (D′), to conclude that Alice is in the dataset. The adversary seeks to minimize: (i) Type I error: Incorrectly concluding that Alice is in the dataset when she is not. (ii) Type II error: Failing to detect that Alice is in the dataset when she actually is. One is therefore interested in the trade-off function that minimizes Type II error subject to a constraint on the Type I error rate, 
+
+T  M(D), M(D′)(α) = inf {Type II error | Type I error ≤ α}.
+
+If a mechanism reveals information, the adversary can distinguish M (D) from M (D′)
+
+with improved odds, i.e., achieve lower Type II error at the same Type I error rate. In this sense, the privacy guarantee can be described as a bound on the trade-off curve. A mechanism M is (ε, δ )-differentially private if and only if, for all rejection rules, the following inequalities hold. 
+
+(
+
+P(Type I error ) + eεP(Type II error ) ≥ 1 − δ, eεP(Type I error ) + P(Type II error ) ≥ 1 − δ. 
+
+This corresponds to the following trade-off function. 
+
+fε,δ (α) = max 
+
+n
+
+0, 1 − δ − eεα, e −ε(1 − δ − α)
+
+o
+
+.
+
+27 E.1.1 Equivalence as a divergence constraint 
+
+A mechanism M is (ε, δ )-differentially private (or (ε, δ ) − DP for short) if and only if, for any neighboring input datasets x, x′, it holds that Deε (M(x)∥M (x′)) ≤ δ using the hockey-stick divergence given by 
+
+Deε (μ∥μ′) := 
+
+Z
+
+[fμ(y) − eε · fμ′ (y)] + dy 
+
+For two discrete distributions μup and μlo , their privacy loss at o ∈ supp ( μup ) is defined as 
+
+Lμup /μ lo (o) := 
+
+(
+
+ln 
+
+μup (o)
+
+> μlo (o)
+
+
+
+if μlo (o) > 0+∞ if μlo (o) = 0 .
+
+The privacy loss distribution (PLD) of μup and μlo , denoted by P LD μup /μ lo , is a distri-bution on R ∪ {∞} where y ∼ P LD μup /μ lo is generated as follows: sample o ∼ μup and let 
+
+y = Lμup /μ lo (o). Moreover, for any two distributions μup and μlo where both are discrete or both are continuous, it holds that 
+
+Deε (μup ∥μlo ) = Ey∼P LD μup/μ lo 
+
+1 − eε−y
+
+> +
+
+Due to this, a mechanism M is (ε, δ ) − DP if and only if the following holds for all neigh-bouring input datasets x and x′ :
+
+δ ≥ Ey∼P LD M(x) /M(x ′)
+
+1 − eε−y
+
+> +
+
+# F Linear regression 
+
+F.0.1 Classical results 
+
+In linear regression, the relationship between a response y ∈ R and covariates x ∈ Rd is given by 
+
+y = x⊤β + ϵ, ϵ ∼ N (0 , σ 2).
+
+Given n i.i.d. samples {(xi, y i)}ni=1 from this model, with X ∈ Rn×d denoting the design matrix and Y denoting the response, the ordinary least squares (OLS) estimator of β is 
+
+ˆβOLS = ( X⊤X)−1X⊤Y, 
+
+and defined when X has full column rank. Under Gaussian errors and fixed design, OLS is minimax optimal and achieves the Cramér-Rao lower bound, with the minimax risks char-acterized as follows. 1. Prediction error (fixed design) : The minimax risk for the normalized prediction error satisfies 
+
+inf 
+
+> ˆβ
+
+sup 
+
+> β0∈Rd
+
+E
+
+ 1
+
+n∥X( ˆβ − β0)∥22 | X
+
+
+
+= σ2 rank( X)
+
+n .
+
+2. Estimation error (fixed design) :
+
+inf 
+
+> ˆβ
+
+sup 
+
+> β0∈Rd
+
+E
+
+h
+
+∥ ˆβ − β0∥22 | X
+
+i
+
+= σ2 · tr  (X⊤X)−1 .
+
+28 F.0.2 Statistical learning result 
+
+Linear regression has also been studied in the distribution free statistical learning setting, where the only assumption is that the data are drawn i.i.d. from some unknown distribution 
+
+P defined over some compact domain X × Y . Specifically, let the risk be 
+
+R(β) = E(x,y )∼P 
+
+12
+
+ xT β − y2
+
+
+
+.
+
+The minimax risk under this setting when β, X and Y are Euclidean balls is given [Sha15] by, 
+
+inf 
+
+> ˆβ
+
+sup 
+
+> P
+
+
+
+E[n · R( ˆβ)] − inf 
+
+> β∈β
+
+[n · R(β)] 
+
+
+
+≳ min n∥Y∥ 2, ∥β∥2∥X ∥ 2 + d∥Y∥ 2, √n∥β∥∥X ∥∥Y∥ 
+
+where ˆβ be any measurable function of the data set X, y to β and the expectation is taken over the data generating distribution (X, Y ) ∼ P n.
+
+# Acknowledgments 
+
+We would like to acknowledge the MBZUAI SU Fund and ADIA Lab Fellowship for supporting this work. We also acknowledge the MIT Institute for Data, Systems, and Society for hosting the primary author. 
+
+# References 
+
+[Ass+19] Mahmoud Assran et al. “Stochastic gradient push for distributed deep learning”. In: International Conference on Machine Learning . PMLR. 2019, pp. 344–353. [BH19] Tal Ben-Nun and Torsten Hoefler. “Demystifying parallel and distributed deep learning: An in-depth concurrency analysis”. In: ACM Computing Surveys (CSUR) 
+
+52.4 (2019), pp. 1–43. [Bon+19] Keith Bonawitz et al. “Towards federated learning at scale: System design”. In: 
+
+Proceedings of machine learning and systems 1 (2019), pp. 374–388. [DR+14] Cynthia Dwork, Aaron Roth, et al. “The algorithmic foundations of differential privacy”. In: Foundations and trends ® in theoretical computer science 9.3–4 (2014), pp. 211–407. [Dwo+16] Cynthia Dwork et al. “Calibrating noise to sensitivity in private data analysis”. In: Journal of Privacy and Confidentiality 7.3 (2016), pp. 17–51. [Dwo06] Cynthia Dwork. “Differential privacy”. In: International colloquium on automata, languages, and programming . Springer. 2006, pp. 1–12. [GR18] Otkrist Gupta and Ramesh Raskar. “Distributed learning of deep neural network over multiple agents”. In: Journal of Network and Computer Applications 116 (2018), pp. 1–8. 29 [Gu+23] Diandian Gu et al. “Elasticflow: An elastic serverless training platform for dis-tributed deep learning”. In: Proceedings of the 28th ACM International Confer-ence on Architectural Support for Programming Languages and Operating Sys-tems, Volume 2 . 2023, pp. 266–280. [Kai+21] Peter Kairouz et al. “Advances and open problems in federated learning”. In: 
+
+Foundations and trends ® in machine learning 14.1–2 (2021), pp. 1–210. [Kon+16] Jakub Konečn` y et al. “Federated learning: Strategies for improving communica-tion efficiency”. In: arXiv preprint arXiv:1610.05492 (2016). [Las+20] Michael Laskin et al. “Parallel training of deep networks with local updates”. In: 
+
+arXiv preprint arXiv:2012.03837 (2020). [McM+17] Brendan McMahan et al. “Communication-efficient learning of deep networks from decentralized data”. In: Artificial intelligence and statistics . PMLR. 2017, pp. 1273–1282. [Nem+09] Arkadi Nemirovski et al. “Robust stochastic approximation approach to stochas-tic programming”. In: SIAM Journal on optimization 19.4 (2009), pp. 1574–1609. [SD18] Alexander Sergeev and Mike Del Balso. “Horovod: fast and easy distributed deep learning in TensorFlow”. In: arXiv preprint arXiv:1802.05799 (2018). [Sha15] Ohad Shamir. “The sample complexity of learning linear predictors with the squared loss.” In: J. Mach. Learn. Res. 16 (2015), pp. 3475–3486. [Tha+22] Chandra Thapa et al. “Splitfed: When federated learning meets split learning”. In: Proceedings of the AAAI conference on artificial intelligence . Vol. 36. 2022, pp. 8485–8493. [Vep+18] Praneeth Vepakomma et al. “Split learning for health: Distributed deep learning without sharing raw patient data”. In: arXiv preprint arXiv:1812.00564 (2018). [Zha+17] Hao Zhang et al. “Poseidon: An efficient communication architecture for dis-tributed deep learning on {GPU } clusters”. In: 2017 USENIX Annual Technical Conference (USENIX ATC 17) . 2017, pp. 181–193. 30

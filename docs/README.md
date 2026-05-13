@@ -6,85 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-12
-- 运行时间：2026-05-12 20:40:03 UTC
+- 最新运行日期：2026-05-13
+- 运行时间：2026-05-13 20:37:25 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：10
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日深度复盘 21 篇前沿成果，重点突破联邦学习中的差分隐私重构与参数效率瓶颈。
-满分论文揭示了稀疏离散拉普拉斯机制在本地隐私保护中的卓越表现，并提供了高效的联邦学习重构方案。
-建议开发者关注零知识证明与 HPC 队列感知技术，以应对大规模分布式训练中的隐私与性能挑战。
-- 详情：[/202605/12/README](/202605/12/README)
+今日聚焦强化学习与联邦学习的前沿交叉，深度解析构建可扩展且可信智能系统的关键路径。
+重点关注生成模型驱动的联邦推理（FedGMI）及差分隐私对大模型社会偏见影响的系统性评估。
+建议关注异构环境下基础模型先验对公平性的潜在冲击，在追求模型性能时兼顾算法伦理。
+- 详情：[/202605/13/README](/202605/13/README)
 
 ### 精读区论文标签
-1. [Improving Parameter-Efficient Federated Learning with Differentially Private Refactorization](/202605/12/2605.08443v1-improving-parameter-efficient-federated-learning-with-differentially-private-refactorization)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：差分隐私联邦学习中隐私与效用的权衡
-2. [Sparse Discrete Laplace and Gaussian Mechanisms under Local Differential Privacy](/202605/12/2605.09561v1-sparse-discrete-laplace-and-gaussian-mechanisms-under-local-differential-privacy)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：纯粹和近似本地差分隐私的特征刻画
-3. [Convex Optimization with Local Label Differential Privacy: Tight Bounds in All Privacy Regimes](/202605/12/2605.10200v1-convex-optimization-with-local-label-differential-privacy-tight-bounds-in-all-privacy-regimes)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：本地标签差分隐私下的随机凸优化
-4. [DP-LAC: Lightweight Adaptive Clipping for Differentially Private Federated Fine-tuning of Language Models](/202605/12/2605.10272v1-dp-lac-lightweight-adaptive-clipping-for-differentially-private-federated-fine-tuning-of-language-models)  
-   标签：评分：10.0/10、query:dml-dp
-   evidence：大模型联邦微调中DP-SGD的自适应裁剪
-5. [UMEDA: Unified Multi-modal Efficient Data Fusion for Privacy-Preserving Graph Federated Learning via Spectral-Gated Attention and Diffusion-Based Operator Alignment](/202605/12/2605.08288v1-umeda-unified-multi-modal-efficient-data-fusion-for-privacy-preserving-graph-federated-learning-via-spectral-gated-attention-and-diffusion-based-operator-alignment)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：隐私保护图联邦学习框架
-6. [Private Vertical Federated Inference for Time-Series](/202605/12/2605.08343v1-private-vertical-federated-inference-for-time-series)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：纵向联邦学习结合多方计算与隐私泄露缓解
-7. [Privacy-Preserving Distributed Learning in IoT Systems: A Unified Threat Model and Evaluation Framework](/202605/12/2605.09232v1-privacy-preserving-distributed-learning-in-iot-systems-a-unified-threat-model-and-evaluation-framework)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：对包括差分隐私在内的隐私保护分布式学习的评估
-8. [Deep Learning under Fractional-Order Differential Privacy](/202605/12/2605.09890v1-deep-learning-under-fractional-order-differential-privacy)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：差分隐私随机梯度下降的机制级扩展
-9. [Differentially Private Sampling from Distributions via Wasserstein Projection](/202605/12/2605.10015v1-differentially-private-sampling-from-distributions-via-wasserstein-projection)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：通过 Wasserstein 投影的差分隐私采样机制
-10. [Privacy-preserving Chunk Scheduling in a BitTorrent Implementation of Federated Learning](/202605/12/2605.10499v1-privacy-preserving-chunk-scheduling-in-a-bittorrent-implementation-of-federated-learning)  
-   标签：评分：9.0/10、query:dml-dp
-   evidence：隐私保护的无服务器联邦学习
+1. [Reinforcement Learning for Scalable and Trustworthy Intelligent Systems](/202605/13/2605.08378v1-reinforcement-learning-for-scalable-and-trustworthy-intelligent-systems)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：强化学习中的联邦优化与隐私感知信息披露
+2. [FedGMI: Generative Model-Driven Federated Learning for Probabilistic Mixture Inference](/202605/13/2605.08760v1-fedgmi-generative-model-driven-federated-learning-for-probabilistic-mixture-inference)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：在保护数据隐私的同时进行联邦学习
+3. [Function-Space ADMM for Decentralized Federated Learning: A Control Theoretic Perspective](/202605/13/2605.09356v1-function-space-admm-for-decentralized-federated-learning-a-control-theoretic-perspective)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：保护数据隐私的去中心化联邦学习
+4. [Concordia: Self-Improving Synthetic Tables for Federated LLMs](/202605/13/2605.09855v1-concordia-self-improving-synthetic-tables-for-federated-llms)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：使用合成数据进行隐私保护的联邦学习
+5. [Unveiling High-Probability Generalization in Decentralized SGD](/202605/13/2605.10205v1-unveiling-high-probability-generalization-in-decentralized-sgd)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：去中心化SGD的高概率泛化
+6. [COSMOS: Model-Agnostic Personalized Federated Learning with Clustered Server Models and Pseudo-Label-Only Communication](/202605/13/2605.11165v1-cosmos-model-agnostic-personalized-federated-learning-with-clustered-server-models-and-pseudo-label-only-communication)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：带有伪标签通信的个性化联邦学习框架
 
 ### 速读区论文标签
-1. [FedQueue: Queue-Aware Federated Learning for Cross-Facility HPC Training](/202605/12/2605.02125v2-fedqueue-queue-aware-federated-learning-for-cross-facility-hpc-training)  
+1. [How Does Differential Privacy Affect Social Bias in LLMs? A Systematic Evaluation](/202605/13/2605.11195v1-how-does-differential-privacy-affect-social-bias-in-llms-a-systematic-evaluation)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：跨设施HPC训练的联邦学习协议
-2. [Privacy-Preserving Federated Learning: Integrating Zero-Knowledge Proofs in Scalable Distributed Architectures](/202605/12/2605.08152v1-privacy-preserving-federated-learning-integrating-zero-knowledge-proofs-in-scalable-distributed-architectures)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：结合密码学验证的隐私保护联邦学习
-3. [A Simulated Federated Analysis of MS-Induced Brain Lesions](/202605/12/2605.08223v1-a-simulated-federated-analysis-of-ms-induced-brain-lesions)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：保护患者隐私的联邦学习
-4. [Online Matrix Factorization, Online Private Query Release, and Online Discrepancy Minimization](/202605/12/2605.08358v1-online-matrix-factorization-online-private-query-release-and-online-discrepancy-minimization)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：基于差分隐私的在线隐私查询发布
-5. [Trustworthy Federated Label Distribution Learning under Annotation Quality Disparity](/202605/12/2605.04827v2-trustworthy-federated-label-distribution-learning-under-annotation-quality-disparity)  
+   evidence：对使用 DP-SGD 训练的大语言模型的评估
+2. [Rennala MVR: Improved Time Complexity for Parallel Stochastic Optimization via Momentum-Based Variance Reduction](/202605/13/2605.08871v1-rennala-mvr-improved-time-complexity-for-parallel-stochastic-optimization-via-momentum-based-variance-reduction)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：可信联邦标签分布学习
-6. [\mathsf{VISTA}: Decentralized Machine Learning in Adversary Dominated Environments](/202605/12/2605.07841v1-mathsfvista-decentralized-machine-learning-in-adversary-dominated-environments)  
+   evidence：大规模机器学习的并行随机优化
+3. [When More Parameters Hurt: Foundation Model Priors Amplify Worst-Client Disparity Under Extreme Federated Heterogeneity](/202605/13/2605.08992v1-when-more-parameters-hurt-foundation-model-priors-amplify-worst-client-disparity-under-extreme-federated-heterogeneity)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：对抗环境下的去中心化机器学习
-7. [Enhancing Federated Quadruplet Learning: Stochastic Client Selection and Embedding Stability Analysis](/202605/12/2605.07888v1-enhancing-federated-quadruplet-learning-stochastic-client-selection-and-embedding-stability-analysis)  
+   evidence：分布式隐私数据上的联邦学习
+4. [MemPrivacy: Privacy-Preserving Personalized Memory Management for Edge-Cloud Agents](/202605/13/2605.09530v2-memprivacy-privacy-preserving-personalized-memory-management-for-edge-cloud-agents)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：跨分布式客户端的联邦学习
-8. [Robust Server Defense Against Unreliable Clients in One-Shot Fair Collaborative Machine Learning](/202605/12/2605.08616v1-robust-server-defense-against-unreliable-clients-in-one-shot-fair-collaborative-machine-learning)  
+   evidence：边缘云代理的隐私保护内存管理
+5. [Optimizing Server Placement for Vertical Federated Learning in Dynamic Edge/Fog Networks](/202605/13/2605.09813v1-optimizing-server-placement-for-vertical-federated-learning-in-dynamic-edgefog-networks)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：数据分布式环境下的协作机器学习
-9. [Differentially Private Runtime Monitoring](/202605/12/2605.02391v2-differentially-private-runtime-monitoring)  
+   evidence：动态边缘网络中的纵向联邦学习
+6. [Provable Sparse Inversion and Token Relabel Enhanced One-shot Federated Learning with ViTs](/202605/13/2605.10748v1-provable-sparse-inversion-and-token-relabel-enhanced-one-shot-federated-learning-with-vits)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：带有模型反演的一步联邦学习框架
+7. [A Comparative Study of Federated Learning Aggregation Strategies under Homogeneous and Heterogeneous Data Distributions](/202605/13/2605.11010v1-a-comparative-study-of-federated-learning-aggregation-strategies-under-homogeneous-and-heterogeneous-data-distributions)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：分布式环境下的联邦学习聚合策略
+8. [FedSurrogate: Backdoor Defense in Federated Learning via Layer Criticality and Surrogate Replacement](/202605/13/2605.11122v1-fedsurrogate-backdoor-defense-in-federated-learning-via-layer-criticality-and-surrogate-replacement)  
+   标签：评分：7.0/10、query:dml-dp
+   evidence：联邦学习中的后门防御
+9. [Robust stochastic first order methods in heavy-tailed noise via medoid mini-batch gradient sampling](/202605/13/2605.07634v1-robust-stochastic-first-order-methods-in-heavy-tailed-noise-via-medoid-mini-batch-gradient-sampling)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：注入噪声以实现差分隐私
-10. [Personalized w-Event Privacy for Infinite Stream Estimation](/202605/12/2605.09054v1-personalized-w-event-privacy-for-infinite-stream-estimation)  
+   evidence：鲁棒随机一阶优化方法
+10. [FedVSSAM: Mitigating Flatness Incompatibility in Sharpness-Aware Federated Learning](/202605/13/2605.09144v1-fedvssam-mitigating-flatness-incompatibility-in-sharpness-aware-federated-learning)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：用于隐私流估计的个性化窗口大小机制
-11. [Rényi Rate-Distortion-Perception-Privacy Tradeoff under Indirect Observation](/202605/12/2605.09921v1-rnyi-rate-distortion-perception-privacy-tradeoff-under-indirect-observation)  
+   evidence：在数据异构下提高联邦学习的泛化能力
+11. [Adversary-Robust Learning from Fully Asynchronous Directional Derivative Estimates](/202605/13/2605.09337v1-adversary-robust-learning-from-fully-asynchronous-directional-derivative-estimates)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：刻画了隐私泄露与语义恢复/效用之间的权衡关系
+   evidence：参数服务器系统中的异步鲁棒优化
 
 
 <div class="dpr-home-promo-card">

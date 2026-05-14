@@ -6,73 +6,74 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-13
-- 运行时间：2026-05-13 20:37:25 UTC
+- 最新运行日期：2026-05-14
+- 运行时间：2026-05-14 20:40:23 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日聚焦强化学习与联邦学习的前沿交叉，深度解析构建可扩展且可信智能系统的关键路径。
-重点关注生成模型驱动的联邦推理（FedGMI）及差分隐私对大模型社会偏见影响的系统性评估。
-建议关注异构环境下基础模型先验对公平性的潜在冲击，在追求模型性能时兼顾算法伦理。
-- 详情：[/202605/13/README](/202605/13/README)
+- 今日共生成 17 篇推荐（精读 6 篇，速读 11 篇）
+- 精读：《DP-Muon: Differentially Private Optimization via Matrix-Orthogonalized Momentum》（10.0/10）, 《Population Risk Bounds for Kolmogorov-Arnold Networks Trained by DP-SGD with Correlated Noise》（9.0/10）
+- 速读：《FedMM: Federated Collaborative Signal Quantization for Multi-Market CTR Prediction》（8.0/10）, 《LightSplit: Practical Privacy-Preserving Split Learning via Orthogonal Projections》（8.0/10）, 《FedHPro: Federated Hyper-Prototype Learning via Gradient Matching》（8.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202605/14/README](/202605/14/README)
 
 ### 精读区论文标签
-1. [Reinforcement Learning for Scalable and Trustworthy Intelligent Systems](/202605/13/2605.08378v1-reinforcement-learning-for-scalable-and-trustworthy-intelligent-systems)  
+1. [DP-Muon: Differentially Private Optimization via Matrix-Orthogonalized Momentum](/202605/14/2605.12994v1-dp-muon-differentially-private-optimization-via-matrix-orthogonalized-momentum)  
+   标签：评分：10.0/10、query:dml-dp
+   evidence：通过矩阵正交化动量的差分隐私优化
+2. [Population Risk Bounds for Kolmogorov-Arnold Networks Trained by DP-SGD with Correlated Noise](/202605/14/2605.12648v1-population-risk-bounds-for-kolmogorov-arnold-networks-trained-by-dp-sgd-with-correlated-noise)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：带有相关噪声的DP-SGD及其隐私-效用权衡
+3. [DP-KFC: Data-Free Preconditioning for Privacy-Preserving Deep Learning](/202605/14/2605.13418v1-dp-kfc-data-free-preconditioning-for-privacy-preserving-deep-learning)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：隐私保护深度学习的无数据预处理
+4. [Limits of Personalizing Differential Privacy Budgets](/202605/14/2605.13503v1-limits-of-personalizing-differential-privacy-budgets)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：个性化差分隐私预算的限制与机制
+5. [DisAgg: Distributed Aggregators for Efficient Secure Aggregation in Federated Learning](/202605/14/2605.13708v1-disagg-distributed-aggregators-for-efficient-secure-aggregation-in-federated-learning)  
+   标签：评分：9.0/10、query:dml-dp
+   evidence：联邦学习中使用分布式聚合器的安全聚合
+6. [Unlearning with Asymmetric Sources: Improved Unlearning-Utility Trade-off with Public Data](/202605/14/2605.11170v1-unlearning-with-asymmetric-sources-improved-unlearning-utility-trade-off-with-public-data)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：强化学习中的联邦优化与隐私感知信息披露
-2. [FedGMI: Generative Model-Driven Federated Learning for Probabilistic Mixture Inference](/202605/13/2605.08760v1-fedgmi-generative-model-driven-federated-learning-for-probabilistic-mixture-inference)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：在保护数据隐私的同时进行联邦学习
-3. [Function-Space ADMM for Decentralized Federated Learning: A Control Theoretic Perspective](/202605/13/2605.09356v1-function-space-admm-for-decentralized-federated-learning-a-control-theoretic-perspective)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：保护数据隐私的去中心化联邦学习
-4. [Concordia: Self-Improving Synthetic Tables for Federated LLMs](/202605/13/2605.09855v1-concordia-self-improving-synthetic-tables-for-federated-llms)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：使用合成数据进行隐私保护的联邦学习
-5. [Unveiling High-Probability Generalization in Decentralized SGD](/202605/13/2605.10205v1-unveiling-high-probability-generalization-in-decentralized-sgd)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：去中心化SGD的高概率泛化
-6. [COSMOS: Model-Agnostic Personalized Federated Learning with Clustered Server Models and Pseudo-Label-Only Communication](/202605/13/2605.11165v1-cosmos-model-agnostic-personalized-federated-learning-with-clustered-server-models-and-pseudo-label-only-communication)  
-   标签：评分：8.0/10、query:dml-dp
-   evidence：带有伪标签通信的个性化联邦学习框架
+   evidence：利用公共数据平衡隐私（机器卸载）与效用
 
 ### 速读区论文标签
-1. [How Does Differential Privacy Affect Social Bias in LLMs? A Systematic Evaluation](/202605/13/2605.11195v1-how-does-differential-privacy-affect-social-bias-in-llms-a-systematic-evaluation)  
+1. [FedMM: Federated Collaborative Signal Quantization for Multi-Market CTR Prediction](/202605/14/2605.11433v1-fedmm-federated-collaborative-signal-quantization-for-multi-market-ctr-prediction)  
    标签：评分：8.0/10、query:dml-dp
-   evidence：对使用 DP-SGD 训练的大语言模型的评估
-2. [Rennala MVR: Improved Time Complexity for Parallel Stochastic Optimization via Momentum-Based Variance Reduction](/202605/13/2605.08871v1-rennala-mvr-improved-time-complexity-for-parallel-stochastic-optimization-via-momentum-based-variance-reduction)  
+   evidence：多市场推荐中保护隐私的联邦学习
+2. [LightSplit: Practical Privacy-Preserving Split Learning via Orthogonal Projections](/202605/14/2605.13265v1-lightsplit-practical-privacy-preserving-split-learning-via-orthogonal-projections)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：通过正交投影实现隐私保护的拆分学习
+3. [FedHPro: Federated Hyper-Prototype Learning via Gradient Matching](/202605/14/2605.13475v1-fedhpro-federated-hyper-prototype-learning-via-gradient-matching)  
+   标签：评分：8.0/10、query:dml-dp
+   evidence：通过原型学习保护隐私的联邦学习
+4. [Unlocking Deep Demand Flexibility via Dynamic Signals](/202605/14/2605.06960v1-unlocking-deep-demand-flexibility-via-dynamic-signals)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：大规模机器学习的并行随机优化
-3. [When More Parameters Hurt: Foundation Model Priors Amplify Worst-Client Disparity Under Extreme Federated Heterogeneity](/202605/13/2605.08992v1-when-more-parameters-hurt-foundation-model-priors-amplify-worst-client-disparity-under-extreme-federated-heterogeneity)  
+   evidence：分布式资源的隐私保护反馈学习
+5. [ShardTensor: Domain Parallelism for Scientific Machine Learning](/202605/14/2605.11111v1-shardtensor-domain-parallelism-for-scientific-machine-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：分布式隐私数据上的联邦学习
-4. [MemPrivacy: Privacy-Preserving Personalized Memory Management for Edge-Cloud Agents](/202605/13/2605.09530v2-memprivacy-privacy-preserving-personalized-memory-management-for-edge-cloud-agents)  
+   evidence：科学机器学习的领域并行化
+6. [Partial Model Sharing Improves Byzantine Resilience in Federated Conformal Prediction](/202605/14/2605.11684v1-partial-model-sharing-improves-byzantine-resilience-in-federated-conformal-prediction)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：边缘云代理的隐私保护内存管理
-5. [Optimizing Server Placement for Vertical Federated Learning in Dynamic Edge/Fog Networks](/202605/13/2605.09813v1-optimizing-server-placement-for-vertical-federated-learning-in-dynamic-edgefog-networks)  
+   evidence：通过部分模型共享实现拜占庭容错的联邦学习
+7. [Fed-BAC: Federated Bandit-Guided Additive Clustering in Hierarchical Federated Learning](/202605/14/2605.11815v1-fed-bac-federated-bandit-guided-additive-clustering-in-hierarchical-federated-learning)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：动态边缘网络中的纵向联邦学习
-6. [Provable Sparse Inversion and Token Relabel Enhanced One-shot Federated Learning with ViTs](/202605/13/2605.10748v1-provable-sparse-inversion-and-token-relabel-enhanced-one-shot-federated-learning-with-vits)  
+   evidence：带有老虎机引导优化的层级联邦学习框架
+8. [Beyond Parameter Aggregation: Semantic Consensus for Federated Fine-Tuning of LLMs](/202605/14/2605.11857v1-beyond-parameter-aggregation-semantic-consensus-for-federated-fine-tuning-of-llms)  
    标签：评分：7.0/10、query:dml-dp
-   evidence：带有模型反演的一步联邦学习框架
-7. [A Comparative Study of Federated Learning Aggregation Strategies under Homogeneous and Heterogeneous Data Distributions](/202605/13/2605.11010v1-a-comparative-study-of-federated-learning-aggregation-strategies-under-homogeneous-and-heterogeneous-data-distributions)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：分布式环境下的联邦学习聚合策略
-8. [FedSurrogate: Backdoor Defense in Federated Learning via Layer Criticality and Surrogate Replacement](/202605/13/2605.11122v1-fedsurrogate-backdoor-defense-in-federated-learning-via-layer-criticality-and-surrogate-replacement)  
-   标签：评分：7.0/10、query:dml-dp
-   evidence：联邦学习中的后门防御
-9. [Robust stochastic first order methods in heavy-tailed noise via medoid mini-batch gradient sampling](/202605/13/2605.07634v1-robust-stochastic-first-order-methods-in-heavy-tailed-noise-via-medoid-mini-batch-gradient-sampling)  
+   evidence：通过语义共识和模型行为进行大语言模型的联邦微调
+9. [PAAC: Privacy-Aware Agentic Device-Cloud Collaboration](/202605/14/2605.08646v1-paac-privacy-aware-agentic-device-cloud-collaboration)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：鲁棒随机一阶优化方法
-10. [FedVSSAM: Mitigating Flatness Incompatibility in Sharpness-Aware Federated Learning](/202605/13/2605.09144v1-fedvssam-mitigating-flatness-incompatibility-in-sharpness-aware-federated-learning)  
+   evidence：端云协作的隐私感知代理框架
+10. [Improving Generalization by Permutation Routing Across Model Copies](/202605/14/2605.09256v1-improving-generalization-by-permutation-routing-across-model-copies)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：在数据异构下提高联邦学习的泛化能力
-11. [Adversary-Robust Learning from Fully Asynchronous Directional Derivative Estimates](/202605/13/2605.09337v1-adversary-robust-learning-from-fully-asynchronous-directional-derivative-estimates)  
+   evidence：跨模型副本的分布式学习消息传递
+11. [MemPrivacy: Privacy-Preserving Personalized Memory Management for Edge-Cloud Agents](/202605/14/2605.09530v1-memprivacy-privacy-preserving-personalized-memory-management-for-edge-cloud-agents)  
    标签：评分：6.0/10、query:dml-dp
-   evidence：参数服务器系统中的异步鲁棒优化
+   evidence：边缘云智能体中保护隐私的个性化记忆管理
 
 
 <div class="dpr-home-promo-card">
